@@ -14,6 +14,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from app import __version__
+from app.api.cases import router as cases_router
 from app.api.health import router as health_router
 
 
@@ -24,6 +25,7 @@ def create_app() -> FastAPI:
         version=__version__,
     )
     app.include_router(health_router)
+    app.include_router(cases_router)
     return app
 
 

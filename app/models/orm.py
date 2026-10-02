@@ -103,8 +103,16 @@ class Document(Base):
     filename: Mapped[str | None] = mapped_column(String, nullable=True)
     document_type: Mapped[str | None] = mapped_column(String, nullable=True)
     issuer: Mapped[str | None] = mapped_column(String, nullable=True)
+    entity_id: Mapped[str | None] = mapped_column(
+        ForeignKey("entities.entity_id"), nullable=True, index=True
+    )
     period: Mapped[str | None] = mapped_column(String, nullable=True)
+    source: Mapped[str | None] = mapped_column(String, nullable=True)
     observed_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # ``available_at`` (a.k.a. published/availability date) drives temporal
+    # eligibility (Req 20.3); ``retrieved_at`` records when the pipeline
+    # downloaded it and must never drive eligibility.
+    published_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     available_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     retrieved_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     ingested_at: Mapped[datetime] = mapped_column(

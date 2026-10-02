@@ -8,6 +8,12 @@ hardcoded or logged (see Requirement 25.2).
 from app.core.config import Settings, get_settings
 from app.core.config_registry import ARTIFACT_KINDS, ConfigRegistry, RegisteredConfig
 from app.core.hashing import canonical_json, content_hash
+from app.core.temporal import (
+    EligibilityReason,
+    EligibilityResult,
+    check_temporal_eligibility,
+    is_eligible,
+)
 
 __all__ = [
     "Settings",
@@ -17,4 +23,8 @@ __all__ = [
     "RegisteredConfig",
     "canonical_json",
     "content_hash",
+    "EligibilityReason",
+    "EligibilityResult",
+    "check_temporal_eligibility",
+    "is_eligible",
 ]
