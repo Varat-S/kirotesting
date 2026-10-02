@@ -1,0 +1,33 @@
+# Environment / secrets — never commit real secrets (Req 25.2)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local data / outputs (keep tracked directory placeholders)
+data/**
+!data/
+!data/**/
+!data/**/.gitkeep
+output/**
+!output/
+!output/**/
+!output/**/.gitkeep
+*.db
+*.sqlite3
