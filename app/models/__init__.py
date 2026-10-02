@@ -1,1 +1,41 @@
-"""Models layer: SQLAlchemy ORM entities and persistence."""
+"""Models layer: SQLAlchemy ORM entities and persistence.
+
+Re-exports the declarative base, engine/session helpers, and the ORM models so
+callers can ``from app.models import Base, Case, Fact, ...``.
+"""
+
+from __future__ import annotations
+
+from app.models.base import (
+    Base,
+    UTCDateTime,
+    create_engine_and_session,
+    init_db,
+    utcnow,
+)
+from app.models.orm import (
+    AuditEvent,
+    Case,
+    ConfigVersion,
+    Document,
+    Entity,
+    Fact,
+    FactSourceRef,
+    Snapshot,
+)
+
+__all__ = [
+    "Base",
+    "UTCDateTime",
+    "create_engine_and_session",
+    "init_db",
+    "utcnow",
+    "AuditEvent",
+    "Case",
+    "ConfigVersion",
+    "Document",
+    "Entity",
+    "Fact",
+    "FactSourceRef",
+    "Snapshot",
+]
