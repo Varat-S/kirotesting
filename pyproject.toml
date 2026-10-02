@@ -21,12 +21,23 @@ dependencies = [
     "jinja2>=3.1",
     "jsonschema>=4.21",
     "python-multipart>=0.0.9",
+    # Deterministic parsers (Milestone 3): XLSX, PDF table/text extraction.
+    "openpyxl>=3.1",
+    "pdfplumber>=0.11",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "httpx>=0.27",
+    # Fixture generation for parser golden tests (synthetic PDFs).
+    "reportlab>=4.0",
+]
+# Optional OCR fallback backend (task 3.5). Last-resort; also needs the system
+# `tesseract` binary. Tests skip gracefully when unavailable.
+ocr = [
+    "pytesseract>=0.3",
+    "Pillow>=10.0",
 ]
 
 [tool.setuptools.packages.find]
