@@ -10,6 +10,10 @@ Tables (per design.md "Relational schema"):
 * ``fact_source_refs`` -- one-to-many provenance refs for each fact (Req 3.5).
 * ``snapshots``        -- CanonicalEvidenceSnapshot / FinalCaseSnapshot rows
                           with ``supersedes`` linkage (Req 5, 16).
+* ``reconciliation_records`` -- zero-safe reconciliation results, preserving
+                          both values + both source refs (Req 7, Milestone 4).
+* ``fact_corrections`` -- non-destructive human corrections of conflicts
+                          (Req 7.11, 7.12, 15.2, 15.3).
 * ``audit_events``     -- append-only audit log (Req 18); immutability is
                           enforced structurally in :mod:`app.services.audit`.
 * ``config_versions``  -- versioned + hashed configuration artifacts (Req 19.6).
@@ -231,6 +235,75 @@ class Snapshot(Base):
     finalized: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     config_versions: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class ReconciliationRecord(Base):
+    """A persisted reconciliation result (zero-safe, design.md "Reconciliation result").
+
+    One row per reconciled numerical field. Carries the shape required by
+    design.md: ``field, values[], source_refs[], absolute_delta, relative_delta?,
+    near_zero_floor, comparison_method, tolerance_version, resolved_state``.
+
+    Conflicts are NEVER silently merged: both observed values and both sets of
+    source references are stored on the record so a reviewer sees exactly what
+    disagreed (Req 7.9, 7.10). ``resolved_state`` holds the resolved fact state
+    (``verified``/``conflicting``/``unverified``/``missing``). The record is the
+    forward-compatible signal the Milestone 5 escalation engine consumes; this
+    milestone does NOT build that engine.
+    """
+
+    __tablename__ = "reconciliation_records"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    field: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    values: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    source_refs: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    fact_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    absolute_delta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    relative_delta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    near_zero_floor: Mapped[float | None] = mapped_column(Float, nullable=True)
+    comparison_method: Mapped[str] = mapped_column(String, nullable=False)
+    tolerance: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tolerance_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    resolved_state: Mapped[str] = mapped_column(String, nullable=False)
+    # Mismatch dimensions when comparison_method is definition_mismatch.
+    mismatch_dimensions: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    # ``numeric`` for value comparison, ``non_numeric`` for a contradiction record.
+    record_kind: Mapped[str] = mapped_column(
+        String, default="numeric", nullable=False
+    )
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class FactCorrection(Base):
+    """A non-destructive human correction of a reconciliation/conflict (task 4.3).
+
+    A correction NEVER deletes or overwrites the original conflict. It is an
+    additive row that references the :class:`ReconciliationRecord` it resolves
+    and captures the before/after states so both remain recoverable
+    (Req 7.11, 7.12, 15.2, 15.3). The paired ``fact_human_corrected`` audit
+    event is emitted by the service.
+    """
+
+    __tablename__ = "fact_corrections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    reconciliation_id: Mapped[int] = mapped_column(
+        ForeignKey("reconciliation_records.id"), nullable=False, index=True
+    )
+    field: Mapped[str] = mapped_column(String, nullable=False)
+    before_state: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    after_state: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    corrected_by: Mapped[str] = mapped_column(String, nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, default=utcnow, nullable=False
     )

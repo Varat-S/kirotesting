@@ -33,8 +33,44 @@ class EvidenceSnapshotRef(BaseModel):
     snapshot_version: int
 
 
+class DataQualityState(BaseModel):
+    """Per-field data-quality state in the snapshot (Req 5.2, 5.4).
+
+    Each field records its resolved value, its distinct ``state`` (one of the
+    fact-status values; ``missing`` is never numerical zero), its provenance
+    (source refs), data freshness, and the reconciliation that produced the
+    state. Conflicts carry BOTH values + BOTH source refs (no silent merge).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    state: str
+    value: float | None = None
+    values: list[float] = Field(default_factory=list)
+    source_refs: list[dict] = Field(default_factory=list)
+    data_freshness: datetime | None = None
+    comparison_method: str | None = None
+    absolute_delta: float | None = None
+    relative_delta: float | None = None
+    near_zero_floor: float | None = None
+    tolerance: float | None = None
+    tolerance_version: int | None = None
+    mismatch_dimensions: list[str] = Field(default_factory=list)
+    detail: str | None = None
+
+
 class CanonicalEvidenceSnapshot(BaseModel):
-    """Mid-pipeline canonical evidence snapshot skeleton (Req 5.1)."""
+    """Mid-pipeline canonical evidence snapshot (Req 5.1, 5.3, 5.5, 5.6).
+
+    Contains documents, entities, facts, normalized financials, provenance, and
+    per-field data-quality states (Req 5.1). Each field in ``data_quality``
+    carries value, state and provenance (Req 5.2). Normalized financials
+    (formula inputs) are stored independently from any derived metric (Req 5.3).
+    The snapshot records which ``config_versions`` it was built under (Req 19.6)
+    and is validated against a versioned JSON Schema on write (Req 5.5).
+    Downstream objects reference it by ``snapshot_version`` (Req 5.6).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -46,12 +82,14 @@ class CanonicalEvidenceSnapshot(BaseModel):
     evidence_cutoff_timestamp: datetime | None = None
     config_versions: dict[str, int] = Field(default_factory=dict)
 
-    documents: list = Field(default_factory=list)
-    entities: list = Field(default_factory=list)
-    facts: list = Field(default_factory=list)
+    documents: list[dict] = Field(default_factory=list)
+    entities: list[dict] = Field(default_factory=list)
+    facts: list[dict] = Field(default_factory=list)
+    # Normalized financials (formula inputs) kept independent of derived metrics.
     financials: dict = Field(default_factory=dict)
     provenance: dict = Field(default_factory=dict)
-    data_quality: dict = Field(default_factory=dict)
+    # Per-field data-quality states keyed by field name.
+    data_quality: dict[str, DataQualityState] = Field(default_factory=dict)
 
 
 class FinalCaseSnapshot(BaseModel):
