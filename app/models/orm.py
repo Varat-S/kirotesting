@@ -503,6 +503,114 @@ class Escalation(Base):
     )
 
 
+class PromptVersion(Base):
+    """A versioned prompt artifact (Req 19.1, 19.5; task 6.2).
+
+    A prompt is identified by ``name`` + ``version`` (e.g. ``business_analysis``
+    at version 1 surfaced as ``business_analysis_v1.0``) and carries a canonical
+    content hash of its template + fixed response schema. Registering changed
+    content allocates a NEW version row (append-only); prior rows are never
+    rewritten, so historical LLM runs stay linked to the exact prompt version
+    used. A prompt update sets ``needs_regression`` so the change signals that
+    regression tests must run (Req 19.5) -- the signal is real and queryable
+    rather than silently applied.
+    """
+
+    __tablename__ = "prompt_versions"
+    __table_args__ = (
+        UniqueConstraint("name", "version", name="uq_prompt_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Human-facing identifier, e.g. ``business_analysis_v1.0`` (Req 19.1).
+    prompt_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    template: Mapped[str] = mapped_column(Text, nullable=False)
+    # Fixed response JSON Schema this prompt's output is validated against.
+    response_schema: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String, nullable=False)
+    # Which LLMClient method this prompt drives (extract/analyze/challenge).
+    role: Mapped[str | None] = mapped_column(String, nullable=True)
+    # True while a prompt update has not yet been cleared by regression tests.
+    needs_regression: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    label: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class ModelRun(Base):
+    """Full logging of a single LLM run (Req 19.2; task 6.1).
+
+    Records everything needed to reproduce and audit a generative call WITHOUT
+    claiming byte-exact regeneration (Req 19.4): prompt ID/version/hash, model
+    ID + configuration, the case version, the evidence IDs supplied, the RAW
+    response, the PARSED response, and the validation outcome. A rejected
+    (schema-invalid) run is still recorded with ``validation_outcome='rejected'``
+    and the parsed response left NULL so the rejection is itself auditable.
+    """
+
+    __tablename__ = "model_runs"
+
+    run_id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    case_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Which LLMClient method ran: extract | analyze | challenge.
+    method: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    prompt_id: Mapped[str] = mapped_column(String, nullable=False)
+    prompt_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    prompt_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    prompt_hash: Mapped[str] = mapped_column(String, nullable=False)
+    model_id: Mapped[str] = mapped_column(String, nullable=False)
+    model_config_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    evidence_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    raw_response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parsed_response: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # ``valid`` | ``rejected`` (schema validation outcome, Req 19.4 / 12.5).
+    validation_outcome: Mapped[str] = mapped_column(String, nullable=False)
+    validation_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    temperature: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class ClaimGrounding(Base):
+    """A claim-grounding result with the citation/entailment split (Req 13.6-13.8).
+
+    The headline guarantee of Milestone 6: a claim is NEVER grounded solely
+    because a citation ID is attached. The two signals are stored INDEPENDENTLY:
+
+    * ``citation_present`` -- a boolean about whether ``evidence_refs`` is
+      non-empty and references a real evidence object (check A).
+    * ``entailment_state`` -- a SEPARATE judgment of whether the cited evidence
+      actually supports the claim (check B), one of ``supported |
+      partially_supported | unsupported | contradictory | not_verifiable``.
+
+    ``judge`` records whether entailment was decided ``deterministic``, by an
+    ``llm`` judge, or by a ``human``; ``adjudicated`` flags a high-severity
+    factual claim that a human reviewer has adjudicated.
+    """
+
+    __tablename__ = "claim_groundings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    claim_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    citation_present: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    entailment_state: Mapped[str] = mapped_column(String, nullable=False)
+    evidence_refs: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    judge: Mapped[str] = mapped_column(String, nullable=False)
+    adjudicated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
 class AuditEvent(Base):
     """Append-only audit event (Requirement 18).
 
