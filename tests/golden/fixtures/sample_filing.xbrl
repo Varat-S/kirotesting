@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minimal synthetic XBRL instance for the Milestone 3 XBRL parser golden test.
+  Public/synthetic data only (Req 25.1). Values are illustrative, not real.
+-->
+<xbrli:xbrl
+    xmlns:xbrli="http://www.xbrl.org/2003/instance"
+    xmlns:us-gaap="http://fasb.org/us-gaap/2023"
+    xmlns:iso4217="http://www.xbrl.org/2003/iso4217">
+
+  <xbrli:context id="FY2023">
+    <xbrli:entity>
+      <xbrli:identifier scheme="http://www.sec.gov/CIK">ACME-CORP</xbrli:identifier>
+    </xbrli:entity>
+    <xbrli:period>
+      <xbrli:startDate>2023-01-01</xbrli:startDate>
+      <xbrli:endDate>2023-12-31</xbrli:endDate>
+    </xbrli:period>
+  </xbrli:context>
+
+  <xbrli:context id="AT2023">
+    <xbrli:entity>
+      <xbrli:identifier scheme="http://www.sec.gov/CIK">ACME-CORP</xbrli:identifier>
+    </xbrli:entity>
+    <xbrli:period>
+      <xbrli:instant>2023-12-31</xbrli:instant>
+    </xbrli:period>
+  </xbrli:context>
+
+  <xbrli:unit id="USD">
+    <xbrli:measure>iso4217:USD</xbrli:measure>
+  </xbrli:unit>
+
+  <us-gaap:Revenues contextRef="FY2023" unitRef="USD" scale="6" decimals="-6">1500</us-gaap:Revenues>
+  <us-gaap:NetIncomeLoss contextRef="FY2023" unitRef="USD" scale="6" decimals="-6">250</us-gaap:NetIncomeLoss>
+  <us-gaap:Assets contextRef="AT2023" unitRef="USD" scale="6" decimals="-6">4200</us-gaap:Assets>
+</xbrli:xbrl>

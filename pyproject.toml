@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "credit-memo-poc"
+version = "0.1.0"
+description = "AI-Assisted Credit Memo Generator (proof of concept)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+
+# Core runtime dependencies (design.md technology stack).
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.1",
+    "SQLAlchemy>=2.0",
+    "pandas>=2.1",
+    "jinja2>=3.1",
+    "jsonschema>=4.21",
+    "python-multipart>=0.0.9",
+    # Deterministic parsers (Milestone 3): XLSX, PDF table/text extraction.
+    "openpyxl>=3.1",
+    "pdfplumber>=0.11",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    # Fixture generation for parser golden tests (synthetic PDFs).
+    "reportlab>=4.0",
+]
+# Optional OCR fallback backend (task 3.5). Last-resort; also needs the system
+# `tesseract` binary. Tests skip gracefully when unavailable.
+ocr = [
+    "pytesseract>=0.3",
+    "Pillow>=10.0",
+]
+# Optional offline HTML->PDF backend for the memo renderer (Milestone 8, task
+# 8.2). The deterministic HTML artifact is always produced from the JSON; this
+# backend is only needed to also emit a binary PDF. weasyprint needs system
+# libraries, so PDF-production tests skip gracefully when it is unavailable.
+pdf = [
+    "weasyprint>=60",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+# Ship Jinja2 memo templates (Milestone 8 reporting) inside the package.
+"app.services.reporting" = ["templates/*.j2"]
+# Ship Jinja2 workbench templates (Milestone 10 case workbench UI) too.
+"app.api" = ["templates/*.j2"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-ra"

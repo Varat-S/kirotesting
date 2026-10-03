@@ -1,0 +1,86 @@
+{#
+  Frozen case workbench screen (Req 24.1-24.4; task 10.1).
+
+  Deterministic HTML rendered ONLY from the workbench view-model dict (no DB
+  access, no LLM, no content absent from the view). The header shows the case
+  id, as-of date, evidence cutoff, and the presented frozen snapshot version
+  with its predecessor/successor lineage; the four counts and the nine
+  navigable sections are rendered in a fixed order.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Case Workbench — {{ view.header.case_id }}</title>
+</head>
+<body>
+  <header class="workbench-header">
+    <h1>Case Workbench</h1>
+    <dl class="case-meta">
+      <dt>Case</dt><dd data-case-id="{{ view.header.case_id }}">{{ view.header.case_id }}</dd>
+      <dt>Status</dt><dd data-status="{{ view.header.status }}">{{ view.header.status }}</dd>
+      <dt>As-of date</dt>
+      <dd data-as-of-date>{{ view.header.as_of_date if view.header.as_of_date else "—" }}</dd>
+      <dt>Evidence cutoff</dt>
+      <dd data-evidence-cutoff>
+        {{ view.header.evidence_cutoff_timestamp if view.header.evidence_cutoff_timestamp else "—" }}
+      </dd>
+    </dl>
+
+    {% set lineage = view.header.lineage %}
+    <div class="version-lineage" data-finalized="{{ 'true' if lineage.finalized else 'false' }}">
+      <h2>Version lineage</h2>
+      <ul>
+        <li>Presented version:
+          <span data-presented-version>{{ lineage.presented_version if lineage.presented_version is not none else "pre-final" }}</span>
+          {% if lineage.finalized %}<span data-frozen="true">(frozen)</span>{% endif %}
+        </li>
+        <li>Predecessor:
+          <span data-predecessor-version>{{ lineage.predecessor_version if lineage.predecessor_version is not none else "none" }}</span>
+        </li>
+        <li>Successors:
+          <span data-successor-versions>
+            {{ lineage.successor_versions | join(", ") if lineage.successor_versions else "none" }}
+          </span>
+        </li>
+        <li>All final versions:
+          <span data-all-final-versions>
+            {{ lineage.all_final_versions | join(", ") if lineage.all_final_versions else "none" }}
+          </span>
+        </li>
+      </ul>
+    </div>
+  </header>
+
+  <section class="workbench-counts">
+    <h2>Counts</h2>
+    <ul>
+      <li>Open exceptions:
+        <span data-count="open_exceptions">{{ view.counts.open_exceptions }}</span></li>
+      <li>Critical missing sources:
+        <span data-count="critical_missing_sources">{{ view.counts.critical_missing_sources }}</span></li>
+      <li>AI/deterministic conflicts:
+        <span data-count="ai_deterministic_conflicts">{{ view.counts.ai_deterministic_conflicts }}</span></li>
+      <li>Decisions awaiting humans:
+        <span data-count="awaiting_human_decisions">{{ view.counts.awaiting_human_decisions }}</span></li>
+    </ul>
+  </section>
+
+  <nav class="workbench-nav">
+    <h2>Sections</h2>
+    <ul>
+      {% for section in view.section_order %}
+      <li><a href="#section-{{ section.key }}" data-section-link="{{ section.key }}">{{ section.title }}</a></li>
+      {% endfor %}
+    </ul>
+  </nav>
+
+  <main class="workbench-sections">
+    {% for section in view.section_order %}
+    <section id="section-{{ section.key }}" data-section="{{ section.key }}">
+      <h2>{{ section.title }}</h2>
+    </section>
+    {% endfor %}
+  </main>
+</body>
+</html>

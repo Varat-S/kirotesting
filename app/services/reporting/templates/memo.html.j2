@@ -1,0 +1,223 @@
+{#
+  Deterministic credit-memo template (task 8.2 / Req 17.2-17.7).
+
+  Rendered from the memo JSON ONLY. It introduces NO content that is not present
+  in the JSON: every number and every claim is read verbatim from the context,
+  and every major claim carries its evidence/analysis references so it maps back
+  to an evidence object (Req 17.5). Section order is fixed for stable re-render
+  (Req 17.7).
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Credit Memo — {{ source_snapshot.case_id }} v{{ source_snapshot.snapshot_version }}</title>
+</head>
+<body>
+<header class="memo-header">
+  <h1>Credit Memo (DRAFT — ILLUSTRATIVE, NOT BANK POLICY)</h1>
+  <dl class="memo-meta">
+    <dt>Case</dt><dd data-field="case_id">{{ source_snapshot.case_id }}</dd>
+    <dt>Snapshot version</dt><dd data-field="snapshot_version">{{ source_snapshot.snapshot_version }}</dd>
+    <dt>Snapshot content hash</dt><dd data-field="content_hash">{{ source_snapshot.content_hash }}</dd>
+    <dt>As-of date</dt><dd data-field="as_of_date">{{ as_of_date if as_of_date is not none else "not disclosed" }}</dd>
+    <dt>Evidence cutoff</dt><dd data-field="evidence_cutoff_timestamp">{{ evidence_cutoff_timestamp if evidence_cutoff_timestamp is not none else "not disclosed" }}</dd>
+    <dt>Final status</dt><dd data-field="final_status">{{ final_status if final_status is not none else "draft" }}</dd>
+  </dl>
+</header>
+
+{% for key, title in sections %}
+<section class="memo-section" data-section="{{ key }}">
+<h2>{{ title }}</h2>
+{% if key == "case_summary" %}
+  <p>This memo is rendered from FinalCaseSnapshot
+     <span data-field="snapshot_version">v{{ source_snapshot.snapshot_version }}</span>
+     (content hash <code data-field="content_hash">{{ source_snapshot.content_hash }}</code>),
+     which references CanonicalEvidenceSnapshot
+     v{{ evidence_snapshot_ref.snapshot_version }}.</p>
+  <ul>
+    <li>As-of date: <span data-field="as_of_date">{{ as_of_date if as_of_date is not none else "not disclosed" }}</span></li>
+    <li>Evidence cutoff: <span data-field="evidence_cutoff_timestamp">{{ evidence_cutoff_timestamp if evidence_cutoff_timestamp is not none else "not disclosed" }}</span></li>
+    <li>Unresolved exceptions: <span data-metric="unresolved_exceptions_count">{{ unresolved_exceptions | length }}</span></li>
+  </ul>
+
+{% elif key == "business_overview" %}
+  {% if business_analysis.summary %}
+    <p data-claim="business_overview.summary"
+       data-evidence="{{ business_analysis.summary.evidence_ids | default([]) | join(',') }}">
+      {{ business_analysis.summary.statement | default(business_analysis.summary) }}
+    </p>
+  {% endif %}
+  {% for claim in business_analysis.claims | default([]) %}
+    <p data-claim="business_overview.claim"
+       data-evidence="{{ claim.evidence_ids | default(claim.evidence_refs) | default([]) | join(',') }}">
+      {{ claim.statement | default(claim.text) }}
+    </p>
+  {% endfor %}
+  {% if not business_analysis.summary and not business_analysis.claims %}
+    <p class="empty">No business overview content present in the snapshot.</p>
+  {% endif %}
+
+{% elif key == "financial_overview" %}
+  {% if financial_analysis.summary %}
+    <p data-claim="financial_overview.summary"
+       data-evidence="{{ financial_analysis.summary.evidence_ids | default([]) | join(',') }}">
+      {{ financial_analysis.summary.statement | default(financial_analysis.summary) }}
+    </p>
+  {% endif %}
+  {% for claim in financial_analysis.claims | default([]) %}
+    <p data-claim="financial_overview.claim"
+       data-evidence="{{ claim.evidence_ids | default(claim.evidence_refs) | default([]) | join(',') }}">
+      {{ claim.statement | default(claim.text) }}
+    </p>
+  {% endfor %}
+  {% if not financial_analysis.summary and not financial_analysis.claims %}
+    <p class="empty">No financial overview content present in the snapshot.</p>
+  {% endif %}
+
+{% elif key == "metrics_trends" %}
+  {% if metrics %}
+  <table class="metrics">
+    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+    <tbody>
+    {% for name, value in metrics | dictsort %}
+      <tr>
+        <td data-metric-name="{{ name }}">{{ name }}</td>
+        <td data-metric="{{ name }}">{{ value }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="empty">No metrics present in the snapshot.</p>
+  {% endif %}
+  {% if benchmarks %}
+  <table class="benchmarks">
+    <thead><tr><th>Benchmark</th><th>Value</th></tr></thead>
+    <tbody>
+    {% for name, value in benchmarks | dictsort %}
+      <tr>
+        <td data-benchmark-name="{{ name }}">{{ name }}</td>
+        <td data-benchmark="{{ name }}">{{ value }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+{% elif key == "risk_register" %}
+  {% if risks %}
+  <ol class="risks">
+    {% for risk in risks %}
+    <li data-claim="risk"
+        data-evidence="{{ risk.evidence_ids | default(risk.evidence_refs) | default([]) | join(',') }}">
+      <strong>{{ risk.title | default(risk.name) | default("risk") }}</strong>:
+      {{ risk.statement | default(risk.description) | default(risk.text) | default("") }}
+      {% if risk.severity is defined %}<em>(severity: <span data-field="severity">{{ risk.severity }}</span>)</em>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+    <p class="empty">No risks present in the snapshot.</p>
+  {% endif %}
+
+{% elif key == "mitigants" %}
+  {% if mitigants %}
+  <ul class="mitigants">
+    {% for m in mitigants %}
+    <li data-claim="mitigant"
+        data-evidence="{{ m.evidence_ids | default(m.evidence_refs) | default([]) | join(',') }}">
+      {{ m.statement | default(m.description) | default(m.text) | default(m) }}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p class="empty">No mitigants present in the snapshot.</p>
+  {% endif %}
+
+{% elif key == "exceptions" %}
+  {% if unresolved_exceptions %}
+  <table class="exceptions">
+    <thead><tr><th>Rule</th><th>Severity</th><th>Category</th><th>Reason</th></tr></thead>
+    <tbody>
+    {% for ex in unresolved_exceptions %}
+      <tr data-exception="{{ ex.escalation_id }}">
+        <td data-field="rule_id">{{ ex.rule_id }}</td>
+        <td data-field="severity">{{ ex.severity }}</td>
+        <td data-field="category">{{ ex.category }}</td>
+        <td data-field="reason">{{ ex.reason }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="empty" data-field="no_unresolved_exceptions">No unresolved exceptions.</p>
+  {% endif %}
+
+{% elif key == "recommendation" %}
+  <p>Status: <span data-field="recommendation_status">{{ recommendation.status | default("draft") }}</span></p>
+  {% if recommendation.rating is defined %}
+    <p>Rating: <span data-field="rating">{{ recommendation.rating }}</span></p>
+  {% endif %}
+  {% if recommendation.statement is defined %}
+    <p data-claim="recommendation"
+       data-evidence="{{ recommendation.evidence_ids | default([]) | join(',') }}">
+      {{ recommendation.statement }}
+    </p>
+  {% endif %}
+
+{% elif key == "sources_appendix" %}
+  <dl class="versions">
+    <dt>Evidence snapshot</dt>
+    <dd data-field="evidence_snapshot_version">v{{ evidence_snapshot_ref.snapshot_version }} (case {{ evidence_snapshot_ref.case_id }})</dd>
+    <dt>Config versions</dt>
+    <dd>
+      {% for name, v in config_versions | dictsort %}
+        <span data-config="{{ name }}">{{ name }}=v{{ v }}</span>{% if not loop.last %}, {% endif %}
+      {% endfor %}
+    </dd>
+    <dt>Metric-definition versions</dt>
+    <dd>
+      {% for name, v in metric_definition_versions | dictsort %}
+        <span data-metric-def="{{ name }}">{{ name }}=v{{ v }}</span>{% if not loop.last %}, {% endif %}
+      {% endfor %}
+    </dd>
+    <dt>Rule versions</dt>
+    <dd>
+      {% for name, v in rule_versions | dictsort %}
+        <span data-rule="{{ name }}">{{ name }}=v{{ v }}</span>{% if not loop.last %}, {% endif %}
+      {% endfor %}
+    </dd>
+    <dt>Prompt / model versions</dt>
+    <dd>
+      {% for name, v in prompt_model_versions | dictsort %}
+        <span data-prompt-model="{{ name }}">{{ name }}={{ v }}</span>{% if not loop.last %}, {% endif %}
+      {% endfor %}
+    </dd>
+  </dl>
+
+{% elif key == "review_history" %}
+  {% if human_reviews %}
+  <ol class="reviews">
+    {% for review in human_reviews %}
+    <li data-review="{{ loop.index }}">
+      <span data-field="reviewer">{{ review.reviewer | default(review.actor_id) | default("reviewer") }}</span>
+      — <span data-field="action">{{ review.action | default(review.event_type) | default("review") }}</span>
+      {% if review.reason is defined %}: {{ review.reason }}{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+    <p class="empty">No human reviews recorded in the snapshot.</p>
+  {% endif %}
+{% endif %}
+</section>
+{% endfor %}
+
+<footer class="memo-footer">
+  <p>Generated from FinalCaseSnapshot v{{ source_snapshot.snapshot_version }}
+     (content hash {{ source_snapshot.content_hash }}). The JSON is the source of
+     truth; this document is a deterministic rendering of it.</p>
+</footer>
+</body>
+</html>
