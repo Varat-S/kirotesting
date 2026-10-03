@@ -1,0 +1,55 @@
+{
+  "case_id": "acme-fy2023",
+  "description": "Synthetic golden evaluation case for the Milestone 9 harness. Reuses the Milestone 3 deterministic-parser fixtures as the evidence package and is scored against evals/manifests/acme_fy2023_manifest.json. Public/synthetic data only (Req 25.1).",
+  "manifest": "evals/manifests/acme_fy2023_manifest.json",
+  "evidence_sources": [
+    {
+      "document_id": "doc-xbrl-acme-fy2023",
+      "fixture": "tests/golden/fixtures/sample_filing.xbrl",
+      "tags": ["xbrl", "structured"],
+      "available_at": "2024-01-10T00:00:00+00:00"
+    },
+    {
+      "document_id": "doc-csv-acme-financials",
+      "fixture": "tests/golden/fixtures/sample_financials.csv",
+      "tags": ["csv", "xlsx", "structured"],
+      "available_at": "2024-01-10T00:00:00+00:00"
+    },
+    {
+      "document_id": "doc-pdf-acme-narrative",
+      "fixture": "tests/golden/fixtures/sample_narrative.pdf",
+      "tags": ["pdf", "narrative"],
+      "available_at": "2024-01-11T00:00:00+00:00"
+    },
+    {
+      "document_id": "doc-industry-airline",
+      "fixture": "synthetic:industry_benchmarks",
+      "tags": ["industry"],
+      "available_at": "2024-01-05T00:00:00+00:00"
+    },
+    {
+      "document_id": "doc-fuel-index",
+      "fixture": "synthetic:fuel_index",
+      "tags": ["fuel", "market_macro"],
+      "available_at": "2024-01-08T00:00:00+00:00"
+    },
+    {
+      "document_id": "doc-debt-maturity",
+      "fixture": "tests/golden/fixtures/sample_table.pdf",
+      "tags": ["pdf", "debt_maturity"],
+      "available_at": "2024-01-10T00:00:00+00:00"
+    },
+    {
+      "document_id": "doc-interim-q3",
+      "fixture": "synthetic:interim_q3",
+      "tags": ["interim"],
+      "available_at": "2024-01-09T00:00:00+00:00"
+    }
+  ],
+  "leakage_probe": {
+    "document_id": "doc-future-filing",
+    "data_type": "filing",
+    "available_at": "2024-06-30T00:00:00+00:00",
+    "note": "Future-dated item that MUST be rejected for a historical run (Req 20.4)."
+  }
+}

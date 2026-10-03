@@ -1,0 +1,144 @@
+{
+  "case_id": "acme-fy2023",
+  "as_of_date": "2024-01-15",
+  "evidence_cutoff_timestamp": "2024-01-15T00:00:00+00:00",
+  "manifest_version": "1.0.0",
+  "approved_document_ids": [
+    "doc-xbrl-acme-fy2023",
+    "doc-csv-acme-financials",
+    "doc-pdf-acme-narrative",
+    "doc-industry-airline",
+    "doc-fuel-index",
+    "doc-debt-maturity",
+    "doc-interim-q3"
+  ],
+  "verified_facts": [
+    {
+      "name": "revenue",
+      "field_type": "financial",
+      "expected_value": 1500.0,
+      "entity_id": "ACME-CORP",
+      "period_end": "2023-12-31",
+      "currency": "USD",
+      "scale": "millions",
+      "source_document_id": "doc-xbrl-acme-fy2023",
+      "source_location": {"taxonomy_concept": "us-gaap:Revenues"},
+      "tolerance": 1.0,
+      "expected_status": "verified",
+      "required": true
+    },
+    {
+      "name": "net_income",
+      "field_type": "financial",
+      "expected_value": 250.0,
+      "entity_id": "ACME-CORP",
+      "period_end": "2023-12-31",
+      "currency": "USD",
+      "scale": "millions",
+      "source_document_id": "doc-xbrl-acme-fy2023",
+      "source_location": {"taxonomy_concept": "us-gaap:NetIncomeLoss"},
+      "tolerance": 1.0,
+      "expected_status": "verified",
+      "required": true
+    },
+    {
+      "name": "total_assets",
+      "field_type": "financial",
+      "expected_value": 4200.0,
+      "entity_id": "ACME-CORP",
+      "period_end": "2023-12-31",
+      "currency": "USD",
+      "scale": "millions",
+      "source_document_id": "doc-xbrl-acme-fy2023",
+      "source_location": {"taxonomy_concept": "us-gaap:Assets"},
+      "tolerance": 1.0,
+      "expected_status": "verified",
+      "required": true
+    },
+    {
+      "name": "total_debt",
+      "field_type": "financial",
+      "expected_value": 750.0,
+      "entity_id": "ACME-CORP",
+      "period_end": "2023-12-31",
+      "currency": "USD",
+      "scale": "millions",
+      "source_document_id": "doc-csv-acme-financials",
+      "source_location": {"row_label": "Total Debt"},
+      "tolerance": 1.0,
+      "expected_status": "verified",
+      "required": true
+    },
+    {
+      "name": "load_factor",
+      "field_type": "operating",
+      "expected_value": 0.85,
+      "entity_id": "ACME-CORP",
+      "period_end": "2023-12-31",
+      "source_document_id": "doc-pdf-acme-narrative",
+      "source_location": {"page": 2},
+      "tolerance": 0.001,
+      "expected_status": "verified",
+      "required": true
+    },
+    {
+      "name": "management_assessment",
+      "field_type": "qualitative",
+      "expected_value": "experienced management team with aviation background",
+      "entity_id": "ACME-CORP",
+      "source_document_id": "doc-pdf-acme-narrative",
+      "source_location": {"page": 1},
+      "tolerance": 0.0,
+      "expected_status": "unverified",
+      "required": false
+    }
+  ],
+  "expected_normalized_values": {
+    "revenue": 1500.0,
+    "net_income": 250.0,
+    "total_assets": 4200.0,
+    "total_debt": 750.0
+  },
+  "expected_metric_outputs": [
+    {"metric_id": "net_debt_to_ebitda", "expected_result": 2.0, "expected_state": "ok", "tolerance": 0.01},
+    {"metric_id": "operating_margin", "expected_result": 0.1667, "expected_state": "ok", "tolerance": 0.001},
+    {"metric_id": "load_factor", "expected_result": 0.85, "expected_state": "ok", "tolerance": 0.001}
+  ],
+  "known_missing_items": [
+    "fy2022_cash_not_disclosed"
+  ],
+  "known_contradictions": [],
+  "expected_rule_triggers": [
+    "R-DATA-MISSING-CRITICAL-01"
+  ],
+  "expected_escalations": [
+    {
+      "rule_id": "R-DATA-MISSING-CRITICAL-01",
+      "category": "data_integrity",
+      "severity": "mandatory",
+      "mandatory": true
+    }
+  ],
+  "adjudicated_material_risks": [
+    "fuel_price_exposure",
+    "near_term_debt_maturity"
+  ],
+  "contemporaneous_ground_truth": {
+    "liquidity_adequate_at_t": true,
+    "leverage_within_illustrative_threshold": true,
+    "borrower_entity": "ACME-CORP"
+  },
+  "future_outcome": {
+    "default_occurred": false,
+    "rating_downgrade": true,
+    "liquidity_shock": false,
+    "covenant_breach": false,
+    "observed_at": "2024-09-30",
+    "notes": "A rating downgrade occurred after T; NEVER an input at T."
+  },
+  "annotator_metadata": {
+    "annotator": "synthetic-poc",
+    "reviewed_by": "evaluation-harness-fixture",
+    "notes": "Synthetic/public data only (Req 25.1); values illustrative."
+  }
+}
