@@ -235,6 +235,57 @@ class Snapshot(Base):
     finalized: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     config_versions: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    # SHA-256 over the canonical payload recorded at finalization. Any later
+    # read can re-hash the payload and compare to prove the finalized snapshot
+    # has not drifted (Req 16.2). NULL until finalized.
+    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    finalized_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class HumanReview(Base):
+    """A non-destructive human-review action (Req 15.1-15.6; task 7.1).
+
+    Every reviewer action (verify a source, resolve a conflicting figure,
+    approve an accounting adjustment, approve assumptions, confirm the peer set,
+    resolve contradictory evidence, accept/reject an AI interpretation, modify
+    risk materiality, or sign off the final recommendation) is captured as an
+    ADDITIVE row. Nothing is ever overwritten or deleted: ``prior_value`` and
+    ``new_value`` are both retained so before/after stays visible/recoverable
+    (Req 15.2, 15.3). The paired ``human_review`` audit event is emitted by the
+    service.
+
+    ``requires_sign_off`` marks the gated actions (final recommendation,
+    material accounting adjustments, resolved conflicts, facility structure
+    recommendations, policy exceptions, judgment-heavy risk rankings) per
+    Req 15.4. ``signed_off`` records explicit sign-off (Req 15.6).
+    """
+
+    __tablename__ = "human_reviews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    review_id: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    case_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    # One of the ReviewAction values (verify_source, resolve_conflict, ...).
+    action: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    # What the action targets (e.g. "fact:...", "escalation:...", "risk:...").
+    target_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    target_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    reviewer: Mapped[str] = mapped_column(String, nullable=False)
+    reviewed_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+    prior_value: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    new_value: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    linked_evidence: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    requires_sign_off: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    signed_off: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, default=utcnow, nullable=False
     )
