@@ -39,9 +39,20 @@ ocr = [
     "pytesseract>=0.3",
     "Pillow>=10.0",
 ]
+# Optional offline HTML->PDF backend for the memo renderer (Milestone 8, task
+# 8.2). The deterministic HTML artifact is always produced from the JSON; this
+# backend is only needed to also emit a binary PDF. weasyprint needs system
+# libraries, so PDF-production tests skip gracefully when it is unavailable.
+pdf = [
+    "weasyprint>=60",
+]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.setuptools.package-data]
+# Ship Jinja2 memo templates (Milestone 8 reporting) inside the package.
+"app.services.reporting" = ["templates/*.j2"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
