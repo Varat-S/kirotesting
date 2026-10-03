@@ -53,6 +53,8 @@ include = ["app*"]
 [tool.setuptools.package-data]
 # Ship Jinja2 memo templates (Milestone 8 reporting) inside the package.
 "app.services.reporting" = ["templates/*.j2"]
+# Ship Jinja2 workbench templates (Milestone 10 case workbench UI) too.
+"app.api" = ["templates/*.j2"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
