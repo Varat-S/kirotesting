@@ -15,12 +15,18 @@ from app.models.base import (
 )
 from app.models.orm import (
     AuditEvent,
+    Benchmark,
     Case,
     ConfigVersion,
     Document,
     Entity,
+    Escalation,
     Fact,
     FactSourceRef,
+    Metric,
+    MetricDefinition,
+    Rule,
+    RuleVersion,
     Snapshot,
 )
 
@@ -31,11 +37,17 @@ __all__ = [
     "init_db",
     "utcnow",
     "AuditEvent",
+    "Benchmark",
     "Case",
     "ConfigVersion",
     "Document",
     "Entity",
+    "Escalation",
     "Fact",
     "FactSourceRef",
+    "Metric",
+    "MetricDefinition",
+    "Rule",
+    "RuleVersion",
     "Snapshot",
 ]

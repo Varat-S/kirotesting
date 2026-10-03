@@ -309,6 +309,200 @@ class FactCorrection(Base):
     )
 
 
+class MetricDefinition(Base):
+    """A versioned metric definition (Req 8.2, 8.3; Milestone 5 task 5.1).
+
+    A definition states which components are included/excluded (e.g. what
+    "EBITDA", "net debt", "FCF", "liquidity" comprise) and is identified by
+    ``metric_definition_id`` + ``version``. Changing a definition creates a NEW
+    row (append-only); prior rows are never rewritten, so historical metric
+    outputs stay linked to the exact definition version they used (Req 8.8).
+    """
+
+    __tablename__ = "metric_definitions"
+    __table_args__ = (
+        UniqueConstraint(
+            "metric_definition_id", "version", name="uq_metric_def_version"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    metric_definition_id: Mapped[str] = mapped_column(
+        String, nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    formula_id: Mapped[str] = mapped_column(String, nullable=False)
+    # Which components the metric includes/excludes + the input fact names.
+    components: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String, nullable=False)
+    label: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class Metric(Base):
+    """A persisted deterministic metric result (Req 8.2; task 5.2).
+
+    Stores ``metric_definition_id``, ``metric_definition_version``,
+    ``formula_id``, inputs, input fact IDs, result OR an explicit state, period,
+    units, and ``engine_version``. A bad-denominator outcome records an explicit
+    ``explicit_state`` (``not_meaningful``/``missing_input``/``requires_review``)
+    and leaves ``result`` NULL -- a missing/not-meaningful metric is NEVER a
+    coerced zero (Req 8.4). The recorded version linkage makes historical runs
+    reproducible and immune to later definition changes (Req 8.6, 8.8).
+    """
+
+    __tablename__ = "metrics"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    metric_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    metric_definition_id: Mapped[str] = mapped_column(String, nullable=False)
+    metric_definition_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    formula_id: Mapped[str] = mapped_column(String, nullable=False)
+    engine_version: Mapped[str] = mapped_column(String, nullable=False)
+    inputs: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    input_fact_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    result: Mapped[float | None] = mapped_column(Float, nullable=True)
+    explicit_state: Mapped[str | None] = mapped_column(String, nullable=True)
+    period: Mapped[str | None] = mapped_column(String, nullable=True)
+    fiscal_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    units: Mapped[str | None] = mapped_column(String, nullable=True)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class Benchmark(Base):
+    """A persisted small-cohort-aware peer benchmark result (Req 10; task 5.4).
+
+    Shape per design.md "Benchmark result". Records ``benchmark_method``,
+    ``sample_size``, cohort definition + version, and benchmark date. Percentiles
+    (p90/p95) are only populated when the sample permits and ``percentiles_reliable``
+    is otherwise False so unstable percentiles are suppressed/labelled (Req 10.1,
+    10.2). The borrower is never double-counted in its own cohort (Req 10.5). A
+    benchmark is an ANOMALY SIGNAL only, never a credit threshold (Req 10.7).
+    """
+
+    __tablename__ = "benchmarks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    metric_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    cohort_definition: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    cohort_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    benchmark_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    sample_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    benchmark_method: Mapped[str] = mapped_column(String, nullable=False)
+    borrower_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    raw_peer_values: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    median: Mapped[float | None] = mapped_column(Float, nullable=True)
+    minimum: Mapped[float | None] = mapped_column(Float, nullable=True)
+    maximum: Mapped[float | None] = mapped_column(Float, nullable=True)
+    p25: Mapped[float | None] = mapped_column(Float, nullable=True)
+    p75: Mapped[float | None] = mapped_column(Float, nullable=True)
+    p90: Mapped[float | None] = mapped_column(Float, nullable=True)
+    p95: Mapped[float | None] = mapped_column(Float, nullable=True)
+    percentiles_reliable: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    synthetic: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class Rule(Base):
+    """A policy/escalation rule identity (Req 11; task 5.5, 5.6).
+
+    A rule is identified by a stable ``rule_id`` (e.g. ``R-TREND-LEV-01``) and a
+    ``concept`` keeping the THREE separate ideas distinct: ``policy_threshold``,
+    ``peer_benchmark``, and ``historical_deterioration`` (plus ``data_integrity``,
+    ``evidence``, ``ai_deterministic_conflict`` for the escalation categories).
+    The concrete, versioned threshold logic lives in :class:`RuleVersion`.
+    """
+
+    __tablename__ = "rules"
+
+    rule_id: Mapped[str] = mapped_column(String, primary_key=True)
+    concept: Mapped[str] = mapped_column(String, nullable=False)
+    category: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class RuleVersion(Base):
+    """A versioned rule definition (Req 11.5, 11.6; task 5.5).
+
+    Each change to a rule creates a NEW version row + an audit event; prior rows
+    are never rewritten, so a historical run stays linked to the exact rule
+    version in force at run time. ``config_kind``/``config_version`` link the
+    rule to the versioned configuration artifact that supplies its thresholds
+    (e.g. ``policy``/``trend_rules``/``escalation_rules``) so no threshold is
+    buried in code (Req 11.3).
+    """
+
+    __tablename__ = "rule_versions"
+    __table_args__ = (
+        UniqueConstraint("rule_id", "version", name="uq_rule_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    rule_id: Mapped[str] = mapped_column(
+        ForeignKey("rules.rule_id"), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    definition: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String, nullable=False)
+    config_kind: Mapped[str | None] = mapped_column(String, nullable=True)
+    config_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class Escalation(Base):
+    """A persisted escalation record (Req 14.3; task 5.6).
+
+    Carries every required field: ``escalation_id, case_id, severity, rule_id,
+    reason, triggered_at, evidence_refs[], status, resolution``. An escalation
+    CANNOT disappear unresolved (Req 14.5): resolution is additive -- the record
+    moves from ``open`` to ``resolved`` and records who/when/why, but is never
+    deleted. ``mandatory`` escalations keep the case status reflecting them
+    until resolved (Req 14.7). ``category`` keeps the four categories distinct
+    (data integrity / financial rules / AI-deterministic conflict / evidence)
+    and ``concept`` records which of the THREE financial-rule ideas fired.
+    """
+
+    __tablename__ = "escalations"
+
+    escalation_id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    severity: Mapped[str] = mapped_column(String, nullable=False)
+    category: Mapped[str] = mapped_column(String, nullable=False)
+    concept: Mapped[str | None] = mapped_column(String, nullable=True)
+    rule_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    rule_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    mandatory: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    triggered_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+    evidence_refs: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    status: Mapped[str] = mapped_column(String, default="open", nullable=False)
+    resolution: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
 class AuditEvent(Base):
     """Append-only audit event (Requirement 18).
 
