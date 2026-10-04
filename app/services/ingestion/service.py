@@ -152,6 +152,7 @@ class IngestionService:
         supersedes: str | None = None,
         enforce_cutoff: bool = True,
         actor_id: str | None = None,
+        document_id: str | None = None,
     ) -> IngestResult:
         """Store raw bytes immutably and record a ``DocumentRecord``.
 
@@ -201,7 +202,7 @@ class IngestionService:
             superseded_id = prior.document_id
 
         document = Document(
-            document_id=str(uuid.uuid4()),
+            document_id=document_id or str(uuid.uuid4()),
             case_id=case_id,
             filename=safe_name,
             document_type=document_type,

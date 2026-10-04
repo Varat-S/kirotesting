@@ -49,26 +49,78 @@ See the full spec in [`.kiro/specs/credit-memo-poc/`](.kiro/specs/credit-memo-po
 
 ## Getting started
 
-Requires Python 3.11 or newer.
+Python 3.11+ is supported. The preferred reproducible setup uses the checked-in
+`uv.lock` (including development/test dependencies):
 
-```bash
-# Create and activate a virtual environment
-python3.11 -m venv .venv
-source .venv/bin/activate
-
-# Install the project with development extras
-pip install -e ".[dev]"
-
-# Configure environment (copy and edit; never commit the real .env)
-cp .env.example .env
-
-# Run the API locally
-uvicorn app.main:app --reload
-# Health check: http://127.0.0.1:8000/health
-
-# Run the tests
-pytest
+```powershell
+python -m pip install uv==0.12.23
+uv sync --locked --python 3.11 --extra dev
+.\.venv\Scripts\Activate.ps1
+$env:DEBUG = 'false'
+python -m pytest -q
 ```
+
+`uv` creates `.venv` and can provision the requested Python version. On an
+existing pip environment, `pip install -e ".[dev]"` remains available but resolves
+the declared version ranges rather than the lock. Optional `ocr` and `pdf`
+extras require system dependencies; the default setup produces JSON and HTML.
+
+Create an offline draft from the labelled synthetic evidence package:
+
+```powershell
+python -m app.cli run-case SYNTHETIC_2024 --package examples/synthetic-case/package.json
+```
+
+This executes the actual parsers, mapping, reconciliation, deterministic metrics,
+trends, peer benchmarking, rules, fake extraction/analysis/challenge and grounding.
+The CLI prints output paths and outstanding mandatory escalations. The bundled
+sources and truth manifest are synthetic. Regenerate them with development extras
+using `python examples/generate_synthetic_case.py`.
+
+Approval is a separate human action. After reviewing the exact draft and
+resolving mandatory escalations, record approval and finalize that version:
+
+```powershell
+python -m app.cli approve SYNTHETIC_2024 --version 1 --reviewer credit.officer --reason "Reviewed the synthetic draft"
+python -m app.cli finalize SYNTHETIC_2024 --version 1 --reviewer credit.officer
+```
+
+Approval is bound to the reviewer, case, snapshot version and draft content.
+Changing the draft requires a new approval. Finalization freezes the draft row;
+a subsequent revision creates a new draft that supersedes the frozen snapshot.
+Add `--pdf` to `finalize` only with a working native PDF renderer.
+
+To choose local storage, put global options before the command:
+
+```powershell
+python -m app.cli --database data/demo.db --output output/demo run-case SYNTHETIC_2024
+```
+
+All nine illustrative artifacts in `config/poc` are versioned and hashed through
+`ConfigRegistry`. Input packages declare availability timestamps, entities,
+scope, accounting basis and extraction options. Future sources are rejected and
+logged. Missing or conflicting evidence produces explicit states and review
+requirements. Generic cash is distinct from unrestricted cash.
+
+For a browser preview with three synthetic cases (full, missing financials,
+conflicting revenue), run:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.preview --seed-demo
+```
+
+Open `http://127.0.0.1:8000/`. The workbench shows saved draft/final data,
+metrics and provenance, with memo HTML/JSON links. It uses a separate
+`data/browser_demo.db` and does not approve cases. See [TESTING_GUIDE.md](TESTING_GUIDE.md)
+for manual checks, upload testing, approval commands, and remaining work.
+
+For the API, optionally copy `.env.example` to `.env`, supply any required local
+settings, and run `uvicorn app.main:app --reload`. The health endpoint is
+`http://127.0.0.1:8000/health`.
+
+Existing SQLite databases require the additive migration described in
+[HARDENING_REPORT.md](HARDENING_REPORT.md#database-compatibility). Back up the
+database before running `python -m app.migrate --database data/credit_memo.db`.
 
 ## Configuration and secrets
 
@@ -80,9 +132,17 @@ containing placeholder keys, is tracked in git.
 
 ## Status
 
-Milestone 0 (project scaffold) is in place: package structure, tooling,
-FastAPI entrypoint with a health endpoint, an environment-driven config loader,
-and a smoke test. Subsequent milestones build the core evidence model,
-ingestion and entity controls, deterministic parsers, reconciliation, metrics
-and rules, LLM extraction/analysis/challenge, human review, outputs, and the
-evaluation harness.
+The offline end-to-end pipeline is wired and tested with actual synthetic
+XBRL/XLSX/CSV/PDF sources, eight source-removal ablations, historical replay and
+canonical memo reproducibility. Regression tests cover reconciliation integrity,
+metric evidence quality, case-specific entity roles and content-bound human approval.
+
+A real LLM provider is a separate integration step; `RealProviderBackend` remains
+a stub. Fake responses exercise orchestration and validation without asserting
+real narrative accuracy. Binary PDF needs the optional `pdf` dependency and its
+native libraries; OCR needs Tesseract. Immutability is enforced by the application
+and ORM in this PoC rather than hardware/WORM storage.
+
+See [HARDENING_REPORT.md](HARDENING_REPORT.md) for changes, tests, validation and
+migration details, and [REAL_DATA_READINESS.md](REAL_DATA_READINESS.md) for parser
+limits and the next real-filing validation step.

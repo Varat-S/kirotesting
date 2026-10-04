@@ -1,0 +1,9 @@
+{
+  "entities": [
+    "PEER_A",
+    "PEER_B"
+  ],
+  "synthetic": true,
+  "min_sample_for_percentiles": 8,
+  "label": "ILLUSTRATIVE - NOT BANK POLICY"
+}

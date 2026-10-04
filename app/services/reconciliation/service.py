@@ -40,6 +40,7 @@ NOT build the escalation engine or routing.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from itertools import combinations
 from enum import Enum
 from typing import Any
 
@@ -64,8 +65,8 @@ from app.services.reconciliation.compatibility import (
 DEFAULT_TOLERANCES: dict[str, Any] = {
     "label": "ILLUSTRATIVE — NOT BANK POLICY",
     "near_zero_floor": 1.0,
-    "default_relative": 0.005,
-    "default_absolute": 1.0,
+    "default_relative": 0.0,
+    "default_absolute": 0.0,
     "fields": {
         # relative tolerance; illustrative values from requirements/design.
         "revenue": {"relative": 0.005, "absolute": 1.0},
@@ -74,6 +75,9 @@ DEFAULT_TOLERANCES: dict[str, Any] = {
         "ebitda": {"relative": 0.005, "absolute": 1.0},
         # ratios compare on an absolute 0.01x band.
         "ratio": {"relative": None, "absolute": 0.01},
+        "operating_margin": {"comparison": "absolute", "absolute": 0.005},
+        "load_factor": {"comparison": "absolute", "absolute": 0.002},
+        "net_debt_to_ebitda": {"comparison": "absolute", "absolute": 0.01},
     },
 }
 
@@ -153,6 +157,8 @@ class ToleranceConfig:
         else:
             relative = entry.get("relative", self._content.get("default_relative"))
             absolute = entry.get("absolute", self._content.get("default_absolute"))
+            if entry.get("comparison") == "absolute":
+                relative = None
         return FieldTolerance(
             relative=None if relative is None else float(relative),
             absolute=None if absolute is None else float(absolute),
@@ -184,6 +190,10 @@ class ReconciliationResult:
     mismatch_dimensions: list[str] = field(default_factory=list)
     record_kind: str = "numeric"
     detail: str | None = None
+    selected_fact_id: str | None = None
+    selected_value: float | None = None
+    selection_reason: str | None = None
+    selection_version: int | None = None
 
     @property
     def within_tolerance(self) -> bool:
@@ -205,6 +215,10 @@ class ReconciliationResult:
             "mismatch_dimensions": self.mismatch_dimensions,
             "record_kind": self.record_kind,
             "detail": self.detail,
+            "selected_fact_id": self.selected_fact_id,
+            "selected_value": self.selected_value,
+            "selection_reason": self.selection_reason,
+            "selection_version": self.selection_version,
         }
 
 
@@ -233,10 +247,15 @@ def _fact_signature(fact: CanonicalFact) -> tuple:
         fact.period_type,
         fact.fiscal_year,
         fact.entity_id,
+        fact.consolidation_scope,
+        fact.status,
+        fact.extraction_method,
         fact.accounting_basis,
         fact.definition_version,
         fact.restated,
-        tuple(tuple(sorted(r.model_dump(mode="json").items())) for r in fact.source_refs),
+        tuple(
+            tuple(sorted(r.model_dump(mode="json").items())) for r in fact.source_refs
+        ),
     )
 
 
@@ -263,11 +282,18 @@ class Reconciler:
         session: Session | None = None,
         audit: AuditLog | None = None,
         case_id: str | None = None,
+        precedence: dict | None = None,
+        selection_version: int | None = None,
     ) -> None:
         self._tol = tolerances
         self._session = session
         self._audit = audit
         self._case_id = case_id
+        self._precedence = (precedence or {}).get(
+            "methods",
+            ["xbrl", "xlsx", "csv", "pdf_table", "pdf_text", "ocr", "llm", "manual"],
+        )
+        self._selection_version = selection_version
 
     # -- pure comparison ------------------------------------------------------
 
@@ -303,9 +329,7 @@ class Reconciler:
         # Zero-safe denominator: use the larger magnitude so neither a 0 nor a
         # near-zero value can be chosen as the divisor (Req 7.2).
         denominator = max(abs(a), abs(b))
-        can_divide = (
-            tol.relative is not None and denominator > tol.near_zero_floor
-        )
+        can_divide = tol.relative is not None and denominator > tol.near_zero_floor
 
         if can_divide:
             relative_delta = absolute_delta / denominator
@@ -379,18 +403,35 @@ class Reconciler:
                 source_refs=source_refs,
                 fact_ids=fact_ids,
                 comparison_method=ComparisonMethod.NOT_COMPARABLE,
-                resolved_state=FactStatus.UNVERIFIED,
+                resolved_state=max(
+                    [FactStatus.UNVERIFIED, a.status, b.status], key=_severity
+                ),
                 near_zero_floor=self._tol.near_zero_floor,
                 tolerance_version=self._tol.version,
                 detail="One or both facts carry no numeric value to compare.",
             )
 
-        result = self.compare_values(
-            field_name, a.normalized_value, b.normalized_value
-        )
+        result = self.compare_values(field_name, a.normalized_value, b.normalized_value)
         result.source_refs = source_refs
         result.fact_ids = fact_ids
-        return result
+        semantic = [
+            f.status
+            for f in (a, b)
+            if f.status not in {FactStatus.VERIFIED, FactStatus.UNVERIFIED}
+        ]
+        if semantic:
+            result.resolved_state = max(
+                [result.resolved_state, *semantic], key=_severity
+            )
+        if (
+            any(
+                f.extraction_method is not None and f.extraction_method.value == "llm"
+                for f in (a, b)
+            )
+            and result.resolved_state == FactStatus.VERIFIED
+        ):
+            result.resolved_state = FactStatus.UNVERIFIED
+        return self._select(result, [a, b])
 
     def reconcile_field(
         self, field_name: str, facts: list[CanonicalFact]
@@ -402,11 +443,10 @@ class Reconciler:
         otherwise ``conflicting``. Exact duplicates are removed first (Req 3.8).
         Conflicts preserve both values + refs (no silent merge, Req 7.9, 7.10).
         """
-        value_facts = [
-            f
-            for f in deduplicate_exact(facts)
-            if f.status not in {FactStatus.MISSING}
-        ]
+        value_facts = sorted(
+            deduplicate_exact(sorted(facts, key=lambda f: f.fact_id)),
+            key=lambda f: f.fact_id,
+        )
 
         if not value_facts:
             return ReconciliationResult(
@@ -425,12 +465,14 @@ class Reconciler:
             only = value_facts[0]
             state = (
                 FactStatus.UNVERIFIED
-                if only.normalized_value is not None
-                else FactStatus.MISSING
+                if only.status == FactStatus.VERIFIED
+                else only.status
             )
-            return ReconciliationResult(
+            result = ReconciliationResult(
                 field=field_name,
-                values=[only.normalized_value] if only.normalized_value is not None else [],
+                values=[only.normalized_value]
+                if only.normalized_value is not None
+                else [],
                 source_refs=_source_refs_payload(only),
                 fact_ids=[only.fact_id],
                 comparison_method=ComparisonMethod.NOT_COMPARABLE,
@@ -439,12 +481,12 @@ class Reconciler:
                 tolerance_version=self._tol.version,
                 detail="Only one reliable source; cannot cross-verify.",
             )
+            return self._select(result, value_facts)
 
         # Reconcile pairwise against the first fact; any conflict/mismatch keeps
         # the field in a non-verified state with both values preserved.
-        anchor = value_facts[0]
         worst: ReconciliationResult | None = None
-        for other in value_facts[1:]:
+        for anchor, other in combinations(value_facts, 2):
             result = self.reconcile_pair(field_name, anchor, other)
             if worst is None or _severity(result.resolved_state) > _severity(
                 worst.resolved_state
@@ -454,9 +496,7 @@ class Reconciler:
 
         # Collect every value + ref so no observation is dropped (Req 7.10).
         all_values = [
-            f.normalized_value
-            for f in value_facts
-            if f.normalized_value is not None
+            f.normalized_value for f in value_facts if f.normalized_value is not None
         ]
         all_refs: list[dict] = []
         all_ids: list[str] = []
@@ -466,7 +506,52 @@ class Reconciler:
         worst.values = all_values
         worst.source_refs = all_refs
         worst.fact_ids = all_ids
-        return worst
+        # Numeric agreement cannot erase stale/conflicting or non-value observations.
+        semantic = [
+            f.status
+            for f in value_facts
+            if f.status not in {FactStatus.VERIFIED, FactStatus.UNVERIFIED}
+        ]
+        if semantic:
+            worst.resolved_state = max([worst.resolved_state, *semantic], key=_severity)
+        if any(
+            f.extraction_method is not None and f.extraction_method.value == "llm"
+            for f in value_facts
+        ):
+            if worst.resolved_state == FactStatus.VERIFIED:
+                worst.resolved_state = FactStatus.UNVERIFIED
+        return self._select(worst, value_facts)
+
+    def _select(
+        self, result: ReconciliationResult, facts: list[CanonicalFact]
+    ) -> ReconciliationResult:
+        result.selection_version = self._selection_version
+        if result.resolved_state not in {
+            FactStatus.VERIFIED,
+            FactStatus.UNVERIFIED,
+            FactStatus.STALE,
+        }:
+            return result
+        candidates = [f for f in facts if f.normalized_value is not None]
+        if not candidates:
+            return result
+
+        def rank(f):
+            method = f.extraction_method.value if f.extraction_method else "unknown"
+            return (
+                self._precedence.index(method)
+                if method in self._precedence
+                else len(self._precedence),
+                f.fact_id,
+            )
+
+        selected = min(candidates, key=rank)
+        result.selected_fact_id = selected.fact_id
+        result.selected_value = selected.normalized_value
+        result.selection_reason = (
+            "Preferred compatible source by versioned precedence; fact ID breaks ties."
+        )
+        return result
 
     # -- non-numeric contradiction -------------------------------------------
 
@@ -489,9 +574,7 @@ class Reconciler:
             near_zero_floor=self._tol.near_zero_floor,
             tolerance_version=self._tol.version,
             record_kind="non_numeric",
-            detail=(
-                f"Non-numeric disagreement: {a.raw_value!r} vs {b.raw_value!r}."
-            ),
+            detail=(f"Non-numeric disagreement: {a.raw_value!r} vs {b.raw_value!r}."),
         )
 
     # -- persistence ----------------------------------------------------------
@@ -526,11 +609,23 @@ class Reconciler:
             mismatch_dimensions=list(result.mismatch_dimensions),
             record_kind=result.record_kind,
             detail=result.detail,
+            selected_fact_id=result.selected_fact_id,
+            selected_value=result.selected_value,
+            selection_reason=result.selection_reason,
+            selection_version=result.selection_version,
         )
         self._session.add(row)
         self._session.flush()
 
         if self._audit is not None:
+            self._audit.record(
+                EventType.FACT_RECONCILED,
+                case_id=self._case_id,
+                actor_type=ActorType.SYSTEM,
+                after=result.as_payload(),
+                reason=f"Canonical state resolved for {result.field!r}.",
+                linked_objects=result.fact_ids,
+            )
             if result.resolved_state is FactStatus.VERIFIED:
                 self._audit.record(
                     EventType.FACT_VERIFIED,
@@ -561,7 +656,10 @@ def _severity(state: FactStatus) -> int:
         FactStatus.VERIFIED: 0,
         FactStatus.UNVERIFIED: 1,
         FactStatus.MISSING: 2,
-        FactStatus.CONFLICTING: 3,
+        FactStatus.NOT_APPLICABLE: 3,
+        FactStatus.NOT_DISCLOSED: 4,
+        FactStatus.STALE: 5,
+        FactStatus.CONFLICTING: 6,
     }
     return order.get(state, 1)
 

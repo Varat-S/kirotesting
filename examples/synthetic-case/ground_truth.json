@@ -1,0 +1,146 @@
+{
+  "case_id": "SYNTHETIC_2024",
+  "as_of_date": "2024-12-31",
+  "evidence_cutoff_timestamp": "2025-01-15T00:00:00Z",
+  "manifest_version": "synthetic-1.0",
+  "verified_facts": [
+    {
+      "name": "revenue",
+      "field_type": "financial",
+      "expected_value": 1000,
+      "tolerance": 0
+    },
+    {
+      "name": "operating_income",
+      "field_type": "financial",
+      "expected_value": 200,
+      "tolerance": 0
+    },
+    {
+      "name": "total_debt",
+      "field_type": "financial",
+      "expected_value": 700,
+      "tolerance": 0
+    },
+    {
+      "name": "unrestricted_cash",
+      "field_type": "financial",
+      "expected_value": 100,
+      "tolerance": 0
+    },
+    {
+      "name": "ebitda",
+      "field_type": "financial",
+      "expected_value": 200,
+      "tolerance": 0
+    },
+    {
+      "name": "interest_expense",
+      "field_type": "financial",
+      "expected_value": 40,
+      "tolerance": 0
+    },
+    {
+      "name": "cfo",
+      "field_type": "financial",
+      "expected_value": 170,
+      "tolerance": 0
+    },
+    {
+      "name": "capex",
+      "field_type": "financial",
+      "expected_value": 80,
+      "tolerance": 0
+    },
+    {
+      "name": "undrawn_revolver",
+      "field_type": "financial",
+      "expected_value": 100,
+      "tolerance": 0
+    },
+    {
+      "name": "operating_expense",
+      "field_type": "financial",
+      "expected_value": 800,
+      "tolerance": 0
+    },
+    {
+      "name": "rpm",
+      "field_type": "financial",
+      "expected_value": 800,
+      "tolerance": 0
+    },
+    {
+      "name": "asm",
+      "field_type": "financial",
+      "expected_value": 1000,
+      "tolerance": 0
+    }
+  ],
+  "expected_metric_outputs": [
+    {
+      "metric_id": "operating_margin",
+      "expected_result": 0.2,
+      "tolerance": 1e-09
+    },
+    {
+      "metric_id": "net_debt",
+      "expected_result": 600,
+      "tolerance": 1e-09
+    },
+    {
+      "metric_id": "net_debt_to_ebitda",
+      "expected_result": 3,
+      "tolerance": 1e-09
+    },
+    {
+      "metric_id": "interest_coverage",
+      "expected_result": 5,
+      "tolerance": 1e-09
+    },
+    {
+      "metric_id": "cash_conversion",
+      "expected_result": 0.85,
+      "tolerance": 1e-09
+    },
+    {
+      "metric_id": "free_cash_flow",
+      "expected_result": 90,
+      "tolerance": 1e-09
+    },
+    {
+      "metric_id": "liquidity",
+      "expected_result": 200,
+      "tolerance": 1e-09
+    },
+    {
+      "metric_id": "capex_to_revenue",
+      "expected_result": 0.08,
+      "tolerance": 1e-09
+    },
+    {
+      "metric_id": "load_factor",
+      "expected_result": 0.8,
+      "tolerance": 1e-09
+    },
+    {
+      "metric_id": "casm",
+      "expected_result": 0.8,
+      "tolerance": 1e-09
+    },
+    {
+      "metric_id": "revenue_growth",
+      "expected_result": 0.1111111111111111,
+      "tolerance": 1e-09
+    }
+  ],
+  "adjudicated_material_risks": [
+    "R-EVIDENCE-WEAK-01"
+  ],
+  "expected_rule_triggers": [
+    "R-EVIDENCE-WEAK-01"
+  ],
+  "annotator_metadata": {
+    "source": "Synthetic generator; values are deliberately illustrative"
+  }
+}

@@ -47,6 +47,7 @@ ARTIFACT_KINDS: frozenset[str] = frozenset(
         "escalation_rules",
         "parser_precedence",
         "source_profiles",
+        "financial_mappings",
     }
 )
 
@@ -158,9 +159,7 @@ class ConfigRegistry:
         row = self._latest_row(artifact_kind)
         return self._to_view(row) if row is not None else None
 
-    def config_versions_map(
-        self, kinds: Iterable[str] | None = None
-    ) -> dict[str, int]:
+    def config_versions_map(self, kinds: Iterable[str] | None = None) -> dict[str, int]:
         """Return ``{artifact_kind: latest_version}`` for recording on snapshots.
 
         A snapshot records exactly which configuration versions it used

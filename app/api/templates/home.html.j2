@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Credit memo cases</title>{% include 'browser_style.html.j2' %}</head>
+<body>
+<header><span class="badge">Local proof of concept</span><h1>Credit memo cases</h1>
+<p class="subtle">Inspect source evidence, calculated metrics, exceptions, and saved memos.</p>
+<p class="notice">The bundled Delta example uses synthetic data. The offline runner uses a fake AI backend, so generated analysis is empty. Drafts require human approval.</p>
+<div class="actions"><a href="/docs">API explorer: create a case / upload documents</a><a href="/health">Service health</a></div>
+</header>
+<main><section><h2>Saved cases</h2>
+{% if cases %}
+<div class="table-wrap"><table><thead><tr><th>Case</th><th>As of</th><th>Status</th><th>Version</th><th>Open</th></tr></thead><tbody>
+{% for case in cases %}<tr><td>{{ case.case_id }}</td><td>{{ case.as_of_date or 'not set' }}</td><td>{{ case.status }}</td><td>{{ case.version or 'none' }}</td><td>
+<a href="{{ request.url_for('get_workbench_html', case_id=case.case_id) }}{% if case.version %}?snapshot_version={{ case.version }}{% endif %}">Workbench</a>
+{% if case.version %} · <a href="{{ request.url_for('get_memo_html', case_id=case.case_id) }}?snapshot_version={{ case.version }}">Memo</a> · <a href="{{ request.url_for('get_memo_json', case_id=case.case_id) }}?snapshot_version={{ case.version }}">JSON</a>{% endif %}
+</td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p>No cases yet. Run the bundled source package using the CLI to create a draft.</p>{% endif %}
+<p class="subtle">Processing, resolving exceptions, approval, and finalization are currently service/CLI actions; this workbench displays saved results.</p>
+</section></main>
+<section><h2>Try the three examples</h2>
+<ul><li><strong>SYNTHETIC_2024:</strong> inspect calculated metrics, evidence quality, and the draft memo.</li>
+<li><strong>SYNTHETIC_MISSING:</strong> check that unavailable financial inputs leave results unavailable and raise exceptions.</li>
+<li><strong>SYNTHETIC_CONFLICT:</strong> inspect disagreeing revenue observations and the mandatory conflict exception.</li></ul>
+<p>Open each workbench, use the section links, and expand the data panels to trace results back to their evidence.</p>
+</section>
+</body></html>

@@ -1,0 +1,40 @@
+{
+  "label": "ILLUSTRATIVE - NOT BANK POLICY",
+  "near_zero_floor": 1.0,
+  "default_relative": 0.0,
+  "default_absolute": 0.0,
+  "fields": {
+    "revenue": {
+      "relative": 0.005,
+      "absolute": 1.0
+    },
+    "total_debt": {
+      "relative": 0.005,
+      "absolute": 1.0
+    },
+    "debt": {
+      "relative": 0.005,
+      "absolute": 1.0
+    },
+    "ebitda": {
+      "relative": 0.005,
+      "absolute": 1.0
+    },
+    "ratio": {
+      "relative": null,
+      "absolute": 0.01
+    },
+    "operating_margin": {
+      "comparison": "absolute",
+      "absolute": 0.005
+    },
+    "load_factor": {
+      "comparison": "absolute",
+      "absolute": 0.002
+    },
+    "net_debt_to_ebitda": {
+      "comparison": "absolute",
+      "absolute": 0.01
+    }
+  }
+}

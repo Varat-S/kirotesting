@@ -4,7 +4,7 @@ Tasks follow the revised milestone order: **core evidence/provenance model is bu
 
 ## Milestone 0 — Project Scaffold
 
-- [ ] 0.1 Initialize the repository structure and tooling
+- [x] 0.1 Initialize the repository structure and tooling
   - Create `pyproject.toml` (Python 3.11+), `.env.example`, `README.md`.
   - Create `app/{api,core,models,schemas,prompts,config}` and `app/services/{ingestion,entity,extraction,reconciliation,metrics,benchmarking,analysis,escalation,reporting,audit,evaluation}`.
   - Create `config/{tolerances,policy,peers,metric_defs,rules,source_profiles}`, `data/{raw,parsed,normalized,derived,snapshots}`, `tests/{unit,integration,golden,ablation,prompts,end_to_end,leakage}`, `evals/{cases,manifests,annotations,results,reports}`, `output/{json,pdf}`.
@@ -13,17 +13,17 @@ Tasks follow the revised milestone order: **core evidence/provenance model is bu
 
 ## Milestone 1 — Core Evidence Model (data model before parsers)
 
-- [ ] 1.1 Define core persistence and the configuration registry
+- [x] 1.1 Define core persistence and the configuration registry
   - SQLAlchemy models for `cases`, `entities`, `documents`, `facts`, `fact_source_refs`, `snapshots`, `audit_events`, `config_versions` on SQLite.
   - `app/core` config loader reading secrets from env vars (never hardcoded/logged); configuration registry that versions + hashes tolerances, policy, peers, metric defs, trend rules, escalation rules, parser precedence, source profiles.
   - _Requirements: 19.6, 21.1, 21.2, 25.2_
 
-- [ ] 1.2 Implement the append-only audit log
+- [x] 1.2 Implement the append-only audit log
   - Emit events with `event_id, case_id, event_type, timestamp, actor_type, actor_id, before, after, reason, linked_objects`; enforce immutability (no update/delete).
   - Support all required event types including `entity_registered`, `entity_mismatch_detected`, `metric_definition_changed`, `config_version_changed`, `snapshot_finalized`.
   - _Requirements: 18.1, 18.2, 18.3, 18.4_
 
-- [ ] 1.3 Define the EntityRecord and entity registry
+- [x] 1.3 Define the EntityRecord and entity registry
   - `EntityRecord` with `entity_id, legal_name, aliases, tickers, entity_type, parent_entity_id, borrower_flag, guarantor_flag, jurisdiction?, source_refs`; preserve legal borrower distinct from consolidated parent.
   - _Requirements: 2.1, 2.5_
 
@@ -95,19 +95,19 @@ Tasks follow the revised milestone order: **core evidence/provenance model is bu
 
 ## Milestone 4 — Reconciliation + CanonicalEvidenceSnapshot
 
-- [ ] 4.1 Implement definition-compatibility checks
+- [x] 4.1 Implement definition-compatibility checks
   - Before comparison, check entity/period/unit-scale/currency/accounting-definition/restatement/source-authority; structured value wins ONLY if all pass; otherwise preserve both and mark `definition_mismatch`; no global ranking erases disagreement.
   - _Requirements: 3.7, 6.1, 6.2, 6.3_
 
-- [ ] 4.2 Implement zero-safe reconciliation + conflict detection
+- [x] 4.2 Implement zero-safe reconciliation + conflict detection
   - Always compute absolute delta; relative delta only above versioned near-zero floor; record `comparison_method` (`relative|absolute|exact|definition_mismatch|not_comparable`); apply versioned field tolerances; resolve to `verified|conflicting|unverified|missing`; dedupe exact duplicates; keep conflicts visible with both values/refs; contradiction records for non-numeric disagreement.
   - _Requirements: 3.8, 3.9, 7.1–7.10_
 
-- [ ] 4.3 Implement human correction workflow (non-destructive)
+- [x] 4.3 Implement human correction workflow (non-destructive)
   - Resolution creates a new event (does not delete conflict); before/after states visible; emit `fact_human_corrected`.
   - _Requirements: 7.11, 7.12, 15.2, 15.3_
 
-- [ ] 4.4 Assemble and version the CanonicalEvidenceSnapshot
+- [x] 4.4 Assemble and version the CanonicalEvidenceSnapshot
   - Documents, entities, facts, normalized financials, provenance, data-quality states; record `config_versions`; validate against JSON Schema; downstream references by version.
   - _Requirements: 5.1, 5.3, 5.5, 5.6_
 
@@ -117,23 +117,23 @@ Tasks follow the revised milestone order: **core evidence/provenance model is bu
 
 ## Milestone 5 — Deterministic Metrics / Trends / Benchmarks / Rules
 
-- [ ] 5.1 Implement the metric-definition registry
+- [x] 5.1 Implement the metric-definition registry
   - `metric_definition_id` + version stating components included/excluded; definition change → audit event + regression trigger, no rewrite of historical outputs; historical runs linked to definition version.
   - _Requirements: 8.2, 8.3, 8.8_
 
-- [ ] 5.2 Implement the deterministic metric engine
+- [x] 5.2 Implement the deterministic metric engine
   - Configured metric set; store definition/formula/engine versions, inputs, input fact IDs, result, period, units; zero/near-zero/missing/misleading denominator → `not_meaningful|missing_input|requires_review`; LLM never overrides.
   - _Requirements: 8.1, 8.2, 8.4, 8.7_
 
-- [ ] 5.3 Implement the historical trend layer
+- [x] 5.3 Implement the historical trend layer
   - current/previous/2Y/3Y change, slope/direction, volatility; configured metric-specific adverse direction; no implied continuity across missing years; surface structural breaks; deterministic.
   - _Requirements: 9.1–9.5_
 
-- [ ] 5.4 Implement the small-cohort-aware peer benchmark layer
+- [x] 5.4 Implement the small-cohort-aware peer benchmark layer
   - Report raw peer values, rank, median, min/max, simple distribution; suppress/label unstable percentiles; P90/P95 only when sample size permits; store `benchmark_method`, `sample_size`, cohort definition/version, benchmark date; prevent borrower double-count; label synthetic values; reproducible; anomaly signal only.
   - _Requirements: 10.1–10.7_
 
-- [ ] 5.5 Implement the versioned policy/rule layer
+- [x] 5.5 Implement the versioned policy/rule layer
   - Keep policy threshold / peer benchmark / historical deterioration separate; thresholds in versioned config labelled `ILLUSTRATIVE — NOT BANK POLICY`; rules versioned; change → audit; historical runs linked to rule version.
   - _Requirements: 11.1, 11.2, 11.3, 11.5, 11.6_
 
@@ -174,29 +174,29 @@ Tasks follow the revised milestone order: **core evidence/provenance model is bu
 
 ## Milestone 7 — Human Review + FinalCaseSnapshot
 
-- [ ] 7.1 Implement the human-in-the-loop review workflow
+- [x] 7.1 Implement the human-in-the-loop review workflow
   - All reviewer actions; record reviewer/timestamp/prior/new/reason/linked evidence/comment; non-destructive, before/after visible; explicit sign-off for final recommendation + gated items; final output identifies unresolved exceptions; emit `human_review`.
   - _Requirements: 15.1–15.6_
 
-- [ ] 7.2 Implement FinalCaseSnapshot finalization + immutability
+- [x] 7.2 Implement FinalCaseSnapshot finalization + immutability
   - Assemble `FinalCaseSnapshot` referencing a `CanonicalEvidenceSnapshot` version + metrics/benchmarks/analysis/risks/mitigants/escalations/human reviews/recommendation/audit metadata + config/metric-def/rule/prompt-model versions; once finalized immutable; later change creates new version referencing predecessor; outputs linked to exact snapshot; emit `snapshot_finalized`.
   - _Requirements: 16.1, 16.2, 16.3, 16.4_
 
-- [ ] 7.3 Tests: review + snapshot immutability
+- [x] 7.3 Tests: review + snapshot immutability
   - Non-destructive edits with recoverable before/after; sign-off gates finalization; finalized snapshot immutable; new version references predecessor.
   - _Requirements: 16.2, 16.3, 23.1_
 
 ## Milestone 8 — Outputs
 
-- [ ] 8.1 Generate the FinalCaseSnapshot JSON (first)
+- [x] 8.1 Generate the FinalCaseSnapshot JSON (first)
   - Source refs, facts, metrics, analysis, escalations, human reviews, final status, version metadata; validate against JSON Schema; emit `memo_generated`/`case_finalized`.
   - _Requirements: 17.1_
 
-- [ ] 8.2 Render the PDF memo from FinalCaseSnapshot (deterministic)
+- [x] 8.2 Render the PDF memo from FinalCaseSnapshot (deterministic)
   - Jinja2 templates; configured sections; every number matches JSON; every major claim maps to evidence/analysis; no content absent from JSON; show as-of/cutoff/unresolved exceptions; stable re-render; linked to snapshot version.
   - _Requirements: 17.2–17.7_
 
-- [ ] 8.3 Tests: JSON↔PDF parity
+- [x] 8.3 Tests: JSON↔PDF parity
   - Numerical parity; claim-to-evidence mapping; re-render equivalence; output linked to exact snapshot.
   - _Requirements: 17.4, 17.5, 17.7_
 
@@ -210,11 +210,11 @@ Tasks follow the revised milestone order: **core evidence/provenance model is bu
   - Per field: value, entity, period, currency, scale, source location, allowed tolerance, expected status; measure field/numeric/citation accuracy + required-field recall by field type.
   - _Requirements: 23.2_
 
-- [ ] 9.3 Implement temporal backtesting + leakage tests
+- [x] 9.3 Implement temporal backtesting + leakage tests
   - Expanding and (if learned model) rolling windows; never mix future/past; same evidence rerunnable under original vs latest config (two visibly distinguished modes); leakage tests reject future filing/news/peer/market-macro.
   - _Requirements: 19.7, 20.4, 23.7_
 
-- [ ] 9.4 Implement missing-data ablation harness
+- [x] 9.4 Implement missing-data ablation harness
   - FULL + NO_XLSX/NO_XBRL/PDF_ONLY/NO_INDUSTRY_DATA/NO_FUEL_DATA/NO_DEBT_MATURITY_TABLE/NO_INTERIM_STATEMENTS; measure completeness/accuracy, metric availability, risk recall, unsupported-claim rate, correct-escalation rate, human-review rate, `performance_drop`; graceful degradation only; run ≥4.
   - _Requirements: 23.8, 23.14_
 
@@ -230,7 +230,7 @@ Tasks follow the revised milestone order: **core evidence/provenance model is bu
   - Simple-baseline comparison, precision/recall/F1, AUROC where meaningful, calibration, paired bootstrap CIs, McNemar where appropriate, effect size + sample size; no ML for appearance; LLM not retrained by PoC.
   - _Requirements: 23.12_
 
-- [ ] 9.8 Implement end-to-end reproducibility test
+- [x] 9.8 Implement end-to-end reproducibility test
   - Same source snapshot + config/metric-def/rule/prompt/model versions reproduce source set, deterministic facts/metrics, rule triggers, schema structure, `FinalCaseSnapshot` linkage; store original LLM outputs.
   - _Requirements: 23.13_
 
@@ -281,3 +281,14 @@ Tasks follow the revised milestone order: **core evidence/provenance model is bu
 **Critical design rules → acceptance test:** rules 1–23 are each exercised by at least one test task — e.g. rule 4 (entity scope) → 2.5; rule 8 (compat precedence) → 4.5; rule 9 (zero-safe) → 4.5; rule 14 (citation vs entailment) → 6.6; rule 16 (snapshot immutability) → 7.3; rule 17 (leakage) → 2.5/9.3; rule 19 (ground truth) → 9.1; rule 20 (contemporaneous vs future) → 9.6; rule 21 (no silent defaults) → 1.6/2.4.
 
 **Deferred / non-MVP:** OCR (3.5) optional unless required by evidence; lower-level ML statistical tests (9.7) only if a learned model is introduced; workbench UI (Milestone 10) optional per the MVP cut.
+
+## Hardening acceptance evidence
+
+The checked tasks above are substantiated by the passing deterministic suite and
+`tests/integration/test_pipeline_acceptance.py`,
+`tests/integration/test_hardening_boundaries.py`,
+`tests/ablation/test_pipeline_ablation.py`, and
+`tests/leakage/test_pipeline_replay.py`. Binary PDF production remains conditional
+on native dependencies; HTML/JSON parity is exercised. Fake AI stages are wired;
+real-provider integration and real-filing parser validation remain separate work.
+See `HARDENING_REPORT.md` and `REAL_DATA_READINESS.md`.

@@ -17,6 +17,7 @@ from datetime import date, datetime, timezone
 import pytest
 from sqlalchemy.orm import Session
 
+from app.schemas.snapshots import FinalCaseSnapshot
 from app.core.config_registry import ConfigRegistry
 from app.models.orm import Case, ReconciliationRecord
 from app.schemas.enums import EntityType
@@ -62,7 +63,9 @@ def _finalize_case(
     with_open_exception: bool = True,
 ) -> tuple[FinalSnapshotAssembler, object]:
     """Seed + finalize a FinalCaseSnapshot v1 and return (assembler, row)."""
-    db_session.add(Case(case_id=case_id, as_of_date=AS_OF, evidence_cutoff_timestamp=CUTOFF))
+    db_session.add(
+        Case(case_id=case_id, as_of_date=AS_OF, evidence_cutoff_timestamp=CUTOFF)
+    )
     db_session.flush()
     registry = ConfigRegistry(db_session)
     registry.register("policy", {"net_debt_to_ebitda": 3.5})
@@ -79,7 +82,6 @@ def _finalize_case(
         )
 
     wf = HumanReviewWorkflow(db_session, audit=audit, case_id=case_id)
-    wf.sign_off_recommendation(reviewer="credit.officer")
 
     final = FinalSnapshotAssembler(db_session, registry, audit=audit)
     snapshot = final.assemble(
@@ -93,9 +95,8 @@ def _finalize_case(
         mitigants=[{"statement": "Strong liquidity."}],
         recommendation={"status": "draft", "rating": "BB"},
     )
-    row = final.finalize(
-        snapshot, signed_off_by="credit.officer", has_sign_off=wf.has_sign_off()
-    )
+    wf.sign_off_recommendation(reviewer="credit.officer", snapshot=snapshot)
+    row = final.finalize(snapshot, signed_off_by="credit.officer")
     return final, row
 
 
@@ -219,7 +220,9 @@ def test_count_ai_deterministic_conflicts(db_session: Session) -> None:
 
 def test_count_awaiting_human_decisions(db_session: Session) -> None:
     # Fresh case with a gated-but-unsigned review + an open mandatory escalation.
-    db_session.add(Case(case_id="C1", as_of_date=AS_OF, evidence_cutoff_timestamp=CUTOFF))
+    db_session.add(
+        Case(case_id="C1", as_of_date=AS_OF, evidence_cutoff_timestamp=CUTOFF)
+    )
     db_session.flush()
     audit = AuditLog(db_session)
 
@@ -281,10 +284,13 @@ def test_later_review_creates_new_version_old_stays_frozen(db_session: Session) 
     # A later review supersedes v1 with v2 (Req 16.3 / 24.4). v1 is untouched.
     v2 = final.supersede(
         v1,
-        signed_off_by="credit.officer",
-        has_sign_off=True,
         recommendation={"status": "draft", "rating": "BBB-"},
     )
+    revised = FinalCaseSnapshot.model_validate(v2.payload)
+    HumanReviewWorkflow(db_session, case_id="DAL_2024").sign_off_recommendation(
+        reviewer="credit.officer", snapshot=revised
+    )
+    v2 = final.finalize(revised, signed_off_by="credit.officer")
 
     db_session.refresh(v1)
     assert v1.content_hash == v1_hash  # old version frozen / unchanged
@@ -316,7 +322,9 @@ def test_later_review_creates_new_version_old_stays_frozen(db_session: Session) 
 
 
 def test_pre_final_case_renders_pending_sections(db_session: Session) -> None:
-    db_session.add(Case(case_id="PF", as_of_date=AS_OF, evidence_cutoff_timestamp=CUTOFF))
+    db_session.add(
+        Case(case_id="PF", as_of_date=AS_OF, evidence_cutoff_timestamp=CUTOFF)
+    )
     db_session.flush()
     registry = ConfigRegistry(db_session)
     registry.register("source_profiles", {"filing": "critical"})

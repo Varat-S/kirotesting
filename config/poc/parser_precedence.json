@@ -1,0 +1,13 @@
+{
+  "methods": [
+    "xbrl",
+    "xlsx",
+    "csv",
+    "pdf_table",
+    "pdf_text",
+    "ocr",
+    "llm",
+    "manual"
+  ],
+  "label": "ILLUSTRATIVE - NOT BANK POLICY"
+}

@@ -129,6 +129,7 @@ class HumanReviewWorkflow:
         comment: str | None = None,
         signed_off: bool = False,
         case_id: str | None = None,
+        review_id: str | None = None,
     ) -> HumanReview:
         """Append a human-review action and emit a ``human_review`` event.
 
@@ -143,7 +144,7 @@ class HumanReviewWorkflow:
         requires_sign_off = action_v in GATED_ACTIONS
 
         row = HumanReview(
-            review_id=str(uuid.uuid4()),
+            review_id=review_id or str(uuid.uuid4()),
             case_id=cid,
             action=action_v.value,
             target_type=target_type,
@@ -171,7 +172,7 @@ class HumanReviewWorkflow:
                 reason=reason,
                 linked_objects=[
                     f"review:{row.review_id}",
-                    *( [f"{target_type}:{target_id}"] if target_id else [] ),
+                    *([f"{target_type}:{target_id}"] if target_id else []),
                     *row.linked_evidence,
                 ],
             )
@@ -181,6 +182,8 @@ class HumanReviewWorkflow:
         self,
         *,
         reviewer: str,
+        snapshot=None,
+        review_id: str | None = None,
         prior_value: dict[str, Any] | None = None,
         new_value: dict[str, Any] | None = None,
         reason: str | None = None,
@@ -189,10 +192,24 @@ class HumanReviewWorkflow:
         case_id: str | None = None,
     ) -> HumanReview:
         """Record an explicit sign-off of the final recommendation (Req 15.6)."""
+        if snapshot is not None:
+            from app.services.review.approval import approval_hash
+
+            snapshot_case = snapshot.evidence_snapshot_ref.case_id
+            if (case_id or self._case_id) not in (None, snapshot_case):
+                raise ValueError("Approval snapshot belongs to a different case.")
+            case_id = snapshot_case
+            new_value = {
+                "snapshot_hash": approval_hash(snapshot),
+                "recommendation": snapshot.recommendation,
+            }
         return self.record_action(
             ReviewAction.SIGN_OFF_RECOMMENDATION,
             reviewer=reviewer,
             target_type="recommendation",
+            target_id=f"final_case:{snapshot.snapshot_version}"
+            if snapshot is not None
+            else None,
             prior_value=prior_value,
             new_value=new_value,
             reason=reason,
@@ -200,6 +217,7 @@ class HumanReviewWorkflow:
             comment=comment,
             signed_off=True,
             case_id=case_id,
+            review_id=review_id,
         )
 
     # -- read helpers ---------------------------------------------------------
@@ -239,9 +257,7 @@ class HumanReviewWorkflow:
         )
         return self._session.execute(stmt).first() is not None
 
-    def unresolved_exceptions(
-        self, case_id: str | None = None
-    ) -> list[dict[str, Any]]:
+    def unresolved_exceptions(self, case_id: str | None = None) -> list[dict[str, Any]]:
         """Identify unresolved exceptions for the final output (Req 15.5).
 
         Reuses the Milestone 5 escalation engine's open-escalation query rather
@@ -263,13 +279,11 @@ class HumanReviewWorkflow:
             for e in engine.open_escalations(cid)
         ]
 
-    def has_unresolved_mandatory_exceptions(
-        self, case_id: str | None = None
-    ) -> bool:
+    def has_unresolved_mandatory_exceptions(self, case_id: str | None = None) -> bool:
         cid = case_id if case_id is not None else self._case_id
-        return EscalationEngine(
-            self._session, case_id=cid
-        ).has_unresolved_mandatory(cid)
+        return EscalationEngine(self._session, case_id=cid).has_unresolved_mandatory(
+            cid
+        )
 
     @staticmethod
     def _view(row: HumanReview) -> ReviewView:

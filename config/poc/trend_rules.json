@@ -1,0 +1,17 @@
+{
+  "adverse_directions": {
+    "net_debt_to_ebitda": "up",
+    "net_debt": "up",
+    "capex_to_revenue": "up",
+    "casm": "up",
+    "interest_coverage": "down",
+    "operating_margin": "down",
+    "cash_conversion": "down",
+    "revenue_growth": "down",
+    "free_cash_flow": "down",
+    "liquidity": "down",
+    "load_factor": "down"
+  },
+  "break_threshold": 0.5,
+  "label": "ILLUSTRATIVE - NOT BANK POLICY"
+}

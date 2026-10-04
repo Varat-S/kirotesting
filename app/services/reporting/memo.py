@@ -45,7 +45,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.hashing import canonical_json
+from app.core.hashing import canonical_json, content_hash
 from app.models.orm import Snapshot
 from app.schemas.json_schema import validate_snapshot
 from app.services.audit.log import ActorType, AuditLog, EventType
@@ -117,7 +117,9 @@ class MemoReportGenerator:
         self._audit = audit
         # Output root is configurable; defaults under the repo ``output/`` tree.
         # Tests pass a pytest ``tmp_path`` so nothing is written to the repo.
-        self._output_root = Path(output_root) if output_root is not None else Path("output")
+        self._output_root = (
+            Path(output_root) if output_root is not None else Path("output")
+        )
         self._env = Environment(
             loader=FileSystemLoader(str(_TEMPLATE_DIR)),
             autoescape=select_autoescape(["html", "xml"]),
@@ -170,7 +172,9 @@ class MemoReportGenerator:
             "as_of_date": as_of_date,
             "evidence_cutoff_timestamp": evidence_cutoff,
             "unresolved_exceptions": unresolved,
-            "final_status": (snapshot_payload.get("recommendation") or {}).get("status"),
+            "final_status": (snapshot_payload.get("recommendation") or {}).get(
+                "status"
+            ),
             # The full FinalCaseSnapshot content (source of truth).
             "final_case_snapshot": snapshot_payload,
         }
@@ -207,6 +211,39 @@ class MemoReportGenerator:
         if write:
             self._write_json(case_id, row.snapshot_version, memo_json)
         return memo_json
+
+    def generate_draft_json(
+        self, *, case_id: str, snapshot_version: int
+    ) -> dict[str, Any]:
+        """Render an explicitly unapproved draft without emitting finalization events."""
+        row = self._session.scalars(
+            select(Snapshot).where(
+                Snapshot.case_id == case_id,
+                Snapshot.snapshot_type == FINAL_SNAPSHOT_TYPE,
+                Snapshot.snapshot_version == snapshot_version,
+            )
+        ).one()
+        if row.finalized:
+            raise ValueError("Use generate_json for a finalized snapshot.")
+        payload = validate_snapshot(row.payload)
+        as_of, cutoff = self._resolve_evidence_dates(case_id, payload)
+        return {
+            "output_version": MEMO_OUTPUT_VERSION,
+            "output_type": "credit_memo_draft",
+            "source_snapshot": {
+                "case_id": case_id,
+                "snapshot_type": FINAL_SNAPSHOT_TYPE,
+                "snapshot_version": row.snapshot_version,
+                "schema_version": row.schema_version,
+                "content_hash": content_hash(payload),
+                "supersedes_snapshot": payload.get("supersedes_snapshot"),
+            },
+            "as_of_date": as_of,
+            "evidence_cutoff_timestamp": cutoff,
+            "unresolved_exceptions": payload.get("exceptions", []),
+            "final_status": "draft",
+            "final_case_snapshot": payload,
+        }
 
     # -- 8.2: deterministic rendering from the JSON ---------------------------
 
@@ -383,7 +420,9 @@ class MemoReportGenerator:
     def _pdf_path(self, case_id: str, version: int) -> Path:
         return self._output_root / "pdf" / f"{case_id}_v{version}.pdf"
 
-    def _write_json(self, case_id: str, version: int, memo_json: dict[str, Any]) -> Path:
+    def _write_json(
+        self, case_id: str, version: int, memo_json: dict[str, Any]
+    ) -> Path:
         path = self._json_path(case_id, version)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(canonical_json(memo_json), encoding="utf-8")
@@ -416,13 +455,24 @@ def detect_pdf_backend() -> str | None:
 
     for name in ("weasyprint", "xhtml2pdf"):
         if importlib.util.find_spec(name) is not None:
-            return name
+            try:
+                import importlib
+
+                importlib.import_module(name)
+                return name
+            except (ImportError, OSError):
+                continue
     return None
 
 
 def _render_pdf_with(backend: str, html: str) -> bytes:
     if backend == "weasyprint":  # pragma: no cover - exercised only when installed
-        import weasyprint
+        try:
+            import weasyprint
+        except (ImportError, OSError) as exc:
+            raise PdfBackendUnavailableError(
+                "WeasyPrint native libraries are unavailable."
+            ) from exc
 
         return weasyprint.HTML(string=html).write_pdf()
     if backend == "xhtml2pdf":  # pragma: no cover - exercised only when installed

@@ -36,6 +36,7 @@ class CompatibilityDimension(str, Enum):
     """A single dimension that must match before two facts are comparable."""
 
     ENTITY = "entity"
+    CONSOLIDATION_SCOPE = "consolidation_scope"
     PERIOD = "period"
     UNIT_SCALE = "unit_scale"
     CURRENCY = "currency"
@@ -91,7 +92,9 @@ def _norm(value: object | None) -> object | None:
 
 def _effective_unit(fact: CanonicalFact) -> object | None:
     """The unit that governs comparison: normalized unit if present, else raw."""
-    return _norm(fact.normalized_unit if fact.normalized_unit is not None else fact.raw_unit)
+    return _norm(
+        fact.normalized_unit if fact.normalized_unit is not None else fact.raw_unit
+    )
 
 
 def check_compatibility(a: CanonicalFact, b: CanonicalFact) -> CompatibilityResult:
@@ -103,6 +106,15 @@ def check_compatibility(a: CanonicalFact, b: CanonicalFact) -> CompatibilityResu
     (Req 6.3). The caller consults :func:`prefer_structured` for that.
     """
     checks: list[CompatibilityCheck] = []
+    checks.append(
+        CompatibilityCheck(
+            CompatibilityDimension.CONSOLIDATION_SCOPE,
+            _norm(a.consolidation_scope) == _norm(b.consolidation_scope),
+            a.consolidation_scope,
+            b.consolidation_scope,
+            "consolidation scope must match",
+        )
+    )
 
     checks.append(
         CompatibilityCheck(
@@ -178,14 +190,14 @@ def check_compatibility(a: CanonicalFact, b: CanonicalFact) -> CompatibilityResu
 # Source-authority ordering is DISPLAY metadata only. It is used to choose which
 # value to show first when two facts are *fully compatible* (Req 6.1); it is
 # NEVER used to silence a disagreement between incompatible facts (Req 6.3).
-STRUCTURED_METHODS: frozenset[str] = frozenset(
-    {"xbrl", "xlsx", "csv", "pdf_table"}
-)
+STRUCTURED_METHODS: frozenset[str] = frozenset({"xbrl", "xlsx", "csv", "pdf_table"})
 
 
 def is_structured(fact: CanonicalFact) -> bool:
     """True when a fact came from a structured/typed extraction route."""
-    method = fact.extraction_method.value if fact.extraction_method is not None else None
+    method = (
+        fact.extraction_method.value if fact.extraction_method is not None else None
+    )
     return method in STRUCTURED_METHODS
 
 

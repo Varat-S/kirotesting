@@ -58,6 +58,9 @@ class DataQualityState(BaseModel):
     tolerance_version: int | None = None
     mismatch_dimensions: list[str] = Field(default_factory=list)
     detail: str | None = None
+    selected_fact_id: str | None = None
+    selection_reason: str | None = None
+    selection_version: int | None = None
 
 
 class CanonicalEvidenceSnapshot(BaseModel):

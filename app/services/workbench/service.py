@@ -25,10 +25,8 @@ Design guarantees enforced here:
   ``supersedes_snapshot`` linkage), the workbench surfaces both the predecessor
   and successor versions and can present ANY frozen version.
 
-Section-data sourcing. For a FINALIZED version the workbench prefers the M8
-memo JSON (:meth:`MemoReportGenerator.generate_json`) as the single source of
-truth. For a case that is not yet finalized it reads the latest
-``CanonicalEvidenceSnapshot`` payload read-only for the pre-final sections.
+Section data comes from the presented draft or finalized memo JSON and its
+referenced evidence snapshot. Cases without a draft show the available evidence.
 """
 
 from __future__ import annotations
@@ -183,10 +181,9 @@ class WorkbenchService:
     ) -> WorkbenchView:
         """Assemble the workbench view for a case (optionally a specific version).
 
-        When ``snapshot_version`` is given, that FINALIZED version is presented
-        as frozen (Req 24.3); otherwise the latest finalized version is used, or
-        the pre-final evidence snapshot when nothing is finalized yet. Nothing is
-        written -- this is a pure read (Req 24.3 headline).
+        An explicit version can be a draft or final; its status is surfaced.
+        Otherwise prefer the latest finalized version, then the latest draft,
+        then evidence alone. Nothing is written by viewing a case.
         """
         case = self._session.get(Case, case_id)
         if case is None:
@@ -197,7 +194,19 @@ class WorkbenchService:
 
         lineage = self._build_lineage(case_id, presented, final_versions)
         header = self._build_header(case, presented, lineage)
-        counts = self._build_counts(case_id, present_source_types)
+        evidence = self._evidence_snapshot_for(case_id, presented)
+        evidence_payload = evidence.payload if evidence is not None else {}
+        documents = evidence_payload.get("documents") or []
+        if present_source_types is None and any("tags" in doc for doc in documents):
+            present_source_types = sorted(
+                {tag for doc in documents for tag in doc.get("tags", [])}
+            )
+        profile_version = (evidence_payload.get("config_versions") or {}).get(
+            "source_profiles"
+        )
+        counts = self._build_counts(
+            case_id, present_source_types, profile_version=profile_version
+        )
         sections = self._build_sections(case_id, presented)
 
         return WorkbenchView(
@@ -226,12 +235,11 @@ class WorkbenchService:
         snapshot_version: int | None,
         final_versions: list[Snapshot],
     ) -> Snapshot | None:
-        """Return the finalized Snapshot row to present, or None when pre-final.
+        """Return a saved draft/final snapshot, or None for an evidence-only case.
 
         A requested version must exist (else :class:`SnapshotVersionNotFoundError`);
-        with no explicit request the LATEST finalized version is presented, and
-        when nothing is finalized the method returns ``None`` so the view falls
-        back to the pre-final evidence snapshot.
+        With no explicit request prefer the latest finalized version, then the
+        latest draft. Only evidence-only cases have no presented snapshot.
         """
         if snapshot_version is not None:
             for row in final_versions:
@@ -240,7 +248,12 @@ class WorkbenchService:
             raise SnapshotVersionNotFoundError(
                 f"No FinalCaseSnapshot v{snapshot_version} for case {case_id!r}."
             )
-        return final_versions[-1] if final_versions else None
+        finalized = [row for row in final_versions if row.finalized]
+        return (
+            finalized[-1]
+            if finalized
+            else (final_versions[-1] if final_versions else None)
+        )
 
     def _build_lineage(
         self,
@@ -248,7 +261,7 @@ class WorkbenchService:
         presented: Snapshot | None,
         final_versions: list[Snapshot],
     ) -> VersionLineage:
-        all_versions = [r.snapshot_version for r in final_versions]
+        all_versions = [r.snapshot_version for r in final_versions if r.finalized]
         if presented is None:
             return VersionLineage(
                 presented_version=None,
@@ -265,7 +278,8 @@ class WorkbenchService:
         successors = sorted(
             r.snapshot_version
             for r in final_versions
-            if (r.payload or {}).get("supersedes_snapshot") == presented.snapshot_version
+            if (r.payload or {}).get("supersedes_snapshot")
+            == presented.snapshot_version
         )
         return VersionLineage(
             presented_version=presented.snapshot_version,
@@ -313,7 +327,11 @@ class WorkbenchService:
     # -- counts (Req 24.2) ----------------------------------------------------
 
     def _build_counts(
-        self, case_id: str, present_source_types: list[str] | None
+        self,
+        case_id: str,
+        present_source_types: list[str] | None,
+        *,
+        profile_version: int | None = None,
     ) -> WorkbenchCounts:
         """Compute the four counts from authoritative sources at view time."""
         engine = EscalationEngine(self._session, case_id=case_id)
@@ -324,7 +342,9 @@ class WorkbenchService:
 
         # 2) Critical missing sources = completeness evaluator missing-critical
         #    signal. Deterministic, config-driven; 0 when no profile/present set.
-        critical_missing = self._critical_missing_count(present_source_types)
+        critical_missing = self._critical_missing_count(
+            present_source_types, profile_version=profile_version
+        )
 
         # 3) AI/deterministic conflicts = reconciliation records in the
         #    ``conflicting`` resolved state.
@@ -342,12 +362,17 @@ class WorkbenchService:
         )
 
     def _critical_missing_count(
-        self, present_source_types: list[str] | None
+        self,
+        present_source_types: list[str] | None,
+        *,
+        profile_version: int | None = None,
     ) -> int:
         if self._completeness is None or present_source_types is None:
             return 0
         try:
-            assessment = self._completeness.assess(present_source_types)
+            assessment = self._completeness.assess(
+                present_source_types, profile_version=profile_version
+            )
         except SourceProfileError:
             # No profile configured -> no silent default; report zero critical
             # missing rather than fabricate a determination (Req 21).
@@ -361,16 +386,12 @@ class WorkbenchService:
         )
         return len(list(self._session.execute(stmt).scalars().all()))
 
-    def _awaiting_human_count(
-        self, case_id: str, open_escalations: list[Any]
-    ) -> int:
+    def _awaiting_human_count(self, case_id: str, open_escalations: list[Any]) -> int:
         workflow = HumanReviewWorkflow(self._session, case_id=case_id)
         reviews = workflow.reviews_for_case(case_id)
         gated_action_values = {a.value for a in GATED_ACTIONS}
         unsigned_gated = sum(
-            1
-            for r in reviews
-            if r.action in gated_action_values and not r.signed_off
+            1 for r in reviews if r.action in gated_action_values and not r.signed_off
         )
         open_mandatory = sum(1 for e in open_escalations if e.mandatory)
         return unsigned_gated + open_mandatory
@@ -382,22 +403,22 @@ class WorkbenchService:
     ) -> dict[str, Any]:
         """Assemble the nine navigable sections as read-only view data.
 
-        For a finalized version the section data is sourced from the M8 memo
-        JSON (single source of truth). For a pre-final case the pre-final
-        sections are read from the latest evidence snapshot payload read-only.
+        Saved drafts and finals use their memo JSON and referenced evidence.
+        Evidence-only cases fall back to the latest evidence snapshot.
         """
-        if presented is not None and presented.finalized:
+        if presented is not None:
             return self._sections_from_memo(case_id, presented)
         return self._sections_from_evidence(case_id, presented)
 
-    def _sections_from_memo(
-        self, case_id: str, presented: Snapshot
-    ) -> dict[str, Any]:
+    def _sections_from_memo(self, case_id: str, presented: Snapshot) -> dict[str, Any]:
         # Reuse the M8 generator read-only (no audit -> no events emitted).
         generator = MemoReportGenerator(self._session)
-        memo = generator.generate_json(
-            case_id=case_id, snapshot_version=presented.snapshot_version
+        generate = (
+            generator.generate_json
+            if presented.finalized
+            else generator.generate_draft_json
         )
+        memo = generate(case_id=case_id, snapshot_version=presented.snapshot_version)
         snap = memo["final_case_snapshot"]
         evidence = self._evidence_snapshot_for(case_id, presented)
         evidence_payload = evidence.payload if evidence is not None else {}
@@ -410,6 +431,7 @@ class WorkbenchService:
             "canonical_data": {
                 "entities": evidence_payload.get("entities") or [],
                 "facts": evidence_payload.get("facts") or [],
+                "financials": evidence_payload.get("financials") or {},
                 "data_quality": evidence_payload.get("data_quality") or {},
             },
             "metrics": {
