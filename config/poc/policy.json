@@ -1,0 +1,16 @@
+{
+  "label": "ILLUSTRATIVE - NOT BANK POLICY",
+  "metrics": {
+    "net_debt_to_ebitda": {
+      "policy_limit": 3.5,
+      "peer_review_percentile": 90,
+      "historical_change_review": 0.5,
+      "adverse_direction": "up",
+      "rule_ids": {
+        "policy_threshold": "R-POLICY-LEV-01",
+        "peer_benchmark": "R-PEER-LEV-01",
+        "historical_deterioration": "R-TREND-LEV-01"
+      }
+    }
+  }
+}

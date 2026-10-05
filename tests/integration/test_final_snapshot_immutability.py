@@ -16,6 +16,7 @@ from datetime import date, datetime, timezone
 import pytest
 from sqlalchemy.orm import Session
 
+from app.schemas.snapshots import FinalCaseSnapshot
 from app.core.config_registry import ConfigRegistry
 from app.core.hashing import content_hash
 from app.models.orm import AuditEvent, Case, Snapshot
@@ -67,13 +68,11 @@ def test_finalization_blocked_without_sign_off(db_session: Session) -> None:
     snapshot = final.assemble(case_id="DAL_2024", evidence_snapshot_version=1)
 
     with pytest.raises(SignOffRequiredError):
-        final.finalize(snapshot, signed_off_by="officer", has_sign_off=False)
+        final.finalize(snapshot, signed_off_by="officer")
 
     # Nothing was persisted as finalized.
     rows = (
-        db_session.query(Snapshot)
-        .filter(Snapshot.snapshot_type == "final_case")
-        .all()
+        db_session.query(Snapshot).filter(Snapshot.snapshot_type == "final_case").all()
     )
     assert rows == []
 
@@ -96,11 +95,16 @@ def test_finalization_blocked_while_mandatory_escalation_unresolved(
     snapshot = final.assemble(case_id="DAL_2024", evidence_snapshot_version=1)
 
     # Even WITH sign-off, an unresolved mandatory escalation blocks finalization.
+    HumanReviewWorkflow(db_session, case_id="DAL_2024").sign_off_recommendation(
+        reviewer="officer", snapshot=snapshot
+    )
     with pytest.raises(SignOffRequiredError):
-        final.finalize(snapshot, signed_off_by="officer", has_sign_off=True)
+        final.finalize(snapshot, signed_off_by="officer")
 
     # The unresolved exception is surfaced on the assembled snapshot (Req 15.5).
-    assert snapshot.exceptions and snapshot.exceptions[0]["rule_id"] == "R-POLICY-LEV-01"
+    assert (
+        snapshot.exceptions and snapshot.exceptions[0]["rule_id"] == "R-POLICY-LEV-01"
+    )
 
 
 def test_finalize_records_versions_and_emits_event(db_session: Session) -> None:
@@ -108,7 +112,6 @@ def test_finalize_records_versions_and_emits_event(db_session: Session) -> None:
     registry = _seed_case_and_evidence(db_session)
     audit = AuditLog(db_session)
     wf = HumanReviewWorkflow(db_session, audit=audit, case_id="DAL_2024")
-    wf.sign_off_recommendation(reviewer="credit.officer")
 
     final = FinalSnapshotAssembler(db_session, registry, audit=audit)
     snapshot = final.assemble(
@@ -118,9 +121,8 @@ def test_finalize_records_versions_and_emits_event(db_session: Session) -> None:
         rule_versions={"R-POLICY-LEV-01": 1},
         prompt_model_versions={"business_analysis": "v1.0"},
     )
-    row = final.finalize(
-        snapshot, signed_off_by="credit.officer", has_sign_off=wf.has_sign_off()
-    )
+    wf.sign_off_recommendation(reviewer="credit.officer", snapshot=snapshot)
+    row = final.finalize(snapshot, signed_off_by="credit.officer")
 
     assert row.finalized is True
     assert row.snapshot_version == 1
@@ -153,7 +155,10 @@ def test_finalized_snapshot_is_immutable(db_session: Session) -> None:
     audit = AuditLog(db_session)
     final = FinalSnapshotAssembler(db_session, registry, audit=audit)
     snapshot = final.assemble(case_id="DAL_2024", evidence_snapshot_version=1)
-    row = final.finalize(snapshot, signed_off_by="officer", has_sign_off=True)
+    HumanReviewWorkflow(db_session, case_id="DAL_2024").sign_off_recommendation(
+        reviewer="officer", snapshot=snapshot
+    )
+    row = final.finalize(snapshot, signed_off_by="officer")
     db_session.commit()
     original_hash = row.content_hash
 
@@ -175,7 +180,10 @@ def test_finalized_snapshot_cannot_be_deleted(db_session: Session) -> None:
     registry = _seed_case_and_evidence(db_session)
     final = FinalSnapshotAssembler(db_session, registry)
     snapshot = final.assemble(case_id="DAL_2024", evidence_snapshot_version=1)
-    row = final.finalize(snapshot, signed_off_by="officer", has_sign_off=True)
+    HumanReviewWorkflow(db_session, case_id="DAL_2024").sign_off_recommendation(
+        reviewer="officer", snapshot=snapshot
+    )
+    row = final.finalize(snapshot, signed_off_by="officer")
     db_session.commit()
 
     db_session.delete(row)
@@ -198,16 +206,22 @@ def test_change_creates_new_version_referencing_predecessor(
         evidence_snapshot_version=1,
         recommendation={"status": "draft", "rating": "BB"},
     )
-    v1 = final.finalize(v1_snapshot, signed_off_by="officer", has_sign_off=True)
+    HumanReviewWorkflow(db_session, case_id="DAL_2024").sign_off_recommendation(
+        reviewer="officer", snapshot=v1_snapshot
+    )
+    v1 = final.finalize(v1_snapshot, signed_off_by="officer")
     v1_hash = v1.content_hash
 
     # A later change creates a NEW version that references the predecessor.
     v2 = final.supersede(
         v1,
-        signed_off_by="officer",
-        has_sign_off=True,
         recommendation={"status": "final", "rating": "BB-"},
     )
+    revised = FinalCaseSnapshot.model_validate(v2.payload)
+    HumanReviewWorkflow(db_session, case_id="DAL_2024").sign_off_recommendation(
+        reviewer="officer", snapshot=revised
+    )
+    v2 = final.finalize(revised, signed_off_by="officer")
 
     assert v2.snapshot_version == 2
     assert v2.payload["supersedes_snapshot"] == 1

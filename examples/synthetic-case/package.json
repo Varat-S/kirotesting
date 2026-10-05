@@ -1,0 +1,222 @@
+{
+  "as_of_date": "2024-12-31",
+  "evidence_cutoff_timestamp": "2025-01-15T00:00:00Z",
+  "borrower_entity_id": "DAL",
+  "entities": [
+    {
+      "entity_id": "DAL",
+      "legal_name": "Delta Synthetic Fixture",
+      "entity_type": "borrower",
+      "borrower_flag": true,
+      "expected_consolidation_scope": "consolidated"
+    },
+    {
+      "entity_id": "PEER_A",
+      "legal_name": "Synthetic Peer A",
+      "entity_type": "other"
+    }
+  ],
+  "sources": [
+    {
+      "filename": "financials.xlsx",
+      "path": "financials.xlsx",
+      "parser": "xlsx",
+      "tags": [
+        "xlsx",
+        "financial_statements"
+      ],
+      "entity_id": "DAL",
+      "scope": "consolidated",
+      "accounting_basis": "GAAP",
+      "available_at": "2025-01-10T00:00:00Z",
+      "parse_options": {
+        "scale": "millions",
+        "currency": "USD",
+        "period_headers": {
+          "2022": {
+            "fiscal_year": 2022
+          },
+          "2023": {
+            "fiscal_year": 2023
+          },
+          "2024": {
+            "fiscal_year": 2024
+          }
+        }
+      }
+    },
+    {
+      "filename": "filing.xbrl",
+      "path": "filing.xbrl",
+      "parser": "xbrl",
+      "tags": [
+        "xbrl",
+        "financial_statements"
+      ],
+      "entity_id": "DAL",
+      "scope": "consolidated",
+      "accounting_basis": "GAAP",
+      "available_at": "2025-01-10T00:00:00Z",
+      "parse_options": {}
+    },
+    {
+      "filename": "financials.pdf",
+      "path": "financials.pdf",
+      "parser": "pdf_table",
+      "tags": [
+        "pdf",
+        "financial_statements"
+      ],
+      "entity_id": "DAL",
+      "scope": "consolidated",
+      "accounting_basis": "GAAP",
+      "available_at": "2025-01-10T00:00:00Z",
+      "parse_options": {
+        "scale": "millions",
+        "currency": "USD",
+        "period_headers": {
+          "2022": {
+            "fiscal_year": 2022
+          },
+          "2023": {
+            "fiscal_year": 2023
+          },
+          "2024": {
+            "fiscal_year": 2024
+          }
+        }
+      }
+    },
+    {
+      "filename": "operations.csv",
+      "path": "operations.csv",
+      "parser": "csv",
+      "tags": [
+        "xlsx",
+        "operations"
+      ],
+      "entity_id": "DAL",
+      "scope": "consolidated",
+      "accounting_basis": "GAAP",
+      "available_at": "2025-01-10T00:00:00Z",
+      "parse_options": {
+        "scale": "millions",
+        "currency": null,
+        "period_headers": {
+          "2022": {
+            "fiscal_year": 2022
+          },
+          "2023": {
+            "fiscal_year": 2023
+          },
+          "2024": {
+            "fiscal_year": 2024
+          }
+        }
+      }
+    },
+    {
+      "filename": "industry.csv",
+      "path": "industry.csv",
+      "parser": "csv",
+      "tags": [
+        "industry"
+      ],
+      "entity_id": "PEER_A",
+      "scope": "consolidated",
+      "accounting_basis": "GAAP",
+      "available_at": "2025-01-10T00:00:00Z",
+      "parse_options": {
+        "scale": "millions",
+        "currency": "USD",
+        "period_headers": {
+          "2022": {
+            "fiscal_year": 2022
+          },
+          "2023": {
+            "fiscal_year": 2023
+          },
+          "2024": {
+            "fiscal_year": 2024
+          }
+        }
+      }
+    },
+    {
+      "filename": "fuel.csv",
+      "path": "fuel.csv",
+      "parser": "csv",
+      "tags": [
+        "fuel"
+      ],
+      "entity_id": "DAL",
+      "scope": "consolidated",
+      "accounting_basis": "GAAP",
+      "available_at": "2025-01-10T00:00:00Z",
+      "parse_options": {
+        "scale": "millions",
+        "currency": "USD",
+        "period_headers": {
+          "2022": {
+            "fiscal_year": 2022
+          },
+          "2023": {
+            "fiscal_year": 2023
+          },
+          "2024": {
+            "fiscal_year": 2024
+          }
+        }
+      }
+    },
+    {
+      "filename": "debt.csv",
+      "path": "debt.csv",
+      "parser": "csv",
+      "tags": [
+        "debt_maturity"
+      ],
+      "entity_id": "DAL",
+      "scope": "consolidated",
+      "accounting_basis": "GAAP",
+      "available_at": "2025-01-10T00:00:00Z",
+      "parse_options": {
+        "scale": "millions",
+        "currency": "USD",
+        "period_headers": {
+          "2022": {
+            "fiscal_year": 2022
+          },
+          "2023": {
+            "fiscal_year": 2023
+          },
+          "2024": {
+            "fiscal_year": 2024
+          }
+        }
+      }
+    },
+    {
+      "filename": "interim.csv",
+      "path": "interim.csv",
+      "parser": "csv",
+      "tags": [
+        "interim"
+      ],
+      "entity_id": "DAL",
+      "scope": "consolidated",
+      "accounting_basis": "GAAP",
+      "available_at": "2025-01-10T00:00:00Z",
+      "parse_options": {
+        "scale": "millions",
+        "currency": "USD",
+        "period_headers": {
+          "Q3": {
+            "period_start": "2024-07-01",
+            "period_end": "2024-09-30"
+          }
+        }
+      }
+    }
+  ]
+}

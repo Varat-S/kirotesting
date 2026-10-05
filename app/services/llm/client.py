@@ -165,11 +165,13 @@ class LLMClient:
         prompts: PromptRegistry,
         session: Session | None = None,
         audit: AuditLog | None = None,
+        prompt_versions: dict[str, int] | None = None,
     ) -> None:
         self._backend = backend
         self._prompts = prompts
         self._session = session
         self._audit = audit
+        self._prompt_versions = prompt_versions
 
     # -- public interface -----------------------------------------------------
 
@@ -249,7 +251,11 @@ class LLMClient:
         case_version: int | None,
         key: str | None,
     ) -> ModelRunResult:
-        prompt = self._prompts.latest(prompt_name)
+        prompt = (
+            self._prompts.get(prompt_name, self._prompt_versions[prompt_name])
+            if self._prompt_versions is not None
+            else self._prompts.latest(prompt_name)
+        )
         if prompt is None:
             raise ValueError(
                 f"No registered prompt named {prompt_name!r}; register the prompt "

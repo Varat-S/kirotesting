@@ -1,0 +1,10 @@
+{
+  "sources": {
+    "financial_statements": "critical",
+    "debt_maturity": "important",
+    "interim": "important",
+    "industry": "important",
+    "fuel": "important"
+  },
+  "label": "ILLUSTRATIVE - NOT BANK POLICY"
+}

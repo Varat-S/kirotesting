@@ -1,0 +1,180 @@
+{
+  "rules": [
+    {
+      "source_type": "table_label",
+      "source_key": "Operating Revenue",
+      "canonical_name": "revenue"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Revenue",
+      "canonical_name": "revenue"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Revenues",
+      "canonical_name": "revenue"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Operating Income",
+      "canonical_name": "operating_income"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Total Debt",
+      "canonical_name": "total_debt"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Cash and Cash Equivalents",
+      "canonical_name": "cash"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Unrestricted Cash",
+      "canonical_name": "unrestricted_cash"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "EBITDA",
+      "canonical_name": "ebitda"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Interest Expense",
+      "canonical_name": "interest_expense"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Operating Cash Flow",
+      "canonical_name": "cfo"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Capital Expenditures",
+      "canonical_name": "capex"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Undrawn Revolver",
+      "canonical_name": "undrawn_revolver"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Prior Revenue",
+      "canonical_name": "revenue_prior"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Revenue Passenger Miles",
+      "canonical_name": "rpm"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Available Seat Miles",
+      "canonical_name": "asm"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Operating Cost",
+      "canonical_name": "operating_cost"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "us-gaap:Revenues",
+      "canonical_name": "revenue"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+      "canonical_name": "revenue"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "us-gaap:OperatingIncomeLoss",
+      "canonical_name": "operating_income"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "us-gaap:LongTermDebtCurrent",
+      "canonical_name": "current_debt"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+      "canonical_name": "cash"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "poc:TotalDebt",
+      "canonical_name": "total_debt"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "poc:UnrestrictedCash",
+      "canonical_name": "unrestricted_cash"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "poc:EBITDA",
+      "canonical_name": "ebitda"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "poc:InterestExpense",
+      "canonical_name": "interest_expense"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "poc:OperatingCashFlow",
+      "canonical_name": "cfo"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "poc:CapitalExpenditures",
+      "canonical_name": "capex"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "poc:UndrawnRevolver",
+      "canonical_name": "undrawn_revolver"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Operating Expense",
+      "canonical_name": "operating_expense"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Jet Fuel Price",
+      "canonical_name": "fuel_price"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Debt Due Within One Year",
+      "canonical_name": "debt_due_1y"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "us-gaap:NetCashProvidedByUsedInOperatingActivities",
+      "canonical_name": "cfo"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+      "canonical_name": "capex"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "us-gaap:InterestExpense",
+      "canonical_name": "interest_expense"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "us-gaap:LongTermDebtNoncurrent",
+      "canonical_name": "long_term_debt"
+    }
+  ],
+  "label": "ILLUSTRATIVE - NOT BANK POLICY"
+}

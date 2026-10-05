@@ -26,7 +26,18 @@ from pathlib import Path
 
 # Allowed evidence file types (Req 1.3 / 25.3 restrict file types).
 ALLOWED_EXTENSIONS: frozenset[str] = frozenset(
-    {".pdf", ".xlsx", ".csv", ".json", ".html", ".htm", ".xbrl", ".xml"}
+    {
+        ".pdf",
+        ".xlsx",
+        ".csv",
+        ".json",
+        ".html",
+        ".htm",
+        ".xhtml",
+        ".xbrl",
+        ".xml",
+        ".xsd",
+    }
 )
 
 

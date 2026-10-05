@@ -64,7 +64,6 @@ def test_full_output_pipeline(db_session: Session, tmp_path) -> None:
 
     # A human review + sign-off.
     wf = HumanReviewWorkflow(db_session, audit=audit, case_id="DAL_2024")
-    wf.sign_off_recommendation(reviewer="credit.officer")
 
     final = FinalSnapshotAssembler(db_session, registry, audit=audit)
     snapshot = final.assemble(
@@ -74,24 +73,32 @@ def test_full_output_pipeline(db_session: Session, tmp_path) -> None:
         benchmarks={"peer_median_leverage": 2.75},
         business_analysis={
             "claims": [
-                {"statement": "Delta is a legacy network carrier.",
-                 "evidence_ids": ["F1"]}
+                {
+                    "statement": "Delta is a legacy network carrier.",
+                    "evidence_ids": ["F1"],
+                }
             ]
         },
         risks=[
-            {"title": "Leverage", "statement": "Leverage above peer median.",
-             "evidence_ids": ["M1"], "severity": "high"}
+            {
+                "title": "Leverage",
+                "statement": "Leverage above peer median.",
+                "evidence_ids": ["M1"],
+                "severity": "high",
+            }
         ],
         mitigants=[{"statement": "Strong liquidity position.", "evidence_ids": ["F7"]}],
         human_reviews=[
-            {"reviewer": "credit.officer", "action": "sign_off_recommendation",
-             "reason": "Final recommendation approved."}
+            {
+                "reviewer": "credit.officer",
+                "action": "sign_off_recommendation",
+                "reason": "Final recommendation approved.",
+            }
         ],
         recommendation={"status": "draft", "rating": "BB"},
     )
-    row = final.finalize(
-        snapshot, signed_off_by="credit.officer", has_sign_off=wf.has_sign_off()
-    )
+    wf.sign_off_recommendation(reviewer="credit.officer", snapshot=snapshot)
+    row = final.finalize(snapshot, signed_off_by="credit.officer")
 
     gen = MemoReportGenerator(db_session, audit=audit, output_root=tmp_path)
     out = gen.generate(case_id="DAL_2024", snapshot_version=1, write=True)

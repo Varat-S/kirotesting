@@ -64,7 +64,19 @@ def test_all_required_event_types_present() -> None:
         "memo_generated",
         "case_finalized",
     }
-    assert {e.value for e in EventType} == required
+    assert {e.value for e in EventType} == required | {
+        "evidence_rejected",
+        "mapping_review_required",
+        "draft_memo_generated",
+        "fact_reconciled",
+        "evidence_admitted",
+        "sec_filing_discovered",
+        "sec_file_downloaded",
+        "inline_xbrl_parsed",
+        "narrative_evidence_extracted",
+        "proxy_linked",
+        "subsidiaries_extracted",
+    }
 
 
 def test_audit_log_has_no_update_or_delete_methods() -> None:

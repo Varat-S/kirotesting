@@ -1,0 +1,33 @@
+{
+  "conditions": {
+    "missing_critical": {
+      "rule_id": "R-DATA-MISSING-CRITICAL-01",
+      "severity": "mandatory"
+    },
+    "missing_important": {
+      "rule_id": "R-DATA-MISSING-IMPORTANT-01",
+      "severity": "review"
+    },
+    "conflict": {
+      "rule_id": "R-DATA-CONFLICT-01",
+      "severity": "mandatory"
+    },
+    "weak_evidence": {
+      "rule_id": "R-EVIDENCE-WEAK-01",
+      "severity": "review"
+    },
+    "mapping": {
+      "rule_id": "R-MAPPING-REVIEW-01",
+      "severity": "review"
+    },
+    "invalid_metadata": {
+      "rule_id": "R-DATA-METADATA-01",
+      "severity": "mandatory"
+    },
+    "grounding": {
+      "rule_id": "R-AI-GROUNDING-01",
+      "severity": "mandatory"
+    }
+  },
+  "label": "ILLUSTRATIVE - NOT BANK POLICY"
+}

@@ -76,10 +76,12 @@ class EscalationEngine:
         *,
         audit: AuditLog | None = None,
         case_id: str | None = None,
+        deterministic_ids: bool = False,
     ) -> None:
         self._session = session
         self._audit = audit
         self._case_id = case_id
+        self._deterministic_ids = deterministic_ids
 
     # -- raising --------------------------------------------------------------
 
@@ -101,17 +103,33 @@ class EscalationEngine:
         ``escalated`` (Req 14.7).
         """
         cat_v = (
-            category.value if isinstance(category, EscalationCategory) else str(category)
+            category.value
+            if isinstance(category, EscalationCategory)
+            else str(category)
         )
         sev_v = severity.value if isinstance(severity, Severity) else str(severity)
-        concept_v = (
-            concept.value if isinstance(concept, RuleConcept) else concept
-        )
+        concept_v = concept.value if isinstance(concept, RuleConcept) else concept
         cid = case_id if case_id is not None else self._case_id
         mandatory = sev_v == Severity.MANDATORY.value
 
+        escalation_id = str(uuid.uuid4())
+        if self._deterministic_ids:
+            from app.core.hashing import content_hash
+
+            escalation_id = content_hash(
+                {
+                    "case": cid,
+                    "rule": rule_id,
+                    "version": rule_version,
+                    "reason": reason,
+                    "refs": sorted(evidence_refs or []),
+                }
+            )
+            existing = self._session.get(Escalation, escalation_id)
+            if existing is not None:
+                return existing
         row = Escalation(
-            escalation_id=str(uuid.uuid4()),
+            escalation_id=escalation_id,
             case_id=cid,
             severity=sev_v,
             category=cat_v,

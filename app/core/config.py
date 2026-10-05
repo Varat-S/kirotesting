@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr | None = Field(default=None)
     llm_provider: str = Field(default="none")
     llm_model: str | None = Field(default=None)
+    sec_user_agent: str | None = Field(default=None)
 
 
 @lru_cache

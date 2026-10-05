@@ -48,6 +48,7 @@ class ExtractionMethod(str, Enum):
     """How a fact was produced (precedence per Req 3.1)."""
 
     XBRL = "xbrl"
+    INLINE_XBRL = "inline_xbrl"
     XLSX = "xlsx"
     CSV = "csv"
     PDF_TABLE = "pdf_table"

@@ -15,7 +15,7 @@
 </head>
 <body>
 <header class="memo-header">
-  <h1>Credit Memo (DRAFT — ILLUSTRATIVE, NOT BANK POLICY)</h1>
+  <h1>Credit Memo ({{ 'FINAL' if final_status == 'final' else 'DRAFT' }} — ILLUSTRATIVE, NOT BANK POLICY)</h1>
   <dl class="memo-meta">
     <dt>Case</dt><dd data-field="case_id">{{ source_snapshot.case_id }}</dd>
     <dt>Snapshot version</dt><dd data-field="snapshot_version">{{ source_snapshot.snapshot_version }}</dd>

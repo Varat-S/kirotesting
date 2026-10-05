@@ -8,9 +8,9 @@ service and is unit-testable without HTTP.
 Routes:
 
 * ``GET /cases/{case_id}/workbench`` -- the latest frozen version (or the
-  pre-final evidence view when nothing is finalized), as structured JSON.
+  latest draft/evidence view when nothing is finalized), as structured JSON.
 * ``GET /cases/{case_id}/workbench/versions/{snapshot_version}`` -- a specific
-  finalized version, presented frozen.
+  draft or final version, exposing its status and predecessor/successor lineage.
 * ``GET /cases/{case_id}/workbench.html`` -- an optional deterministic HTML
   rendering of the workbench screen.
 
@@ -22,13 +22,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from app.api.deps import get_session
 from app.core.config_registry import ConfigRegistry
+from app.models.orm import Snapshot
+from app.services.reporting.memo import MemoReportGenerator
 from app.services.ingestion.completeness import CompletenessEvaluator
 from app.services.workbench import (
     CaseNotFoundError,
@@ -102,7 +105,7 @@ def get_workbench_version(
     present_source_types: list[str] | None = Query(default=None),
     session: Session = Depends(get_session),
 ) -> dict:
-    """Return a specific finalized version, presented frozen (Req 24.3)."""
+    """Read a specific saved version, exposing whether it is draft or final."""
     view = _assemble(
         session,
         case_id,
@@ -115,6 +118,7 @@ def get_workbench_version(
 @router.get("/{case_id}/workbench.html", response_class=HTMLResponse)
 def get_workbench_html(
     case_id: str,
+    request: Request,
     snapshot_version: int | None = Query(default=None),
     present_source_types: list[str] | None = Query(default=None),
     session: Session = Depends(get_session),
@@ -127,5 +131,46 @@ def get_workbench_html(
         present_source_types=present_source_types,
     )
     template = _env.get_template(_WORKBENCH_TEMPLATE)
-    html = template.render(view=view.to_dict())
+    html = template.render(view=view.to_dict(), request=request)
     return HTMLResponse(content=html)
+
+
+def _memo(session: Session, case_id: str, snapshot_version: int | None) -> dict:
+    query = select(Snapshot).where(
+        Snapshot.case_id == case_id, Snapshot.snapshot_type == "final_case"
+    )
+    if snapshot_version is not None:
+        query = query.where(Snapshot.snapshot_version == snapshot_version)
+    row = session.scalars(query.order_by(Snapshot.snapshot_version.desc())).first()
+    if row is None:
+        raise HTTPException(
+            status_code=404, detail="No memo snapshot found for this case/version."
+        )
+    generator = MemoReportGenerator(session)
+    generate = (
+        generator.generate_json if row.finalized else generator.generate_draft_json
+    )
+    return generate(case_id=case_id, snapshot_version=row.snapshot_version)
+
+
+@router.get("/{case_id}/memo.json")
+def get_memo_json(
+    case_id: str,
+    snapshot_version: int | None = Query(default=None),
+    session: Session = Depends(get_session),
+) -> dict:
+    """Read a saved draft or finalized memo without changing its approval state."""
+    return _memo(session, case_id, snapshot_version)
+
+
+@router.get("/{case_id}/memo.html", response_class=HTMLResponse)
+def get_memo_html(
+    case_id: str,
+    snapshot_version: int | None = Query(default=None),
+    session: Session = Depends(get_session),
+) -> HTMLResponse:
+    return HTMLResponse(
+        MemoReportGenerator(session).render_html(
+            _memo(session, case_id, snapshot_version)
+        )
+    )

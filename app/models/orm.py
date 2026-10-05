@@ -95,6 +95,23 @@ class Entity(Base):
     )
 
 
+class CaseEntity(Base):
+    """Case-specific roles over a reusable global legal entity."""
+
+    __tablename__ = "case_entities"
+    case_id: Mapped[str] = mapped_column(ForeignKey("cases.case_id"), primary_key=True)
+    entity_id: Mapped[str] = mapped_column(
+        ForeignKey("entities.entity_id"), primary_key=True
+    )
+    role: Mapped[str] = mapped_column(String, nullable=False)
+    borrower_flag: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    guarantor_flag: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    expected_consolidation_scope: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    entity: Mapped["Entity"] = relationship()
+
+
 class Document(Base):
     """Ingested source document (skeleton; populated fully in Milestone 2)."""
 
@@ -151,6 +168,12 @@ class Fact(Base):
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
 
+    original_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    mapping_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    mapping_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    mapping_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    mapping_candidates: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+
     # Raw vs normalized value/unit preserved separately (Req 4.4).
     raw_value: Mapped[str | None] = mapped_column(String, nullable=True)
     raw_unit: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -171,6 +194,10 @@ class Fact(Base):
     reporting_entity_name: Mapped[str | None] = mapped_column(String, nullable=True)
     restated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     taxonomy_concept: Mapped[str | None] = mapped_column(String, nullable=True)
+    xbrl_context_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    dimensions: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    inline_element_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    sec_accession: Mapped[str | None] = mapped_column(String, nullable=True)
     source_label: Mapped[str | None] = mapped_column(String, nullable=True)
     data_freshness: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     normalization_method: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -205,6 +232,10 @@ class FactSourceRef(Base):
     taxonomy_concept: Mapped[str | None] = mapped_column(String, nullable=True)
     row_label: Mapped[str | None] = mapped_column(String, nullable=True)
     cell: Mapped[str | None] = mapped_column(String, nullable=True)
+    xbrl_context_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    inline_element_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    presentation_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    sec_accession: Mapped[str | None] = mapped_column(String, nullable=True)
 
     fact: Mapped["Fact"] = relationship(back_populates="source_refs")
 
@@ -322,11 +353,15 @@ class ReconciliationRecord(Base):
     tolerance_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     resolved_state: Mapped[str] = mapped_column(String, nullable=False)
     # Mismatch dimensions when comparison_method is definition_mismatch.
-    mismatch_dimensions: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
-    # ``numeric`` for value comparison, ``non_numeric`` for a contradiction record.
-    record_kind: Mapped[str] = mapped_column(
-        String, default="numeric", nullable=False
+    mismatch_dimensions: Mapped[list] = mapped_column(
+        JSON, default=list, nullable=False
     )
+    # ``numeric`` for value comparison, ``non_numeric`` for a contradiction record.
+    record_kind: Mapped[str] = mapped_column(String, default="numeric", nullable=False)
+    selected_fact_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    selected_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    selection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    selection_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, default=utcnow, nullable=False
@@ -420,6 +455,10 @@ class Metric(Base):
     period: Mapped[str | None] = mapped_column(String, nullable=True)
     fiscal_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     units: Mapped[str | None] = mapped_column(String, nullable=True)
+    evidence_quality: Mapped[str] = mapped_column(
+        String, default="unverified", nullable=False
+    )
+    review_required: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, default=utcnow, nullable=False
@@ -499,9 +538,7 @@ class RuleVersion(Base):
     """
 
     __tablename__ = "rule_versions"
-    __table_args__ = (
-        UniqueConstraint("rule_id", "version", name="uq_rule_version"),
-    )
+    __table_args__ = (UniqueConstraint("rule_id", "version", name="uq_rule_version"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     rule_id: Mapped[str] = mapped_column(
@@ -568,9 +605,7 @@ class PromptVersion(Base):
     """
 
     __tablename__ = "prompt_versions"
-    __table_args__ = (
-        UniqueConstraint("name", "version", name="uq_prompt_version"),
-    )
+    __table_args__ = (UniqueConstraint("name", "version", name="uq_prompt_version"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String, nullable=False, index=True)

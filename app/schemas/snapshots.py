@@ -21,7 +21,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
 
 
 class EvidenceSnapshotRef(BaseModel):
@@ -58,6 +58,9 @@ class DataQualityState(BaseModel):
     tolerance_version: int | None = None
     mismatch_dimensions: list[str] = Field(default_factory=list)
     detail: str | None = None
+    selected_fact_id: str | None = None
+    selection_reason: str | None = None
+    selection_version: int | None = None
 
 
 class CanonicalEvidenceSnapshot(BaseModel):
@@ -83,6 +86,8 @@ class CanonicalEvidenceSnapshot(BaseModel):
     config_versions: dict[str, int] = Field(default_factory=dict)
 
     documents: list[dict] = Field(default_factory=list)
+    sec_filings: list[dict] = Field(default_factory=list)
+    narrative_evidence: list[dict] = Field(default_factory=list)
     entities: list[dict] = Field(default_factory=list)
     facts: list[dict] = Field(default_factory=list)
     # Normalized financials (formula inputs) kept independent of derived metrics.

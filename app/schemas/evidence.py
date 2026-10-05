@@ -41,6 +41,10 @@ class SourceRef(BaseModel):
     taxonomy_concept: str | None = None
     row_label: str | None = None
     cell: str | None = None
+    xbrl_context_id: str | None = None
+    inline_element_id: str | None = None
+    presentation_role: str | None = None
+    sec_accession: str | None = None
 
 
 class EntityRecord(BaseModel):
@@ -62,12 +66,16 @@ class EntityRecord(BaseModel):
     parent_entity_id: str | None = None
     borrower_flag: bool = False
     guarantor_flag: bool = False
+    expected_consolidation_scope: str | None = None
     jurisdiction: str | None = None
     source_refs: list[SourceRef] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _not_own_parent(self) -> "EntityRecord":
-        if self.parent_entity_id is not None and self.parent_entity_id == self.entity_id:
+        if (
+            self.parent_entity_id is not None
+            and self.parent_entity_id == self.entity_id
+        ):
             raise ValueError("An entity cannot be its own parent_entity_id.")
         return self
 
@@ -85,6 +93,11 @@ class CanonicalFact(BaseModel):
 
     fact_id: str
     name: str
+    original_name: str | None = None
+    mapping_version: int | None = None
+    mapping_hash: str | None = None
+    mapping_status: str | None = None
+    mapping_candidates: list[str] = Field(default_factory=list)
 
     # Raw vs normalized kept separate (Req 4.4).
     raw_value: str | None = None
@@ -104,6 +117,10 @@ class CanonicalFact(BaseModel):
     reporting_entity_name: str | None = None
     restated: bool = False
     taxonomy_concept: str | None = None
+    xbrl_context_id: str | None = None
+    dimensions: dict[str, str] = Field(default_factory=dict)
+    inline_element_id: str | None = None
+    sec_accession: str | None = None
     source_label: str | None = None
     data_freshness: datetime | None = None
     normalization_method: str | None = None
