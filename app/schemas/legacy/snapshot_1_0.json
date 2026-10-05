@@ -1,0 +1,446 @@
+{
+  "canonical_evidence": {
+    "$defs": {
+      "DataQualityState": {
+        "additionalProperties": false,
+        "description": "Per-field data-quality state in the snapshot (Req 5.2, 5.4).\n\nEach field records its resolved value, its distinct ``state`` (one of the\nfact-status values; ``missing`` is never numerical zero), its provenance\n(source refs), data freshness, and the reconciliation that produced the\nstate. Conflicts carry BOTH values + BOTH source refs (no silent merge).",
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Value"
+          },
+          "values": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Values",
+            "type": "array"
+          },
+          "source_refs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "data_freshness": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data Freshness"
+          },
+          "comparison_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Comparison Method"
+          },
+          "absolute_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Absolute Delta"
+          },
+          "relative_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Relative Delta"
+          },
+          "near_zero_floor": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Near Zero Floor"
+          },
+          "tolerance": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tolerance"
+          },
+          "tolerance_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tolerance Version"
+          },
+          "mismatch_dimensions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Mismatch Dimensions",
+            "type": "array"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Detail"
+          },
+          "selected_fact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Selected Fact Id"
+          },
+          "selection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Selection Reason"
+          },
+          "selection_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Selection Version"
+          }
+        },
+        "required": [
+          "field",
+          "state"
+        ],
+        "title": "DataQualityState",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Mid-pipeline canonical evidence snapshot (Req 5.1, 5.3, 5.5, 5.6).\n\nContains documents, entities, facts, normalized financials, provenance, and\nper-field data-quality states (Req 5.1). Each field in ``data_quality``\ncarries value, state and provenance (Req 5.2). Normalized financials\n(formula inputs) are stored independently from any derived metric (Req 5.3).\nThe snapshot records which ``config_versions`` it was built under (Req 19.6)\nand is validated against a versioned JSON Schema on write (Req 5.5).\nDownstream objects reference it by ``snapshot_version`` (Req 5.6).",
+    "properties": {
+      "schema_version": {
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "snapshot_type": {
+        "default": "canonical_evidence",
+        "title": "Snapshot Type",
+        "type": "string"
+      },
+      "snapshot_version": {
+        "default": 1,
+        "title": "Snapshot Version",
+        "type": "integer"
+      },
+      "case_id": {
+        "title": "Case Id",
+        "type": "string"
+      },
+      "as_of_date": {
+        "anyOf": [
+          {
+            "format": "date",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "As Of Date"
+      },
+      "evidence_cutoff_timestamp": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Evidence Cutoff Timestamp"
+      },
+      "config_versions": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "title": "Config Versions",
+        "type": "object"
+      },
+      "documents": {
+        "items": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "title": "Documents",
+        "type": "array"
+      },
+      "entities": {
+        "items": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "title": "Entities",
+        "type": "array"
+      },
+      "facts": {
+        "items": {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        "title": "Facts",
+        "type": "array"
+      },
+      "financials": {
+        "additionalProperties": true,
+        "title": "Financials",
+        "type": "object"
+      },
+      "provenance": {
+        "additionalProperties": true,
+        "title": "Provenance",
+        "type": "object"
+      },
+      "data_quality": {
+        "additionalProperties": {
+          "$ref": "#/$defs/DataQualityState"
+        },
+        "title": "Data Quality",
+        "type": "object"
+      }
+    },
+    "required": [
+      "case_id"
+    ],
+    "title": "CanonicalEvidenceSnapshot",
+    "type": "object"
+  },
+  "final_case": {
+    "$defs": {
+      "EvidenceSnapshotRef": {
+        "additionalProperties": false,
+        "description": "Reference from a FinalCaseSnapshot to a CanonicalEvidenceSnapshot.",
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "snapshot_version": {
+            "title": "Snapshot Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "case_id",
+          "snapshot_version"
+        ],
+        "title": "EvidenceSnapshotRef",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Final immutable case snapshot skeleton (Req 16.1).\n\nReferences a ``CanonicalEvidenceSnapshot`` by version and records the config,\nmetric-definition, rule, and prompt/model versions it was built under.\n``supersedes_snapshot`` links a new version to its predecessor (Req 16.3).",
+    "properties": {
+      "schema_version": {
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "snapshot_type": {
+        "default": "final_case",
+        "title": "Snapshot Type",
+        "type": "string"
+      },
+      "snapshot_version": {
+        "default": 1,
+        "title": "Snapshot Version",
+        "type": "integer"
+      },
+      "supersedes_snapshot": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Supersedes Snapshot"
+      },
+      "evidence_snapshot_ref": {
+        "$ref": "#/$defs/EvidenceSnapshotRef"
+      },
+      "config_versions": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "title": "Config Versions",
+        "type": "object"
+      },
+      "metric_definition_versions": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "title": "Metric Definition Versions",
+        "type": "object"
+      },
+      "rule_versions": {
+        "additionalProperties": {
+          "type": "integer"
+        },
+        "title": "Rule Versions",
+        "type": "object"
+      },
+      "prompt_model_versions": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "title": "Prompt Model Versions",
+        "type": "object"
+      },
+      "metrics": {
+        "additionalProperties": true,
+        "title": "Metrics",
+        "type": "object"
+      },
+      "benchmarks": {
+        "additionalProperties": true,
+        "title": "Benchmarks",
+        "type": "object"
+      },
+      "business_analysis": {
+        "additionalProperties": true,
+        "title": "Business Analysis",
+        "type": "object"
+      },
+      "financial_analysis": {
+        "additionalProperties": true,
+        "title": "Financial Analysis",
+        "type": "object"
+      },
+      "risks": {
+        "items": {},
+        "title": "Risks",
+        "type": "array"
+      },
+      "mitigants": {
+        "items": {},
+        "title": "Mitigants",
+        "type": "array"
+      },
+      "exceptions": {
+        "items": {},
+        "title": "Exceptions",
+        "type": "array"
+      },
+      "escalations": {
+        "items": {},
+        "title": "Escalations",
+        "type": "array"
+      },
+      "human_reviews": {
+        "items": {},
+        "title": "Human Reviews",
+        "type": "array"
+      },
+      "recommendation": {
+        "additionalProperties": true,
+        "title": "Recommendation",
+        "type": "object"
+      },
+      "audit_metadata": {
+        "additionalProperties": true,
+        "title": "Audit Metadata",
+        "type": "object"
+      },
+      "finalized": {
+        "default": false,
+        "title": "Finalized",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "evidence_snapshot_ref"
+    ],
+    "title": "FinalCaseSnapshot",
+    "type": "object"
+  }
+}

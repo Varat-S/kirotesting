@@ -11,11 +11,23 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Case Workbench — {{ view.header.case_id }}</title>
+  {% include 'browser_style.html.j2' %}
 </head>
 <body>
   <header class="workbench-header">
     <h1>Case Workbench</h1>
+    <p><a href="/">All cases</a> · <a href="/docs">API explorer</a></p>
+    {% if view.header.lineage.presented_version is not none and not view.header.lineage.finalized %}
+    <p class="notice">Draft v{{ view.header.lineage.presented_version }} — unapproved. Viewing this case does not approve or finalize it.</p>
+    {% endif %}
+    {% if view.header.lineage.presented_version is not none %}
+    <div class="actions">
+      <a href="{{ request.url_for('get_memo_html', case_id=view.header.case_id) }}?snapshot_version={{ view.header.lineage.presented_version }}">Open memo</a>
+      <a href="{{ request.url_for('get_memo_json', case_id=view.header.case_id) }}?snapshot_version={{ view.header.lineage.presented_version }}">Memo JSON</a>
+    </div>
+    {% endif %}
     <dl class="case-meta">
       <dt>Case</dt><dd data-case-id="{{ view.header.case_id }}">{{ view.header.case_id }}</dd>
       <dt>Status</dt><dd data-status="{{ view.header.status }}">{{ view.header.status }}</dd>
@@ -61,7 +73,7 @@
         <span data-count="critical_missing_sources">{{ view.counts.critical_missing_sources }}</span></li>
       <li>AI/deterministic conflicts:
         <span data-count="ai_deterministic_conflicts">{{ view.counts.ai_deterministic_conflicts }}</span></li>
-      <li>Decisions awaiting humans:
+      <li>Queued human decisions:
         <span data-count="awaiting_human_decisions">{{ view.counts.awaiting_human_decisions }}</span></li>
     </ul>
   </section>
@@ -79,6 +91,45 @@
     {% for section in view.section_order %}
     <section id="section-{{ section.key }}" data-section="{{ section.key }}">
       <h2>{{ section.title }}</h2>
+      {% set data = view.sections[section.key] %}
+      {% if section.key == 'sources' %}
+      <p>{{ data.documents | length }} admitted source documents.</p>
+      <div class="table-wrap"><table><thead><tr><th>File</th><th>Parser</th><th>Entity</th><th>Available at</th></tr></thead><tbody>
+      {% for doc in data.documents %}<tr><td>{{ doc.filename | default(doc.document_id) }}</td><td>{{ doc.parser | default('not recorded') }}</td><td>{{ doc.entity_id | default('not recorded') }}</td><td>{{ doc.available_at | default('not recorded') }}</td></tr>{% endfor %}
+      </tbody></table></div>
+      {% elif section.key == 'canonical_data' %}
+      <p>{{ data.entities | length }} entities · {{ data.facts | length }} extracted facts. Open the data below for values, selected facts, quality states, and source references.</p>
+      {% if data.sec_filings %}
+      <h3>SEC filing diagnostics</h3>
+      <div class="table-wrap"><table><thead><tr><th>Accession</th><th>Contexts</th><th>Observations</th><th>Presentation sections</th><th>Subsidiaries</th></tr></thead><tbody>
+      {% for filing in data.sec_filings %}<tr><td>{{ filing.accession }}</td><td>{{ filing.contexts | length }}</td><td>{{ filing.observations | length }}</td><td>{{ filing.presentation | length }}</td><td>{{ filing.subsidiaries | length }}</td></tr>{% endfor %}
+      </tbody></table></div>
+      <p>{{ data.narrative_evidence | length }} candidate narrative passages. Segment facts remain separate from consolidated inputs. Parsed facts and narrative passages require evidence review.</p>
+      {% endif %}
+      {% elif section.key == 'metrics' %}
+      {% if data.metrics %}
+      <p class="subtle">Ratios are shown as fractions: 0.2 = 20%. Currency units follow the source package. Evidence quality is separate from calculation status.</p>
+      <div class="table-wrap"><table><thead><tr><th>Metric</th><th>Result</th><th>Units</th><th>Calculation</th><th>Evidence</th><th>Review needed</th></tr></thead><tbody>
+      {% for name, metric in data.metrics | dictsort %}<tr>
+        <td>{{ name | replace('_', ' ') }}</td>
+        {% if metric is mapping %}
+        <td>{{ '%.6g' | format(metric.result) if metric.result is number else 'unavailable' }}</td><td>{{ metric.units | default('') }}</td><td>{{ metric.calculation_state | default(metric.explicit_state) | default('') }}</td><td>{{ metric.evidence_quality | default('not recorded') }}</td><td>{{ 'yes' if metric.review_required else 'no' }}</td>
+        {% else %}<td>{{ metric }}</td><td colspan="4">No quality metadata recorded.</td>{% endif %}
+      </tr>{% endfor %}
+      </tbody></table></div>
+      {% else %}<p>No calculated metrics saved yet.</p>{% endif %}
+      {% elif section.key in ['business_analysis', 'financial_analysis'] %}
+      <p class="subtle">The current offline runner uses a fake AI backend. Inspect any saved analysis below; empty lists mean no generated claims.</p>
+      {% elif section.key == 'risks' %}
+      <p>{{ data.risks | length }} risks · {{ data.mitigants | length }} mitigants recorded.</p>
+      {% elif section.key == 'exceptions' %}
+      {% for exception in data.unresolved_exceptions %}<p class="notice"><strong>{{ exception.rule_id }}</strong> · {{ exception.severity }}{% if exception.mandatory %} · mandatory{% endif %}<br>{{ exception.reason }}</p>{% else %}<p>No unresolved exceptions recorded.</p>{% endfor %}
+      {% elif section.key == 'human_review' %}
+      <p>{{ data.human_reviews | length }} human review records in this view. Approval and finalization currently use the CLI.</p>
+      {% elif section.key == 'memo' %}
+      <p>Memo status: <strong>{{ data.final_status | default(data.status) }}</strong></p>
+      {% endif %}
+      <details{% if section.key == 'canonical_data' and not data.sec_filings %} open{% endif %}><summary>Inspect {{ section.title | lower }} data and provenance</summary><pre>{{ data | tojson(indent=2) }}</pre></details>
     </section>
     {% endfor %}
   </main>

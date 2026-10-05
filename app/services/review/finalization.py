@@ -35,7 +35,8 @@ from sqlalchemy.orm import Session
 from app.core.config_registry import ConfigRegistry
 from app.core.hashing import content_hash
 from app.models.base import utcnow
-from app.models.orm import Snapshot
+from app.models.orm import HumanReview, Snapshot
+from app.services.review.approval import approval_hash
 from app.schemas.json_schema import validate_snapshot
 from app.schemas.snapshots import (
     SCHEMA_VERSION,
@@ -95,9 +96,7 @@ def install_finalized_snapshot_guard(session: Session) -> None:
             if not was_finalized:
                 continue
             modified = {
-                attr
-                for attr in _FROZEN_COLUMNS
-                if _history(obj, attr).has_changes()
+                attr for attr in _FROZEN_COLUMNS if _history(obj, attr).has_changes()
             }
             if modified:
                 raise SnapshotImmutabilityError(
@@ -260,15 +259,13 @@ class FinalSnapshotAssembler:
         snapshot: FinalCaseSnapshot,
         *,
         signed_off_by: str,
-        has_sign_off: bool,
         reason: str | None = None,
     ) -> Snapshot:
         """Finalize a FinalCaseSnapshot: gate, freeze a hash, persist immutably.
 
         Finalization is BLOCKED (Req 15.6 / 16.2) unless:
 
-        * ``has_sign_off`` is True (explicit human sign-off of the final
-          recommendation), AND
+        * a persisted approval matches the signer, version and draft content, AND
         * there is no unresolved MANDATORY escalation for the case (Req 14.7).
 
         On success the recommendation status is set to ``final``, a SHA-256
@@ -280,7 +277,21 @@ class FinalSnapshotAssembler:
 
         case_id = snapshot.evidence_snapshot_ref.case_id
 
-        if not has_sign_off:
+        approval = self._session.scalars(
+            select(HumanReview)
+            .where(
+                HumanReview.case_id == case_id,
+                HumanReview.action == "sign_off_recommendation",
+                HumanReview.target_type == "recommendation",
+                HumanReview.target_id == f"final_case:{snapshot.snapshot_version}",
+                HumanReview.reviewer == signed_off_by,
+                HumanReview.signed_off.is_(True),
+            )
+            .order_by(HumanReview.id.desc())
+        ).first()
+        if approval is None or (approval.new_value or {}).get(
+            "snapshot_hash"
+        ) != approval_hash(snapshot):
             raise SignOffRequiredError(
                 "Cannot finalize FinalCaseSnapshot without explicit human "
                 "sign-off of the final recommendation (Req 15.6)."
@@ -298,26 +309,31 @@ class FinalSnapshotAssembler:
             update={
                 "finalized": True,
                 "recommendation": {**snapshot.recommendation, "status": "final"},
+                "audit_metadata": {
+                    **snapshot.audit_metadata,
+                    "sign_off_review_id": approval.review_id,
+                    "signed_off_by": signed_off_by,
+                },
             }
         )
         payload = validate_snapshot(finalized_snapshot)
         frozen_hash = content_hash(payload)
 
-        row = Snapshot(
-            case_id=case_id,
-            snapshot_type=finalized_snapshot.snapshot_type,
-            snapshot_version=finalized_snapshot.snapshot_version,
-            schema_version=finalized_snapshot.schema_version,
-            supersedes=self._row_id_for_version(
-                case_id, finalized_snapshot.supersedes_snapshot
-            ),
-            finalized=True,
-            config_versions=finalized_snapshot.config_versions,
-            payload=payload,
-            content_hash=frozen_hash,
-            finalized_at=utcnow(),
-        )
-        self._session.add(row)
+        row = self.get_version(case_id, snapshot.snapshot_version)
+        if row is not None and row.finalized:
+            raise SnapshotImmutabilityError(
+                "Snapshot is already finalized; create a superseding version."
+            )
+        if row is None:
+            row = self.persist_draft(snapshot)
+        elif row.payload != validate_snapshot(snapshot):
+            raise ValueError(
+                "Persisted draft differs from the approved draft; persist the revised draft first."
+            )
+        row.payload = payload
+        row.finalized = True
+        row.content_hash = frozen_hash
+        row.finalized_at = utcnow()
         self._session.flush()
 
         if self._audit is not None:
@@ -331,10 +347,12 @@ class FinalSnapshotAssembler:
                     "snapshot_version": row.snapshot_version,
                     "content_hash": frozen_hash,
                     "supersedes_snapshot": finalized_snapshot.supersedes_snapshot,
+                    "sign_off_review_id": approval.review_id,
                 },
                 reason=reason or "FinalCaseSnapshot finalized after human sign-off.",
                 linked_objects=[
-                    f"snapshot:{FINAL_SNAPSHOT_TYPE}:{row.snapshot_version}"
+                    f"snapshot:{FINAL_SNAPSHOT_TYPE}:{row.snapshot_version}",
+                    f"review:{approval.review_id}",
                 ],
             )
         return row
@@ -343,8 +361,6 @@ class FinalSnapshotAssembler:
         self,
         predecessor: Snapshot,
         *,
-        signed_off_by: str,
-        has_sign_off: bool,
         metrics: dict | None = None,
         benchmarks: dict | None = None,
         business_analysis: dict | None = None,
@@ -360,16 +376,14 @@ class FinalSnapshotAssembler:
         prompt_model_versions: dict[str, str] | None = None,
         reason: str | None = None,
     ) -> Snapshot:
-        """Create a NEW finalized version that supersedes a predecessor (Req 16.3).
+        """Create a NEW draft version that supersedes a predecessor (Req 16.3).
 
         The predecessor row is NEVER edited; a new snapshot version is assembled
-        and finalized with ``supersedes_snapshot`` pointing at the predecessor's
+        with ``supersedes_snapshot`` pointing at the predecessor's
         version, leaving the original byte-for-byte reproducible.
         """
         if predecessor.snapshot_type != FINAL_SNAPSHOT_TYPE:
-            raise ValueError(
-                "Can only supersede a FinalCaseSnapshot predecessor."
-            )
+            raise ValueError("Can only supersede a FinalCaseSnapshot predecessor.")
         case_id = predecessor.case_id
         prior_payload = predecessor.payload
 
@@ -380,7 +394,9 @@ class FinalSnapshotAssembler:
             ],
             metrics=metrics if metrics is not None else prior_payload.get("metrics"),
             benchmarks=(
-                benchmarks if benchmarks is not None else prior_payload.get("benchmarks")
+                benchmarks
+                if benchmarks is not None
+                else prior_payload.get("benchmarks")
             ),
             business_analysis=(
                 business_analysis
@@ -433,12 +449,8 @@ class FinalSnapshotAssembler:
             ),
             supersedes_snapshot=predecessor.snapshot_version,
         )
-        return self.finalize(
-            snapshot,
-            signed_off_by=signed_off_by,
-            has_sign_off=has_sign_off,
-            reason=reason or "New version superseding a finalized snapshot.",
-        )
+        snapshot.recommendation = {**snapshot.recommendation, "status": "draft"}
+        return self.persist_draft(snapshot)
 
     # -- integrity ------------------------------------------------------------
 

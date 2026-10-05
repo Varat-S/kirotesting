@@ -22,6 +22,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_session
+from app.schemas.snapshots import FinalCaseSnapshot
 from app.core.config_registry import ConfigRegistry
 from app.main import create_app
 from app.models.orm import Case
@@ -83,7 +84,6 @@ def _finalize_case(db_session: Session, case_id: str = "DAL_2024"):
         reason="Debt maturity table missing.",
     )
     wf = HumanReviewWorkflow(db_session, audit=audit, case_id=case_id)
-    wf.sign_off_recommendation(reviewer="credit.officer")
 
     final = FinalSnapshotAssembler(db_session, registry, audit=audit)
     snapshot = final.assemble(
@@ -96,16 +96,13 @@ def _finalize_case(db_session: Session, case_id: str = "DAL_2024"):
         risks=[{"title": "Leverage", "severity": "high"}],
         recommendation={"status": "draft", "rating": "BB"},
     )
-    row = final.finalize(
-        snapshot, signed_off_by="credit.officer", has_sign_off=wf.has_sign_off()
-    )
+    wf.sign_off_recommendation(reviewer="credit.officer", snapshot=snapshot)
+    row = final.finalize(snapshot, signed_off_by="credit.officer")
     db_session.commit()
     return final, row
 
 
-def test_get_workbench_returns_sections_and_counts(
-    client, db_session: Session
-) -> None:
+def test_get_workbench_returns_sections_and_counts(client, db_session: Session) -> None:
     _finalize_case(db_session)
 
     resp = client.get("/cases/DAL_2024/workbench")
@@ -166,12 +163,15 @@ def test_version_lineage_after_later_review(client, db_session: Session) -> None
     v1_hash = v1.content_hash
 
     # A later review creates a NEW version referencing its predecessor.
-    final.supersede(
+    v2 = final.supersede(
         v1,
-        signed_off_by="credit.officer",
-        has_sign_off=True,
         recommendation={"status": "draft", "rating": "BBB-"},
     )
+    revised = FinalCaseSnapshot.model_validate(v2.payload)
+    HumanReviewWorkflow(db_session, case_id="DAL_2024").sign_off_recommendation(
+        reviewer="credit.officer", snapshot=revised
+    )
+    v2 = final.finalize(revised, signed_off_by="credit.officer")
     db_session.commit()
 
     # Latest view -> v2, predecessor v1.
@@ -222,3 +222,23 @@ def test_workbench_html_rendering(client, db_session: Session) -> None:
         "memo",
     ):
         assert f'data-section="{key}"' in html
+
+
+def test_final_memo_browser_read_preserves_approval_and_hash(client, db_session):
+    from sqlalchemy import func, select
+    from app.models.orm import AuditEvent
+
+    _assembler, row = _finalize_case(db_session)
+    before_hash = row.content_hash
+    before_events = db_session.scalar(select(func.count()).select_from(AuditEvent))
+    memo = client.get("/cases/DAL_2024/memo.json?snapshot_version=1")
+    assert memo.status_code == 200
+    assert memo.json()["final_status"] == "final"
+    html = client.get("/cases/DAL_2024/memo.html?snapshot_version=1")
+    assert html.status_code == 200
+    assert "Credit Memo (FINAL" in html.text
+    db_session.refresh(row)
+    assert row.finalized and row.content_hash == before_hash
+    assert (
+        db_session.scalar(select(func.count()).select_from(AuditEvent)) == before_events
+    )

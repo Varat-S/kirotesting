@@ -28,7 +28,7 @@ from enum import Enum
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.orm import Entity
+from app.models.orm import CaseEntity, Entity
 from app.services.audit.log import ActorType, AuditLog, EventType
 
 
@@ -106,7 +106,9 @@ class EntityResolver:
 
         stmt = select(Entity)
         if case_id is not None:
-            stmt = stmt.where(Entity.case_id == case_id)
+            stmt = stmt.join(
+                CaseEntity, CaseEntity.entity_id == Entity.entity_id
+            ).where(CaseEntity.case_id == case_id)
 
         matches: list[str] = []
         for entity in self._session.execute(stmt).scalars().all():

@@ -1,0 +1,170 @@
+{
+  "definitions": {
+    "revenue_growth": {
+      "formula_id": "F-REV-GROWTH-01",
+      "inputs": [
+        "revenue",
+        "revenue_prior"
+      ],
+      "included": [
+        "total_operating_revenue"
+      ],
+      "excluded": [],
+      "units": "ratio",
+      "period_type": "FY"
+    },
+    "operating_margin": {
+      "formula_id": "F-OP-MARGIN-01",
+      "inputs": [
+        "operating_income",
+        "revenue"
+      ],
+      "included": [
+        "operating_income",
+        "total_operating_revenue"
+      ],
+      "excluded": [
+        "special_items"
+      ],
+      "units": "ratio",
+      "period_type": "FY"
+    },
+    "net_debt": {
+      "formula_id": "F-NET-DEBT-01",
+      "inputs": [
+        "total_debt",
+        "unrestricted_cash"
+      ],
+      "included": [
+        "total_debt"
+      ],
+      "excluded": [
+        "restricted_cash",
+        "operating_leases"
+      ],
+      "units": "currency",
+      "period_type": "instant"
+    },
+    "net_debt_to_ebitda": {
+      "formula_id": "F-ND-EBITDA-01",
+      "inputs": [
+        "total_debt",
+        "unrestricted_cash",
+        "ebitda"
+      ],
+      "included": [
+        "net_debt",
+        "ebitda"
+      ],
+      "excluded": [
+        "operating_leases"
+      ],
+      "units": "x",
+      "period_type": "FY"
+    },
+    "interest_coverage": {
+      "formula_id": "F-INT-COV-01",
+      "inputs": [
+        "ebitda",
+        "interest_expense"
+      ],
+      "included": [
+        "ebitda"
+      ],
+      "excluded": [
+        "capitalized_interest"
+      ],
+      "units": "x",
+      "period_type": "FY"
+    },
+    "cash_conversion": {
+      "formula_id": "F-CFO-EBITDA-01",
+      "inputs": [
+        "cfo",
+        "ebitda"
+      ],
+      "included": [
+        "cfo",
+        "ebitda"
+      ],
+      "excluded": [],
+      "units": "ratio",
+      "period_type": "FY"
+    },
+    "free_cash_flow": {
+      "formula_id": "F-FCF-01",
+      "inputs": [
+        "cfo",
+        "capex"
+      ],
+      "included": [
+        "cfo"
+      ],
+      "excluded": [
+        "acquisitions"
+      ],
+      "units": "currency",
+      "period_type": "FY"
+    },
+    "liquidity": {
+      "formula_id": "F-LIQ-01",
+      "inputs": [
+        "unrestricted_cash",
+        "undrawn_revolver"
+      ],
+      "included": [
+        "unrestricted_cash",
+        "undrawn_revolver"
+      ],
+      "excluded": [
+        "restricted_cash"
+      ],
+      "units": "currency",
+      "period_type": "instant"
+    },
+    "capex_to_revenue": {
+      "formula_id": "F-CAPEX-REV-01",
+      "inputs": [
+        "capex",
+        "revenue"
+      ],
+      "included": [
+        "capex"
+      ],
+      "excluded": [],
+      "units": "ratio",
+      "period_type": "FY"
+    },
+    "load_factor": {
+      "formula_id": "F-LOAD-FACTOR-01",
+      "inputs": [
+        "rpm",
+        "asm"
+      ],
+      "included": [
+        "revenue_passenger_miles",
+        "available_seat_miles"
+      ],
+      "excluded": [],
+      "units": "ratio",
+      "period_type": "FY"
+    },
+    "casm": {
+      "formula_id": "F-CASM-01",
+      "inputs": [
+        "operating_expense",
+        "asm"
+      ],
+      "included": [
+        "operating_expense",
+        "available_seat_miles"
+      ],
+      "excluded": [
+        "special_items"
+      ],
+      "units": "currency_per_asm",
+      "period_type": "FY"
+    }
+  },
+  "label": "ILLUSTRATIVE - NOT BANK POLICY"
+}

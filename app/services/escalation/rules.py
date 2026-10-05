@@ -169,6 +169,19 @@ class RuleRegistry:
     def latest_version(self, rule_id: str) -> RuleVersion | None:
         return self._latest_version(rule_id)
 
+    def version_for_definition(
+        self, rule_id: str, definition: dict
+    ) -> RuleVersion | None:
+        """Resolve historical content without allocating a new rule version."""
+        return self._session.scalars(
+            select(RuleVersion)
+            .where(
+                RuleVersion.rule_id == rule_id,
+                RuleVersion.content_hash == content_hash(definition),
+            )
+            .order_by(RuleVersion.version)
+        ).first()
+
 
 class PolicyRuleEvaluator:
     """Evaluate the three separate rule concepts deterministically.

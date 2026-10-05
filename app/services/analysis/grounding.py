@@ -57,6 +57,7 @@ class EvidenceItem:
     value: float | None = None
     text: str | None = None
     supports: EntailmentState | None = None
+    unit: str | None = None
 
 
 class EvidenceIndex:
@@ -125,12 +126,50 @@ class GroundingEvaluator:
         items = [i for i in items if i is not None]
 
         # Deterministic numeric entailment where the claim asserts a figure.
+        numbers = list(_NUMBER_RE.finditer(claim.text.replace(",", "")))
         claimed = _extract_number(claim.text)
         numeric_items = [i for i in items if i.value is not None]
         if claimed is not None and numeric_items:
-            for item in numeric_items:
-                if abs(item.value - claimed) <= self._tol:
-                    return EntailmentState.SUPPORTED, JudgeKind.DETERMINISTIC
+            # No number-to-evidence linkage exists in this schema. Multiple
+            # assertions or candidates cannot be deterministically entailed.
+            if len(numbers) != 1 or len(numeric_items) != 1:
+                return EntailmentState.NOT_VERIFIABLE, JudgeKind.DETERMINISTIC
+            item = numeric_items[0]
+            text = claim.text.replace(",", "")
+            before = text[: numbers[0].start()].rstrip()
+            after = text[numbers[0].end() :].lstrip().lower()
+            if after.startswith("%") or after.startswith("percent"):
+                if item.unit not in {"ratio", "fraction", "percent"}:
+                    return EntailmentState.NOT_VERIFIABLE, JudgeKind.DETERMINISTIC
+                if item.unit != "percent":
+                    claimed /= 100
+            elif before.endswith("$") or before.upper().endswith("USD"):
+                if item.unit not in {
+                    "USD",
+                    "USD_million",
+                    "USD_millions",
+                    "USD_billion",
+                }:
+                    return EntailmentState.NOT_VERIFIABLE, JudgeKind.DETERMINISTIC
+                scale = (
+                    1e9
+                    if after.startswith("billion")
+                    else 1e6
+                    if after.startswith("million")
+                    else 1
+                )
+                target = (
+                    1e9
+                    if item.unit == "USD_billion"
+                    else 1e6
+                    if item.unit in {"USD_million", "USD_millions"}
+                    else 1
+                )
+                claimed *= scale / target
+            elif after.startswith("x") and item.unit not in {None, "x", "ratio"}:
+                return EntailmentState.NOT_VERIFIABLE, JudgeKind.DETERMINISTIC
+            if abs(item.value - claimed) <= self._tol:
+                return EntailmentState.SUPPORTED, JudgeKind.DETERMINISTIC
             return EntailmentState.CONTRADICTORY, JudgeKind.DETERMINISTIC
 
         # Deterministic narrative verdict pre-stated on the evidence item.

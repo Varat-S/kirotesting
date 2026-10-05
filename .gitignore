@@ -11,6 +11,9 @@ __pycache__/
 build/
 dist/
 .venv/
+.venv-verify/
+.python/
+.uv-cache/
 venv/
 
 # Tooling caches

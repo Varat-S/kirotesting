@@ -39,7 +39,7 @@ from app.services.metrics.definitions import ResolvedMetricDefinition
 # The engine version is a code-level constant: a change in formula behaviour
 # bumps it so historical results stay attributable to the engine that produced
 # them (Req 8.2, 8.6).
-ENGINE_VERSION = "metric-engine-1.0.0"
+ENGINE_VERSION = "metric-engine-1.1.0"
 
 # Near-zero floor for denominators. Reuses the M4 tolerances concept; the engine
 # can be constructed with a floor read from the versioned ``tolerances`` config.
@@ -105,6 +105,8 @@ class MetricResult:
     period: str | None = None
     fiscal_year: int | None = None
     detail: str | None = None
+    evidence_quality: str = "unverified"
+    review_required: bool = True
 
     @property
     def explicit_state(self) -> str | None:
@@ -130,6 +132,9 @@ class MetricResult:
             "period": self.period,
             "fiscal_year": self.fiscal_year,
             "detail": self.detail,
+            "calculation_state": self.state.value,
+            "evidence_quality": self.evidence_quality,
+            "review_required": self.review_required,
         }
 
 
@@ -151,11 +156,16 @@ def _guard_inputs(
     """
     for name in required:
         inp = inputs.get(name)
-        if inp is None or inp.value is None or inp.status in {
-            FactStatus.MISSING,
-            FactStatus.NOT_DISCLOSED,
-            FactStatus.NOT_APPLICABLE,
-        }:
+        if (
+            inp is None
+            or inp.value is None
+            or inp.status
+            in {
+                FactStatus.MISSING,
+                FactStatus.NOT_DISCLOSED,
+                FactStatus.NOT_APPLICABLE,
+            }
+        ):
             return (None, MetricState.MISSING_INPUT, f"Input {name!r} is missing.")
         if inp.status is FactStatus.CONFLICTING:
             return (
@@ -207,7 +217,9 @@ def _f_net_debt_to_ebitda(inp: dict[str, MetricInput], floor: float) -> FormulaO
 
 def _f_operating_margin(inp: dict[str, MetricInput], floor: float) -> FormulaOutput:
     return _ratio(
-        inp["operating_income"].value, inp["revenue"].value, floor,  # type: ignore[arg-type]
+        inp["operating_income"].value,
+        inp["revenue"].value,
+        floor,  # type: ignore[arg-type]
         allow_negative_den=False,
     )
 
@@ -219,13 +231,17 @@ def _f_revenue_growth(inp: dict[str, MetricInput], floor: float) -> FormulaOutpu
 
 def _f_interest_coverage(inp: dict[str, MetricInput], floor: float) -> FormulaOutput:
     return _ratio(
-        inp["ebitda"].value, inp["interest_expense"].value, floor,  # type: ignore[arg-type]
+        inp["ebitda"].value,
+        inp["interest_expense"].value,
+        floor,  # type: ignore[arg-type]
         allow_negative_den=False,
     )
 
 
 def _f_cash_conversion(inp: dict[str, MetricInput], floor: float) -> FormulaOutput:
-    return _ratio(inp["cfo"].value, inp["ebitda"].value, floor, allow_negative_den=False)  # type: ignore[arg-type]
+    return _ratio(
+        inp["cfo"].value, inp["ebitda"].value, floor, allow_negative_den=False
+    )  # type: ignore[arg-type]
 
 
 def _f_free_cash_flow(inp: dict[str, MetricInput], floor: float) -> FormulaOutput:
@@ -241,7 +257,9 @@ def _f_liquidity(inp: dict[str, MetricInput], floor: float) -> FormulaOutput:
 
 
 def _f_capex_to_revenue(inp: dict[str, MetricInput], floor: float) -> FormulaOutput:
-    return _ratio(inp["capex"].value, inp["revenue"].value, floor, allow_negative_den=False)  # type: ignore[arg-type]
+    return _ratio(
+        inp["capex"].value, inp["revenue"].value, floor, allow_negative_den=False
+    )  # type: ignore[arg-type]
 
 
 def _f_load_factor(inp: dict[str, MetricInput], floor: float) -> FormulaOutput:
@@ -250,7 +268,9 @@ def _f_load_factor(inp: dict[str, MetricInput], floor: float) -> FormulaOutput:
 
 def _f_casm(inp: dict[str, MetricInput], floor: float) -> FormulaOutput:
     return _ratio(
-        inp["operating_expense"].value, inp["asm"].value, floor,  # type: ignore[arg-type]
+        inp["operating_expense"].value,
+        inp["asm"].value,
+        floor,  # type: ignore[arg-type]
         allow_negative_den=False,
     )
 
@@ -321,6 +341,25 @@ class MetricEngine:
         else:
             value, state, detail = formula(inputs, self._floor)
 
+        quality_order = {
+            s: i
+            for i, s in enumerate(
+                [
+                    FactStatus.VERIFIED,
+                    FactStatus.UNVERIFIED,
+                    FactStatus.NOT_APPLICABLE,
+                    FactStatus.NOT_DISCLOSED,
+                    FactStatus.MISSING,
+                    FactStatus.STALE,
+                    FactStatus.CONFLICTING,
+                ]
+            )
+        }
+        quality = max(
+            (inputs[k].status if k in inputs else FactStatus.MISSING for k in required),
+            key=quality_order.get,
+        )
+
         return MetricResult(
             metric_name=name,
             metric_definition_id=definition.metric_definition_id,
@@ -335,6 +374,8 @@ class MetricEngine:
             period=period,
             fiscal_year=fiscal_year,
             detail=detail,
+            evidence_quality=quality.value,
+            review_required=quality != FactStatus.VERIFIED or state != MetricState.OK,
         )
 
     def persist(self, result: MetricResult) -> Metric:
@@ -356,6 +397,8 @@ class MetricEngine:
             fiscal_year=result.fiscal_year,
             units=result.units,
             detail=result.detail,
+            evidence_quality=result.evidence_quality,
+            review_required=result.review_required,
         )
         self._session.add(row)
         self._session.flush()

@@ -35,7 +35,12 @@ class SnapshotAssembler:
 
     # Config kinds relevant to the evidence stage; recorded on the snapshot so
     # downstream reproduction knows exactly which versions were in force.
-    EVIDENCE_CONFIG_KINDS = ("tolerances", "parser_precedence", "source_profiles")
+    EVIDENCE_CONFIG_KINDS = (
+        "tolerances",
+        "parser_precedence",
+        "source_profiles",
+        "financial_mappings",
+    )
 
     def __init__(self, session: Session, registry: ConfigRegistry) -> None:
         self._session = session
@@ -119,8 +124,8 @@ class SnapshotAssembler:
 def _to_data_quality(result: ReconciliationResult) -> DataQualityState:
     """Project a reconciliation result into a snapshot data-quality field."""
     value: float | None = None
-    if result.resolved_state.value in {"verified", "unverified"} and result.values:
-        value = result.values[0]
+    if result.resolved_state.value in {"verified", "unverified", "stale"}:
+        value = result.selected_value
     return DataQualityState(
         field=result.field,
         state=result.resolved_state.value,
@@ -135,4 +140,7 @@ def _to_data_quality(result: ReconciliationResult) -> DataQualityState:
         tolerance_version=result.tolerance_version,
         mismatch_dimensions=list(result.mismatch_dimensions),
         detail=result.detail,
+        selected_fact_id=result.selected_fact_id,
+        selection_reason=result.selection_reason,
+        selection_version=result.selection_version,
     )

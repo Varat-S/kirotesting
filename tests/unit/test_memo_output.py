@@ -42,6 +42,7 @@ from app.services.reporting.memo import (
     PdfBackendUnavailableError,
     detect_pdf_backend,
 )
+from app.services.review.workflow import HumanReviewWorkflow
 from app.services.review.finalization import FinalSnapshotAssembler
 
 AS_OF = date(2024, 12, 31)
@@ -102,7 +103,10 @@ def _finalize(
         rule_versions={"R-POLICY-LEV-01": 1},
         prompt_model_versions={"business_analysis": "v1.0"},
     )
-    return final.finalize(snapshot, signed_off_by="officer", has_sign_off=True)
+    HumanReviewWorkflow(session, case_id="DAL_2024").sign_off_recommendation(
+        reviewer="officer", snapshot=snapshot
+    )
+    return final.finalize(snapshot, signed_off_by="officer")
 
 
 # -- 8.1: JSON first ----------------------------------------------------------
@@ -117,8 +121,12 @@ def test_json_generated_first_with_required_content(db_session: Session) -> None
         registry,
         audit,
         metrics={"net_debt_to_ebitda": 3.1, "revenue": 50000.0},
-        business_analysis={"summary": {"statement": "Delta is a legacy carrier.",
-                                        "evidence_ids": ["F1", "F2"]}},
+        business_analysis={
+            "summary": {
+                "statement": "Delta is a legacy carrier.",
+                "evidence_ids": ["F1", "F2"],
+            }
+        },
     )
 
     gen = MemoReportGenerator(db_session, audit=audit)
@@ -315,8 +323,12 @@ def test_claims_map_back_to_evidence(db_session: Session) -> None:
             ]
         },
         risks=[
-            {"title": "Fuel price exposure", "statement": "Jet fuel is volatile.",
-             "evidence_ids": ["F20", "F21"], "severity": "high"},
+            {
+                "title": "Fuel price exposure",
+                "statement": "Jet fuel is volatile.",
+                "evidence_ids": ["F20", "F21"],
+                "severity": "high",
+            },
         ],
     )
     gen = MemoReportGenerator(db_session, audit=audit)
