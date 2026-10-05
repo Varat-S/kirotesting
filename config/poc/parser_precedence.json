@@ -1,5 +1,6 @@
 {
   "methods": [
+    "inline_xbrl",
     "xbrl",
     "xlsx",
     "csv",

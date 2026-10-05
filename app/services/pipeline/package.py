@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.evidence import EntityRecord
+from app.services.extraction.sec.bundle import SecFilingBundle
 
 
 class SourceInput(BaseModel):
@@ -13,7 +14,7 @@ class SourceInput(BaseModel):
     filename: str
     path: str | None = None
     data: bytes | None = Field(default=None, repr=False, exclude=True)
-    parser: Literal["xbrl", "xlsx", "csv", "pdf_table", "pdf_text"]
+    parser: Literal["xbrl", "inline_xbrl", "xlsx", "csv", "pdf_table", "pdf_text"]
     tags: list[str] = Field(default_factory=list)
     available_at: datetime
     entity_id: str
@@ -35,6 +36,14 @@ class SourceInput(BaseModel):
         return self
 
 
+class SecBundleInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bundle: SecFilingBundle
+    entity_id: str
+    scope: str = "consolidated"
+    accounting_basis: str = "GAAP"
+
+
 class SourcePackage(BaseModel):
     model_config = ConfigDict(extra="forbid")
     as_of_date: date
@@ -42,6 +51,7 @@ class SourcePackage(BaseModel):
     borrower_entity_id: str
     entities: list[EntityRecord]
     sources: list[SourceInput]
+    sec_bundles: list[SecBundleInput] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_package(self):
@@ -52,12 +62,22 @@ class SourcePackage(BaseModel):
             raise ValueError("Unique entities including the borrower are required.")
         if any(s.entity_id not in ids for s in self.sources):
             raise ValueError("Each source must identify a registered entity.")
+        if any(b.entity_id not in ids for b in self.sec_bundles):
+            raise ValueError("Each SEC bundle must identify a registered entity.")
         return self
 
     @classmethod
     def load(cls, manifest: Path):
         manifest = manifest.resolve()
-        package = cls.model_validate(json.loads(manifest.read_text(encoding="utf-8")))
+        raw = json.loads(manifest.read_text(encoding="utf-8"))
+        for entry in raw.get("sec_bundles", []):
+            bundle_path = (manifest.parent / entry["bundle"]).resolve()
+            if not bundle_path.is_relative_to(manifest.parent):
+                raise ValueError(
+                    "SEC bundle paths must stay inside the package directory."
+                )
+            entry["bundle"] = SecFilingBundle.load(bundle_path)
+        package = cls.model_validate(raw)
         for source in package.sources:
             resolved = (manifest.parent / source.path).resolve()
             if not resolved.is_relative_to(manifest.parent):

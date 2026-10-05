@@ -37,6 +37,7 @@ class CompatibilityDimension(str, Enum):
 
     ENTITY = "entity"
     CONSOLIDATION_SCOPE = "consolidation_scope"
+    XBRL_DIMENSIONS = "xbrl_dimensions"
     PERIOD = "period"
     UNIT_SCALE = "unit_scale"
     CURRENCY = "currency"
@@ -106,6 +107,15 @@ def check_compatibility(a: CanonicalFact, b: CanonicalFact) -> CompatibilityResu
     (Req 6.3). The caller consults :func:`prefer_structured` for that.
     """
     checks: list[CompatibilityCheck] = []
+    checks.append(
+        CompatibilityCheck(
+            CompatibilityDimension.XBRL_DIMENSIONS,
+            a.dimensions == b.dimensions,
+            a.dimensions,
+            b.dimensions,
+            "XBRL dimensions must match",
+        )
+    )
     checks.append(
         CompatibilityCheck(
             CompatibilityDimension.CONSOLIDATION_SCOPE,
@@ -190,7 +200,9 @@ def check_compatibility(a: CanonicalFact, b: CanonicalFact) -> CompatibilityResu
 # Source-authority ordering is DISPLAY metadata only. It is used to choose which
 # value to show first when two facts are *fully compatible* (Req 6.1); it is
 # NEVER used to silence a disagreement between incompatible facts (Req 6.3).
-STRUCTURED_METHODS: frozenset[str] = frozenset({"xbrl", "xlsx", "csv", "pdf_table"})
+STRUCTURED_METHODS: frozenset[str] = frozenset(
+    {"xbrl", "inline_xbrl", "xlsx", "csv", "pdf_table"}
+)
 
 
 def is_structured(fact: CanonicalFact) -> bool:

@@ -69,6 +69,13 @@ def test_all_required_event_types_present() -> None:
         "mapping_review_required",
         "draft_memo_generated",
         "fact_reconciled",
+        "evidence_admitted",
+        "sec_filing_discovered",
+        "sec_file_downloaded",
+        "inline_xbrl_parsed",
+        "narrative_evidence_extracted",
+        "proxy_linked",
+        "subsidiaries_extracted",
     }
 
 

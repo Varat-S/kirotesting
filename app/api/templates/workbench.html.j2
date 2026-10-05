@@ -99,6 +99,13 @@
       </tbody></table></div>
       {% elif section.key == 'canonical_data' %}
       <p>{{ data.entities | length }} entities · {{ data.facts | length }} extracted facts. Open the data below for values, selected facts, quality states, and source references.</p>
+      {% if data.sec_filings %}
+      <h3>SEC filing diagnostics</h3>
+      <div class="table-wrap"><table><thead><tr><th>Accession</th><th>Contexts</th><th>Observations</th><th>Presentation sections</th><th>Subsidiaries</th></tr></thead><tbody>
+      {% for filing in data.sec_filings %}<tr><td>{{ filing.accession }}</td><td>{{ filing.contexts | length }}</td><td>{{ filing.observations | length }}</td><td>{{ filing.presentation | length }}</td><td>{{ filing.subsidiaries | length }}</td></tr>{% endfor %}
+      </tbody></table></div>
+      <p>{{ data.narrative_evidence | length }} candidate narrative passages. Segment facts remain separate from consolidated inputs. Parsed facts and narrative passages require evidence review.</p>
+      {% endif %}
       {% elif section.key == 'metrics' %}
       {% if data.metrics %}
       <p class="subtle">Ratios are shown as fractions: 0.2 = 20%. Currency units follow the source package. Evidence quality is separate from calculation status.</p>
@@ -122,7 +129,7 @@
       {% elif section.key == 'memo' %}
       <p>Memo status: <strong>{{ data.final_status | default(data.status) }}</strong></p>
       {% endif %}
-      <details{% if section.key == 'canonical_data' %} open{% endif %}><summary>Inspect {{ section.title | lower }} data and provenance</summary><pre>{{ data | tojson(indent=2) }}</pre></details>
+      <details{% if section.key == 'canonical_data' and not data.sec_filings %} open{% endif %}><summary>Inspect {{ section.title | lower }} data and provenance</summary><pre>{{ data | tojson(indent=2) }}</pre></details>
     </section>
     {% endfor %}
   </main>

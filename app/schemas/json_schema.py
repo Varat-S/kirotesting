@@ -9,6 +9,8 @@ by ``snapshot_type`` + ``schema_version``, then validate instances with the
 from __future__ import annotations
 
 from typing import Any
+import json
+from importlib.resources import files
 
 import jsonschema
 
@@ -25,12 +27,35 @@ class SchemaValidationError(ValueError):
 
 # Registry of versioned JSON Schemas, keyed by (snapshot_type, schema_version).
 _SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
-    ("canonical_evidence", SCHEMA_VERSION): CanonicalEvidenceSnapshot.model_json_schema(),
+    (
+        "canonical_evidence",
+        SCHEMA_VERSION,
+    ): CanonicalEvidenceSnapshot.model_json_schema(),
     ("final_case", SCHEMA_VERSION): FinalCaseSnapshot.model_json_schema(),
 }
 
+# Keep the original schema, rather than changing its definition under the same version.
+legacy = json.loads(
+    files("app.schemas")
+    .joinpath("legacy/snapshot_1_0.json")
+    .read_text(encoding="utf-8")
+)
+for kind, schema in legacy.items():
+    _SCHEMAS[(kind, "1.0")] = schema
+_SCHEMAS[("canonical_evidence", SCHEMA_VERSION)]["properties"]["facts"]["items"] = {
+    "type": "object",
+    "properties": {
+        "dimensions": {"type": "object", "additionalProperties": {"type": "string"}},
+        "xbrl_context_id": {"type": ["string", "null"]},
+        "inline_element_id": {"type": ["string", "null"]},
+        "sec_accession": {"type": ["string", "null"]},
+    },
+}
 
-def get_json_schema(snapshot_type: str, schema_version: str = SCHEMA_VERSION) -> dict[str, Any]:
+
+def get_json_schema(
+    snapshot_type: str, schema_version: str = SCHEMA_VERSION
+) -> dict[str, Any]:
     """Return the registered JSON Schema for a snapshot type + version."""
     key = (snapshot_type, schema_version)
     if key not in _SCHEMAS:

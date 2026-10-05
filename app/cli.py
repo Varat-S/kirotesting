@@ -2,6 +2,7 @@
 
 import argparse
 import json
+from datetime import date, datetime
 from pathlib import Path
 
 from sqlalchemy import select
@@ -13,6 +14,10 @@ from app.services.audit.log import AuditLog
 from app.services.pipeline.package import SourcePackage
 from app.services.pipeline.runner import CreditMemoPipeline
 from app.services.review.workflow import HumanReviewWorkflow
+from app.core.config import get_settings
+from app.services.acquisition.sec_edgar import SecEdgarClient, EdgarError, write_bundle
+from app.services.extraction.sec.bundle import SecFilingBundle
+from app.services.pipeline.sec import sec_source_package
 
 
 def main(argv=None):
@@ -31,6 +36,42 @@ def main(argv=None):
     run.add_argument(
         "--package", type=Path, default=Path("examples/synthetic-case/package.json")
     )
+    listing = commands.add_parser(
+        "sec-list",
+        help="List SEC annual reports; requires SEC_USER_AGENT contact identification",
+    )
+    listing.add_argument("ticker")
+    listing.add_argument("--include-amendments", action="store_true")
+    fetch = commands.add_parser(
+        "sec-fetch", help="Download a bundle without admitting it to a case"
+    )
+    fetch.add_argument("ticker")
+    selection = fetch.add_mutually_exclusive_group(required=True)
+    selection.add_argument(
+        "--fy", type=int, help="Discovery hint from the report date; accession is exact"
+    )
+    selection.add_argument("--accession")
+    fetch.add_argument("--with-proxy", action="store_true")
+    fetch.add_argument("--destination", type=Path)
+    sec_run = commands.add_parser(
+        "run-sec-case",
+        help="Run a local or fetched SEC bundle through the controlled offline pipeline",
+    )
+    source = sec_run.add_mutually_exclusive_group(required=True)
+    source.add_argument("--bundle", type=Path)
+    source.add_argument("--ticker")
+    sec_run.add_argument("case_id")
+    sec_run.add_argument("--fy", type=int)
+    sec_run.add_argument("--accession")
+    sec_run.add_argument("--with-proxy", action="store_true")
+    sec_run.add_argument(
+        "--cutoff",
+        type=lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")),
+        required=True,
+    )
+    sec_run.add_argument("--as-of", type=date.fromisoformat)
+    sec_run.add_argument("--entity-id")
+    sec_run.add_argument("--entity-name")
     approve = commands.add_parser(
         "approve", help="Record your explicit approval of the exact draft content"
     )
@@ -46,6 +87,12 @@ def main(argv=None):
     finalize.add_argument("--reviewer", required=True)
     finalize.add_argument("--pdf", action="store_true")
     args = parser.parse_args(argv)
+    if (
+        args.command == "run-sec-case"
+        and args.ticker
+        and (bool(args.fy) == bool(args.accession))
+    ):
+        parser.error("A live SEC run requires exactly one of --fy or --accession.")
     database = Path(args.database).resolve()
     database.parent.mkdir(parents=True, exist_ok=True)
     engine, factory = create_engine_and_session(f"sqlite:///{database.as_posix()}")
@@ -55,10 +102,84 @@ def main(argv=None):
             runner = CreditMemoPipeline(
                 session, data_root=database.parent, output_root=args.output
             )
-            if args.command == "run-case":
-                result = runner.run_case(
-                    args.case_id, package=SourcePackage.load(args.package)
+            if args.command in {"sec-list", "sec-fetch"} or (
+                args.command == "run-sec-case" and args.ticker
+            ):
+                client = SecEdgarClient(
+                    get_settings().sec_user_agent, audit=AuditLog(session)
                 )
+                company = client.lookup_ticker(args.ticker)
+                filings = client.list_filings(company["cik"])
+                if args.command == "sec-list":
+                    summary = {
+                        "company": company,
+                        "filings": [
+                            {**f.metadata(), "fiscal_year_hint": f.fiscal_year}
+                            for f in client.annual_reports(
+                                filings, args.include_amendments
+                            )
+                        ],
+                        "fetches": client.fetch_metadata,
+                    }
+                    session.commit()
+                    print(json.dumps(summary, indent=2))
+                    return
+                matches = [
+                    f
+                    for f in filings
+                    if (
+                        f.accession == args.accession
+                        if args.accession
+                        else f.form == "10-K" and f.fiscal_year == args.fy
+                    )
+                ]
+                if not matches:
+                    raise EdgarError(
+                        "No filing matched; use sec-list and choose an explicit accession."
+                    )
+                # Never silently select between two annual filings/amendments.
+                if len(matches) != 1:
+                    raise EdgarError(
+                        "Multiple filings matched; select an explicit accession."
+                    )
+                filing = matches[0]
+                bundle = client.fetch_bundle(
+                    company,
+                    filing,
+                    proxy=client.proxy_for(filings, filing)
+                    if args.with_proxy
+                    else None,
+                )
+                if args.command == "sec-fetch":
+                    destination = (
+                        args.destination
+                        or Path("data/sec") / company["ticker"] / filing.accession
+                    )
+                    manifest = write_bundle(bundle, destination)
+                    summary = {
+                        "bundle_manifest": str(manifest),
+                        "file_count": len(bundle.files),
+                        "status": "downloaded; not admitted",
+                        "fetches": client.fetch_metadata,
+                    }
+                    session.commit()
+                    print(json.dumps(summary, indent=2))
+                    return
+            if args.command in {"run-case", "run-sec-case"}:
+                if args.command == "run-sec-case":
+                    if args.bundle:
+                        bundle = SecFilingBundle.load(args.bundle)
+                    package = sec_source_package(
+                        bundle,
+                        cutoff=args.cutoff,
+                        entity_id=args.entity_id,
+                        legal_name=args.entity_name
+                        or (company["name"] if args.ticker else None),
+                        as_of_date=args.as_of,
+                    )
+                else:
+                    package = SourcePackage.load(args.package)
+                result = runner.run_case(args.case_id, package=package)
                 summary = {
                     "case_id": args.case_id,
                     "status": "draft",

@@ -58,6 +58,8 @@ from app.services.extraction.pdf_text import PdfTextParser
 from app.services.extraction.qualitative import QualitativeExtractor
 from app.services.extraction.xlsx_csv import CsvParser, XlsxParser
 from app.services.extraction.xbrl import XbrlParser
+from app.services.extraction.sec.statements import parse_bundle
+from app.services.ingestion.sec import admit_sec_bundle
 from app.services.ingestion.completeness import CompletenessEvaluator
 from app.services.ingestion.service import IngestionService, TemporalLeakageError
 from app.services.ingestion.storage import RawFileStore
@@ -70,7 +72,7 @@ from app.services.mapping.mapper import FinancialMapper
 from app.services.metrics.definitions import MetricDefinitionRegistry
 from app.services.metrics.engine import MetricEngine, MetricInput
 from app.services.metrics.trends import TrendAnalyzer, TrendPoint
-from app.services.pipeline.package import SourcePackage
+from app.services.pipeline.package import SourcePackage, SourceInput
 from app.services.pipeline.result import PipelineResult
 from app.services.reconciliation.service import Reconciler, ToleranceConfig
 from app.services.reconciliation.snapshot import SnapshotAssembler
@@ -203,6 +205,7 @@ class CreditMemoPipeline:
             )
 
         documents, facts, rejected, issues, admitted_tags = [], [], [], [], set()
+        sec_filings, narrative = [], []
         parsers = {
             "csv": CsvParser,
             "xlsx": XlsxParser,
@@ -210,6 +213,121 @@ class CreditMemoPipeline:
             "pdf_table": PdfTableParser,
             "pdf_text": PdfTextParser,
         }
+
+        def consume_source(source, parsed, did):
+            # Only successfully parsed sources count towards coverage.
+            admitted_tags.update(source.tags)
+            audit.record(
+                EventType.FACT_EXTRACTED,
+                case_id=case_id,
+                actor_type=ActorType.SYSTEM,
+                after={
+                    **parsed.metadata.as_dict(),
+                    "fact_count": parsed.fact_count,
+                    "warnings": parsed.warnings,
+                },
+                linked_objects=[did],
+            )
+            for original in parsed.facts:
+                financial = (
+                    source.parser != "inline_xbrl"
+                    or original.normalized_unit is not None
+                )
+                entity_id = original.entity_id
+                if entity_id is not None and entities.get(entity_id) is None:
+                    resolved = resolver.resolve(entity_id, case_id=case_id)
+                    entity_id = (
+                        resolved.entity_id
+                        if resolved.status == ResolutionStatus.RESOLVED
+                        else entity_id
+                    )
+                tagged = original.model_copy(
+                    update={
+                        "entity_id": entity_id or source.entity_id,
+                        "consolidation_scope": original.consolidation_scope
+                        or source.scope,
+                        "accounting_basis": original.accounting_basis
+                        or source.accounting_basis,
+                    }
+                )
+                if (
+                    tagged.period_type == "duration"
+                    and tagged.period_start is not None
+                    and tagged.period_end is not None
+                    and tagged.period_start.isoformat() == f"{tagged.fiscal_year}-01-01"
+                    and tagged.period_end.isoformat() == f"{tagged.fiscal_year}-12-31"
+                ):
+                    tagged.period_type = "FY"
+                mismatch = resolver.detect_mismatch(
+                    expected_entity_id=source.entity_id,
+                    observed_entity_id=tagged.entity_id,
+                    expected_scope=self.session.get(
+                        CaseEntity, (case_id, source.entity_id)
+                    ).expected_consolidation_scope
+                    or source.scope,
+                    observed_scope=tagged.consolidation_scope,
+                    case_id=case_id,
+                    fact_id=original.fact_id,
+                )
+                if (
+                    mismatch is not None
+                    or (
+                        financial
+                        and (tagged.fiscal_year is None or tagged.period_end is None)
+                    )
+                    or (
+                        source.parser != "inline_xbrl"
+                        and tagged.period_end is not None
+                        and tagged.period_end > package.as_of_date
+                    )
+                ):
+                    tagged.status = FactStatus.CONFLICTING
+                    flag(
+                        "invalid_metadata",
+                        f"Unusable entity/period/scope metadata for {source.filename}:{original.name}",
+                        [did],
+                    )
+                if not financial:
+                    tagged.mapping_status = "not_financial"
+                    tagged.fact_id = content_hash(
+                        tagged.model_dump(mode="json", exclude={"fact_id"})
+                    )
+                    self._persist_fact(tagged, case_id)
+                    facts.append(tagged)
+                    continue
+                mapped = mapper.map_fact(
+                    tagged,
+                    "xbrl"
+                    if source.parser in {"xbrl", "inline_xbrl"}
+                    else "table_label",
+                )
+                fact = mapped.fact
+                stable = fact.model_dump(mode="json", exclude={"fact_id"})
+                fact.fact_id = content_hash(stable)
+                if mapped.status != "mapped":
+                    issue = {
+                        "fact_id": fact.fact_id,
+                        "source_name": original.name,
+                        "status": mapped.status,
+                        "candidates": list(mapped.candidates),
+                        "mapping_version": mapper.version,
+                    }
+                    issues.append(issue)
+                    audit.record(
+                        EventType.MAPPING_REVIEW_REQUIRED,
+                        case_id=case_id,
+                        actor_type=ActorType.SYSTEM,
+                        after=issue,
+                        linked_objects=[fact.fact_id, did],
+                    )
+                    flag(
+                        "mapping",
+                        f"{mapped.status} financial label {original.name!r}.",
+                        [fact.fact_id],
+                    )
+                self._persist_fact(fact, case_id)
+                facts.append(fact)
+
         for source in sorted(
             package.sources, key=lambda s: (s.filename, s.available_at, s.entity_id)
         ):
@@ -273,6 +391,10 @@ class CreditMemoPipeline:
                     numeric_fields=set(source.numeric_fields),
                 )
             try:
+                if source.parser not in parsers:
+                    raise ParserError(
+                        "Inline-XBRL requires a declared SEC filing bundle."
+                    )
                 parsed = parsers[source.parser]().parse(
                     data, document_id=did, **options
                 )
@@ -283,97 +405,85 @@ class CreditMemoPipeline:
                     [did],
                 )
                 continue
-            # Only successfully parsed sources count towards coverage.
-            admitted_tags.update(source.tags)
-            audit.record(
-                EventType.FACT_EXTRACTED,
+            consume_source(source, parsed, did)
+
+        for entry in package.sec_bundles:
+            admitted, sec_documents, excluded = admit_sec_bundle(
+                entry.bundle,
+                entity_id=entry.entity_id,
                 case_id=case_id,
-                actor_type=ActorType.SYSTEM,
-                after={
-                    **parsed.metadata.as_dict(),
-                    "fact_count": parsed.fact_count,
-                    "warnings": parsed.warnings,
-                },
-                linked_objects=[did],
+                ingestion=ingestion,
+                session=self.session,
+                audit=audit,
             )
-            for original in parsed.facts:
-                entity_id = original.entity_id
-                if entity_id is not None and entities.get(entity_id) is None:
-                    resolved = resolver.resolve(entity_id, case_id=case_id)
-                    entity_id = (
-                        resolved.entity_id
-                        if resolved.status == ResolutionStatus.RESOLVED
-                        else entity_id
-                    )
-                tagged = original.model_copy(
-                    update={
-                        "entity_id": entity_id or source.entity_id,
-                        "consolidation_scope": original.consolidation_scope
-                        or source.scope,
-                        "accounting_basis": original.accounting_basis
-                        or source.accounting_basis,
-                    }
+            documents.extend(sec_documents)
+            rejected.extend(excluded)
+            primary = next(
+                (f for f in admitted.files if f.role == "primary_inline_xbrl"), None
+            )
+            if primary is None:
+                continue
+            try:
+                parsed, diagnostics, passages = parse_bundle(
+                    admitted,
+                    entity_id=entry.entity_id,
+                    scope=entry.scope,
+                    accounting_basis=entry.accounting_basis,
                 )
-                if (
-                    tagged.period_type == "duration"
-                    and tagged.period_start is not None
-                    and tagged.period_end is not None
-                    and tagged.period_start.isoformat() == f"{tagged.fiscal_year}-01-01"
-                    and tagged.period_end.isoformat() == f"{tagged.fiscal_year}-12-31"
-                ):
-                    tagged.period_type = "FY"
-                mismatch = resolver.detect_mismatch(
-                    expected_entity_id=source.entity_id,
-                    observed_entity_id=tagged.entity_id,
-                    expected_scope=self.session.get(
-                        CaseEntity, (case_id, source.entity_id)
-                    ).expected_consolidation_scope
-                    or source.scope,
-                    observed_scope=tagged.consolidation_scope,
-                    case_id=case_id,
-                    fact_id=original.fact_id,
+            except ParserError as exc:
+                flag(
+                    "invalid_metadata",
+                    f"SEC parser failed for {primary.filename}: {exc}",
+                    [primary.document_id],
                 )
-                if (
-                    mismatch is not None
-                    or tagged.fiscal_year is None
-                    or tagged.period_end is None
-                    or tagged.period_end > package.as_of_date
-                ):
-                    tagged.status = FactStatus.CONFLICTING
-                    flag(
-                        "invalid_metadata",
-                        f"Unusable entity/period/scope metadata for {source.filename}:{original.name}",
-                        [did],
-                    )
-                mapped = mapper.map_fact(
-                    tagged, "xbrl" if source.parser == "xbrl" else "table_label"
-                )
-                fact = mapped.fact
-                stable = fact.model_dump(mode="json", exclude={"fact_id"})
-                fact.fact_id = content_hash(stable)
-                if mapped.status != "mapped":
-                    issue = {
-                        "fact_id": fact.fact_id,
-                        "source_name": original.name,
-                        "status": mapped.status,
-                        "candidates": list(mapped.candidates),
-                        "mapping_version": mapper.version,
-                    }
-                    issues.append(issue)
+                continue
+            sec_filings.append(diagnostics)
+            narrative.extend(passages)
+            audit.record(
+                EventType.INLINE_XBRL_PARSED,
+                case_id=case_id,
+                after={
+                    "accession": admitted.accession,
+                    "fact_count": parsed.fact_count,
+                    "parser_version": diagnostics["parser_version"],
+                },
+                linked_objects=[primary.document_id],
+            )
+            audit.record(
+                EventType.NARRATIVE_EVIDENCE_EXTRACTED,
+                case_id=case_id,
+                after={"passage_count": len(passages)},
+                linked_objects=sorted({p["document_id"] for p in passages}),
+            )
+            for companion in admitted.files:
+                if companion.role == "proxy":
                     audit.record(
-                        EventType.MAPPING_REVIEW_REQUIRED,
+                        EventType.PROXY_LINKED,
                         case_id=case_id,
-                        actor_type=ActorType.SYSTEM,
-                        after=issue,
-                        linked_objects=[fact.fact_id, did],
+                        after={"accession": companion.accession},
+                        linked_objects=[companion.document_id, primary.document_id],
                     )
-                    flag(
-                        "mapping",
-                        f"{mapped.status} financial label {original.name!r}.",
-                        [fact.fact_id],
+                if companion.role == "exhibit_21":
+                    audit.record(
+                        EventType.SUBSIDIARIES_EXTRACTED,
+                        case_id=case_id,
+                        after={"count": len(diagnostics["subsidiaries"])},
+                        linked_objects=[companion.document_id],
                     )
-                self._persist_fact(fact, case_id)
-                facts.append(fact)
+            consume_source(
+                SourceInput(
+                    filename=primary.filename,
+                    data=primary.content,
+                    parser="inline_xbrl",
+                    entity_id=entry.entity_id,
+                    scope=entry.scope,
+                    accounting_basis=entry.accounting_basis,
+                    tags=["sec", "financial_statements"],
+                    available_at=primary.available_at,
+                ),
+                parsed,
+                primary.document_id,
+            )
 
         facts = sorted({f.fact_id: f for f in facts}.values(), key=lambda f: f.fact_id)
         completeness = CompletenessEvaluator(registry).assess(
@@ -393,6 +503,8 @@ class CreditMemoPipeline:
                         fact.period_type,
                         str(fact.period_end),
                         fact.name,
+                        tuple(sorted(fact.dimensions.items())),
+                        str(fact.period_start),
                     )
                 ].append(fact)
         reconciler = Reconciler(
@@ -405,7 +517,7 @@ class CreditMemoPipeline:
         )
         reconciliations = []
         for key, observations in sorted(groups.items(), key=lambda item: str(item[0])):
-            result = reconciler.reconcile_field(key[-1], observations)
+            result = reconciler.reconcile_field(key[4], observations)
             result.field = canonical_json(key)
             reconciler.persist(result)
             reconciliations.append(result)
@@ -428,6 +540,8 @@ class CreditMemoPipeline:
         )
         # Exact pinned versions, rather than whatever became latest subsequently.
         evidence.config_versions = versions
+        evidence.sec_filings = sec_filings
+        evidence.narrative_evidence = sorted(narrative, key=lambda p: p["evidence_id"])
         evidence.financials = {
             key: {
                 "value": dq.value,
@@ -477,9 +591,12 @@ class CreditMemoPipeline:
             flag,
         )
         final = FinalSnapshotAssembler(self.session, registry, audit=audit)
-        esc_payloads = [
-            self._escalation_payload(e) for e in escalation.escalations_for_case()
-        ]
+        # Timestamp resolution can change ordering across otherwise equal runs.
+        # Canonical memo content uses stable IDs instead of wall-clock order.
+        esc_payloads = sorted(
+            [self._escalation_payload(e) for e in escalation.escalations_for_case()],
+            key=lambda e: e["escalation_id"],
+        )
         draft = final.assemble(
             case_id=case_id,
             evidence_snapshot_version=evidence.snapshot_version,
@@ -594,9 +711,19 @@ class CreditMemoPipeline:
         # Only FY duration/instant observations sharing the exact year-end are
         # eligible. Quarterly/YTD observations stay in the evidence snapshot.
         pools = defaultdict(lambda: defaultdict(list))
+        facts_by_id = {f["fact_id"]: f for f in evidence.facts}
         for key, dq in evidence.data_quality.items():
-            entity, year, period_type, end, name = json.loads(key)
-            if year is not None and period_type in {"FY", "instant"}:
+            entity, year, period_type, end, name, *identity = json.loads(key)
+            dimensional = identity and bool(identity[0])
+            selected = facts_by_id.get(dq.selected_fact_id, {})
+            consolidated = selected.get("consolidation_scope") in {None, "consolidated"}
+            if (
+                year is not None
+                and period_type in {"FY", "instant"}
+                and not dimensional
+                and consolidated
+                and end <= evidence.as_of_date.isoformat()
+            ):
                 pools[(entity, int(year), end)][name].append(dq)
         all_metrics = defaultdict(dict)
         for (entity, year, end), fields in sorted(pools.items()):
@@ -609,8 +736,15 @@ class CreditMemoPipeline:
                     inputs[name] = MetricInput(
                         name, dq.value, FactStatus(dq.state), dq.selected_fact_id
                     )
-            previous = pools.get((entity, year - 1, f"{year - 1}-12-31"), {}).get(
-                "revenue", []
+            prior_periods = [
+                k
+                for k in pools
+                if k[0] == entity and k[1] == year - 1 and "revenue" in pools[k]
+            ]
+            previous = (
+                pools[max(prior_periods, key=lambda k: k[2])].get("revenue", [])
+                if prior_periods
+                else []
             )
             if len(previous) == 1:
                 dq = previous[0]
@@ -632,7 +766,16 @@ class CreditMemoPipeline:
                 )
                 engine.persist(metric)
                 all_metrics[(entity, year, end)][name] = metric
-        target = (borrower, evidence.as_of_date.year, evidence.as_of_date.isoformat())
+        targets = [
+            k
+            for k in all_metrics
+            if k[0] == borrower and k[2] == evidence.as_of_date.isoformat()
+        ]
+        target = (
+            targets[0]
+            if len(targets) == 1
+            else (borrower, evidence.as_of_date.year, evidence.as_of_date.isoformat())
+        )
         current = all_metrics.get(target)
         if current is None:
             engine = MetricEngine(session=self.session, audit=audit, case_id=case_id)
@@ -672,7 +815,7 @@ class CreditMemoPipeline:
             points = [
                 TrendPoint(year, values[name].result)
                 for (entity, year, end), values in sorted(all_metrics.items())
-                if entity == package.borrower_entity_id and end == f"{year}-12-31"
+                if entity == package.borrower_entity_id
             ]
             trends[name] = analyzer.analyze(name, points).as_payload()
             peer_values = []
@@ -799,6 +942,7 @@ class CreditMemoPipeline:
         inputs = AnalysisInputs(
             canonical_facts=evidence.facts
             + [f.model_dump(mode="json") for f in qualitative],
+            snippets=evidence.narrative_evidence,
             metrics=[m.as_payload() for m in metrics.values()],
             trends=list(trends.values()),
             benchmarks=list(benchmarks.values()),
@@ -839,6 +983,12 @@ class CreditMemoPipeline:
             EvidenceItem(name, value=m.result, unit=m.units)
             for name, m in metrics.items()
             if m.result is not None and not m.review_required
+        ]
+        # Candidate passages establish citation presence; they do not establish
+        # entailment or turn heuristic topic tags into verified conclusions.
+        items += [
+            EvidenceItem(p["evidence_id"], text=p["text"])
+            for p in evidence.narrative_evidence
         ]
         evaluator = GroundingEvaluator(
             EvidenceIndex(items), session=self.session, case_id=case_id

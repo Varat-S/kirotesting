@@ -432,6 +432,8 @@ class WorkbenchService:
                 "entities": evidence_payload.get("entities") or [],
                 "facts": evidence_payload.get("facts") or [],
                 "financials": evidence_payload.get("financials") or {},
+                "sec_filings": evidence_payload.get("sec_filings") or [],
+                "narrative_evidence": evidence_payload.get("narrative_evidence") or [],
                 "data_quality": evidence_payload.get("data_quality") or {},
             },
             "metrics": {
@@ -501,6 +503,8 @@ class WorkbenchService:
             "canonical_data": {
                 "entities": payload.get("entities") or [],
                 "facts": payload.get("facts") or [],
+                "sec_filings": payload.get("sec_filings") or [],
+                "narrative_evidence": payload.get("narrative_evidence") or [],
                 "data_quality": payload.get("data_quality") or {},
             },
             "metrics": {"metrics": {}, "benchmarks": {}, **pending},

@@ -248,6 +248,7 @@ def _fact_signature(fact: CanonicalFact) -> tuple:
         fact.fiscal_year,
         fact.entity_id,
         fact.consolidation_scope,
+        tuple(sorted(fact.dimensions.items())),
         fact.status,
         fact.extraction_method,
         fact.accounting_basis,
@@ -431,7 +432,7 @@ class Reconciler:
             and result.resolved_state == FactStatus.VERIFIED
         ):
             result.resolved_state = FactStatus.UNVERIFIED
-        return self._select(result, [a, b])
+        return self._select(_single_inline_source(result, [a, b]), [a, b])
 
     def reconcile_field(
         self, field_name: str, facts: list[CanonicalFact]
@@ -520,7 +521,7 @@ class Reconciler:
         ):
             if worst.resolved_state == FactStatus.VERIFIED:
                 worst.resolved_state = FactStatus.UNVERIFIED
-        return self._select(worst, value_facts)
+        return self._select(_single_inline_source(worst, value_facts), value_facts)
 
     def _select(
         self, result: ReconciliationResult, facts: list[CanonicalFact]
@@ -648,6 +649,28 @@ class Reconciler:
                     linked_objects=result.fact_ids,
                 )
         return row
+
+
+def _single_inline_source(result, facts):
+    if (
+        result.resolved_state == FactStatus.VERIFIED
+        and all(
+            f.extraction_method is not None
+            and f.extraction_method.value == "inline_xbrl"
+            for f in facts
+        )
+        and len(
+            {
+                f.sec_accession or r.sec_accession or r.document_id
+                for f in facts
+                for r in f.source_refs
+            }
+        )
+        == 1
+    ):
+        result.resolved_state = FactStatus.UNVERIFIED
+        result.detail = "Repeated Inline-XBRL observations from one filing are not independent corroboration."
+    return result
 
 
 def _severity(state: FactStatus) -> int:

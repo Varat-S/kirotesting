@@ -154,6 +154,26 @@
       "source_type": "table_label",
       "source_key": "Debt Due Within One Year",
       "canonical_name": "debt_due_1y"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "us-gaap:NetCashProvidedByUsedInOperatingActivities",
+      "canonical_name": "cfo"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+      "canonical_name": "capex"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "us-gaap:InterestExpense",
+      "canonical_name": "interest_expense"
+    },
+    {
+      "source_type": "xbrl",
+      "source_key": "us-gaap:LongTermDebtNoncurrent",
+      "canonical_name": "long_term_debt"
     }
   ],
   "label": "ILLUSTRATIVE - NOT BANK POLICY"

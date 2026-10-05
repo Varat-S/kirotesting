@@ -18,6 +18,16 @@ ADDITIONS = {
         "mapping_hash": "TEXT",
         "mapping_status": "TEXT",
         "mapping_candidates": "JSON NOT NULL DEFAULT '[]'",
+        "dimensions": "JSON NOT NULL DEFAULT '{}'",
+        "xbrl_context_id": "TEXT",
+        "inline_element_id": "TEXT",
+        "sec_accession": "TEXT",
+    },
+    "fact_source_refs": {
+        "xbrl_context_id": "TEXT",
+        "inline_element_id": "TEXT",
+        "presentation_role": "TEXT",
+        "sec_accession": "TEXT",
     },
     "reconciliation_records": {
         "selected_fact_id": "TEXT",

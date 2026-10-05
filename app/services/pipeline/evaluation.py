@@ -19,12 +19,13 @@ def variant_outcome(
     produced = {}
     current_year = result.evidence_snapshot.as_of_date.year
     for key, quality in result.evidence_snapshot.data_quality.items():
-        entity, year, period_type, end, name = json.loads(key)
+        entity, year, period_type, end, name, *identity = json.loads(key)
         if (
             entity == borrower_entity_id
             and year == current_year
             and end == result.evidence_snapshot.as_of_date.isoformat()
             and quality.value is not None
+            and not (identity and identity[0])
         ):
             produced[name] = quality.value
     missing = sorted(

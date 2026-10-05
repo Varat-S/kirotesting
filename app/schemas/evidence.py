@@ -41,6 +41,10 @@ class SourceRef(BaseModel):
     taxonomy_concept: str | None = None
     row_label: str | None = None
     cell: str | None = None
+    xbrl_context_id: str | None = None
+    inline_element_id: str | None = None
+    presentation_role: str | None = None
+    sec_accession: str | None = None
 
 
 class EntityRecord(BaseModel):
@@ -113,6 +117,10 @@ class CanonicalFact(BaseModel):
     reporting_entity_name: str | None = None
     restated: bool = False
     taxonomy_concept: str | None = None
+    xbrl_context_id: str | None = None
+    dimensions: dict[str, str] = Field(default_factory=dict)
+    inline_element_id: str | None = None
+    sec_accession: str | None = None
     source_label: str | None = None
     data_freshness: datetime | None = None
     normalization_method: str | None = None

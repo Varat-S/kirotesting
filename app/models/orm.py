@@ -194,6 +194,10 @@ class Fact(Base):
     reporting_entity_name: Mapped[str | None] = mapped_column(String, nullable=True)
     restated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     taxonomy_concept: Mapped[str | None] = mapped_column(String, nullable=True)
+    xbrl_context_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    dimensions: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    inline_element_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    sec_accession: Mapped[str | None] = mapped_column(String, nullable=True)
     source_label: Mapped[str | None] = mapped_column(String, nullable=True)
     data_freshness: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     normalization_method: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -228,6 +232,10 @@ class FactSourceRef(Base):
     taxonomy_concept: Mapped[str | None] = mapped_column(String, nullable=True)
     row_label: Mapped[str | None] = mapped_column(String, nullable=True)
     cell: Mapped[str | None] = mapped_column(String, nullable=True)
+    xbrl_context_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    inline_element_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    presentation_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    sec_accession: Mapped[str | None] = mapped_column(String, nullable=True)
 
     fact: Mapped["Fact"] = relationship(back_populates="source_refs")
 

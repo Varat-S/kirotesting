@@ -17,6 +17,7 @@ See the full spec in [`.kiro/specs/credit-memo-poc/`](.kiro/specs/credit-memo-po
 - FastAPI + Uvicorn
 - Pydantic v2 + `pydantic-settings` (and JSON Schema for canonical snapshots)
 - pandas (tabular parsing and metric computation)
+- lxml (bounded SEC Inline-XBRL, context/dimension and local linkbase parsing)
 - SQLAlchemy over SQLite (PoC), migratable to PostgreSQL
 - Jinja2 (deterministic memo rendering)
 - pytest
@@ -130,12 +131,35 @@ never logged** (Requirement 25.2). Secret-bearing fields use Pydantic's
 `SecretStr` so they are masked in any `repr`/log output. Only `.env.example`,
 containing placeholder keys, is tracked in git.
 
+## SEC filing bundles
+
+The supplied real NVIDIA filing can run offline with no SEC or LLM credentials:
+
+```powershell
+$env:DEBUG = 'false'
+.\.venv\Scripts\python.exe -m app.cli --database data/sec_demo.db --output output/sec_demo run-sec-case NVDA_2026 --bundle examples/sec/nvda-2026/bundle.json --entity-name 'NVIDIA Corporation' --cutoff 2026-03-01T00:00:00Z
+.\.venv\Scripts\python.exe -m app.preview --database data/sec_demo.db --output output/sec_demo --port 8001
+```
+
+Open <http://127.0.0.1:8001/>. The saved draft includes SEC diagnostics, facts
+and candidate passages. The later proxy is rejected at this cutoff. Available
+financial metrics require evidence review; unknown mappings remain visible.
+
+Optional public SEC acquisition uses `sec-list`, `sec-fetch`, or `run-sec-case
+--ticker`. Set `SEC_USER_AGENT` to your name and real contact email; no SEC API
+key is required. Acquisition passes every file through the normal cutoff gate
+before parsing. See [SEC_INTEGRATION_REPORT.md](SEC_INTEGRATION_REPORT.md) for
+exact commands, migration, tests, ported behavior and known limits.
+
 ## Status
 
 The offline end-to-end pipeline is wired and tested with actual synthetic
 XBRL/XLSX/CSV/PDF sources, eight source-removal ablations, historical replay and
 canonical memo reproducibility. Regression tests cover reconciliation integrity,
 metric evidence quality, case-specific entity roles and content-bound human approval.
+The real NVIDIA Inline-XBRL fixture also runs through the pipeline, with
+dimension-safe reconciliation, 52/53-week annual periods, conservative SEC
+availability, narrative retrieval and independent companion admission.
 
 A real LLM provider is a separate integration step; `RealProviderBackend` remains
 a stub. Fake responses exercise orchestration and validation without asserting

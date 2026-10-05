@@ -28,8 +28,38 @@ document or **JSON** for its canonical payload.
 
 Viewing any page is read-only: it creates no approval, finalization, or audit
 event. The offline fake AI returns empty analysis rather than simulated credit
-judgments, so narrative sections will be empty. All bundled examples are
-synthetic, and the configuration is illustrative rather than bank policy.
+judgments, so narrative analysis sections will be empty. The three Delta demo
+cases are synthetic; the separate NVIDIA fixture uses real supplied filing
+bytes. Configuration is illustrative rather than bank policy.
+
+## Try the real NVIDIA filing
+
+```powershell
+$env:DEBUG = 'false'
+.\.venv\Scripts\python.exe -m app.cli --database data/sec_demo.db --output output/sec_demo run-sec-case NVDA_2026 --bundle examples/sec/nvda-2026/bundle.json --entity-name 'NVIDIA Corporation' --cutoff 2026-03-01T00:00:00Z
+.\.venv\Scripts\python.exe -m app.preview --database data/sec_demo.db --output output/sec_demo --port 8001
+```
+
+Open <http://127.0.0.1:8001/> and select `NVDA_2026`. No credentials or live
+downloads are needed. If this preview is already running, simply open the URL.
+
+- **Sources:** 13 admitted files; the May proxy is excluded by the March cutoff.
+- **Canonical Data:** 1,305 facts, 281 contexts and 91 presentation sections;
+  expand the data for dimensions, inline IDs, source hashes, mapped/unmapped
+  observations, candidate passages and three subsidiary rows.
+- **Metrics:** operating margin about 60.38% and revenue growth about 65.47%,
+  both unverified and requiring review. Missing inputs remain unavailable.
+- **Exceptions:** mapping review and a mandatory missing-metrics condition.
+  The airline-oriented illustrative configuration is not NVIDIA policy.
+- **Memo / JSON:** saved draft artifacts. Candidate passages are available
+  to inspect, while generated AI analysis remains empty with the fake backend.
+
+For a later-cutoff comparison, use a new case ID, for example `NVDA_2026_LATE`,
+with `--cutoff 2026-06-01T00:00:00Z`; the proxy then passes its own gate and
+its passages cite its own document. An existing case's cutoff cannot change.
+See [SEC_INTEGRATION_REPORT.md](SEC_INTEGRATION_REPORT.md) for live SEC commands
+and database migration. Older preview databases need that additive migration
+before using the new schema.
 
 ## Create a case and upload a file
 

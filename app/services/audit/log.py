@@ -44,6 +44,13 @@ class EventType(str, Enum):
 
     CASE_CREATED = "case_created"
     EVIDENCE_REJECTED = "evidence_rejected"
+    EVIDENCE_ADMITTED = "evidence_admitted"
+    SEC_FILING_DISCOVERED = "sec_filing_discovered"
+    SEC_FILE_DOWNLOADED = "sec_file_downloaded"
+    INLINE_XBRL_PARSED = "inline_xbrl_parsed"
+    NARRATIVE_EVIDENCE_EXTRACTED = "narrative_evidence_extracted"
+    PROXY_LINKED = "proxy_linked"
+    SUBSIDIARIES_EXTRACTED = "subsidiaries_extracted"
     MAPPING_REVIEW_REQUIRED = "mapping_review_required"
     DRAFT_MEMO_GENERATED = "draft_memo_generated"
     DOCUMENT_INGESTED = "document_ingested"
