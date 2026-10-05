@@ -24,6 +24,7 @@ class SourceInput(BaseModel):
     field_patterns: dict[str, str] = Field(default_factory=dict)
     numeric_fields: list[str] = Field(default_factory=list)
     supersedes: str | None = None
+    notes: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_source(self):
@@ -83,4 +84,9 @@ class SourcePackage(BaseModel):
             if not resolved.is_relative_to(manifest.parent):
                 raise ValueError("Source paths must stay inside the package directory.")
             source.path = str(resolved)
+            if source.parse_options.get("ocr_cache"):
+                cache = (manifest.parent / source.parse_options["ocr_cache"]["path"]).resolve()
+                if not cache.is_relative_to(manifest.parent):
+                    raise ValueError("OCR capture paths must stay inside the package directory.")
+                source.parse_options["ocr_cache"]["path"] = str(cache)
         return package

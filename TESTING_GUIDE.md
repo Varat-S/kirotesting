@@ -14,23 +14,51 @@ does not duplicate its seeded cases.
 
 ## What you can test in the browser
 
-| Case | What to inspect | Expected behavior |
-| --- | --- | --- |
-| `SYNTHETIC_2024` | Sources, metrics, exceptions, memo | Eight source files; operating margin 0.2 (20%); net debt / EBITDA 3x. Some operating metrics have weaker evidence and require review. Memo remains draft. |
-| `SYNTHETIC_MISSING` | Missing sources and unavailable financial metrics | Critical financial statements are absent. Financial results remain unavailable; exceptions require human attention. |
-| `SYNTHETIC_CONFLICT` | Revenue observations, metric quality, mandatory exceptions | An additional source reports different revenue. Dependent metrics such as operating margin are unavailable; the conflict is preserved and blocks finalization. |
+**The default test case is now the user's three Delta PDFs.** Open `/inspect`
+and click **Open default Delta evidence preview**; the files and metadata are
+already included. Use **Run the Delta files again as a new case** to repeat
+processing. Start the server with `--seed-default` to prepare the default on
+startup. This preset uses the PDF selection and excludes the `.xls` version.
 
-Use the nine section links and expand the data panels to inspect fact IDs,
-source references, selected financial values, and configuration versions.
-Metric results distinguish calculation status from evidence quality. Ratio
-fractions are displayed as stored: 0.2 means 20%. Open **Memo** for the rendered
-document or **JSON** for its canonical payload.
+The refreshed default is `/inspect/DELTA_2025_OCR_REVIEW/1`, as of December 31,
+2025, with a March 1, 2026 cutoff. Earlier cases remain available. All 132 pages
+are captured, including six OCR pages; 358 structured observations are mapped
+and nine of eleven metrics can be calculated. Seven of those metrics still
+require evidence/definition review. Interest coverage and liquidity remain
+unavailable because gross interest and a structured revolver input are absent.
+Net interest and cash interest are kept as distinct extracted fields.
 
-Viewing any page is read-only: it creates no approval, finalization, or audit
-event. The offline fake AI returns empty analysis rather than simulated credit
-judgments, so narrative analysis sections will be empty. The three Delta demo
-cases are synthetic; the separate NVIDIA fixture uses real supplied filing
-bytes. Configuration is illustrative rather than bank policy.
+**Saved outputs / JSON** includes recorded extraction and mapping outputs,
+complete page captures with raw numeric candidates, reconciliation, canonical
+evidence, metrics, context, exact LLM input and the full preview. SHA-256 payload
+hashes and a hash chain are recorded during processing and checked on read.
+The reference-check artifact contains 71 source-value/metric checks and an OCR
+numeric-cell comparison. Historical exports without recorded hashes remain
+labelled as export-time projections.
+
+Use **Review** beside a fact to verify it, map an unresolved label, or select a
+source value for a conflict. Enter your name, reason and explicit confirmation.
+A decision creates a new evidence version and recalculates metrics; earlier
+versions and original values remain available. Resolve exceptions separately
+with a documented judgment. The release and audited 10-K have real balance-sheet
+differences which require review.
+
+Use **Generate draft** in the LLM section. Offline mode runs three empty scripted
+responses to test the workflow. Live mode uses your configured provider and
+sends the exact saved evidence; it does not reparse documents. Drafts expose
+analysis, challenges, grounding, limitations, and separate approval/finalization
+controls. A matching human approval and resolution of mandatory exceptions are
+required for finalization. Superseded evidence and drafts cannot be approved or finalized. Use the explicit
+regeneration checkbox to create a new draft or retry after a provider failure;
+this preserves previous runs and incurs new provider calls in live mode.
+
+Configure live models locally in the ignored `.env` file (see `.env.example`):
+`LLM_PROVIDER=openai`, an explicit `LLM_MODEL`, and `LLM_API_KEY`. For a local
+model use `LLM_PROVIDER=openai_compatible` and its `LLM_BASE_URL`, such as
+`http://127.0.0.1:1234/v1`. Restart the preview after changing settings. Keep
+keys out of source control. Live execution is never part of automated tests.
+Inputs exceeding `LLM_MAX_INPUT_BYTES` are rejected without truncation; requests
+have a timeout and are not automatically retried or billed repeatedly.
 
 ## Try the real NVIDIA filing
 
@@ -81,9 +109,8 @@ Changing availability to `2025-02-01T00:00:00Z` should return HTTP 422 because
 the file was not available at the case cutoff. Creating the same case twice
 should return HTTP 409.
 
-Uploading stores evidence; it does not run the pipeline. Processing requires
-a source package with entity, period, unit, scope, and extraction metadata.
-An upload-only case has no calculated draft until that step runs.
+This API-explorer endpoint stores evidence without running the pipeline. Use
+the `/inspect` upload form above to create and process a new review case.
 
 ## Test the approval gate yourself
 
@@ -109,22 +136,14 @@ mandatory exceptions to be resolved; approval alone cannot clear that gate.
 
 ## What remains
 
-1. **Real-source validation:** run one actual Delta filing with a reviewed
-   package and ground truth, then address demonstrated XBRL/PDF/unit/period
-   gaps. Synthetic tests do not prove accuracy on a real filing.
-2. **Real LLM integration:** implement the provider backend, connect provider
-   and model settings, configure credentials, timeouts/retries/cost limits,
-   and evaluate actual extraction, analysis, and challenge responses. Existing
-   schema validation, logging, grounding, and deterministic arithmetic remain
-   the acceptance boundary.
-3. **Interactive workflow:** add browser controls for source-package setup,
-   processing, reviewing/resolving exceptions, and approval/finalization.
-   Current inspection works in the browser; write workflows use API/CLI/services.
-4. **Optional document backends:** install native PDF libraries for binary
-   PDF export and Tesseract for OCR, then test real image-only documents.
-5. **Deployment work:** authentication/authorization, a reviewed deployment
-   database migration, durable storage, and stronger storage-level immutability.
-   A shared remotely hosted service has not been deployed.
+- Live LLM quality and provider/model compatibility validation, after configuring
+  credentials locally. HTTP integration and error handling are tested offline.
+- Review the default case's actual conflicts, OCR uncertainties, input definitions
+  and missing gross-interest/revolver facts before drawing credit conclusions.
+- Binary memo PDF export needs an optional native rendering backend. The browser
+  supports complete draft JSON and HTML without it.
+- Shared deployment needs authentication, durable storage and deployment-specific
+  migrations. The current interface remains local to this machine.
 
 ## Run automated checks
 

@@ -64,6 +64,9 @@ class PdfTableParser(BaseParser):
         scale: str | None = None,
         currency: str | None = None,
         period_headers: dict[str, dict] | None = None,
+        fiscal_year_end_month: int | None = None,
+        statement_recipes: list[dict] | None = None,
+        captured_pages: dict | None = None,
         target_scale: str = "millions",
         audit_hook: ParserAuditHook | None = None,
     ) -> ParseResult:
@@ -85,14 +88,26 @@ class PdfTableParser(BaseParser):
             raise ParserError(f"Unreadable PDF document: {exc}") from exc
 
         with pdf:
+            if statement_recipes is not None:
+                from app.services.extraction.pdf_recipe import parse_statement_recipes
+
+                result = parse_statement_recipes(
+                    pdf,
+                    statement_recipes,
+                    document_id=document_id,
+                    scale=scale,
+                    currency=currency,
+                    target_scale=target_scale,
+                    captured_pages=captured_pages,
+                )
+                self._log(result, audit_hook, document_id=document_id)
+                return result
             for page_index, page in enumerate(pdf.pages, start=1):
                 if pages is not None and page_index not in pages:
                     continue
                 tables = page.extract_tables() or []
                 if not tables:
-                    result.warnings.append(
-                        f"No table detected on page {page_index}."
-                    )
+                    result.warnings.append(f"No table detected on page {page_index}.")
                     continue
                 for t_index, table in enumerate(tables):
                     rows = [
@@ -107,6 +122,7 @@ class PdfTableParser(BaseParser):
                         scale=scale,
                         currency=currency,
                         period_headers=period_headers,
+                        fiscal_year_end_month=fiscal_year_end_month,
                         target_scale=target_scale,
                     )
                     # Attach page number to each source ref (pdfplumber tables).

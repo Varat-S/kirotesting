@@ -4,14 +4,14 @@ The runner never approves its own work. ``run_case`` produces a draft;
 ``finalize_case`` consumes a separately persisted human approval.
 """
 
+import json
+import re
 from collections import defaultdict
 from dataclasses import asdict
 from hashlib import sha256
 from pathlib import Path
-import re
-import json
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.bootstrap import bootstrap_config
@@ -19,19 +19,19 @@ from app.core.config_registry import ARTIFACT_KINDS, ConfigRegistry
 from app.core.hashing import canonical_json, content_hash
 from app.models.orm import (
     Case,
+    CaseEntity,
     Document,
     Fact,
     FactSourceRef,
-    ModelRun,
     MetricDefinition,
-    CaseEntity,
+    ModelRun,
     Snapshot,
 )
 from app.prompts.registry import PromptRegistry
 from app.schemas.enums import FactStatus
 from app.schemas.llm import AnalysisResponse, ChallengeResponse, ExtractionResponse
 from app.schemas.snapshots import FinalCaseSnapshot
-from app.services.analysis.challenge import ChallengeService, ChallengeRejectedError
+from app.services.analysis.challenge import ChallengeRejectedError, ChallengeService
 from app.services.analysis.grounding import (
     EvidenceIndex,
     EvidenceItem,
@@ -39,8 +39,8 @@ from app.services.analysis.grounding import (
 )
 from app.services.analysis.service import (
     AnalysisInputs,
-    AnalysisService,
     AnalysisRejectedError,
+    AnalysisService,
 )
 from app.services.audit.log import ActorType, AuditLog, EventType
 from app.services.benchmarking.peers import PeerBenchmarker, PeerValue
@@ -53,14 +53,16 @@ from app.services.escalation.rules import (
     RuleRegistry,
 )
 from app.services.extraction.base import ParserError
+from app.services.extraction.pdf_capture import capture_pdf
 from app.services.extraction.pdf_table import PdfTableParser
 from app.services.extraction.pdf_text import PdfTextParser
 from app.services.extraction.qualitative import QualitativeExtractor
-from app.services.extraction.xlsx_csv import CsvParser, XlsxParser
-from app.services.extraction.xbrl import XbrlParser
 from app.services.extraction.sec.statements import parse_bundle
-from app.services.ingestion.sec import admit_sec_bundle
+from app.services.extraction.sec.xml import safe_xml
+from app.services.extraction.xbrl import XbrlParser
+from app.services.extraction.xlsx_csv import CsvParser, XlsxParser
 from app.services.ingestion.completeness import CompletenessEvaluator
+from app.services.ingestion.sec import admit_sec_bundle
 from app.services.ingestion.service import IngestionService, TemporalLeakageError
 from app.services.ingestion.storage import RawFileStore
 from app.services.llm.client import (
@@ -72,8 +74,9 @@ from app.services.mapping.mapper import FinancialMapper
 from app.services.metrics.definitions import MetricDefinitionRegistry
 from app.services.metrics.engine import MetricEngine, MetricInput
 from app.services.metrics.trends import TrendAnalyzer, TrendPoint
-from app.services.pipeline.package import SourcePackage, SourceInput
-from app.services.pipeline.result import PipelineResult
+from app.services.pipeline.artifacts import StageRecorder
+from app.services.pipeline.package import SourceInput, SourcePackage
+from app.services.pipeline.result import PipelineResult, PreparedCaseResult
 from app.services.reconciliation.service import Reconciler, ToleranceConfig
 from app.services.reconciliation.snapshot import SnapshotAssembler
 from app.services.reporting.memo import MemoReportGenerator
@@ -124,8 +127,29 @@ class CreditMemoPipeline:
         with self.session.begin_nested():
             return self._run(case_id, package, config_versions)
 
-    def _run(self, case_id, package, pinned):
+    def prepare_case(
+        self, case_id: str, *, package: SourcePackage
+    ) -> PreparedCaseResult:
+        """Ingest, parse, reconcile and calculate; stop before creating any LLM client."""
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", case_id):
+            raise ValueError(
+                "Case ID must contain only letters, digits, underscores or hyphens."
+            )
+        with self.session.begin_nested():
+            return self._run(case_id, package, None, prepare_only=True)
+
+    def _run(self, case_id, package, pinned, *, prepare_only=False):
         audit = AuditLog(self.session)
+        next_version = (
+            self.session.scalar(
+                select(func.max(Snapshot.snapshot_version)).where(
+                    Snapshot.case_id == case_id,
+                    Snapshot.snapshot_type == "canonical_evidence",
+                )
+            )
+            or 0
+        ) + 1
+        recorder = StageRecorder(self.session, case_id, next_version)
         ingestion = IngestionService(
             self.session, RawFileStore(self.data_root / "raw"), audit
         )
@@ -206,6 +230,7 @@ class CreditMemoPipeline:
 
         documents, facts, rejected, issues, admitted_tags = [], [], [], [], set()
         sec_filings, narrative = [], []
+        raw_extraction = []
         sec_mapping_groups = {}
         parsers = {
             "csv": CsvParser,
@@ -216,6 +241,17 @@ class CreditMemoPipeline:
         }
 
         def consume_source(source, parsed, did):
+            raw_extraction.append(
+                {
+                    "document_id": did,
+                    "parser": parsed.metadata.as_dict(),
+                    "facts": [
+                        f.model_dump(mode="json", exclude={"fact_id"})
+                        for f in parsed.facts
+                    ],
+                    "warnings": parsed.warnings,
+                }
+            )
             # Only successfully parsed sources count towards coverage.
             admitted_tags.update(source.tags)
             audit.record(
@@ -315,24 +351,31 @@ class CreditMemoPipeline:
                             mapped.status,
                             mapped.candidates,
                         )
-                        group = sec_mapping_groups.setdefault(key, {
-                            "source_name": key[0],
-                            "entity_id": fact.entity_id,
-                            "consolidation_scope": fact.consolidation_scope,
-                            "accounting_basis": fact.accounting_basis,
-                            "dimensions": set(),
-                            "status": mapped.status,
-                            "candidates": list(mapped.candidates),
-                            "mapping_version": mapper.version,
-                            "fact_ids": set(),
-                            "periods": set(),
-                        })
+                        group = sec_mapping_groups.setdefault(
+                            key,
+                            {
+                                "source_name": key[0],
+                                "entity_id": fact.entity_id,
+                                "consolidation_scope": fact.consolidation_scope,
+                                "accounting_basis": fact.accounting_basis,
+                                "dimensions": set(),
+                                "status": mapped.status,
+                                "candidates": list(mapped.candidates),
+                                "mapping_version": mapper.version,
+                                "fact_ids": set(),
+                                "periods": set(),
+                            },
+                        )
                         group["fact_ids"].add(fact.fact_id)
                         group["dimensions"].add(tuple(sorted(fact.dimensions.items())))
-                        group["periods"].add((
-                            fact.fiscal_year, fact.period_type,
-                            str(fact.period_start), str(fact.period_end),
-                        ))
+                        group["periods"].add(
+                            (
+                                fact.fiscal_year,
+                                fact.period_type,
+                                str(fact.period_start),
+                                str(fact.period_end),
+                            )
+                        )
                         self._persist_fact(fact, case_id)
                         facts.append(fact)
                         continue
@@ -368,6 +411,10 @@ class CreditMemoPipeline:
                 else Path(source.path).read_bytes()
             )
             descriptor = source.model_dump(mode="json", exclude={"path", "data"})
+            if descriptor["parse_options"].get("ocr_cache"):
+                descriptor["parse_options"]["ocr_cache"]["path"] = Path(
+                    descriptor["parse_options"]["ocr_cache"]["path"]
+                ).name
             digest = sha256(data).hexdigest()
             did = content_hash(
                 {"case": case_id, "source": descriptor, "sha256": digest}
@@ -413,9 +460,14 @@ class CreditMemoPipeline:
                     "tags": sorted(source.tags),
                     "entity_id": source.entity_id,
                     "extraction_recipe": descriptor,
+                    "notes": source.notes,
                 }
             )
             options = dict(source.parse_options)
+            include_pdf_text = options.pop("include_text_evidence", False)
+            enable_ocr = options.pop("enable_ocr", True)
+            ocr_cache = options.pop("ocr_cache", None)
+            harden_xml = options.pop("harden_xml", False)
             if source.parser == "pdf_text":
                 options.update(
                     field_patterns=source.field_patterns,
@@ -425,6 +477,33 @@ class CreditMemoPipeline:
                 if source.parser not in parsers:
                     raise ParserError(
                         "Inline-XBRL requires a declared SEC filing bundle."
+                    )
+                if harden_xml and source.parser == "xbrl":
+                    safe_xml(data)
+                passages = []
+                if include_pdf_text and source.parser == "pdf_table":
+                    capture = capture_pdf(
+                        data,
+                        document_id=did,
+                        enable_ocr=enable_ocr,
+                        ocr_cache=ocr_cache,
+                    )
+                    recorder.record("document_" + did, capture)
+                    documents[-1]["extraction_coverage"] = capture["coverage"]
+                    passages = capture["passages"]
+                    options["captured_pages"] = {p["page"]: p for p in capture["pages"]}
+                    if capture["coverage"]["failed_pages"]:
+                        flag(
+                            "invalid_metadata",
+                            f"Unreadable pages in {source.filename}: {capture['coverage']['failed_pages']}",
+                            [did],
+                        )
+                narrative.extend(passages)
+                if include_pdf_text and source.parser == "pdf_table" and not passages:
+                    flag(
+                        "invalid_metadata",
+                        f"No readable text in {source.filename}; image-only pages require OCR before their contents can be reviewed or extracted.",
+                        [did],
                     )
                 parsed = parsers[source.parser]().parse(
                     data, document_id=did, **options
@@ -544,6 +623,29 @@ class CreditMemoPipeline:
         sec_filings = list({content_hash(d): d for d in sec_filings}.values())
         narrative = list({p["evidence_id"]: p for p in narrative}.values())
         facts = sorted({f.fact_id: f for f in facts}.values(), key=lambda f: f.fact_id)
+        recorder.record(
+            "admission",
+            {
+                "cutoff": package.evidence_cutoff_timestamp.isoformat(),
+                "admitted_sources": documents,
+                "rejected_sources": rejected,
+            },
+        )
+        recorder.record("extraction", {"sources": raw_extraction})
+        from app.services.pipeline.derived import derived_observations
+
+        for derived in derived_observations(
+            facts, configs["metric_defs"].get("input_derivations", {})
+        ):
+            self._persist_fact(derived, case_id)
+            facts.append(derived)
+        recorder.record(
+            "mapping",
+            {
+                "facts": [f.model_dump(mode="json") for f in facts],
+                "mapping_issues": issues,
+            },
+        )
         completeness = CompletenessEvaluator(registry).assess(
             admitted_tags, profile_version=versions["source_profiles"]
         )
@@ -563,6 +665,7 @@ class CreditMemoPipeline:
                         fact.name,
                         tuple(sorted(fact.dimensions.items())),
                         str(fact.period_start),
+                        fact.accounting_basis,
                     )
                 ].append(fact)
         reconciler = Reconciler(
@@ -609,9 +712,20 @@ class CreditMemoPipeline:
             for key, dq in evidence.data_quality.items()
         }
         evidence_row = assembler.persist(evidence)
+        dumped_evidence = evidence.model_dump(mode="json")
+        recorder.record(
+            "reconciliation",
+            {
+                "financials": dumped_evidence["financials"],
+                "data_quality": dumped_evidence["data_quality"],
+                "provenance": dumped_evidence["provenance"],
+            },
+        )
+        recorder.record("canonical_evidence", evidence.model_dump(mode="json"))
         metrics, all_metrics, definition_versions = self._metrics(
             case_id, evidence, configs, audit, package.borrower_entity_id
         )
+        recorder.record("metrics", {k: v.as_payload() for k, v in metrics.items()})
         required_missing = [
             name for name, metric in metrics.items() if metric.state.value != "ok"
         ]
@@ -636,6 +750,32 @@ class CreditMemoPipeline:
         )
         for outcome in outcomes:
             escalation.raise_from_outcome(outcome)
+        recorder.record("context", {"trends": trends, "benchmarks": benchmarks})
+        if prepare_only:
+            prepared = PreparedCaseResult(
+                evidence,
+                metrics,
+                benchmarks,
+                trends,
+                sorted(
+                    [
+                        self._escalation_payload(e)
+                        for e in escalation.escalations_for_case()
+                    ],
+                    key=lambda e: e["escalation_id"],
+                ),
+                rejected,
+                issues,
+                asdict(completeness),
+            )
+            from app.services.pipeline.inspection_views import stage_outputs
+
+            for name, (_, payload) in stage_outputs(prepared.as_payload()).items():
+                if name not in {"admission", "canonical_evidence", "full_preview"}:
+                    recorder.record(name, payload)
+            prepared.recorded_stages = recorder.references()
+            recorder.record("full_preview", prepared.as_payload())
+            return prepared
         analysis, runs, grounding, qualitative = self._ai(
             case_id,
             evidence,
@@ -686,6 +826,16 @@ class CreditMemoPipeline:
         )
         draft.config_versions = versions
         draft_row = final.persist_draft(draft)
+        recorder.record("llm_runs", runs)
+        recorder.record(
+            "analysis",
+            {
+                "analysis": analysis,
+                "grounding": grounding,
+                "qualitative_facts": qualitative,
+            },
+        )
+        recorder.record("draft", draft_row.payload)
         reporter = MemoReportGenerator(
             self.session, audit=audit, output_root=self.output_root
         )
@@ -774,12 +924,16 @@ class CreditMemoPipeline:
             entity, year, period_type, end, name, *identity = json.loads(key)
             dimensional = identity and bool(identity[0])
             selected = facts_by_id.get(dq.selected_fact_id, {})
+            basis = (
+                identity[2] if len(identity) > 2 else selected.get("accounting_basis")
+            )
             consolidated = selected.get("consolidation_scope") in {None, "consolidated"}
             if (
                 year is not None
                 and period_type in {"FY", "instant"}
                 and not dimensional
                 and consolidated
+                and basis in {None, "GAAP"}
                 and end <= evidence.as_of_date.isoformat()
             ):
                 pools[(entity, int(year), end)][name].append(dq)
@@ -792,7 +946,15 @@ class CreditMemoPipeline:
                 else:
                     dq = states[0]
                     inputs[name] = MetricInput(
-                        name, dq.value, FactStatus(dq.state), dq.selected_fact_id
+                        name,
+                        dq.value,
+                        FactStatus.UNVERIFIED
+                        if facts_by_id.get(dq.selected_fact_id, {}).get("created_by")
+                        == "deterministic_derived"
+                        and dq.selected_fact_id
+                        not in evidence.provenance.get("human_verified_fact_ids", [])
+                        else FactStatus(dq.state),
+                        dq.selected_fact_id,
                     )
             prior_periods = [
                 k
@@ -976,6 +1138,11 @@ class CreditMemoPipeline:
                 "Qualitative extraction was rejected; human review required.",
             )
         known_docs = {d["document_id"] for d in evidence.documents}
+        pdf_page_counts = {
+            d["document_id"]: d["extraction_coverage"]["total_pages"]
+            for d in evidence.documents
+            if d.get("extraction_coverage")
+        }
         for fact in qualitative:
             if any(ref.document_id not in known_docs for ref in fact.source_refs):
                 return self._rejected_ai(
@@ -983,6 +1150,21 @@ class CreditMemoPipeline:
                     evidence.snapshot_version,
                     flag,
                     "AI extraction cited evidence outside the admitted source set.",
+                )
+            if any(
+                ref.document_id in pdf_page_counts
+                and (
+                    ref.page is None
+                    or ref.page < 1
+                    or ref.page > pdf_page_counts[ref.document_id]
+                )
+                for ref in fact.source_refs
+            ):
+                return self._rejected_ai(
+                    case_id,
+                    evidence.snapshot_version,
+                    flag,
+                    "AI extraction cited a missing or invalid PDF page.",
                 )
             if fact.normalized_value is not None:
                 # An extraction output is never a route around deterministic
@@ -1035,7 +1217,14 @@ class CreditMemoPipeline:
                 unit=fact_index[dq.selected_fact_id].get("normalized_unit"),
             )
             for dq in evidence.data_quality.values()
-            if dq.selected_fact_id and dq.state == "verified"
+            if dq.selected_fact_id
+            and dq.state == "verified"
+            and (
+                fact_index[dq.selected_fact_id].get("created_by")
+                != "deterministic_derived"
+                or dq.selected_fact_id
+                in evidence.provenance.get("human_verified_fact_ids", [])
+            )
         ]
         items += [
             EvidenceItem(name, value=m.result, unit=m.units)

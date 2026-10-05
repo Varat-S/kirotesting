@@ -1,0 +1,900 @@
+{
+  "as_of_date": "2025-12-31",
+  "evidence_cutoff_timestamp": "2026-03-01T00:00:00Z",
+  "borrower_entity_id": "DAL",
+  "entities": [
+    {
+      "entity_id": "DAL",
+      "legal_name": "Delta Air Lines, Inc.",
+      "entity_type": "borrower",
+      "borrower_flag": true,
+      "tickers": [
+        "DAL"
+      ],
+      "expected_consolidation_scope": "consolidated"
+    }
+  ],
+  "sources": [
+    {
+      "filename": "DeltaAirlines_10k_2025.pdf",
+      "path": "DeltaAirlines_10k_2025.pdf",
+      "parser": "pdf_table",
+      "tags": [
+        "financial_statements",
+        "annual_report"
+      ],
+      "available_at": "2026-02-12T05:00:00Z",
+      "entity_id": "DAL",
+      "scope": "consolidated",
+      "accounting_basis": "GAAP",
+      "parse_options": {
+        "scale": "millions",
+        "currency": "USD",
+        "include_text_evidence": true,
+        "statement_recipes": [
+          {
+            "page": 59,
+            "required_text": [
+              "Consolidated Statements of Operations",
+              "(in millions",
+              "2025 2024 2023"
+            ],
+            "value_count": 3,
+            "columns": {
+              "2025": 0,
+              "2024": 1,
+              "2023": 2
+            },
+            "periods": {
+              "2025": {
+                "fiscal_year": 2025
+              },
+              "2024": {
+                "fiscal_year": 2024
+              },
+              "2023": {
+                "fiscal_year": 2023
+              }
+            },
+            "rows": [
+              {
+                "label": "Total operating revenue",
+                "mapping_label": "Operating Revenue"
+              },
+              {
+                "label": "Operating Income",
+                "mapping_label": "Operating Income"
+              },
+              {
+                "label": "Total operating expense",
+                "mapping_label": "Operating Expense"
+              },
+              {
+                "label": "Passenger",
+                "mapping_label": "Passenger"
+              },
+              {
+                "label": "Cargo",
+                "mapping_label": "Cargo"
+              },
+              {
+                "label": "Salaries and related costs",
+                "mapping_label": "Salaries and related costs"
+              },
+              {
+                "label": "Aircraft fuel and related taxes",
+                "mapping_label": "Aircraft fuel and related taxes"
+              },
+              {
+                "label": "Ancillary businesses and refinery",
+                "mapping_label": "Ancillary businesses and refinery"
+              },
+              {
+                "label": "Contracted services",
+                "mapping_label": "Contracted services"
+              },
+              {
+                "label": "Landing fees and other rents",
+                "mapping_label": "Landing fees and other rents"
+              },
+              {
+                "label": "Regional carrier expense",
+                "mapping_label": "Regional carrier expense"
+              },
+              {
+                "label": "Passenger commissions and other selling expenses",
+                "mapping_label": "Passenger commissions and other selling expenses"
+              },
+              {
+                "label": "Depreciation and amortization",
+                "mapping_label": "Depreciation and amortization"
+              },
+              {
+                "label": "Aircraft maintenance materials and outside repairs",
+                "mapping_label": "Aircraft maintenance materials and outside repairs"
+              },
+              {
+                "label": "Passenger service",
+                "mapping_label": "Passenger service"
+              },
+              {
+                "label": "Profit sharing",
+                "mapping_label": "Profit sharing"
+              },
+              {
+                "label": "Aircraft rent",
+                "mapping_label": "Aircraft rent"
+              },
+              {
+                "label": "Pilot agreement and related expenses",
+                "mapping_label": "Pilot agreement and related expenses"
+              },
+              {
+                "label": "Interest expense, net",
+                "mapping_label": "Interest expense, net"
+              },
+              {
+                "label": "Gain/(loss) on investments, net",
+                "mapping_label": "Gain/(loss) on investments, net"
+              },
+              {
+                "label": "Loss on extinguishment of debt",
+                "mapping_label": "Loss on extinguishment of debt"
+              },
+              {
+                "label": "Miscellaneous, net",
+                "mapping_label": "Miscellaneous, net"
+              },
+              {
+                "label": "Total non-operating income/(expense), net",
+                "mapping_label": "Total non-operating income/(expense), net"
+              },
+              {
+                "label": "Income Before Income Taxes",
+                "mapping_label": "Income Before Income Taxes"
+              },
+              {
+                "label": "Income Tax Provision",
+                "mapping_label": "Income Tax Provision"
+              },
+              {
+                "label": "Net Income",
+                "mapping_label": "Net Income"
+              }
+            ]
+          },
+          {
+            "page": 58,
+            "required_text": [
+              "Consolidated Balance Sheets",
+              "(in millions",
+              "2025 2024"
+            ],
+            "value_count": 2,
+            "columns": {
+              "2025": 0,
+              "2024": 1
+            },
+            "periods": {
+              "2025": {
+                "instant": "2025-12-31",
+                "fiscal_year": 2025
+              },
+              "2024": {
+                "instant": "2024-12-31",
+                "fiscal_year": 2024
+              }
+            },
+            "rows": [
+              {
+                "label": "Cash and cash equivalents",
+                "mapping_label": "Cash and Cash Equivalents"
+              },
+              {
+                "label": "Current maturities of debt and finance leases",
+                "mapping_label": "Current maturities of debt and finance leases"
+              },
+              {
+                "label": "Debt and finance leases",
+                "mapping_label": "Debt and finance leases"
+              },
+              {
+                "label": "Current maturities of operating leases",
+                "mapping_label": "Current maturities of operating leases"
+              },
+              {
+                "label": "Noncurrent operating leases",
+                "mapping_label": "Noncurrent operating leases"
+              },
+              {
+                "label": "Total assets",
+                "mapping_label": "Total assets"
+              },
+              {
+                "label": "Total current assets",
+                "mapping_label": "Total current assets"
+              },
+              {
+                "label": "Operating lease right-of-use assets",
+                "mapping_label": "Operating lease right-of-use assets"
+              },
+              {
+                "label": "Goodwill",
+                "mapping_label": "Goodwill"
+              },
+              {
+                "label": "Equity investments",
+                "mapping_label": "Equity investments"
+              },
+              {
+                "label": "Other noncurrent assets",
+                "mapping_label": "Other noncurrent assets"
+              },
+              {
+                "label": "Air traffic liability",
+                "mapping_label": "Air traffic liability"
+              },
+              {
+                "label": "Accounts payable",
+                "mapping_label": "Accounts payable"
+              },
+              {
+                "label": "Accrued salaries and related benefits",
+                "mapping_label": "Accrued salaries and related benefits"
+              },
+              {
+                "label": "Fuel card obligation",
+                "mapping_label": "Fuel card obligation"
+              },
+              {
+                "label": "Other accrued liabilities",
+                "mapping_label": "Other accrued liabilities"
+              },
+              {
+                "label": "Total current liabilities",
+                "mapping_label": "Total current liabilities"
+              },
+              {
+                "label": "Pension, postretirement and related benefits",
+                "mapping_label": "Pension, postretirement and related benefits"
+              },
+              {
+                "label": "Deferred income taxes, net",
+                "mapping_label": "Deferred income taxes, net"
+              },
+              {
+                "label": "Other noncurrent liabilities",
+                "mapping_label": "Other noncurrent liabilities"
+              },
+              {
+                "label": "Total noncurrent liabilities",
+                "mapping_label": "Total noncurrent liabilities"
+              },
+              {
+                "label": "Total stockholders' equity",
+                "mapping_label": "Total stockholders' equity"
+              },
+              {
+                "label": "Total liabilities and stockholders' equity",
+                "mapping_label": "Total liabilities and stockholders' equity"
+              }
+            ]
+          },
+          {
+            "page": 61,
+            "required_text": [
+              "Consolidated Statements of Cash Flows",
+              "(in millions",
+              "2025 2024 2023"
+            ],
+            "value_count": 3,
+            "columns": {
+              "2025": 0,
+              "2024": 1,
+              "2023": 2
+            },
+            "periods": {
+              "2025": {
+                "fiscal_year": 2025
+              },
+              "2024": {
+                "fiscal_year": 2024
+              },
+              "2023": {
+                "fiscal_year": 2023
+              }
+            },
+            "rows": [
+              {
+                "label": "Net cash provided by operating activities",
+                "mapping_label": "Operating Cash Flow"
+              },
+              {
+                "label": "Flight equipment, including advance payments",
+                "mapping_label": "Flight equipment, including advance payments"
+              },
+              {
+                "label": "Ground property and equipment, including technology",
+                "mapping_label": "Ground property and equipment, including technology"
+              },
+              {
+                "label": "Supplemental Disclosure of Cash Paid for Interest",
+                "mapping_label": "Supplemental Disclosure of Cash Paid for Interest"
+              },
+              {
+                "label": "Net cash used in investing activities",
+                "mapping_label": "Net cash used in investing activities"
+              },
+              {
+                "label": "Net cash used in financing activities",
+                "mapping_label": "Net cash used in financing activities"
+              },
+              {
+                "label": "Cash dividends",
+                "mapping_label": "Cash dividends"
+              },
+              {
+                "label": "Payments on debt and finance lease obligations",
+                "mapping_label": "Payments on debt and finance lease obligations"
+              },
+              {
+                "label": "Purchase of equity investments",
+                "mapping_label": "Purchase of equity investments"
+              },
+              {
+                "label": "Proceeds from long-term obligations",
+                "mapping_label": "Proceeds from long-term obligations"
+              }
+            ]
+          },
+          {
+            "page": 64,
+            "required_text": [
+              "Reconciliation of cash, cash equivalents and restricted cash",
+              "2025 2024 2023"
+            ],
+            "value_count": 3,
+            "columns": {
+              "2025": 0,
+              "2024": 1,
+              "2023": 2
+            },
+            "periods": {
+              "2025": {
+                "instant": "2025-12-31",
+                "fiscal_year": 2025
+              },
+              "2024": {
+                "instant": "2024-12-31",
+                "fiscal_year": 2024
+              },
+              "2023": {
+                "instant": "2023-12-31",
+                "fiscal_year": 2023
+              }
+            },
+            "rows": [
+              {
+                "label": "Restricted cash included in prepaid expenses and other",
+                "mapping_label": "Restricted cash included in prepaid expenses and other"
+              },
+              {
+                "label": "Restricted cash included in other noncurrent assets",
+                "mapping_label": "Restricted cash included in other noncurrent assets"
+              },
+              {
+                "label": "Total cash, cash equivalents and restricted cash",
+                "mapping_label": "Total cash, cash equivalents and restricted cash"
+              }
+            ]
+          }
+        ]
+      },
+      "notes": [
+        "105-page FY2025 Form 10-K. Expanded GAAP statement recipes and cash-reconciliation note; full text and numeric candidates retained for every page.",
+        "Availability conservatively uses the end of the official 2026-02-11 US Eastern filing day (SEC accession 0000027904-26-000013).",
+        "Audited annual statement evidence is reconciled with matching annual figures in the unaudited earnings release. Q4 figures remain separate."
+      ]
+    },
+    {
+      "filename": "DeltaAirlines_EarningsRelease_Q4_2025.pdf",
+      "path": "DeltaAirlines_EarningsRelease_Q4_2025.pdf",
+      "parser": "pdf_table",
+      "tags": [
+        "financial_statements",
+        "earnings_release"
+      ],
+      "available_at": "2026-01-14T05:00:00Z",
+      "entity_id": "DAL",
+      "scope": "consolidated",
+      "accounting_basis": "GAAP",
+      "parse_options": {
+        "scale": "millions",
+        "currency": "USD",
+        "include_text_evidence": true,
+        "statement_recipes": [
+          {
+            "page": 8,
+            "required_text": [
+              "Consolidated Statements of Operations",
+              "Three Months Ended Year Ended",
+              "2025 2024 $ Change % Change 2025 2024"
+            ],
+            "value_count": 8,
+            "columns": {
+              "Q4_2025": 0,
+              "Q4_2024": 1,
+              "FY_2025": 4,
+              "FY_2024": 5
+            },
+            "periods": {
+              "Q4_2025": {
+                "fiscal_year": 2025,
+                "period_start": "2025-10-01",
+                "period_end": "2025-12-31"
+              },
+              "Q4_2024": {
+                "fiscal_year": 2024,
+                "period_start": "2024-10-01",
+                "period_end": "2024-12-31"
+              },
+              "FY_2025": {
+                "fiscal_year": 2025
+              },
+              "FY_2024": {
+                "fiscal_year": 2024
+              }
+            },
+            "rows": [
+              {
+                "label": "Total operating revenue",
+                "mapping_label": "Operating Revenue"
+              },
+              {
+                "label": "Operating Income",
+                "mapping_label": "Operating Income"
+              },
+              {
+                "label": "Total operating expense",
+                "mapping_label": "Operating Expense"
+              },
+              {
+                "label": "Passenger",
+                "mapping_label": "Passenger"
+              },
+              {
+                "label": "Cargo",
+                "mapping_label": "Cargo"
+              },
+              {
+                "label": "Salaries and related costs",
+                "mapping_label": "Salaries and related costs"
+              },
+              {
+                "label": "Aircraft fuel and related taxes",
+                "mapping_label": "Aircraft fuel and related taxes"
+              },
+              {
+                "label": "Ancillary businesses and refinery",
+                "mapping_label": "Ancillary businesses and refinery"
+              },
+              {
+                "label": "Contracted services",
+                "mapping_label": "Contracted services"
+              },
+              {
+                "label": "Landing fees and other rents",
+                "mapping_label": "Landing fees and other rents"
+              },
+              {
+                "label": "Regional carrier expense",
+                "mapping_label": "Regional carrier expense"
+              },
+              {
+                "label": "Passenger commissions and other selling expenses",
+                "mapping_label": "Passenger commissions and other selling expenses"
+              },
+              {
+                "label": "Depreciation and amortization",
+                "mapping_label": "Depreciation and amortization"
+              },
+              {
+                "label": "Aircraft maintenance materials and outside repairs",
+                "mapping_label": "Aircraft maintenance materials and outside repairs"
+              },
+              {
+                "label": "Passenger service",
+                "mapping_label": "Passenger service"
+              },
+              {
+                "label": "Profit sharing",
+                "mapping_label": "Profit sharing"
+              },
+              {
+                "label": "Aircraft rent",
+                "mapping_label": "Aircraft rent"
+              },
+              {
+                "label": "Interest expense, net",
+                "mapping_label": "Interest expense, net"
+              },
+              {
+                "label": "Income Before Income Taxes",
+                "mapping_label": "Income Before Income Taxes"
+              },
+              {
+                "label": "Income Tax Provision",
+                "mapping_label": "Income Tax Provision"
+              },
+              {
+                "label": "Net Income",
+                "mapping_label": "Net Income"
+              }
+            ]
+          },
+          {
+            "page": 12,
+            "required_text": [
+              "Consolidated Balance Sheets",
+              "(in millions) 2025 2024"
+            ],
+            "value_count": 2,
+            "columns": {
+              "2025": 0,
+              "2024": 1
+            },
+            "periods": {
+              "2025": {
+                "instant": "2025-12-31",
+                "fiscal_year": 2025
+              },
+              "2024": {
+                "instant": "2024-12-31",
+                "fiscal_year": 2024
+              }
+            },
+            "rows": [
+              {
+                "label": "Cash and cash equivalents",
+                "mapping_label": "Cash and Cash Equivalents"
+              },
+              {
+                "label": "Current maturities of debt and finance leases",
+                "mapping_label": "Current maturities of debt and finance leases"
+              },
+              {
+                "label": "Debt and finance leases",
+                "mapping_label": "Debt and finance leases"
+              },
+              {
+                "label": "Current maturities of operating leases",
+                "mapping_label": "Current maturities of operating leases"
+              },
+              {
+                "label": "Noncurrent operating leases",
+                "mapping_label": "Noncurrent operating leases"
+              },
+              {
+                "label": "Total assets",
+                "mapping_label": "Total assets"
+              },
+              {
+                "label": "Total current assets",
+                "mapping_label": "Total current assets"
+              },
+              {
+                "label": "Operating lease right-of-use assets",
+                "mapping_label": "Operating lease right-of-use assets"
+              },
+              {
+                "label": "Goodwill",
+                "mapping_label": "Goodwill"
+              },
+              {
+                "label": "Equity investments",
+                "mapping_label": "Equity investments"
+              },
+              {
+                "label": "Other noncurrent assets",
+                "mapping_label": "Other noncurrent assets"
+              },
+              {
+                "label": "Air traffic liability",
+                "mapping_label": "Air traffic liability"
+              },
+              {
+                "label": "Accounts payable",
+                "mapping_label": "Accounts payable"
+              },
+              {
+                "label": "Accrued salaries and related benefits",
+                "mapping_label": "Accrued salaries and related benefits"
+              },
+              {
+                "label": "Fuel card obligation",
+                "mapping_label": "Fuel card obligation"
+              },
+              {
+                "label": "Other accrued liabilities",
+                "mapping_label": "Other accrued liabilities"
+              },
+              {
+                "label": "Total current liabilities",
+                "mapping_label": "Total current liabilities"
+              },
+              {
+                "label": "Pension, postretirement and related benefits",
+                "mapping_label": "Pension, postretirement and related benefits"
+              },
+              {
+                "label": "Deferred income taxes, net",
+                "mapping_label": "Deferred income taxes, net"
+              },
+              {
+                "label": "Other noncurrent liabilities",
+                "mapping_label": "Other noncurrent liabilities"
+              },
+              {
+                "label": "Total noncurrent liabilities",
+                "mapping_label": "Total noncurrent liabilities"
+              },
+              {
+                "label": "Total liabilities and stockholders' equity",
+                "mapping_label": "Total liabilities and stockholders' equity"
+              }
+            ]
+          },
+          {
+            "page": 11,
+            "required_text": [
+              "Consolidated Statements of Cash Flows",
+              "(in millions",
+              "2025 2024"
+            ],
+            "value_count": 2,
+            "columns": {
+              "2025": 0,
+              "2024": 1
+            },
+            "periods": {
+              "2025": {
+                "fiscal_year": 2025,
+                "period_start": "2025-10-01",
+                "period_end": "2025-12-31"
+              },
+              "2024": {
+                "fiscal_year": 2024,
+                "period_start": "2024-10-01",
+                "period_end": "2024-12-31"
+              }
+            },
+            "rows": [
+              {
+                "label": "Net cash provided by operating activities",
+                "mapping_label": "Operating Cash Flow"
+              },
+              {
+                "label": "Flight equipment, including advance payments",
+                "mapping_label": "Flight equipment, including advance payments"
+              },
+              {
+                "label": "Ground property and equipment, including technology",
+                "mapping_label": "Ground property and equipment, including technology"
+              },
+              {
+                "label": "Depreciation and amortization",
+                "mapping_label": "Depreciation and amortization"
+              },
+              {
+                "label": "Cash dividends",
+                "mapping_label": "Cash dividends"
+              },
+              {
+                "label": "Payments on debt and finance lease obligations",
+                "mapping_label": "Payments on debt and finance lease obligations"
+              },
+              {
+                "label": "Net cash used in investing activities",
+                "mapping_label": "Net cash used in investing activities"
+              },
+              {
+                "label": "Net cash used in financing activities",
+                "mapping_label": "Net cash used in financing activities"
+              }
+            ]
+          },
+          {
+            "page": 10,
+            "required_text": [
+              "Statistical Summary",
+              "2025 2024 Change 2025 2024 Change"
+            ],
+            "value_count": 6,
+            "columns": {
+              "Q4_2025": 0,
+              "Q4_2024": 1,
+              "FY_2025": 3,
+              "FY_2024": 4
+            },
+            "periods": {
+              "Q4_2025": {
+                "fiscal_year": 2025,
+                "period_start": "2025-10-01",
+                "period_end": "2025-12-31"
+              },
+              "Q4_2024": {
+                "fiscal_year": 2024,
+                "period_start": "2024-10-01",
+                "period_end": "2024-12-31"
+              },
+              "FY_2025": {
+                "fiscal_year": 2025
+              },
+              "FY_2024": {
+                "fiscal_year": 2024
+              }
+            },
+            "rows": [
+              {
+                "label": "Revenue passenger miles (millions)",
+                "mapping_label": "Revenue Passenger Miles",
+                "unit": "passenger_miles_million"
+              },
+              {
+                "label": "Available seat miles (millions)",
+                "mapping_label": "Available Seat Miles",
+                "unit": "seat_miles_million"
+              },
+              {
+                "label": "Cost per available seat mile (cents)",
+                "mapping_label": "Reported CASM",
+                "unit": "USD_cents_per_seat_mile"
+              },
+              {
+                "label": "Total revenue per available seat mile (cents)",
+                "mapping_label": "Reported TRASM",
+                "unit": "USD_cents_per_seat_mile"
+              },
+              {
+                "label": "Fuel gallons consumed (millions)",
+                "mapping_label": "Fuel Gallons",
+                "unit": "gallons_million"
+              }
+            ]
+          }
+        ]
+      },
+      "notes": [
+        "21-page Q4/FY2025 release. Expanded GAAP statements and statistical summary; adjusted narrative retained separately.",
+        "Q4 and annual columns are explicitly distinct. Q4 cash flow is not used as annual cash flow."
+      ]
+    },
+    {
+      "filename": "DeltaAirlines_Non-GAAPs_Q4_2025.pdf",
+      "path": "DeltaAirlines_Non-GAAPs_Q4_2025.pdf",
+      "parser": "pdf_table",
+      "tags": [
+        "non_gaap_reconciliation"
+      ],
+      "available_at": "2026-01-14T05:00:00Z",
+      "entity_id": "DAL",
+      "scope": "consolidated",
+      "accounting_basis": "non-GAAP",
+      "parse_options": {
+        "scale": "millions",
+        "currency": "USD",
+        "include_text_evidence": true,
+        "pages": [],
+        "statement_recipes": [
+          {
+            "page": 4,
+            "required_text": [
+              "Adjusted debt",
+              "December 31, 2022",
+              "Year Ended"
+            ],
+            "value_count": 2,
+            "columns": {
+              "2025": 0,
+              "2022": 1
+            },
+            "periods": {
+              "2025": {
+                "fiscal_year": 2025
+              },
+              "2022": {
+                "fiscal_year": 2022
+              }
+            },
+            "rows": [
+              {
+                "label": "Operating income, adjusted",
+                "mapping_label": "Operating income, adjusted"
+              },
+              {
+                "label": "Depreciation and amortization",
+                "mapping_label": "Depreciation and amortization"
+              },
+              {
+                "label": "Fixed portion of operating lease expense",
+                "mapping_label": "Fixed portion of operating lease expense"
+              },
+              {
+                "label": "EBITDAR",
+                "mapping_label": "EBITDAR"
+              }
+            ]
+          },
+          {
+            "page": 6,
+            "required_text": [
+              "Adjusted Net Debt",
+              "December 31, 2025"
+            ],
+            "value_count": 1,
+            "columns": {
+              "2025": 0
+            },
+            "periods": {
+              "2025": {
+                "instant": "2025-12-31",
+                "fiscal_year": 2025
+              }
+            },
+            "rows": [
+              {
+                "label": "Debt and finance lease obligations",
+                "mapping_label": "Debt and finance lease obligations"
+              },
+              {
+                "label": "Adjusted debt and finance lease obligations",
+                "mapping_label": "Adjusted debt and finance lease obligations"
+              },
+              {
+                "label": "Adjusted gross debt",
+                "mapping_label": "Adjusted gross debt"
+              },
+              {
+                "label": "Adjusted net debt",
+                "mapping_label": "Adjusted net debt"
+              }
+            ]
+          },
+          {
+            "page": 6,
+            "required_text": [
+              "Gross Capital Expenditures",
+              "Year Ended",
+              "December 31, 2025"
+            ],
+            "value_count": 1,
+            "columns": {
+              "2025": 0
+            },
+            "periods": {
+              "2025": {
+                "fiscal_year": 2025
+              }
+            },
+            "rows": [
+              {
+                "label": "Gross capital expenditures",
+                "mapping_label": "Gross capital expenditures"
+              }
+            ]
+          }
+        ],
+        "enable_ocr": true,
+        "ocr_cache": {
+          "path": "ocr_capture.json",
+          "sha256": "d03c2ec89532d31da8232fa47a9243109e45c498f28e9ded1c49f3105188cdb3"
+        }
+      },
+      "notes": [
+        "Six scanned/vector-outline pages: native text is absent. OCR preserves every page, word boxes and numeric candidates; selected adjusted measures remain unverified and separate from GAAP.",
+        "Availability is provisionally tied to the Q4 2025 supplemental release on 2026-01-13; the image-only file does not independently verify its publication date.",
+        "Adjusted measures must remain separate from GAAP statement values."
+      ]
+    }
+  ]
+}

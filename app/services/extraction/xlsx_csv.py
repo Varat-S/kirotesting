@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import uuid
 
 from app.schemas.enums import ExtractionMethod, FactStatus
@@ -79,6 +80,7 @@ class TableParser(BaseParser):
         scale: str | None = None,
         currency: str | None = None,
         period_headers: dict[str, dict] | None = None,
+        fiscal_year_end_month: int | None = None,
         target_scale: str = "millions",
         audit_hook: ParserAuditHook | None = None,
     ) -> ParseResult:
@@ -114,7 +116,9 @@ class TableParser(BaseParser):
                     row_label=row_label,
                     cell=cell_ref,
                 )
-                period = self._resolve_period(col_header, period_headers)
+                period = self._resolve_period(
+                    col_header, period_headers, fiscal_year_end_month
+                )
 
                 if not cell_text:
                     # Empty cell -> explicit MISSING, never zero (Req 4.4).
@@ -172,8 +176,22 @@ class TableParser(BaseParser):
         self._log(result, audit_hook, document_id=document_id, sheet=sheet_name)
         return result
 
-    def _resolve_period(self, col_header: str, period_headers: dict[str, dict]):
+    def _resolve_period(
+        self,
+        col_header: str,
+        period_headers: dict[str, dict],
+        fiscal_year_end_month=None,
+    ):
         spec = period_headers.get(col_header)
+        if (
+            spec is None
+            and fiscal_year_end_month is not None
+            and re.fullmatch(r"(?:FY\s*)?((?:19|20)\d{2})", col_header, re.I)
+        ):
+            spec = {
+                "fiscal_year": col_header,
+                "fiscal_year_end_month": fiscal_year_end_month,
+            }
         if spec is None:
             return None
         try:
@@ -200,6 +218,7 @@ class CsvParser(TableParser):
         scale: str | None = None,
         currency: str | None = None,
         period_headers: dict[str, dict] | None = None,
+        fiscal_year_end_month: int | None = None,
         target_scale: str = "millions",
         audit_hook: ParserAuditHook | None = None,
     ) -> ParseResult:
@@ -216,6 +235,7 @@ class CsvParser(TableParser):
             scale=scale,
             currency=currency,
             period_headers=period_headers,
+            fiscal_year_end_month=fiscal_year_end_month,
             target_scale=target_scale,
             audit_hook=audit_hook,
         )
@@ -236,6 +256,7 @@ class XlsxParser(TableParser):
         scale: str | None = None,
         currency: str | None = None,
         period_headers: dict[str, dict] | None = None,
+        fiscal_year_end_month: int | None = None,
         target_scale: str = "millions",
         audit_hook: ParserAuditHook | None = None,
     ) -> ParseResult:
@@ -256,8 +277,7 @@ class XlsxParser(TableParser):
         if sheet_name is not None:
             if sheet_name not in workbook.sheetnames:
                 raise ParserError(
-                    f"Sheet {sheet_name!r} not found; available: "
-                    f"{workbook.sheetnames}"
+                    f"Sheet {sheet_name!r} not found; available: {workbook.sheetnames}"
                 )
             worksheet = workbook[sheet_name]
         else:
@@ -275,6 +295,7 @@ class XlsxParser(TableParser):
             scale=scale,
             currency=currency,
             period_headers=period_headers,
+            fiscal_year_end_month=fiscal_year_end_month,
             target_scale=target_scale,
             audit_hook=audit_hook,
         )

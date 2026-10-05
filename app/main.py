@@ -18,6 +18,7 @@ from app.api.cases import router as cases_router
 from app.api.browser import router as browser_router
 from app.api.health import router as health_router
 from app.api.workbench import router as workbench_router
+from app.api.inspection import router as inspection_router
 
 
 def create_app() -> FastAPI:
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(cases_router)
     app.include_router(workbench_router)
     app.include_router(browser_router)
+    app.include_router(inspection_router)
     return app
 
 

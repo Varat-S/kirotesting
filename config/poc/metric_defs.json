@@ -11,7 +11,9 @@
       ],
       "excluded": [],
       "units": "ratio",
-      "period_type": "FY"
+      "period_type": "FY",
+      "accounting_basis": "GAAP",
+      "input_definition_policy": "Derived inputs require human review; net interest expense and cash interest paid are not gross interest expense."
     },
     "operating_margin": {
       "formula_id": "F-OP-MARGIN-01",
@@ -27,7 +29,9 @@
         "special_items"
       ],
       "units": "ratio",
-      "period_type": "FY"
+      "period_type": "FY",
+      "accounting_basis": "GAAP",
+      "input_definition_policy": "Derived inputs require human review; net interest expense and cash interest paid are not gross interest expense."
     },
     "net_debt": {
       "formula_id": "F-NET-DEBT-01",
@@ -43,7 +47,9 @@
         "operating_leases"
       ],
       "units": "currency",
-      "period_type": "instant"
+      "period_type": "instant",
+      "accounting_basis": "GAAP",
+      "input_definition_policy": "Derived inputs require human review; net interest expense and cash interest paid are not gross interest expense."
     },
     "net_debt_to_ebitda": {
       "formula_id": "F-ND-EBITDA-01",
@@ -60,7 +66,9 @@
         "operating_leases"
       ],
       "units": "x",
-      "period_type": "FY"
+      "period_type": "FY",
+      "accounting_basis": "GAAP",
+      "input_definition_policy": "Derived inputs require human review; net interest expense and cash interest paid are not gross interest expense."
     },
     "interest_coverage": {
       "formula_id": "F-INT-COV-01",
@@ -75,7 +83,9 @@
         "capitalized_interest"
       ],
       "units": "x",
-      "period_type": "FY"
+      "period_type": "FY",
+      "accounting_basis": "GAAP",
+      "input_definition_policy": "Derived inputs require human review; net interest expense and cash interest paid are not gross interest expense."
     },
     "cash_conversion": {
       "formula_id": "F-CFO-EBITDA-01",
@@ -89,7 +99,9 @@
       ],
       "excluded": [],
       "units": "ratio",
-      "period_type": "FY"
+      "period_type": "FY",
+      "accounting_basis": "GAAP",
+      "input_definition_policy": "Derived inputs require human review; net interest expense and cash interest paid are not gross interest expense."
     },
     "free_cash_flow": {
       "formula_id": "F-FCF-01",
@@ -104,7 +116,9 @@
         "acquisitions"
       ],
       "units": "currency",
-      "period_type": "FY"
+      "period_type": "FY",
+      "accounting_basis": "GAAP",
+      "input_definition_policy": "Derived inputs require human review; net interest expense and cash interest paid are not gross interest expense."
     },
     "liquidity": {
       "formula_id": "F-LIQ-01",
@@ -120,7 +134,9 @@
         "restricted_cash"
       ],
       "units": "currency",
-      "period_type": "instant"
+      "period_type": "instant",
+      "accounting_basis": "GAAP",
+      "input_definition_policy": "Derived inputs require human review; net interest expense and cash interest paid are not gross interest expense."
     },
     "capex_to_revenue": {
       "formula_id": "F-CAPEX-REV-01",
@@ -133,7 +149,9 @@
       ],
       "excluded": [],
       "units": "ratio",
-      "period_type": "FY"
+      "period_type": "FY",
+      "accounting_basis": "GAAP",
+      "input_definition_policy": "Derived inputs require human review; net interest expense and cash interest paid are not gross interest expense."
     },
     "load_factor": {
       "formula_id": "F-LOAD-FACTOR-01",
@@ -147,7 +165,9 @@
       ],
       "excluded": [],
       "units": "ratio",
-      "period_type": "FY"
+      "period_type": "FY",
+      "accounting_basis": "GAAP",
+      "input_definition_policy": "Derived inputs require human review; net interest expense and cash interest paid are not gross interest expense."
     },
     "casm": {
       "formula_id": "F-CASM-01",
@@ -163,8 +183,59 @@
         "special_items"
       ],
       "units": "currency_per_asm",
-      "period_type": "FY"
+      "period_type": "FY",
+      "accounting_basis": "GAAP",
+      "input_definition_policy": "Derived inputs require human review; net interest expense and cash interest paid are not gross interest expense."
     }
   },
-  "label": "ILLUSTRATIVE - NOT BANK POLICY"
+  "label": "ILLUSTRATIVE - NOT BANK POLICY",
+  "input_derivations": {
+    "total_debt": {
+      "inputs": [
+        "current_maturities_of_debt_and_finance_leases",
+        "debt_and_finance_leases"
+      ],
+      "coefficients": [
+        1,
+        1
+      ],
+      "description": "Carrying amount of current plus noncurrent debt and finance leases; excludes operating leases and sale-leaseback financing liabilities."
+    },
+    "capex": {
+      "inputs": [
+        "flight_equipment_including_advance_payments",
+        "ground_property_and_equipment_including_technology"
+      ],
+      "coefficients": [
+        -1,
+        -1
+      ],
+      "description": "Positive cash expenditures for flight plus ground equipment; excludes equity investments and company non-GAAP adjustments."
+    },
+    "ebitda": {
+      "inputs": [
+        "operating_income",
+        "depreciation_amortization"
+      ],
+      "coefficients": [
+        1,
+        1
+      ],
+      "description": "GAAP operating income plus depreciation and amortization. Unadjusted operating EBITDA proxy; excludes rent addback. Requires definition review."
+    },
+    "unrestricted_cash": {
+      "inputs": [
+        "total_cash_cash_equivalents_and_restricted_cash",
+        "restricted_cash_included_in_prepaid_expenses_and_other",
+        "restricted_cash_included_in_other_noncurrent_assets"
+      ],
+      "coefficients": [
+        1,
+        -1,
+        -1
+      ],
+      "require_cash_reconciliation": true,
+      "description": "Cash-flow total less separately disclosed current and noncurrent restricted cash, reconciled to balance-sheet cash. Requires availability review."
+    }
+  }
 }

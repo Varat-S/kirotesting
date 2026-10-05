@@ -8,6 +8,22 @@ escalation decisions explainable, and humans resolve material judgment calls,
 all over an append-only audit substrate with versioned prompts, models, and
 configuration.
 
+The default browser test case uses the three supplied Delta PDFs (earnings
+release, non-GAAP supplement and the PDF supplied under the 10-K filename), with
+the Excel alternative excluded. Open `/inspect` to prepare or rerun it without
+choosing files. See [the package notes](examples/delta-2025/README.md) for the
+image-only supplement and the corrected FY2025 10-K.
+
+The local browser includes **Upload files and preview parsed evidence** at
+`/inspect`: SEC filing HTML/bundles, PDF, CSV, XLSX and standalone XBRL can be
+processed through deterministic evidence review. The screen exposes facts,
+provenance, mapping issues, metrics and the exact prepared canonical-evidence
+LLM input. Processing stops for review; browser controls then support evidence
+decisions, draft generation, exception resolution, approval and finalization.
+OpenAI Responses and compatible local/remote providers are implemented; live
+execution requires local provider/model settings and credentials. See [TESTING_GUIDE.md](TESTING_GUIDE.md) for actual-file examples,
+required metadata and parser limits.
+
 See the full spec in [`.kiro/specs/credit-memo-poc/`](.kiro/specs/credit-memo-poc/):
 `requirements.md`, `design.md`, and `tasks.md`.
 
@@ -161,12 +177,16 @@ The real NVIDIA Inline-XBRL fixture also runs through the pipeline, with
 dimension-safe reconciliation, 52/53-week annual periods, conservative SEC
 availability, narrative retrieval and independent companion admission.
 
-A real LLM provider is a separate integration step; `RealProviderBackend` remains
-a stub. Fake responses exercise orchestration and validation without asserting
-real narrative accuracy. Binary PDF needs the optional `pdf` dependency and its
-native libraries; OCR needs Tesseract. Immutability is enforced by the application
+`RealProviderBackend` supports OpenAI Responses and compatible Chat Completions,
+with structured outputs, input limits and recorded failure handling. Mocked HTTP
+tests validate integration; live narrative accuracy still requires a configured
+provider and evaluation. Binary PDF export needs the optional `pdf` dependency
+and native libraries. OCR uses Tesseract when installed, or Windows English OCR. Immutability is enforced by the application
 and ORM in this PoC rather than hardware/WORM storage.
 
 See [HARDENING_REPORT.md](HARDENING_REPORT.md) for changes, tests, validation and
 migration details, and [REAL_DATA_READINESS.md](REAL_DATA_READINESS.md) for parser
 limits and the next real-filing validation step.
+
+See [DELTA_VALIDATION_REPORT.md](DELTA_VALIDATION_REPORT.md) for the expanded
+real-document reference checks, OCR coverage and remaining review requirements.

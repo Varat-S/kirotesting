@@ -63,6 +63,18 @@ class Case(Base):
     facts: Mapped[list["Fact"]] = relationship(back_populates="case")
 
 
+class EvidencePreview(Base):
+    """Saved deterministic review view; separate from credit memo snapshots."""
+
+    __tablename__ = "evidence_previews"
+    case_id: Mapped[str] = mapped_column(ForeignKey("cases.case_id"), primary_key=True)
+    evidence_version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
 class Entity(Base):
     """EntityRecord registry row (Requirement 2.1, 2.5).
 
@@ -719,6 +731,21 @@ class AuditEvent(Base):
     after: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     linked_objects: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+
+
+class StageArtifact(Base):
+    """Immutable processing output with a recorded checksum and chain link."""
+
+    __tablename__ = "stage_artifacts"
+    case_id: Mapped[str] = mapped_column(String, primary_key=True)
+    evidence_version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String, primary_key=True)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    sha256: Mapped[str] = mapped_column(String, nullable=False)
+    previous_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    chain_hash: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
 
 
 class ConfigVersion(Base):

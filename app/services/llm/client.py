@@ -272,7 +272,24 @@ class LLMClient:
             temperature=0.0,
             key=key,
         )
-        raw = self._backend.generate(request)
+        try:
+            raw = self._backend.generate(request)
+        except RuntimeError as exc:
+            # Provider exceptions can contain secrets. Persist only their type.
+            raw = LLMRawResult(
+                raw_response="",
+                model_id=getattr(self._backend, "model_id", "unknown"),
+                model_config={"error_type": type(exc).__name__},
+            )
+            detail = f"Provider call failed ({type(exc).__name__})."
+            if type(exc).__module__ == "app.services.llm.providers" and hasattr(
+                exc, "public_message"
+            ):
+                detail = exc.public_message
+            run = self._log_run(request, raw, None, "rejected", detail)
+            return ModelRunResult(
+                run.run_id, method, "rejected", None, "", prompt.prompt_id, raw.model_id
+            )
 
         parsed: dict[str, Any] | None = None
         outcome = "valid"
@@ -330,6 +347,28 @@ class LLMClient:
         if self._session is not None:
             self._session.add(run)
             self._session.flush()
+            if request.case_id and request.case_version:
+                from app.services.pipeline.artifacts import StageRecorder
+
+                StageRecorder(
+                    self._session, request.case_id, request.case_version
+                ).record(
+                    "model_run_" + run.run_id,
+                    {
+                        "method": request.method,
+                        "prompt_id": request.prompt.prompt_id,
+                        "prompt_hash": request.prompt.content_hash,
+                        "prompt_template": request.prompt.template,
+                        "response_schema": request.prompt.response_schema,
+                        "inputs": request.inputs,
+                        "evidence_ids": request.evidence_ids,
+                        "model_id": raw.model_id,
+                        "raw_response": raw.raw_response,
+                        "parsed_response": parsed,
+                        "validation_outcome": outcome,
+                        "validation_detail": detail,
+                    },
+                )
         if self._audit is not None:
             self._audit.record(
                 EventType.LLM_RUN,

@@ -174,6 +174,346 @@
       "source_type": "xbrl",
       "source_key": "us-gaap:LongTermDebtNoncurrent",
       "canonical_name": "long_term_debt"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Passenger",
+      "canonical_name": "passenger"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Cargo",
+      "canonical_name": "cargo"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Salaries and related costs",
+      "canonical_name": "salaries_and_related_costs"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Aircraft fuel and related taxes",
+      "canonical_name": "aircraft_fuel_and_related_taxes"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Ancillary businesses and refinery",
+      "canonical_name": "ancillary_businesses_and_refinery"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Contracted services",
+      "canonical_name": "contracted_services"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Landing fees and other rents",
+      "canonical_name": "landing_fees_and_other_rents"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Regional carrier expense",
+      "canonical_name": "regional_carrier_expense"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Passenger commissions and other selling expenses",
+      "canonical_name": "passenger_commissions_and_other_selling_expenses"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Depreciation and amortization",
+      "canonical_name": "depreciation_amortization"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Aircraft maintenance materials and outside repairs",
+      "canonical_name": "aircraft_maintenance_materials_and_outside_repairs"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Passenger service",
+      "canonical_name": "passenger_service"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Profit sharing",
+      "canonical_name": "profit_sharing"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Aircraft rent",
+      "canonical_name": "aircraft_rent"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Pilot agreement and related expenses",
+      "canonical_name": "pilot_agreement_and_related_expenses"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Interest expense, net",
+      "canonical_name": "interest_expense_net"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Gain/(loss) on investments, net",
+      "canonical_name": "gain_loss_on_investments_net"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Loss on extinguishment of debt",
+      "canonical_name": "loss_on_extinguishment_of_debt"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Miscellaneous, net",
+      "canonical_name": "miscellaneous_net"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Total non-operating income/(expense), net",
+      "canonical_name": "total_non_operating_income_expense_net"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Income Before Income Taxes",
+      "canonical_name": "income_before_income_taxes"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Income Tax Provision",
+      "canonical_name": "income_tax_provision"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Net Income",
+      "canonical_name": "net_income"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Current maturities of debt and finance leases",
+      "canonical_name": "current_maturities_of_debt_and_finance_leases"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Debt and finance leases",
+      "canonical_name": "debt_and_finance_leases"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Current maturities of operating leases",
+      "canonical_name": "current_maturities_of_operating_leases"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Noncurrent operating leases",
+      "canonical_name": "noncurrent_operating_leases"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Total assets",
+      "canonical_name": "total_assets"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Total current assets",
+      "canonical_name": "total_current_assets"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Operating lease right-of-use assets",
+      "canonical_name": "operating_lease_right_of_use_assets"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Goodwill",
+      "canonical_name": "goodwill"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Equity investments",
+      "canonical_name": "equity_investments"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Other noncurrent assets",
+      "canonical_name": "other_noncurrent_assets"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Air traffic liability",
+      "canonical_name": "air_traffic_liability"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Accounts payable",
+      "canonical_name": "accounts_payable"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Accrued salaries and related benefits",
+      "canonical_name": "accrued_salaries_and_related_benefits"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Fuel card obligation",
+      "canonical_name": "fuel_card_obligation"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Other accrued liabilities",
+      "canonical_name": "other_accrued_liabilities"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Total current liabilities",
+      "canonical_name": "total_current_liabilities"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Pension, postretirement and related benefits",
+      "canonical_name": "pension_postretirement_and_related_benefits"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Deferred income taxes, net",
+      "canonical_name": "deferred_income_taxes_net"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Other noncurrent liabilities",
+      "canonical_name": "other_noncurrent_liabilities"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Total noncurrent liabilities",
+      "canonical_name": "total_noncurrent_liabilities"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Total stockholders' equity",
+      "canonical_name": "total_stockholders_equity"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Total liabilities and stockholders' equity",
+      "canonical_name": "total_liabilities_and_stockholders_equity"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Flight equipment, including advance payments",
+      "canonical_name": "flight_equipment_including_advance_payments"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Ground property and equipment, including technology",
+      "canonical_name": "ground_property_and_equipment_including_technology"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Supplemental Disclosure of Cash Paid for Interest",
+      "canonical_name": "supplemental_disclosure_of_cash_paid_for_interest"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Net cash used in investing activities",
+      "canonical_name": "net_cash_used_in_investing_activities"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Net cash used in financing activities",
+      "canonical_name": "net_cash_used_in_financing_activities"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Cash dividends",
+      "canonical_name": "cash_dividends"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Payments on debt and finance lease obligations",
+      "canonical_name": "payments_on_debt_and_finance_lease_obligations"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Purchase of equity investments",
+      "canonical_name": "purchase_of_equity_investments"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Proceeds from long-term obligations",
+      "canonical_name": "proceeds_from_long_term_obligations"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Restricted cash included in prepaid expenses and other",
+      "canonical_name": "restricted_cash_included_in_prepaid_expenses_and_other"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Restricted cash included in other noncurrent assets",
+      "canonical_name": "restricted_cash_included_in_other_noncurrent_assets"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Total cash, cash equivalents and restricted cash",
+      "canonical_name": "total_cash_cash_equivalents_and_restricted_cash"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Reported CASM",
+      "canonical_name": "reported_casm"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Reported TRASM",
+      "canonical_name": "reported_trasm"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Fuel Gallons",
+      "canonical_name": "fuel_gallons"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Operating income, adjusted",
+      "canonical_name": "operating_income_adjusted"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Fixed portion of operating lease expense",
+      "canonical_name": "fixed_portion_of_operating_lease_expense"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "EBITDAR",
+      "canonical_name": "ebitdar"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Debt and finance lease obligations",
+      "canonical_name": "debt_and_finance_lease_obligations"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Adjusted debt and finance lease obligations",
+      "canonical_name": "adjusted_debt_and_finance_lease_obligations"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Adjusted gross debt",
+      "canonical_name": "adjusted_gross_debt"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Adjusted net debt",
+      "canonical_name": "adjusted_net_debt"
+    },
+    {
+      "source_type": "table_label",
+      "source_key": "Gross capital expenditures",
+      "canonical_name": "gross_capital_expenditures"
     }
   ],
   "label": "ILLUSTRATIVE - NOT BANK POLICY"

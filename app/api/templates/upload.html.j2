@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Upload and inspect evidence</title>{% include 'browser_style.html.j2' %}</head>
+<body>
+<header><span class="badge">Evidence review</span><h1>Upload and inspect evidence</h1>
+<p>Run your files through the cutoff checks, parsers, mapping and calculations. Review the resulting evidence before the LLM stage.</p>
+<div class="actions"><a href="/">All cases</a><a href="/inspect/example/nvda.zip">Download the real NVIDIA test bundle</a></div>
+<p class="subtle">For a quick test, download that ZIP, select it below, then <button type="button" id="nvda-settings">fill the NVIDIA test settings</button>.</p>
+</header>
+<main><section><h2>Default test case: Delta FY2025 PDF package</h2>
+<p>Use the three supplied PDFs together: Q4 2025 earnings release, non-GAAP supplement, and the corrected 105-page FY2025 Form 10-K. The supplement includes captured OCR for all six scanned pages, with source-value checks and explicit review requirements.</p>
+<p>Report date: 2025-12-31. Evidence cutoff: 2026-03-01 UTC, including the February 10-K filing. Numeric extraction selects GAAP statement rows with explicit annual, Q4 and balance-sheet periods. Full readable text is also retained.</p>
+<ul><li><a href="/inspect/default/files/DeltaAirlines_EarningsRelease_Q4_2025.pdf" target="_blank" rel="noopener">Open earnings-release PDF</a></li><li><a href="/inspect/default/files/DeltaAirlines_Non-GAAPs_Q4_2025.pdf" target="_blank" rel="noopener">Open non-GAAP PDF</a> (image-only)</li><li><a href="/inspect/default/files/DeltaAirlines_10k_2025.pdf" target="_blank" rel="noopener">Open corrected FY2025 Form 10-K PDF</a></li></ul>
+<form action="/inspect/default" method="post" class="default-test-form"><button class="primary-button" type="submit">Open default Delta evidence preview</button></form>
+<form action="/inspect/default" method="post" class="default-test-form"><input type="hidden" name="rerun" value="1"><button type="submit">Run the Delta files again as a new case</button></form>
+<p class="subtle">Files are already included locally. Processing takes about a minute and stops before the LLM. Opening an existing default preview does not process it again.</p>
+</section><section>
+{% if error %}<p class="notice" role="alert">{{ error }}</p><p>Correct the settings and select your files again.</p>{% endif %}
+<form action="/inspect" method="post" enctype="multipart/form-data" id="upload-form">
+<fieldset><legend>1. Choose your files</legend>
+<label for="files">Source file or SEC filing bundle</label><input id="files" name="files" type="file" multiple required accept=".zip,.htm,.html,.xhtml,.xml,.xsd,.xbrl,.pdf,.xlsx,.csv">
+<p id="selected-files" class="subtle">SEC bundle ZIP, primary SEC HTML with optional XML/XSD sidecars, PDF, CSV, XLSX, or standalone XBRL.</p>
+<label for="source_type">File format</label><select name="source_type" id="source_type">
+{% for key, label in [('auto','Detect from selected files'),('sec_bundle','SEC bundle ZIP with bundle.json'),('sec_inline','SEC Inline-XBRL HTML + optional sidecars'),('pdf_table','PDF tables and readable text'),('csv','CSV financial table'),('xlsx','Excel financial table'),('xbrl','Standalone XBRL XML')] %}<option value="{{ key }}"{% if values.source_type == key %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+<p class="subtle">A SEC ZIP needs a <code>bundle.json</code> manifest with each file's own filing and availability metadata. Standalone SEC HTML needs its official filing metadata below. PDF text extraction supports up to 200 pages; image-only pages need OCR. Files are stored locally, up to 32 MiB each and 128 MiB total.</p>
+</fieldset>
+<fieldset><legend>2. Set the case and evidence dates</legend>
+<div class="form-grid">
+<div><label for="case_id">New case ID</label><input id="case_id" name="case_id" value="{{ values.case_id }}" required pattern="[A-Za-z0-9_-]+"><small>Use a new ID for each upload run.</small></div>
+<div><label for="legal_name">Borrower / issuer name</label><input id="legal_name" name="legal_name" value="{{ values.legal_name | default('') }}"><small>A SEC bundle can supply its ticker when this is blank.</small></div>
+<div><label for="entity_id">Entity identifier / ticker</label><input id="entity_id" name="entity_id" value="{{ values.entity_id | default('') }}"><small>Optional for a bundle; use the issuer's identifier when known.</small></div>
+<div><label for="as_of_date">Report / case as-of date</label><input id="as_of_date" name="as_of_date" type="date" value="{{ values.as_of_date | default('') }}"><small>Required for individual files. A SEC bundle uses its report date if blank.</small></div>
+<div><label for="cutoff">Evidence cutoff</label><input id="cutoff" name="cutoff" type="datetime-local" value="{{ values.cutoff }}" required><small>Evidence published after this time is excluded.</small></div>
+<div><label for="timezone_offset">Timezone for entered times</label><select id="timezone_offset" name="timezone_offset"><option value="+08:00"{% if values.timezone_offset == '+08:00' %} selected{% endif %}>Singapore (UTC+08:00)</option><option value="+00:00"{% if values.timezone_offset == '+00:00' %} selected{% endif %}>UTC</option></select></div>
+<div><label for="scope">Financial scope</label><select id="scope" name="scope"><option value="consolidated"{% if values.scope == 'consolidated' %} selected{% endif %}>Consolidated</option><option value="segment"{% if values.scope == 'segment' %} selected{% endif %}>Segment</option></select></div>
+<div><label for="accounting_basis">Accounting basis</label><select id="accounting_basis" name="accounting_basis"><option value="GAAP"{% if values.accounting_basis == 'GAAP' %} selected{% endif %}>GAAP</option><option value="IFRS"{% if values.accounting_basis == 'IFRS' %} selected{% endif %}>IFRS</option></select></div>
+</div></fieldset>
+<fieldset id="table-settings"><legend>3. Individual PDF / spreadsheet / XBRL settings</legend>
+<div class="form-grid">
+<div><label for="available_at">Source became available at</label><input id="available_at" name="available_at" type="datetime-local" value="{{ values.available_at | default('') }}"><small>Required for PDF, CSV, XLSX and standalone XBRL.</small></div>
+<div><label for="scale">Source amount scale</label><select id="scale" name="scale"><option value="">Choose the scale stated in the report</option>{% for scale in ['units','thousands','millions','billions'] %}<option value="{{ scale }}"{% if values.scale == scale %} selected{% endif %}>{{ scale | capitalize }}</option>{% endfor %}</select><small>Required for financial tables. The preview normalizes monetary amounts to millions once.</small></div>
+<div><label for="currency">Source currency</label><input id="currency" name="currency" value="{{ values.currency }}" maxlength="3" pattern="[A-Z]{3}"></div>
+<div><label for="sheet_name">Excel sheet name</label><input id="sheet_name" name="sheet_name" value="{{ values.sheet_name | default('') }}"><small>Blank uses the workbook's active sheet.</small></div>
+<div><label for="fiscal_year_end_month">Annual table headers: year-end month</label><select id="fiscal_year_end_month" name="fiscal_year_end_month"><option value="">Unknown / not annual month-end periods</option>{% for month in range(1,13) %}<option value="{{ month }}"{% if values.fiscal_year_end_month | default('') == month | string %} selected{% endif %}>{{ month }}</option>{% endfor %}</select><small>Set only for annual headers such as 2024 or FY2024 ending on this month's last day (12 = December). Other headers and 52/53-week periods need an extraction recipe; their periods remain unresolved.</small></div>
+</div><p class="subtle">CSV / Excel tables should have line-item labels in the first column and period headers such as 2024 in subsequent columns. Complex layouts may need a reviewed extraction recipe. PDF table detection can be incomplete; inspect the readable page text as well.</p>
+</fieldset>
+<fieldset id="sec-settings"><legend>3. Standalone SEC HTML filing metadata</legend>
+<div class="form-grid">
+<div><label for="cik">Issuer CIK</label><input id="cik" name="cik" value="{{ values.cik | default('') }}" pattern="[0-9]{1,10}"></div>
+<div><label for="accession">SEC accession</label><input id="accession" name="accession" value="{{ values.accession | default('') }}" placeholder="0001045810-26-000021" pattern="[0-9]{10}-[0-9]{2}-[0-9]{6}"></div>
+<div><label for="filing_date">Official filing date</label><input id="filing_date" name="filing_date" type="date" value="{{ values.filing_date | default('') }}"></div>
+<div><label for="form">Filing form</label><select id="form" name="form">{% for form in ['10-K','10-K/A','10-Q','10-Q/A'] %}<option value="{{ form }}"{% if values.form == form %} selected{% endif %}>{{ form }}</option>{% endfor %}</select></div>
+<div><label for="accepted_at">Official acceptance time (optional)</label><input id="accepted_at" name="accepted_at" type="datetime-local" value="{{ values.accepted_at | default('') }}"><small>Convert to the selected timezone. Leave blank when only the filing date is known.</small></div>
+</div><p class="subtle">With only a filing date, availability is conservatively the next midnight in US Eastern. XML/XSD sidecars share this declared accession. Separately dated proxies and exhibits need a SEC bundle manifest.</p>
+</fieldset>
+<button type="submit" id="submit-upload" class="primary-button">Upload and preview parsed evidence</button>
+<p id="upload-status" class="subtle" aria-live="polite">Processing stops at evidence review, before any LLM call.</p>
+</form>
+</section></main>
+<script>
+const form = document.getElementById('upload-form');
+const files = document.getElementById('files');
+const format = document.getElementById('source_type');
+function showSettings() {
+  let kind = format.value;
+  if (kind === 'auto' && files.files.length) {
+    const names = Array.from(files.files, f => f.name.toLowerCase());
+    kind = names.some(n => /\.(htm|html|xhtml)$/.test(n)) ? 'sec_inline' : names[0].endsWith('.zip') ? 'sec_bundle' : 'table';
+  }
+  document.getElementById('sec-settings').hidden = kind !== 'sec_inline' && kind !== 'auto';
+  document.getElementById('table-settings').hidden = kind === 'sec_inline' || kind === 'sec_bundle';
+  document.getElementById('selected-files').textContent = files.files.length ? Array.from(files.files, f => f.name).join(', ') : 'Choose your source files.';
+}
+files.addEventListener('change', showSettings); format.addEventListener('change', showSettings); showSettings();
+document.getElementById('nvda-settings').addEventListener('click', () => {
+  format.value = 'sec_bundle';
+  document.getElementById('legal_name').value = 'NVIDIA Corporation';
+  document.getElementById('entity_id').value = 'NVDA';
+  document.getElementById('as_of_date').value = '2026-01-25';
+  document.getElementById('timezone_offset').value = '+00:00';
+  document.getElementById('cutoff').value = '2026-03-01T00:00';
+  showSettings();
+});
+form.addEventListener('submit', () => {
+  document.getElementById('submit-upload').disabled = true;
+  document.getElementById('upload-status').textContent = 'Checking availability, parsing files and building the evidence preview…';
+});
+document.querySelectorAll('.default-test-form').forEach(f => f.addEventListener('submit', () => { const b = f.querySelector('button'); b.disabled = true; b.textContent = 'Preparing Delta evidence preview…'; }));
+</script></body></html>

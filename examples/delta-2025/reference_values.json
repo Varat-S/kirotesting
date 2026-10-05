@@ -1,0 +1,598 @@
+{
+  "method": "Checked against supplied PDF statement text and rendered scans; units/periods are explicit. Amounts in USD million unless stated. These references check extraction, not bank policy.",
+  "facts": [
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "revenue",
+      "year": 2025,
+      "period_type": "FY",
+      "value": 63364,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "revenue",
+      "year": 2024,
+      "period_type": "FY",
+      "value": 61643,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "revenue",
+      "year": 2023,
+      "period_type": "FY",
+      "value": 58048,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "operating_income",
+      "year": 2025,
+      "period_type": "FY",
+      "value": 5822,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "operating_income",
+      "year": 2024,
+      "period_type": "FY",
+      "value": 5995,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "operating_income",
+      "year": 2023,
+      "period_type": "FY",
+      "value": 5521,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "operating_expense",
+      "year": 2025,
+      "period_type": "FY",
+      "value": 57542,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "operating_expense",
+      "year": 2024,
+      "period_type": "FY",
+      "value": 55648,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "operating_expense",
+      "year": 2023,
+      "period_type": "FY",
+      "value": 52527,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "depreciation_amortization",
+      "year": 2025,
+      "period_type": "FY",
+      "value": 2443,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "depreciation_amortization",
+      "year": 2024,
+      "period_type": "FY",
+      "value": 2513,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "depreciation_amortization",
+      "year": 2023,
+      "period_type": "FY",
+      "value": 2341,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "interest_expense_net",
+      "year": 2025,
+      "period_type": "FY",
+      "value": -679,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "interest_expense_net",
+      "year": 2024,
+      "period_type": "FY",
+      "value": -747,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "interest_expense_net",
+      "year": 2023,
+      "period_type": "FY",
+      "value": -834,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "net_income",
+      "year": 2025,
+      "period_type": "FY",
+      "value": 5005,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "net_income",
+      "year": 2024,
+      "period_type": "FY",
+      "value": 3457,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 59,
+      "name": "net_income",
+      "year": 2023,
+      "period_type": "FY",
+      "value": 4609,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 58,
+      "name": "cash",
+      "year": 2025,
+      "period_type": "instant",
+      "value": 4310,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 58,
+      "name": "cash",
+      "year": 2024,
+      "period_type": "instant",
+      "value": 3069,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 58,
+      "name": "current_maturities_of_debt_and_finance_leases",
+      "year": 2025,
+      "period_type": "instant",
+      "value": 1605,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 58,
+      "name": "current_maturities_of_debt_and_finance_leases",
+      "year": 2024,
+      "period_type": "instant",
+      "value": 2175,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 58,
+      "name": "debt_and_finance_leases",
+      "year": 2025,
+      "period_type": "instant",
+      "value": 12507,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 58,
+      "name": "debt_and_finance_leases",
+      "year": 2024,
+      "period_type": "instant",
+      "value": 14019,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 58,
+      "name": "total_assets",
+      "year": 2025,
+      "period_type": "instant",
+      "value": 81317,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 58,
+      "name": "total_assets",
+      "year": 2024,
+      "period_type": "instant",
+      "value": 75372,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 61,
+      "name": "cfo",
+      "year": 2025,
+      "period_type": "FY",
+      "value": 8342,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 61,
+      "name": "cfo",
+      "year": 2024,
+      "period_type": "FY",
+      "value": 8025,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 61,
+      "name": "cfo",
+      "year": 2023,
+      "period_type": "FY",
+      "value": 6464,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 61,
+      "name": "flight_equipment_including_advance_payments",
+      "year": 2025,
+      "period_type": "FY",
+      "value": -3521,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 61,
+      "name": "flight_equipment_including_advance_payments",
+      "year": 2024,
+      "period_type": "FY",
+      "value": -3914,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 61,
+      "name": "flight_equipment_including_advance_payments",
+      "year": 2023,
+      "period_type": "FY",
+      "value": -3645,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 61,
+      "name": "ground_property_and_equipment_including_technology",
+      "year": 2025,
+      "period_type": "FY",
+      "value": -978,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 61,
+      "name": "ground_property_and_equipment_including_technology",
+      "year": 2024,
+      "period_type": "FY",
+      "value": -1226,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 61,
+      "name": "ground_property_and_equipment_including_technology",
+      "year": 2023,
+      "period_type": "FY",
+      "value": -1678,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 61,
+      "name": "supplemental_disclosure_of_cash_paid_for_interest",
+      "year": 2025,
+      "period_type": "FY",
+      "value": 850,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 61,
+      "name": "supplemental_disclosure_of_cash_paid_for_interest",
+      "year": 2024,
+      "period_type": "FY",
+      "value": 1001,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 61,
+      "name": "supplemental_disclosure_of_cash_paid_for_interest",
+      "year": 2023,
+      "period_type": "FY",
+      "value": 1164,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 64,
+      "name": "restricted_cash_included_in_prepaid_expenses_and_other",
+      "year": 2025,
+      "period_type": "instant",
+      "value": 135,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 64,
+      "name": "restricted_cash_included_in_prepaid_expenses_and_other",
+      "year": 2024,
+      "period_type": "instant",
+      "value": 168,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 64,
+      "name": "restricted_cash_included_in_prepaid_expenses_and_other",
+      "year": 2023,
+      "period_type": "instant",
+      "value": 199,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 64,
+      "name": "restricted_cash_included_in_other_noncurrent_assets",
+      "year": 2025,
+      "period_type": "instant",
+      "value": 56,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 64,
+      "name": "restricted_cash_included_in_other_noncurrent_assets",
+      "year": 2024,
+      "period_type": "instant",
+      "value": 184,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 64,
+      "name": "restricted_cash_included_in_other_noncurrent_assets",
+      "year": 2023,
+      "period_type": "instant",
+      "value": 455,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 64,
+      "name": "total_cash_cash_equivalents_and_restricted_cash",
+      "year": 2025,
+      "period_type": "instant",
+      "value": 4501,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 64,
+      "name": "total_cash_cash_equivalents_and_restricted_cash",
+      "year": 2024,
+      "period_type": "instant",
+      "value": 3421,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_10k_2025.pdf",
+      "page": 64,
+      "name": "total_cash_cash_equivalents_and_restricted_cash",
+      "year": 2023,
+      "period_type": "instant",
+      "value": 3395,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_EarningsRelease_Q4_2025.pdf",
+      "page": 8,
+      "name": "revenue",
+      "year": 2025,
+      "period_type": "duration",
+      "value": 16003,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_EarningsRelease_Q4_2025.pdf",
+      "page": 8,
+      "name": "revenue",
+      "year": 2024,
+      "period_type": "duration",
+      "value": 15559,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_EarningsRelease_Q4_2025.pdf",
+      "page": 8,
+      "name": "operating_income",
+      "year": 2025,
+      "period_type": "duration",
+      "value": 1467,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_EarningsRelease_Q4_2025.pdf",
+      "page": 8,
+      "name": "operating_income",
+      "year": 2024,
+      "period_type": "duration",
+      "value": 1717,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_EarningsRelease_Q4_2025.pdf",
+      "page": 11,
+      "name": "cfo",
+      "year": 2025,
+      "period_type": "duration",
+      "value": 2260,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_EarningsRelease_Q4_2025.pdf",
+      "page": 11,
+      "name": "cfo",
+      "year": 2024,
+      "period_type": "duration",
+      "value": 1894,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_EarningsRelease_Q4_2025.pdf",
+      "page": 12,
+      "name": "total_assets",
+      "year": 2025,
+      "period_type": "instant",
+      "value": 81185,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_EarningsRelease_Q4_2025.pdf",
+      "page": 12,
+      "name": "total_assets",
+      "year": 2024,
+      "period_type": "instant",
+      "value": 75372,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_EarningsRelease_Q4_2025.pdf",
+      "page": 10,
+      "name": "rpm",
+      "year": 2025,
+      "period_type": "FY",
+      "value": 249578,
+      "unit": "passenger_miles_million"
+    },
+    {
+      "file": "DeltaAirlines_EarningsRelease_Q4_2025.pdf",
+      "page": 10,
+      "name": "rpm",
+      "year": 2024,
+      "period_type": "FY",
+      "value": 246145,
+      "unit": "passenger_miles_million"
+    },
+    {
+      "file": "DeltaAirlines_EarningsRelease_Q4_2025.pdf",
+      "page": 10,
+      "name": "asm",
+      "year": 2025,
+      "period_type": "FY",
+      "value": 298045,
+      "unit": "seat_miles_million"
+    },
+    {
+      "file": "DeltaAirlines_EarningsRelease_Q4_2025.pdf",
+      "page": 10,
+      "name": "asm",
+      "year": 2024,
+      "period_type": "FY",
+      "value": 288394,
+      "unit": "seat_miles_million"
+    },
+    {
+      "file": "DeltaAirlines_Non-GAAPs_Q4_2025.pdf",
+      "page": 4,
+      "name": "ebitdar",
+      "year": 2025,
+      "period_type": "FY",
+      "value": 9226,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_Non-GAAPs_Q4_2025.pdf",
+      "page": 4,
+      "name": "ebitdar",
+      "year": 2022,
+      "period_type": "FY",
+      "value": 6622,
+      "unit": "USD_million"
+    },
+    {
+      "file": "DeltaAirlines_Non-GAAPs_Q4_2025.pdf",
+      "page": 6,
+      "name": "adjusted_net_debt",
+      "year": 2025,
+      "period_type": "instant",
+      "value": 14300,
+      "unit": "USD_million"
+    }
+  ],
+  "metrics": {
+    "revenue_growth": 0.027918822899599238,
+    "operating_margin": 0.09188182564232056,
+    "free_cash_flow": 3843,
+    "capex_to_revenue": 0.07100246196578498,
+    "net_debt": 9802,
+    "net_debt_to_ebitda": 1.1859649122807017,
+    "cash_conversion": 1.0093163944343617,
+    "load_factor": 0.8373836165679679,
+    "casm": 0.1930648056501535
+  },
+  "missing_metrics": [
+    "interest_coverage",
+    "liquidity"
+  ],
+  "conflicts": {
+    "total_assets": [
+      81185,
+      81317
+    ],
+    "other_noncurrent_assets": [
+      4291,
+      4421
+    ],
+    "total_current_assets": [
+      10966,
+      10968
+    ]
+  },
+  "derived": {
+    "total_debt": 14112,
+    "capex": 4499,
+    "ebitda": 8265,
+    "unrestricted_cash": 4310
+  }
+}

@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr | None = Field(default=None)
     llm_provider: str = Field(default="none")
     llm_model: str | None = Field(default=None)
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_timeout_seconds: float = Field(default=120, ge=1, le=600)
+    llm_max_output_tokens: int = Field(default=12000, ge=256, le=64000)
+    llm_max_input_bytes: int = Field(default=1500000, ge=1000)
     sec_user_agent: str | None = Field(default=None)
 
 

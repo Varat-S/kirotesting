@@ -6,18 +6,20 @@
 <p class="subtle">Inspect source evidence, calculated metrics, exceptions, and saved memos.</p>
 <p class="notice">The bundled Delta example uses synthetic data. The offline runner uses a fake AI backend, so generated analysis is empty. Drafts require human approval.</p>
 <p class="subtle">NVDA_2026, when loaded, uses the supplied real NVIDIA filing. Its workbench includes SEC contexts, dimensions, presentation sections and candidate passages.</p>
-<div class="actions"><a href="/docs">API explorer: create a case / upload documents</a><a href="/health">Service health</a></div>
+<div class="actions"><a href="/inspect">Upload files and preview parsed evidence</a><a href="/docs">API explorer</a><a href="/health">Service health</a></div>
+<p><strong>Default test case:</strong> <a href="{{ '/inspect/' ~ default_case_id ~ '/1' if default_preview_ready else '/inspect' }}">Delta FY2025 PDF evidence preview</a>. <a href="/inspect">Prepare or rerun the three supplied Delta PDFs</a>.</p>
 </header>
 <main><section><h2>Saved cases</h2>
 {% if cases %}
 <div class="table-wrap"><table><thead><tr><th>Case</th><th>As of</th><th>Status</th><th>Version</th><th>Open</th></tr></thead><tbody>
 {% for case in cases %}<tr><td>{{ case.case_id }}</td><td>{{ case.as_of_date or 'not set' }}</td><td>{{ case.status }}</td><td>{{ case.version or 'none' }}</td><td>
+{% if case.preview_version %}<a href="/inspect/{{ case.case_id }}/{{ case.preview_version }}">Parsed evidence</a> · {% endif %}
 <a href="{{ request.url_for('get_workbench_html', case_id=case.case_id) }}{% if case.version %}?snapshot_version={{ case.version }}{% endif %}">Workbench</a>
 {% if case.version %} · <a href="{{ request.url_for('get_memo_html', case_id=case.case_id) }}?snapshot_version={{ case.version }}">Memo</a> · <a href="{{ request.url_for('get_memo_json', case_id=case.case_id) }}?snapshot_version={{ case.version }}">JSON</a>{% endif %}
 </td></tr>{% endfor %}
 </tbody></table></div>
 {% else %}<p>No cases yet. Run the bundled source package using the CLI to create a draft.</p>{% endif %}
-<p class="subtle">Processing, resolving exceptions, approval, and finalization are currently service/CLI actions; this workbench displays saved results.</p>
+<p class="subtle">File uploads can now stop at parsed evidence review before the LLM stage. Resolving exceptions, approval and finalization currently use the CLI or services.</p>
 </section></main>
 <section><h2>Try the three examples</h2>
 <ul><li><strong>SYNTHETIC_2024:</strong> inspect calculated metrics, evidence quality, and the draft memo.</li>

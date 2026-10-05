@@ -7,6 +7,43 @@ from app.services.metrics.engine import MetricResult
 
 
 @dataclass
+class PreparedCaseResult:
+    """Deterministic processing completed, before the first LLM call."""
+
+    evidence_snapshot: CanonicalEvidenceSnapshot
+    metrics: dict[str, MetricResult]
+    benchmarks: dict
+    trends: dict
+    escalations: list[dict]
+    rejected_sources: list[dict]
+    mapping_issues: list[dict]
+    coverage: dict
+    recorded_stages: list[dict] = field(default_factory=list)
+
+    def as_payload(self):
+        evidence = self.evidence_snapshot.model_dump(mode="json")
+        return {
+            "stage": "before_llm",
+            "case_id": evidence["case_id"],
+            "evidence_version": evidence["snapshot_version"],
+            "evidence": evidence,
+            "metrics": {
+                name: metric.as_payload() for name, metric in self.metrics.items()
+            },
+            "benchmarks": self.benchmarks,
+            "trends": self.trends,
+            "escalations": self.escalations,
+            "rejected_sources": self.rejected_sources,
+            "mapping_issues": self.mapping_issues,
+            "coverage": self.coverage,
+            "next_llm_step": "qualitative_extraction",
+            "next_llm_input": {"canonical_evidence": evidence},
+            "llm_calls": 0,
+            "recorded_stages": self.recorded_stages,
+        }
+
+
+@dataclass
 class PipelineResult:
     evidence_snapshot: CanonicalEvidenceSnapshot
     evidence_row: Snapshot
