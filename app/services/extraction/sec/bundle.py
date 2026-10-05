@@ -7,6 +7,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from app.core.hashing import content_hash
 from app.services.ingestion.storage import sanitize_filename
 from app.services.acquisition.models import SecFiling
 from .xml import MAX_FILE_BYTES
@@ -100,6 +101,21 @@ class SecFilingFile(BaseModel):
             **self.model_dump(mode="json", exclude={"admitted"}),
             "sha256": self.sha256,
         }
+
+    def evidence_metadata(self):
+        """Canonical evidence excludes acquisition timestamps; metadata retains them."""
+        return {k: v for k, v in self.metadata().items() if k != "retrieved_at"}
+
+    def evidence_id(self, case_id):
+        return content_hash(
+            {
+                "case_id": case_id,
+                "accession": self.accession,
+                "filename": self.filename,
+                "sha256": self.sha256,
+                "available_at": self.available_at.isoformat(),
+            }
+        )
 
 
 class SecFilingBundle(BaseModel):

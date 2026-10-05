@@ -13,6 +13,7 @@ from app.services.acquisition.sec_edgar import (
     SecEdgarClient,
     select_filing_files,
     write_bundle,
+    validate_sec_document_path,
 )
 from app.services.extraction.sec.bundle import SecFilingBundle, SecFilingFile
 from tests.sec_helpers import ACCESSION, bundle, filing_file
@@ -190,6 +191,44 @@ def test_date_only_availability_conservative_across_dst():
     assert winter.available_at.isoformat() == "2025-01-11T05:00:00+00:00"
     assert summer.available_at.isoformat() == "2025-05-02T04:00:00+00:00"
     assert winter.availability_granularity == "date"
+
+
+def test_nested_unrelated_primary_does_not_block_annual_discovery():
+    recent = submission(
+        ["10-K", "N-PX", "UPLOAD"],
+        [ACCESSION, "0000000001-25-000002", "0000000001-25-000003"],
+        ["2025-01-10", "2025-02-10", "2025-02-11"],
+        ["2024-12-31", "", ""],
+        ["primary.htm", "xslN-PX_X01/primary_doc.xml", ""],
+    )
+    c = client([response({"filings": {"recent": recent, "files": []}})])
+    filings = c.list_filings("1")
+    assert len(filings) == 3
+    assert c.annual_reports(filings)[0].primary_document == "primary.htm"
+    nested = next(f for f in filings if f.form == "N-PX")
+    assert nested.primary_document == "xslN-PX_X01/primary_doc.xml"
+    before = len(c.transport.calls)
+    with pytest.raises(EdgarError, match="nested SEC primary document path is unsupported"):
+        c.download_files(nested)
+    assert len(c.transport.calls) == before
+    missing = next(f for f in filings if f.form == "UPLOAD")
+    with pytest.raises(EdgarError, match="no primary document"):
+        c.download_files(missing)
+    assert len(c.transport.calls) == before
+    with pytest.raises(ValueError):
+        filing_file(filename=nested.primary_document)
+
+
+@pytest.mark.parametrize("path", [
+    "../primary.xml", "/primary.xml", "dir/../primary.xml",
+    "dir/./primary.xml", "dir//primary.xml", "dir/",
+    "dir\\primary.xml", "%2e%2e/primary.xml", "dir/%2fprimary.xml",
+    "%252e%252e/primary.xml", "https://www.sec.gov/primary.xml",
+    "dir/primary.xml?query=1", "dir/primary.xml#fragment", "", None,
+])
+def test_sec_document_path_rejects_unsafe_components(path):
+    with pytest.raises(EdgarError, match="Invalid SEC primary document path"):
+        validate_sec_document_path(path)
 
 
 def test_bundle_cannot_claim_early_or_naive_availability():

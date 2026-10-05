@@ -65,7 +65,7 @@ def parse_bundle(bundle, *, entity_id, scope="consolidated", accounting_basis="G
         "report_date": bundle.report_date.isoformat(),
         "filing_date": bundle.filing_date.isoformat(),
         "primary_document_id": primary.document_id,
-        "files": [f.metadata() for f in bundle.files],
+        "files": [f.evidence_metadata() for f in bundle.files],
         "contexts": parsed["contexts"],
         "units": parsed["units"],
         "labels": labels,

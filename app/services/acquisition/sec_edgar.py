@@ -30,6 +30,19 @@ class EdgarError(RuntimeError):
     pass
 
 
+def validate_sec_document_path(path):
+    """Discovery may contain SEC stylesheet directories, unlike local files."""
+    if not isinstance(path, str) or not path or len(path) > 1000:
+        raise EdgarError("Invalid SEC primary document path.")
+    # Component validation also excludes escapes, URL syntax and backslashes.
+    try:
+        for component in path.split("/"):
+            validate_sec_filename(component)
+    except ValueError as exc:
+        raise EdgarError("Invalid SEC primary document path.") from exc
+    return path
+
+
 @dataclass
 class HttpResponse:
     status: int
@@ -247,7 +260,9 @@ class SecEdgarClient:
                     date.fromisoformat(field("reportDate"))
                     if field("reportDate")
                     else None,
-                    validate_sec_filename(field("primaryDocument")),
+                    validate_sec_document_path(field("primaryDocument"))
+                    if field("primaryDocument")
+                    else "",
                     parse_accepted(field("acceptanceDateTime")),
                     bool(field("isInlineXBRL", 0)),
                 )
@@ -292,6 +307,14 @@ class SecEdgarClient:
         )
 
     def download_files(self, filing, *, proxy=False):
+        if not filing.primary_document:
+            raise EdgarError("Selected SEC filing has no primary document to download.")
+        primary = validate_sec_document_path(filing.primary_document)
+        if "/" in primary:
+            raise EdgarError(
+                "Downloading a nested SEC primary document path is unsupported: "
+                f"{primary!r}. Select a filing with a flat primary filename."
+            )
         base = f"https://www.sec.gov/Archives/edgar/data/{int(filing.cik)}/{filing.accession.replace('-', '')}"
         listing = self.get(base + "/index.json")["directory"]["item"]
         names = select_filing_files(

@@ -206,6 +206,7 @@ class CreditMemoPipeline:
 
         documents, facts, rejected, issues, admitted_tags = [], [], [], [], set()
         sec_filings, narrative = [], []
+        sec_mapping_groups = {}
         parsers = {
             "csv": CsvParser,
             "xlsx": XlsxParser,
@@ -305,6 +306,36 @@ class CreditMemoPipeline:
                 stable = fact.model_dump(mode="json", exclude={"fact_id"})
                 fact.fact_id = content_hash(stable)
                 if mapped.status != "mapped":
+                    if source.parser == "inline_xbrl":
+                        key = (
+                            fact.taxonomy_concept or original.name,
+                            fact.entity_id,
+                            fact.consolidation_scope,
+                            fact.accounting_basis,
+                            mapped.status,
+                            mapped.candidates,
+                        )
+                        group = sec_mapping_groups.setdefault(key, {
+                            "source_name": key[0],
+                            "entity_id": fact.entity_id,
+                            "consolidation_scope": fact.consolidation_scope,
+                            "accounting_basis": fact.accounting_basis,
+                            "dimensions": set(),
+                            "status": mapped.status,
+                            "candidates": list(mapped.candidates),
+                            "mapping_version": mapper.version,
+                            "fact_ids": set(),
+                            "periods": set(),
+                        })
+                        group["fact_ids"].add(fact.fact_id)
+                        group["dimensions"].add(tuple(sorted(fact.dimensions.items())))
+                        group["periods"].add((
+                            fact.fiscal_year, fact.period_type,
+                            str(fact.period_start), str(fact.period_end),
+                        ))
+                        self._persist_fact(fact, case_id)
+                        facts.append(fact)
+                        continue
                     issue = {
                         "fact_id": fact.fact_id,
                         "source_name": original.name,
@@ -485,6 +516,33 @@ class CreditMemoPipeline:
                 primary.document_id,
             )
 
+        for group in sec_mapping_groups.values():
+            issue = {
+                **group,
+                "fact_ids": sorted(group["fact_ids"]),
+                "observation_count": len(group["fact_ids"]),
+                "dimensions": [dict(d) for d in sorted(group["dimensions"])],
+                "periods": [list(p) for p in sorted(group["periods"], key=str)],
+            }
+            issues.append(issue)
+            audit.record(
+                EventType.MAPPING_REVIEW_REQUIRED,
+                case_id=case_id,
+                actor_type=ActorType.SYSTEM,
+                after=issue,
+                linked_objects=issue["fact_ids"],
+            )
+            flag(
+                "mapping",
+                f"{issue['status']} financial concept {issue['source_name']!r} "
+                f"for {issue['entity_id']} ({issue['consolidation_scope']}, "
+                f"{issue['accounting_basis']}): "
+                f"{issue['observation_count']} observations.",
+                issue["fact_ids"],
+            )
+        documents = list({d["document_id"]: d for d in documents}.values())
+        sec_filings = list({content_hash(d): d for d in sec_filings}.values())
+        narrative = list({p["evidence_id"]: p for p in narrative}.values())
         facts = sorted({f.fact_id: f for f in facts}.values(), key=lambda f: f.fact_id)
         completeness = CompletenessEvaluator(registry).assess(
             admitted_tags, profile_version=versions["source_profiles"]

@@ -13,7 +13,7 @@ from app.models.orm import AuditEvent, CaseEntity, Document, Fact, FactSourceRef
 from app.services.pipeline.runner import CreditMemoPipeline
 from app.services.pipeline.sec import sec_source_package
 from app.services.extraction.sec.bundle import SecFilingBundle
-from tests.sec_helpers import bundle, filing_file
+from tests.sec_helpers import bundle, filing_file, inline_document
 
 FIXTURE = Path(__file__).resolve().parents[2] / "examples/sec/nvda-2026/bundle.json"
 
@@ -88,8 +88,21 @@ def test_reacquiring_same_accession_is_not_independent_corroboration(
     result = CreditMemoPipeline(
         db_session, data_root=tmp_path / "data", output_root=tmp_path / "output"
     ).run_case("POC_2024", package=package)
-    assert len(result.evidence_snapshot.documents) == 2
-    assert len(result.evidence_snapshot.facts) == 10
+    assert len(result.evidence_snapshot.documents) == 1
+    assert len(result.evidence_snapshot.facts) == 5
+    assert len(result.evidence_snapshot.sec_filings) == 1
+    assert db_session.scalar(select(func.count()).select_from(Document)) == 1
+    assert db_session.scalar(select(func.count()).select_from(Fact)) == 5
+    assert source.files[0].evidence_id("POC_2024") == second.files[0].evidence_id("POC_2024")
+    document = db_session.scalar(select(Document))
+    assert document.retrieved_at == source.files[0].retrieved_at
+    assert json.loads(document.source)["retrieved_at"] == source.files[0].metadata()["retrieved_at"]
+    events = list(db_session.scalars(select(AuditEvent).where(
+        AuditEvent.event_type == "evidence_admitted"
+    )))
+    assert {e.after["retrieved_at"] for e in events} == {
+        source.files[0].metadata()["retrieved_at"], second.files[0].metadata()["retrieved_at"]
+    }
     assert all(
         dq.state == "unverified"
         for dq in result.evidence_snapshot.data_quality.values()
@@ -217,6 +230,11 @@ def test_nvda_real_fixture_to_memo_and_browser_is_reproducible(db_session, tmp_p
         f["taxonomy_concept"].startswith("nvda:") and f["mapping_status"] == "unmapped"
         for f in evidence.facts
     )
+    unmapped = {f["fact_id"] for f in evidence.facts if f["mapping_status"] == "unmapped"}
+    reviews = [i for i in result.mapping_issues if i["status"] == "unmapped"]
+    assert len(reviews) < len(unmapped) / 2
+    assert {fid for i in reviews for fid in i["fact_ids"]} == unmapped
+    assert any(len(i["periods"]) > 1 for i in reviews)
     assert diagnostics["deferred_linkbases"] == [
         "calculation_linkbase",
         "definition_linkbase",
@@ -260,7 +278,10 @@ def test_nvda_real_fixture_to_memo_and_browser_is_reproducible(db_session, tmp_p
             second = run(
                 second_session,
                 tmp_path / "second",
-                source,
+                source.model_copy(update={"files": [
+                    f.model_copy(update={"retrieved_at": datetime(2026, 10, 2, tzinfo=timezone.utc)})
+                    for f in source.files
+                ]}),
                 cutoff="2026-03-01T00:00:00Z",
                 case="NVDA_2026",
             )
@@ -275,6 +296,54 @@ def test_nvda_real_fixture_to_memo_and_browser_is_reproducible(db_session, tmp_p
             )
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("change", [
+    {"content": b"changed bytes"},
+    {"accession": "0000000001-25-000002"},
+    {"filename": "renamed.htm"},
+    {"available_at": datetime(2025, 1, 12, tzinfo=timezone.utc)},
+])
+def test_sec_identity_changes_with_stable_evidence_fields(change):
+    original = filing_file()
+    assert original.evidence_id("CASE") != original.model_copy(update=change).evidence_id("CASE")
+    assert original.evidence_id("CASE") != original.evidence_id("OTHER_CASE")
+
+
+def test_sec_unmapped_reviews_group_concepts_and_retain_all_facts(db_session, tmp_path):
+    observations = "".join(
+        f'<ix:nonFraction id="{fid}" name="poc:{concept}" contextRef="{context}" unitRef="USD" scale="6">10</ix:nonFraction>'
+        for fid, concept, context in [
+            ("a1", "CustomRevenue", "C"),
+            ("a2", "CustomRevenue", "C"),
+            ("a3", "CustomRevenue", "G"),
+            ("b1", "OtherConcept", "C"),
+        ]
+    )
+    source = bundle([filing_file(content=inline_document(extra=observations))])
+    result = run(db_session, tmp_path, source)
+    facts = result.evidence_snapshot.facts
+    unmapped = [f for f in facts if f["mapping_status"] == "unmapped"]
+    assert len(unmapped) == 4
+    assert all(f["name"] == f["original_name"] for f in unmapped)
+    reviews = result.mapping_issues
+    assert len(reviews) == 2
+    grouped = next(i for i in reviews if i["observation_count"] == 3)
+    assert grouped["source_name"] == "poc:CustomRevenue"
+    assert grouped["consolidation_scope"] == "consolidated"
+    assert set(grouped["fact_ids"]) == {f["fact_id"] for f in unmapped if f["inline_element_id"] in {"a1", "a2", "a3"}}
+    assert grouped["dimensions"] == [{}, {"poc:ProductAxis": "poc:GamingMember"}]
+    assert {fid for i in reviews for fid in i["fact_ids"]} == {f["fact_id"] for f in unmapped}
+    assert {i["source_name"] for i in reviews} == {"poc:CustomRevenue", "poc:OtherConcept"}
+    assert all(i["candidates"] == [] for i in reviews)
+    assert result.metrics["operating_margin"].result == 0.2
+    assert len([f for f in facts if f["mapping_status"] == "mapped"]) == 5
+    events = list(db_session.scalars(select(AuditEvent).where(AuditEvent.event_type == "mapping_review_required")))
+    assert len(events) == 2
+    assert {fid for event in events for fid in event.linked_objects} == {f["fact_id"] for f in unmapped}
+    escalations = [e for e in result.escalations if e["rule_id"] == "R-MAPPING-REVIEW-01"]
+    assert len(escalations) == 2
+    assert {fid for e in escalations for fid in e["evidence_refs"]} == {f["fact_id"] for f in unmapped}
 
 
 def test_later_cutoff_proxy_cites_its_own_document(db_session, tmp_path):
@@ -315,7 +384,7 @@ def test_narrative_citation_is_present_but_not_automatically_entailed(
 
     source = bundle()
     # Stable source metadata gives the same document ID as normal admission.
-    did = content_hash({"case": "POC_2024", "source": source.files[0].metadata()})
+    did = source.files[0].evidence_id("POC_2024")
     _, _, passages = parse_bundle(
         source.model_copy(
             update={
