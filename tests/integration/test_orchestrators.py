@@ -167,6 +167,53 @@ def test_orchestrator_input_rejects_wrong_score_kind():
             analysis_run_id="AR1", parameters=[], business_score=fin)
 
 
+def test_material_claim_without_provenance_is_rejected(db_session):
+    from app.services.orchestration.conclusions import (
+        ConclusionProvenanceError,
+        validate_conclusion_provenance,
+    )
+
+    conclusion = build_topic_conclusion(
+        Topic.FINANCIAL,
+        {"overall_assessment": {"claim_id": "a", "category": "assessment",
+                                "text": "Repayment adequate.",
+                                "parameter_result_ids": [], "evidence_ids": []}},
+        analysis_run_id="AR1", orchestrator_run_id="r", score_reference="s:1",
+    )
+    with pytest.raises(ConclusionProvenanceError):
+        validate_conclusion_provenance(conclusion, accepted_parameter_ids=set())
+
+
+def test_claim_referencing_unaccepted_parameter_is_rejected(db_session):
+    from app.services.orchestration.conclusions import (
+        ConclusionProvenanceError,
+        validate_conclusion_provenance,
+    )
+
+    conclusion = build_topic_conclusion(
+        Topic.FINANCIAL,
+        {"overall_assessment": {"claim_id": "a", "category": "assessment",
+                                "text": "x", "parameter_result_ids": ["pr_stale"],
+                                "evidence_ids": ["E1"]}},
+        analysis_run_id="AR1", orchestrator_run_id="r", score_reference="s:1",
+    )
+    with pytest.raises(ConclusionProvenanceError, match="not accepted|current"):
+        validate_conclusion_provenance(conclusion, accepted_parameter_ids={"pr_live"})
+
+
+def test_well_provenanced_conclusion_passes(db_session):
+    from app.services.orchestration.conclusions import validate_conclusion_provenance
+
+    conclusion = build_topic_conclusion(
+        Topic.FINANCIAL,
+        {"overall_assessment": {"claim_id": "a", "category": "assessment",
+                                "text": "x", "parameter_result_ids": ["pr_live"],
+                                "evidence_ids": ["E1"]}},
+        analysis_run_id="AR1", orchestrator_run_id="r", score_reference="s:1",
+    )
+    validate_conclusion_provenance(conclusion, accepted_parameter_ids={"pr_live"})
+
+
 def test_business_orchestrator_conclusion(db_session):
     response = {
         "overall_assessment": {

@@ -84,6 +84,47 @@ def _claim(data, default_category: str) -> ConclusionClaim:
     )
 
 
+class ConclusionProvenanceError(ValueError):
+    """Raised when a material conclusion claim lacks traceable provenance."""
+
+
+def validate_conclusion_provenance(
+    conclusion: TopicConclusion,
+    *,
+    accepted_parameter_ids: set[str],
+) -> None:
+    """Require material claims to carry traceable provenance (item 5 / Req 35).
+
+    Every material strength/weakness/driver/risk and the overall_assessment must
+    carry at least one of {parameter_result_ids, evidence_ids}, and every
+    referenced ParameterResult id must be in the accepted set for the run (exists,
+    same run, accepted/current, not superseded). High-materiality claims that
+    cite a parameter must reference an accepted one.
+    """
+    material_claims = [
+        conclusion.overall_assessment,
+        *conclusion.strengths,
+        *conclusion.weaknesses,
+        *conclusion.key_drivers,
+        *conclusion.material_risks,
+    ]
+    for claim in material_claims:
+        if claim.materiality is Materiality.HIGH or claim.category in (
+            ClaimCategory.ASSESSMENT, ClaimCategory.RISK, ClaimCategory.DRIVER
+        ):
+            if not claim.parameter_result_ids and not claim.evidence_ids:
+                raise ConclusionProvenanceError(
+                    f"Material claim {claim.claim_id!r} carries no parameter or "
+                    "evidence provenance."
+                )
+        for prid in claim.parameter_result_ids:
+            if prid not in accepted_parameter_ids:
+                raise ConclusionProvenanceError(
+                    f"Claim {claim.claim_id!r} references ParameterResult {prid!r} "
+                    "that is not accepted/current for this run."
+                )
+
+
 class ConclusionStore:
     """Persists TopicConclusions append-only."""
 

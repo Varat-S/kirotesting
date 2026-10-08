@@ -20,14 +20,19 @@ from app.services.orchestration.business import (
 )
 from app.services.orchestration.challenge_loop import ChallengeLoop, parse_findings
 from app.services.orchestration.conclusions import (
+    ConclusionProvenanceError,
     ConclusionStore,
     build_topic_conclusion,
+    validate_conclusion_provenance,
 )
 from app.services.orchestration.financial import (
     FinancialOrchestratorInput,
     build_financial_orchestrator_input,
 )
-from app.services.orchestration.credit import verify_cross_topic_inputs
+from app.services.orchestration.credit import (
+    STRUCTURING_UNAVAILABLE,
+    verify_cross_topic_inputs,
+)
 from app.services.orchestration.mitigants import (
     MitigantEligibility,
     mitigants_eligible,
@@ -53,6 +58,8 @@ __all__ = [
     "promote_mitigant_output",
     "ConclusionStore",
     "build_topic_conclusion",
+    "validate_conclusion_provenance",
+    "ConclusionProvenanceError",
     "ChallengeLoop",
     "parse_findings",
     "validate_selection",
@@ -60,6 +67,7 @@ __all__ = [
     "verify_cross_topic_inputs",
     "mitigants_eligible",
     "MitigantEligibility",
+    "STRUCTURING_UNAVAILABLE",
     "RerunController",
     "RerunOutcome",
     "build_business_orchestrator_input",
