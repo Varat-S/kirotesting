@@ -392,7 +392,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 20 — Full evaluation / regression suite [DET]
 
-- [ ] 20.1 Extend `FakeLLMBackend` to the multi-agent graph (keyed by
+- [x] 20.1 Extend `FakeLLMBackend` to the multi-agent graph (keyed by
   `(agent_id, key)`); add the full Req 22.2 test matrix not already covered, plus
   the remediation-specific cases below.
   - _Areas:_ `app/services/llm/client.py` (fake), `tests/unit`,
