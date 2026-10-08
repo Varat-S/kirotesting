@@ -39,7 +39,7 @@ from app.models.orm import HumanReview, Snapshot
 from app.services.review.approval import approval_hash
 from app.schemas.json_schema import validate_snapshot
 from app.schemas.snapshots import (
-    SCHEMA_VERSION,
+    FINAL_SCHEMA_VERSION,
     EvidenceSnapshotRef,
     FinalCaseSnapshot,
 )
@@ -205,7 +205,7 @@ class FinalSnapshotAssembler:
         ]
 
         snapshot = FinalCaseSnapshot(
-            schema_version=SCHEMA_VERSION,
+            schema_version=FINAL_SCHEMA_VERSION,
             snapshot_version=self._next_version(case_id),
             supersedes_snapshot=supersedes_snapshot,
             evidence_snapshot_ref=EvidenceSnapshotRef(

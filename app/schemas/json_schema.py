@@ -15,6 +15,7 @@ from importlib.resources import files
 import jsonschema
 
 from app.schemas.snapshots import (
+    FINAL_SCHEMA_VERSION,
     SCHEMA_VERSION,
     CanonicalEvidenceSnapshot,
     FinalCaseSnapshot,
@@ -25,13 +26,46 @@ class SchemaValidationError(ValueError):
     """Raised when a snapshot payload fails JSON Schema validation."""
 
 
+def _final_schema_v1_1() -> dict[str, Any]:
+    """Legacy (v1.1) FinalCaseSnapshot schema: the v1.2 schema minus the
+    additive agentic fields. Legacy payloads omit those fields entirely, so
+    validating them against the v1.2 schema would also pass; we register an
+    explicit v1.1 entry so a payload tagged ``schema_version="1.1"`` resolves to
+    a schema under its own key (Milestone 1.3 backward compatibility).
+    """
+    schema = FinalCaseSnapshot.model_json_schema()
+    agentic_fields = {
+        "analysis_mode",
+        "accepted_analysis_run_id",
+        "accepted_parameter_result_ids",
+        "accepted_score_ids",
+        "accepted_topic_conclusion_ids",
+        "accepted_challenge_finding_ids",
+        "selected_candidate_id",
+        "scores",
+        "topic_conclusions",
+        "challenge_outcomes",
+        "candidate_structures",
+        "router_version",
+        "agent_registry_version",
+        "agent_registry_hash",
+        "scoring_config_version",
+        "scoring_config_hash",
+    }
+    props = {k: v for k, v in schema.get("properties", {}).items()
+             if k not in agentic_fields}
+    schema = {**schema, "properties": props}
+    return schema
+
+
 # Registry of versioned JSON Schemas, keyed by (snapshot_type, schema_version).
 _SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     (
         "canonical_evidence",
         SCHEMA_VERSION,
     ): CanonicalEvidenceSnapshot.model_json_schema(),
-    ("final_case", SCHEMA_VERSION): FinalCaseSnapshot.model_json_schema(),
+    ("final_case", FINAL_SCHEMA_VERSION): FinalCaseSnapshot.model_json_schema(),
+    ("final_case", SCHEMA_VERSION): _final_schema_v1_1(),
 }
 
 # Keep the original schema, rather than changing its definition under the same version.

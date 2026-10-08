@@ -35,6 +35,7 @@ from app.schemas.json_schema import (
     validate_snapshot,
 )
 from app.schemas.snapshots import (
+    FINAL_SCHEMA_VERSION,
     SCHEMA_VERSION,
     CanonicalEvidenceSnapshot,
     EvidenceSnapshotRef,
@@ -53,6 +54,7 @@ __all__ = [
     "get_json_schema",
     "validate_snapshot",
     "SCHEMA_VERSION",
+    "FINAL_SCHEMA_VERSION",
     "CanonicalEvidenceSnapshot",
     "EvidenceSnapshotRef",
     "FinalCaseSnapshot",

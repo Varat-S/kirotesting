@@ -22,6 +22,9 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 SCHEMA_VERSION = "1.1"
+# FinalCaseSnapshot gains additive agentic fields at v1.2 (Milestone 1.3). The
+# CanonicalEvidenceSnapshot boundary is unchanged and stays at SCHEMA_VERSION.
+FINAL_SCHEMA_VERSION = "1.2"
 
 
 class EvidenceSnapshotRef(BaseModel):
@@ -103,11 +106,18 @@ class FinalCaseSnapshot(BaseModel):
     References a ``CanonicalEvidenceSnapshot`` by version and records the config,
     metric-definition, rule, and prompt/model versions it was built under.
     ``supersedes_snapshot`` links a new version to its predecessor (Req 16.3).
+
+    Milestone 1.3 extends this to schema v1.2 with ADDITIVE agentic fields. All
+    new fields are optional with safe defaults, so a legacy ``1.1`` payload
+    (produced by the baseline analysis path) still validates unchanged. A legacy
+    payload may carry ``schema_version="1.1"``; agentic drafts carry
+    ``FINAL_SCHEMA_VERSION`` ("1.2"). The agentic fields pin exactly one accepted
+    ``analysis_run_id`` and freeze the accepted artifact IDs (Remediations 1/13).
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: str = SCHEMA_VERSION
+    schema_version: str = FINAL_SCHEMA_VERSION
     snapshot_type: str = Field(default="final_case", frozen=True)
     snapshot_version: int = 1
     supersedes_snapshot: int | None = None
@@ -130,3 +140,27 @@ class FinalCaseSnapshot(BaseModel):
     recommendation: dict = Field(default_factory=lambda: {"status": "draft"})
     audit_metadata: dict = Field(default_factory=dict)
     finalized: bool = False
+
+    # --- Agentic analysis fields (schema v1.2, additive; Milestone 1.3) ---
+    # Which analysis path produced this snapshot. Legacy drafts omit it.
+    analysis_mode: str | None = None
+    # Exactly one accepted agentic run (Remediation 1 / Req 27.6).
+    accepted_analysis_run_id: str | None = None
+    # Frozen accepted artifact IDs (Remediation 13 / Req 33.3).
+    accepted_parameter_result_ids: list[str] = Field(default_factory=list)
+    accepted_score_ids: list[str] = Field(default_factory=list)
+    accepted_topic_conclusion_ids: list[str] = Field(default_factory=list)
+    accepted_challenge_finding_ids: list[str] = Field(default_factory=list)
+    selected_candidate_id: str | None = None
+    # Scores, conclusions, challenge outcomes and candidate structures carried
+    # on the agentic draft for human review (Req 20.4).
+    scores: dict = Field(default_factory=dict)
+    topic_conclusions: dict = Field(default_factory=dict)
+    challenge_outcomes: list = Field(default_factory=list)
+    candidate_structures: list = Field(default_factory=list)
+    # Exact versions/hashes for reproducibility (Req 19.5).
+    router_version: str | None = None
+    agent_registry_version: str | None = None
+    agent_registry_hash: str | None = None
+    scoring_config_version: int | None = None
+    scoring_config_hash: str | None = None
