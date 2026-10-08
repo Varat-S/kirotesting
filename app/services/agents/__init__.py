@@ -12,6 +12,18 @@ provider calls occur in automated tests.
 
 from __future__ import annotations
 
+from app.services.agents.router import (
+    ROUTER_VERSION,
+    EvidenceRouter,
+    RouterInputs,
+    RoutingSpec,
+)
 from app.services.agents.runtime import AgentRuntime
 
-__all__ = ["AgentRuntime"]
+__all__ = [
+    "AgentRuntime",
+    "EvidenceRouter",
+    "RouterInputs",
+    "RoutingSpec",
+    "ROUTER_VERSION",
+]
