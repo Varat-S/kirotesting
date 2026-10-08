@@ -67,6 +67,9 @@ class LLMRequest:
     case_version: int | None = None
     temperature: float = 0.0
     key: str | None = None
+    # Model tier for provider routing (narrow|orchestrator|challenge). The
+    # fake/OpenAI backends ignore it; the Vertex backend maps it to a model.
+    model_tier: str | None = None
 
 
 @dataclass
@@ -332,6 +335,7 @@ class LLMClient:
         case_id: str | None = None,
         case_version: int | None = None,
         key: str | None = None,
+        model_tier: str | None = None,
     ) -> LLMRequest:
         """Build an immutable :class:`LLMRequest` without touching the DB."""
         return LLMRequest(
@@ -343,6 +347,7 @@ class LLMClient:
             case_version=case_version,
             temperature=0.0,
             key=key,
+            model_tier=model_tier,
         )
 
     def _generate_and_validate(

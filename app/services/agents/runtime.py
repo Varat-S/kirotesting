@@ -133,6 +133,7 @@ class AgentRuntime:
             evidence_ids=evidence_ids,
             case_id=task.case_id,
             case_version=task.snapshot_version,
+            model_tier=task.model_tier.value,
         )
 
     def _assemble(

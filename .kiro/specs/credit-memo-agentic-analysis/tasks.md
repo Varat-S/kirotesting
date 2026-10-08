@@ -363,7 +363,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 18 — Vertex backend + usage telemetry [LLM provider]
 
-- [ ] 18.1 `VertexProviderBackend(LLMBackend)` (`app/services/llm/
+- [x] 18.1 `VertexProviderBackend(LLMBackend)` (`app/services/llm/
   providers_vertex.py`) via Google Gen AI/Vertex SDK + ADC; model-tier routing;
   usage capture; new `Settings`/`.env.example` keys; no hard-coded models; no
   indefinite retry.

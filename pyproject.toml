@@ -50,6 +50,12 @@ ocr = [
 pdf = [
     "weasyprint>=60",
 ]
+# Optional Google Vertex AI (Gemini) provider backend (Milestone 18). Not needed
+# for OpenAI/compatible/fake backends; imported lazily. Live use is opt-in and
+# never exercised by automated tests.
+vertex = [
+    "google-genai>=1.0",
+]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
