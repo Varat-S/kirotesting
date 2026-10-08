@@ -445,7 +445,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 22 — Documentation / hardening
 
-- [ ] 22.1 Update `README.md`, add an agentic analysis report doc, `.env.example`
+- [x] 22.1 Update `README.md`, add an agentic analysis report doc, `.env.example`
   Vertex keys, config docs; verify audit/provenance chain end-to-end; final
   immutability/reproducibility checks; run-level usage/cost summary surfaced
   (Remediation 14).

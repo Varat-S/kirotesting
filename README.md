@@ -27,6 +27,23 @@ required metadata and parser limits.
 See the full spec in [`.kiro/specs/credit-memo-poc/`](.kiro/specs/credit-memo-poc/):
 `requirements.md`, `design.md`, and `tasks.md`.
 
+## Agentic credit analysis
+
+An optional **agentic analysis** architecture extends the downstream analytical
+portion of the pipeline with a bounded, concurrent multi-agent layer over a
+deterministic parameter + scoring substrate. It runs after the same
+human-reviewed `CanonicalEvidenceSnapshot` boundary and keeps the deterministic-
+first philosophy: code computes all numbers, ratios, scores and policy tests;
+LLMs only interpret, classify, challenge and synthesize. Select it with
+`analysis_mode="agentic"` on `CreditMemoPipeline`; the default `legacy` path is
+unchanged. A Google Vertex AI (Gemini) provider is available behind the existing
+provider abstraction (optional `vertex` extra; credentials via ADC/service
+account, never committed; no live calls in tests).
+
+See [`AGENTIC_ANALYSIS_REPORT.md`](AGENTIC_ANALYSIS_REPORT.md) for the overview
+and the live-Vertex run instructions, and the full spec in
+[`.kiro/specs/credit-memo-agentic-analysis/`](.kiro/specs/credit-memo-agentic-analysis/).
+
 ## Technology stack
 
 - Python 3.11+
