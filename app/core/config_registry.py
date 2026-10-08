@@ -48,6 +48,8 @@ ARTIFACT_KINDS: frozenset[str] = frozenset(
         "parser_precedence",
         "source_profiles",
         "financial_mappings",
+        # Agentic deterministic scoring configuration (Milestone 9).
+        "scoring",
     }
 )
 

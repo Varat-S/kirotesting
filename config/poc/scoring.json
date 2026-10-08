@@ -1,0 +1,100 @@
+{
+  "label": "ILLUSTRATIVE - NOT BANK POLICY",
+  "scale": {
+    "1": "low risk / strong",
+    "2": "acceptable",
+    "3": "elevated",
+    "4": "high risk"
+  },
+  "parameter_bands": {
+    "net_leverage": [
+      {"max": 2.0, "band": 1},
+      {"max": 3.0, "band": 2},
+      {"max": 3.5, "band": 3},
+      {"band": 4}
+    ],
+    "interest_coverage": [
+      {"min": 6.0, "band": 1},
+      {"min": 3.0, "band": 2},
+      {"min": 1.5, "band": 3},
+      {"band": 4}
+    ],
+    "fcf_conversion": [
+      {"min": 0.9, "band": 1},
+      {"min": 0.6, "band": 2},
+      {"min": 0.3, "band": 3},
+      {"band": 4}
+    ],
+    "liquidity": [
+      {"min": 2.0, "band": 1},
+      {"min": 1.2, "band": 2},
+      {"min": 1.0, "band": 3},
+      {"band": 4}
+    ],
+    "customer_hhi": [
+      {"max": 0.15, "band": 1},
+      {"max": 0.25, "band": 2},
+      {"max": 0.4, "band": 3},
+      {"band": 4}
+    ],
+    "competitive_position": [
+      {"max": 1, "band": 1},
+      {"max": 2, "band": 2},
+      {"max": 3, "band": 3},
+      {"band": 4}
+    ],
+    "management_governance": [
+      {"max": 1, "band": 1},
+      {"max": 2, "band": 2},
+      {"max": 3, "band": 3},
+      {"band": 4}
+    ],
+    "downside_dscr": [
+      {"min": 1.5, "band": 1},
+      {"min": 1.2, "band": 2},
+      {"min": 1.0, "band": 3},
+      {"band": 4}
+    ]
+  },
+  "business_weights": {
+    "customer_hhi": 0.3,
+    "competitive_position": 0.4,
+    "management_governance": 0.3
+  },
+  "financial_weights": {
+    "net_leverage": 0.3,
+    "interest_coverage": 0.2,
+    "fcf_conversion": 0.2,
+    "liquidity": 0.3
+  },
+  "coverage": {
+    "business": {
+      "min_coverage": 0.6,
+      "allow_partial": true,
+      "critical_dimensions": ["competitive_position"]
+    },
+    "financial": {
+      "min_coverage": 0.7,
+      "allow_partial": true,
+      "critical_dimensions": ["net_leverage", "liquidity"]
+    },
+    "renormalize_missing_weights": false
+  },
+  "obligor": {
+    "business_weight": 0.4,
+    "financial_weight": 0.6,
+    "floors": [
+      {"if": "base_case_covenant_breach", "financial_min_band": 3},
+      {"if": "downside_dscr_below_minimum", "obligor_min_band": 3}
+    ]
+  },
+  "facility": {
+    "obligor_weight": 0.7,
+    "protection_weight": 0.3
+  },
+  "structure_protection_weights": {
+    "collateral_coverage": 0.4,
+    "guarantee_support": 0.3,
+    "covenant_package": 0.3
+  }
+}
