@@ -11,7 +11,20 @@ StructuringConclusion (M17), never as a mutable flag on the candidate.
 from __future__ import annotations
 
 from app.services.structuring.candidates import assemble_candidate
-from app.services.structuring.engine import StructuringEngine
+from app.services.structuring.engine import FeasibilityPolicy, StructuringEngine
+from app.services.structuring.schedule import (
+    BorrowerForecast,
+    DerivedEconomics,
+    derive_economics,
+)
 from app.services.structuring.stress import stress_candidate
 
-__all__ = ["assemble_candidate", "StructuringEngine", "stress_candidate"]
+__all__ = [
+    "assemble_candidate",
+    "StructuringEngine",
+    "FeasibilityPolicy",
+    "BorrowerForecast",
+    "DerivedEconomics",
+    "derive_economics",
+    "stress_candidate",
+]

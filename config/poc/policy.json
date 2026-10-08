@@ -12,5 +12,13 @@
         "historical_deterioration": "R-TREND-LEV-01"
       }
     }
+  },
+  "structuring": {
+    "max_leverage": 4.0,
+    "min_dscr": 1.0,
+    "min_downside_dscr": 1.0,
+    "min_liquidity_coverage": 1.0,
+    "max_ltv": 0.8,
+    "require_covenant_package": true
   }
 }
