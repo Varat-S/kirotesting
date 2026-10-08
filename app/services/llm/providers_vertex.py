@@ -7,9 +7,11 @@ openai_compatible and the deterministic fake backend are all unaffected.
 Design constraints (Req 17):
 
 * Uses the officially supported Google Gen AI SDK (``google-genai``) in Vertex
-  mode (``Client(vertexai=True, project=..., location=...)``), authenticating via
-  Application Default Credentials / a service account. **Credentials are never
-  committed and never logged.**
+  mode, authenticating either via Application Default Credentials / a service
+  account (``Client(vertexai=True, project=..., location=...)``) or, when
+  ``VERTEX_API_KEY`` is set, via a Vertex API key
+  (``Client(vertexai=True, api_key=...)``). **Credentials are never committed
+  and never logged.**
 * ``google-genai`` is an OPTIONAL dependency: it is imported lazily inside
   ``generate`` (and injectable via ``client_factory``) so importing this module
   never requires the SDK, and tests mock the client with NO network.
@@ -76,10 +78,13 @@ class VertexProviderBackend(LLMBackend):
         s = self._settings
         if s.llm_provider != "vertex":
             raise ProviderNotConfiguredError("Set LLM_PROVIDER=vertex locally.")
-        if not s.google_cloud_project or not s.google_cloud_location:
+        if not self._api_key() and not (
+            s.google_cloud_project and s.google_cloud_location
+        ):
             raise ProviderNotConfiguredError(
-                "Set GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION for Vertex "
-                "(credentials via ADC/service account; never committed)."
+                "Set VERTEX_API_KEY, or GOOGLE_CLOUD_PROJECT and "
+                "GOOGLE_CLOUD_LOCATION for Vertex (credentials via ADC/service "
+                "account; never committed)."
             )
         if not (
             s.vertex_model_narrow
@@ -103,6 +108,10 @@ class VertexProviderBackend(LLMBackend):
 
     # -- generation -----------------------------------------------------------
 
+    def _api_key(self) -> str | None:
+        key = self._settings.vertex_api_key
+        return key.get_secret_value() if key else None
+
     def _client(self):
         if self._client_factory is not None:
             return self._client_factory()
@@ -114,6 +123,11 @@ class VertexProviderBackend(LLMBackend):
                 "the Vertex backend."
             ) from exc
         s = self._settings
+        api_key = self._api_key()
+        if api_key:
+            # The SDK rejects api_key together with project/location; the key
+            # already identifies its project.
+            return genai.Client(vertexai=True, api_key=api_key)
         return genai.Client(
             vertexai=True,
             project=s.google_cloud_project,
@@ -146,7 +160,9 @@ class VertexProviderBackend(LLMBackend):
                 "temperature": request.temperature,
                 "max_output_tokens": s.llm_max_output_tokens,
                 "response_mime_type": "application/json",
-                "response_schema": schema,
+                # Raw JSON Schema. The SDK's typed ``response_schema`` rejects
+                # nullable type unions (e.g. ["string", "null"]) client-side.
+                "response_json_schema": schema,
             },
             "_schema_sha256": content_hash(schema),
             "_inputs_sha256": content_hash(request.inputs),

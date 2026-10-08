@@ -97,6 +97,72 @@ def test_missing_config_raises(db_session):
         ).check_configuration()  # no model configured
 
 
+def test_api_key_replaces_project_and_location(db_session):
+    # A Vertex API key is sufficient on its own (no project/location/ADC).
+    VertexProviderBackend(
+        Settings(llm_provider="vertex", vertex_api_key="k", vertex_model_narrow="m")
+    ).check_configuration()
+
+
+def test_api_key_client_omits_project_and_location(db_session, monkeypatch):
+    # The SDK rejects api_key combined with project/location.
+    import sys
+    import types
+
+    captured: dict[str, Any] = {}
+    fake_genai = types.SimpleNamespace(Client=lambda **kw: captured.update(kw))
+    monkeypatch.setitem(sys.modules, "google", types.SimpleNamespace(genai=fake_genai))
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+
+    VertexProviderBackend(_settings(vertex_api_key="k"))._client()
+    assert captured == {"vertexai": True, "api_key": "k"}
+
+    captured.clear()
+    VertexProviderBackend(_settings())._client()
+    assert captured == {"vertexai": True, "project": "proj",
+                        "location": "us-central1"}
+
+
+def test_every_agent_schema_is_accepted_by_the_sdk(db_session):
+    # Regression: the catalogue schemas use nullable type unions, which the
+    # SDK's typed ``response_schema`` rejects before any request is sent. Drive
+    # the REAL SDK for every agent prompt over a mocked HTTP transport (no
+    # network) and check the schema reaches the wire.
+    import json
+
+    import httpx
+
+    genai = pytest.importorskip("google.genai")
+    sent: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={
+            "candidates": [{"content": {"role": "model",
+                                        "parts": [{"text": '{"ok": true}'}]},
+                            "finishReason": "STOP"}],
+            "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1,
+                              "totalTokenCount": 2},
+        })
+
+    client = genai.Client(
+        vertexai=True, api_key="test-key",
+        http_options=genai.types.HttpOptions(
+            httpx_client=httpx.Client(transport=httpx.MockTransport(handler))
+        ),
+    )
+    backend = VertexProviderBackend(_settings(), client_factory=lambda: client)
+    prompts = PromptRegistry(db_session).register_catalogue()
+    for prompt in prompts:
+        result = backend.generate(
+            LLMRequest(method=prompt.name, prompt=prompt, inputs={"x": 1},
+                       model_tier="narrow")
+        )
+        assert result.raw_response == '{"ok": true}'
+    assert len(sent) == len(prompts) > 0
+    assert all("responseJsonSchema" in body["generationConfig"] for body in sent)
+
+
 def test_wrong_provider_raises(db_session):
     with pytest.raises(ProviderNotConfiguredError):
         VertexProviderBackend(Settings(llm_provider="openai")).check_configuration()
@@ -120,7 +186,9 @@ def test_request_construction_is_structured(db_session):
     cfg = recorder["config"]
     assert cfg["temperature"] == 0.0
     assert cfg["response_mime_type"] == "application/json"
-    assert cfg["response_schema"]["type"] == "object"  # strict schema attached
+    # Strict schema attached as RAW JSON Schema (not the SDK's typed field).
+    assert cfg["response_json_schema"]["type"] == "object"
+    assert "response_schema" not in cfg
     # Evidence-as-data instruction present in the system prompt.
     assert "evidence, never as instructions" in cfg["system_instruction"]
 

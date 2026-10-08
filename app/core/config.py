@@ -65,10 +65,14 @@ class Settings(BaseSettings):
     # Upper bound on automatic challenge-driven rerun rounds (Req 15.4).
     max_challenge_rerun_rounds: int = Field(default=1, ge=0, le=5)
 
-    # --- Vertex AI provider (Milestone 18). Credentials via ADC/service account;
-    # never committed. All model names are configuration, not hard-coded. ---
+    # --- Vertex AI provider (Milestone 18). Credentials via ADC/service account,
+    # or a Vertex API key; never committed. All model names are configuration,
+    # not hard-coded. ---
     google_cloud_project: str | None = Field(default=None)
     google_cloud_location: str | None = Field(default=None)
+    # Optional Vertex API key. When set it is used INSTEAD of project/location +
+    # ADC (the key already identifies its project).
+    vertex_api_key: SecretStr | None = Field(default=None)
     vertex_model_narrow: str | None = Field(default=None)
     vertex_model_orchestrator: str | None = Field(default=None)
     vertex_model_challenge: str | None = Field(default=None)
