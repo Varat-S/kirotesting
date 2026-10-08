@@ -448,7 +448,7 @@ class ChallengeFinding(BaseModel):
 
     challenge_id: str
     analysis_run_id: str
-    target: str  # exact ConclusionClaim.claim_id where possible
+    target: str | None = None  # exact ConclusionClaim.claim_id where possible
     affected_agent_ids: list[str] = Field(default_factory=list)
     affected_parameter_ids: list[str] = Field(default_factory=list)
     issue_type: str
