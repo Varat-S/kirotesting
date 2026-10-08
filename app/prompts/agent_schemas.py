@@ -1,0 +1,162 @@
+"""Response JSON Schemas for the agentic agents (Milestones 10-17).
+
+Each agent's raw output is validated against a FIXED schema before use (same
+discipline as the baseline LLM prompts). Four shapes cover the roster:
+
+* NARROW / EXTRACTION agents emit ``{"parameters": [AgentParameter...]}`` — a
+  bounded list of the parameters the agent owns, each an LLM/hybrid observation
+  that still has to pass deterministic validation before it becomes an official
+  ParameterResult. Numeric financial-statement values are NEVER emitted here;
+  only interpretations, classifications and (for covenants) extracted contractual
+  terms tagged for hybrid validation.
+* MITIGANT agents emit ``{"proposals": [MitigantProposal...]}`` — bounded
+  risk-to-mitigant suggestions, not final structures.
+* ORCHESTRATORS emit a ``TopicConclusion`` of typed ConclusionClaims.
+* CHALLENGERS emit ``{"challenges": [ChallengeFinding...]}``.
+
+Schemas are intentionally permissive on free-text fields and strict on the
+structural contract (ids, evidence refs, enums) so the deterministic validation
+layer (M8) does the real gating.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+# A single parameter observation emitted by a narrow/extraction agent.
+_AGENT_PARAMETER: dict[str, Any] = {
+    "type": "object",
+    "required": ["parameter_id", "value_type"],
+    "properties": {
+        "parameter_id": {"type": "string"},
+        "value": {},  # any JSON type or null
+        "value_type": {"type": "string"},
+        "method": {"type": "string", "enum": ["llm", "hybrid"]},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}},
+        "status": {"type": "string"},
+        "materiality": {"type": "string", "enum": ["low", "medium", "high"]},
+        "notes": {"type": "string"},
+        # For hybrid numeric contractual terms (e.g. max_net_leverage = 3.50x):
+        "extracted_term": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "numeric_value": {"type": ["number", "null"]},
+                "unit": {"type": ["string", "null"]},
+            },
+            "additionalProperties": True,
+        },
+    },
+    "additionalProperties": True,
+}
+
+NARROW_AGENT_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["parameters"],
+    "properties": {
+        "parameters": {"type": "array", "items": _AGENT_PARAMETER},
+        "missing_information": {"type": "array", "items": {"type": "string"}},
+        "notes": {"type": "string"},
+    },
+    "additionalProperties": True,
+}
+
+_MITIGANT_PROPOSAL: dict[str, Any] = {
+    "type": "object",
+    "required": ["parameter_id", "mitigant"],
+    "properties": {
+        "parameter_id": {"type": "string"},
+        "mitigant": {"type": "string"},
+        "addresses_risk": {"type": "string"},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}},
+        "bounded": {"type": "boolean"},
+    },
+    "additionalProperties": True,
+}
+
+MITIGANT_AGENT_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["proposals"],
+    "properties": {
+        "proposals": {"type": "array", "items": _MITIGANT_PROPOSAL},
+        "notes": {"type": "string"},
+    },
+    "additionalProperties": True,
+}
+
+_CONCLUSION_CLAIM: dict[str, Any] = {
+    "type": "object",
+    "required": ["claim_id", "category", "text"],
+    "properties": {
+        "claim_id": {"type": "string"},
+        "category": {
+            "type": "string",
+            "enum": ["strength", "weakness", "driver", "risk", "assessment",
+                     "mitigant", "limitation"],
+        },
+        "text": {"type": "string"},
+        "parameter_result_ids": {"type": "array", "items": {"type": "string"}},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}},
+        "materiality": {"type": "string", "enum": ["low", "medium", "high"]},
+        "uncertainty": {"type": ["string", "null"]},
+        # A claim MAY quote exact validated numbers (checked by M8 validation).
+        "quoted_values": {"type": "object"},
+    },
+    "additionalProperties": True,
+}
+
+ORCHESTRATOR_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["overall_assessment"],
+    "properties": {
+        "overall_assessment": _CONCLUSION_CLAIM,
+        "strengths": {"type": "array", "items": _CONCLUSION_CLAIM},
+        "weaknesses": {"type": "array", "items": _CONCLUSION_CLAIM},
+        "key_drivers": {"type": "array", "items": _CONCLUSION_CLAIM},
+        "material_risks": {"type": "array", "items": _CONCLUSION_CLAIM},
+        "open_questions": {"type": "array", "items": {"type": "string"}},
+        "unresolved_contradictions": {"type": "array", "items": {"type": "string"}},
+        # Structuring orchestrator may name the selected feasible candidate.
+        "selected_candidate_id": {"type": ["string", "null"]},
+    },
+    "additionalProperties": True,
+}
+
+_CHALLENGE_FINDING: dict[str, Any] = {
+    "type": "object",
+    "required": ["challenge_id", "issue_type", "severity", "reason"],
+    "properties": {
+        "challenge_id": {"type": "string"},
+        "target": {"type": ["string", "null"]},
+        "issue_type": {"type": "string"},
+        "severity": {"type": "string",
+                     "enum": ["low", "medium", "high", "material"]},
+        "reason": {"type": "string"},
+        "affected_agent_ids": {"type": "array", "items": {"type": "string"}},
+        "affected_parameter_ids": {"type": "array", "items": {"type": "string"}},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}},
+        "requires_reanalysis": {"type": "boolean"},
+        "requested_rerun_scope": {"type": "array", "items": {"type": "string"}},
+    },
+    "additionalProperties": True,
+}
+
+CHALLENGE_AGENT_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["challenges"],
+    "properties": {
+        "challenges": {"type": "array", "items": _CHALLENGE_FINDING},
+    },
+    "additionalProperties": True,
+}
+
+
+def schema_for_task_type(task_type: str) -> dict[str, Any]:
+    """Return the response schema for an agent's task type."""
+    if task_type == "orchestrate":
+        return ORCHESTRATOR_JSON_SCHEMA
+    if task_type == "challenge":
+        return CHALLENGE_AGENT_JSON_SCHEMA
+    if task_type == "mitigant":
+        return MITIGANT_AGENT_JSON_SCHEMA
+    return NARROW_AGENT_JSON_SCHEMA  # extract / interpret / classify / narrow

@@ -116,8 +116,20 @@ class PromptRegistry:
             )
         return self._to_view(row)
 
-    def register_catalogue(self) -> list[RegisteredPrompt]:
-        """Register every prompt in :data:`PROMPT_CATALOGUE`."""
+    def register_catalogue(self, *, include_agents: bool = True) -> list[RegisteredPrompt]:
+        """Register every baseline prompt, plus the agentic agent prompts.
+
+        The baseline catalogue (extraction/analysis/challenge) is always
+        registered. When ``include_agents`` is set (default), the 27 agentic
+        agent prompts are also registered so the agentic pipeline can resolve a
+        prompt per agent (Milestones 10-17). Legacy callers are unaffected: the
+        baseline prompt names/versions are unchanged.
+        """
+        entries = list(PROMPT_CATALOGUE)
+        if include_agents:
+            from app.prompts.agent_prompts import agent_prompt_catalogue
+
+            entries += agent_prompt_catalogue()
         return [
             self.register(
                 entry["name"],
@@ -126,7 +138,7 @@ class PromptRegistry:
                 role=entry.get("role"),
                 label=entry.get("label"),
             )
-            for entry in PROMPT_CATALOGUE
+            for entry in entries
         ]
 
     # -- regression signal (Req 19.5) ----------------------------------------
