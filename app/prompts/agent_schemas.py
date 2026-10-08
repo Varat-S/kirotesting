@@ -23,17 +23,25 @@ from __future__ import annotations
 
 from typing import Any
 
+# Status values an agent may emit MUST match the application ParameterStatus
+# enum (item 4). An unknown status fails schema validation; it never silently
+# becomes OK. ``proposed_new_calculation`` is deterministic-only and is NOT an
+# allowed agent status.
+AGENT_PARAMETER_STATUSES = [
+    "ok", "provisional", "unavailable", "not_applicable", "requires_review",
+]
+
 # A single parameter observation emitted by a narrow/extraction agent.
 _AGENT_PARAMETER: dict[str, Any] = {
     "type": "object",
-    "required": ["parameter_id", "value_type"],
+    "required": ["parameter_id", "value_type", "status"],
     "properties": {
         "parameter_id": {"type": "string"},
         "value": {},  # any JSON type or null
         "value_type": {"type": "string"},
         "method": {"type": "string", "enum": ["llm", "hybrid"]},
         "evidence_ids": {"type": "array", "items": {"type": "string"}},
-        "status": {"type": "string"},
+        "status": {"type": "string", "enum": AGENT_PARAMETER_STATUSES},
         "materiality": {"type": "string", "enum": ["low", "medium", "high"]},
         "notes": {"type": "string"},
         # For hybrid numeric contractual terms (e.g. max_net_leverage = 3.50x):
@@ -63,10 +71,14 @@ NARROW_AGENT_JSON_SCHEMA: dict[str, Any] = {
 
 _MITIGANT_PROPOSAL: dict[str, Any] = {
     "type": "object",
-    "required": ["parameter_id", "mitigant"],
+    # A proposal must be structured and explicitly BOUNDED to feed candidate
+    # generation (item 11). The LLM proposes; the deterministic engine evaluates.
+    "required": ["parameter_id", "mitigant_type", "bounded"],
     "properties": {
         "parameter_id": {"type": "string"},
-        "mitigant": {"type": "string"},
+        "mitigant_type": {"type": "string"},
+        "proposed_value": {"type": ["number", "string", "null"]},
+        "unit": {"type": ["string", "null"]},
         "addresses_risk": {"type": "string"},
         "evidence_ids": {"type": "array", "items": {"type": "string"}},
         "bounded": {"type": "boolean"},
@@ -99,8 +111,21 @@ _CONCLUSION_CLAIM: dict[str, Any] = {
         "evidence_ids": {"type": "array", "items": {"type": "string"}},
         "materiality": {"type": "string", "enum": ["low", "medium", "high"]},
         "uncertainty": {"type": ["string", "null"]},
-        # A claim MAY quote exact validated numbers (checked by M8 validation).
-        "quoted_values": {"type": "object"},
+        # A claim MAY quote exact validated numbers, bound to an EXACT accepted
+        # ParameterResult id (item 6); logical-name mappings are rejected.
+        "quoted_values": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["parameter_result_id", "value"],
+                "properties": {
+                    "parameter_result_id": {"type": "string"},
+                    "value": {"type": "number"},
+                    "unit": {"type": ["string", "null"]},
+                },
+                "additionalProperties": True,
+            },
+        },
     },
     "additionalProperties": True,
 }

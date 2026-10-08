@@ -85,6 +85,8 @@ class DeterministicValidator:
         *,
         admitted_evidence_ids: set[str] | None = None,
         owned_parameters: set[str] | None = None,
+        hybrid_parameters: set[str] | None = None,
+        deterministic_parameter_ids: set[str] | None = None,
         known_parameters: dict[str, Any] | None = None,
         expected_entity: str | None = None,
         expected_fiscal_year: int | None = None,
@@ -92,6 +94,8 @@ class DeterministicValidator:
     ) -> None:
         self._admitted = admitted_evidence_ids or set()
         self._owned = owned_parameters
+        self._hybrid = hybrid_parameters or set()
+        self._deterministic = deterministic_parameter_ids or set()
         self._known = known_parameters or {}
         self._entity = expected_entity
         self._fiscal_year = expected_fiscal_year
@@ -103,6 +107,8 @@ class DeterministicValidator:
         packet: EvidencePacket,
         *,
         owned_parameters: set[str] | None = None,
+        hybrid_parameters: set[str] | None = None,
+        deterministic_parameter_ids: set[str] | None = None,
         known_parameters: dict[str, Any] | None = None,
         expected_entity: str | None = None,
         expected_fiscal_year: int | None = None,
@@ -111,6 +117,31 @@ class DeterministicValidator:
         return cls(
             admitted_evidence_ids=set(packet.evidence_ids),
             owned_parameters=owned_parameters,
+            hybrid_parameters=hybrid_parameters,
+            deterministic_parameter_ids=deterministic_parameter_ids,
+            known_parameters=known_parameters,
+            expected_entity=expected_entity,
+            expected_fiscal_year=expected_fiscal_year,
+        )
+
+    @classmethod
+    def for_agent(
+        cls,
+        packet: EvidencePacket,
+        agent,
+        *,
+        known_parameters: dict[str, Any] | None = None,
+        expected_entity: str | None = None,
+        expected_fiscal_year: int | None = None,
+    ) -> "DeterministicValidator":
+        """Build a validator scoped to an AgentDefinition's ownership (item 1/3)."""
+        from app.services.agents.registry import deterministic_parameter_ids
+
+        return cls.for_packet(
+            packet,
+            owned_parameters=set(agent.owned_parameters) | set(agent.hybrid_parameters),
+            hybrid_parameters=set(agent.hybrid_parameters),
+            deterministic_parameter_ids=set(deterministic_parameter_ids()),
             known_parameters=known_parameters,
             expected_entity=expected_entity,
             expected_fiscal_year=expected_fiscal_year,
@@ -142,18 +173,9 @@ class DeterministicValidator:
                 return ValidationOutcome(valid=False, issues=issues)
 
         claims = _iter_claims(parsed)
-        emitted_params = _iter_emitted_parameters(parsed)
 
-        # --- parameter ownership ---
-        if self._owned is not None:
-            for pid in emitted_params:
-                if pid not in self._owned:
-                    issues.append(
-                        ValidationIssue(
-                            ValidationCheck.PARAMETER_OWNERSHIP,
-                            f"Agent emitted parameter {pid!r} it does not own.",
-                        )
-                    )
+        # --- explicit parameters-array checks (items 1 & 3) ---
+        issues.extend(self._check_parameters(parsed))
 
         for claim in claims:
             cid = claim.get("claim_id", "?")
@@ -212,6 +234,64 @@ class DeterministicValidator:
 
         return ValidationOutcome(valid=not issues, issues=issues, semantic_notes=notes)
 
+    # Statuses that make a SUBSTANTIVE assertion and therefore need evidence.
+    _SUBSTANTIVE = {"ok", "provisional", "requires_review"}
+    # Statuses that may legitimately carry no citation.
+    _NO_EVIDENCE_OK = {"unavailable", "not_applicable"}
+
+    def _check_parameters(self, parsed: dict[str, Any]) -> list[ValidationIssue]:
+        """Validate each entry in the ``parameters`` array (items 1 & 3)."""
+        issues: list[ValidationIssue] = []
+        for item in parsed.get("parameters", []) or []:
+            if not isinstance(item, dict):
+                continue
+            pid = item.get("parameter_id", "?")
+            method = item.get("method", "llm")
+            status = item.get("status", "ok")
+            evidence_ids = item.get("evidence_ids") or []
+
+            # Ownership: agent may only emit parameters it owns (incl. hybrid).
+            if self._owned is not None and pid not in self._owned:
+                issues.append(
+                    ValidationIssue(
+                        ValidationCheck.PARAMETER_OWNERSHIP,
+                        f"Agent emitted parameter {pid!r} it does not own.",
+                    )
+                )
+
+            # Item 1: an LLM/hybrid result must NOT be a deterministic-only id.
+            if (
+                pid in self._deterministic
+                and pid not in self._hybrid
+                and method in {"llm", "hybrid"}
+            ):
+                issues.append(
+                    ValidationIssue(
+                        ValidationCheck.PARAMETER_OWNERSHIP,
+                        f"Parameter {pid!r} is deterministic and may not be emitted "
+                        f"by an LLM ({method!r}); it is produced by the engine.",
+                    )
+                )
+
+            # Item 3: substantive semantic parameters must cite admitted evidence.
+            if status in self._SUBSTANTIVE and not evidence_ids:
+                issues.append(
+                    ValidationIssue(
+                        ValidationCheck.CITATION_VALID,
+                        f"Parameter {pid!r} (status {status!r}) carries no evidence.",
+                    )
+                )
+            for eid in evidence_ids:
+                if self._admitted and eid not in self._admitted:
+                    issues.append(
+                        ValidationIssue(
+                            ValidationCheck.EVIDENCE_EXISTS,
+                            f"Parameter {pid!r} cites unknown/unadmitted evidence "
+                            f"{eid!r}.",
+                        )
+                    )
+        return issues
+
     def _check_quoted_numbers(
         self, claim: dict[str, Any], cid: str
     ) -> list[ValidationIssue]:
@@ -224,26 +304,45 @@ class DeterministicValidator:
         from calculating.
         """
         issues: list[ValidationIssue] = []
-        quoted = claim.get("quoted_values") or {}
-        if not isinstance(quoted, dict):
+        quoted = claim.get("quoted_values")
+        if not quoted:
             return issues
-        for pid, number in quoted.items():
-            if pid not in self._known:
+
+        # Item 6: the canonical shape binds an EXACT accepted ParameterResult id:
+        #   "quoted_values": [{"parameter_result_id": "pr_...", "value": 3.07}]
+        # ``self._known`` is keyed by parameter_result_id. A legacy dict shape
+        # (logical name -> value) is rejected to force exact-id binding.
+        if isinstance(quoted, dict):
+            issues.append(
+                ValidationIssue(
+                    ValidationCheck.NUMERIC_CORRESPONDENCE,
+                    f"Claim {cid!r} uses a logical-name quote mapping; quotes must "
+                    "bind an exact parameter_result_id (item 6).",
+                )
+            )
+            return issues
+
+        for entry in quoted:
+            if not isinstance(entry, dict):
+                continue
+            prid = entry.get("parameter_result_id")
+            number = entry.get("value")
+            if prid is None or prid not in self._known:
                 issues.append(
                     ValidationIssue(
                         ValidationCheck.NUMERIC_CORRESPONDENCE,
-                        f"Claim {cid!r} quotes {number!r} for parameter {pid!r} that "
-                        "has no validated ParameterResult (invented number).",
+                        f"Claim {cid!r} quotes {number!r} for result {prid!r} that is "
+                        "not an accepted ParameterResult (invented number).",
                     )
                 )
                 continue
-            known = self._known[pid]
-            if not _numbers_match(number, known, self._tol):
+            if not _numbers_match(number, self._known[prid], self._tol):
                 issues.append(
                     ValidationIssue(
                         ValidationCheck.NUMERIC_CORRESPONDENCE,
-                        f"Claim {cid!r} quotes {number!r} for {pid!r} but the "
-                        f"validated value is {known!r} (no LLM arithmetic allowed).",
+                        f"Claim {cid!r} quotes {number!r} for {prid!r} but the "
+                        f"validated value is {self._known[prid]!r} (no LLM "
+                        "arithmetic allowed).",
                     )
                 )
         return issues

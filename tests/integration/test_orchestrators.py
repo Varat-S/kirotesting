@@ -47,12 +47,12 @@ _GOOD_RESPONSE = {
     "overall_assessment": {
         "claim_id": "a1", "category": "assessment",
         "text": "Repayment capacity adequate but leverage-sensitive.",
-        "parameter_result_ids": ["PR_LEV"], "evidence_ids": ["E1"],
-        "quoted_values": {"net_leverage": 3.07},
+        "parameter_result_ids": ["pr_lev"], "evidence_ids": ["E1"],
+        "quoted_values": [{"parameter_result_id": "pr_lev", "value": 3.07}],
     },
     "material_risks": [
         {"claim_id": "r1", "category": "risk", "text": "Elevated leverage.",
-         "parameter_result_ids": ["PR_LEV"], "evidence_ids": ["E1"]},
+         "parameter_result_ids": ["pr_lev"], "evidence_ids": ["E1"]},
     ],
     "open_questions": ["Is the revolver accessible under downside leverage?"],
 }
@@ -66,7 +66,7 @@ def test_orchestrator_emits_claim_level_conclusion(db_session):
         orchestrator_run_id=out.agent_run.run_id, score_reference="S_fin:1",
     )
     assert conclusion.overall_assessment.claim_id == "a1"
-    assert conclusion.overall_assessment.parameter_result_ids == ["PR_LEV"]
+    assert conclusion.overall_assessment.parameter_result_ids == ["pr_lev"]
     assert conclusion.material_risks[0].category.value == "risk"
     assert conclusion.open_questions  # surfaced, not resolved
 
@@ -79,7 +79,7 @@ def test_orchestrator_emits_claim_level_conclusion(db_session):
 def test_exact_quoted_number_passes_validation(db_session):
     _, out = _run_orchestrator(db_session, "financial_orchestrator", _GOOD_RESPONSE)
     validator = DeterministicValidator(
-        admitted_evidence_ids={"E1"}, known_parameters={"net_leverage": 3.07},
+        admitted_evidence_ids={"E1"}, known_parameters={"pr_lev": 3.07},
     )
     assert validator.validate(out.execution.parsed).valid
 
@@ -90,12 +90,13 @@ def test_invented_number_is_rejected(db_session):
             "claim_id": "a1", "category": "assessment",
             "text": "Leverage should fall to 2.6x next year.",
             "evidence_ids": ["E1"],
-            "quoted_values": {"net_leverage_forecast": 2.6},  # no validated param
+            # No accepted ParameterResult pr_fcast exists => rejected.
+            "quoted_values": [{"parameter_result_id": "pr_fcast", "value": 2.6}],
         }
     }
     _, out = _run_orchestrator(db_session, "financial_orchestrator", response)
     validator = DeterministicValidator(
-        admitted_evidence_ids={"E1"}, known_parameters={"net_leverage": 3.07},
+        admitted_evidence_ids={"E1"}, known_parameters={"pr_lev": 3.07},
     )
     outcome = validator.validate(out.execution.parsed)
     assert not outcome.valid

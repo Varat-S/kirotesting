@@ -74,40 +74,93 @@ def test_wrong_period_rejected():
 
 
 def test_non_owned_parameter_rejected():
-    v = DeterministicValidator(owned_parameters={"net_leverage"})
-    parsed = {"parameters": [{"parameter_id": "customer_hhi"}]}
+    v = DeterministicValidator(
+        admitted_evidence_ids={"E1"},
+        owned_parameters={"pricing_power_assessment"},
+    )
+    parsed = {"parameters": [{"parameter_id": "customer_dependence_assessment",
+                              "value_type": "category", "status": "ok",
+                              "evidence_ids": ["E1"]}]}
     outcome = v.validate(parsed)
     assert any(i.check is ValidationCheck.PARAMETER_OWNERSHIP for i in outcome.issues)
 
 
 def test_owned_parameter_accepted():
-    v = DeterministicValidator(owned_parameters={"net_leverage"})
-    parsed = {"parameters": [{"parameter_id": "net_leverage"}]}
+    v = DeterministicValidator(
+        admitted_evidence_ids={"E1"},
+        owned_parameters={"pricing_power_assessment"},
+    )
+    parsed = {"parameters": [{"parameter_id": "pricing_power_assessment",
+                              "value": "strong", "value_type": "category",
+                              "status": "ok", "evidence_ids": ["E1"]}]}
+    assert v.validate(parsed).valid
+
+
+def test_llm_cannot_emit_deterministic_parameter():
+    # Item 1: a deterministic id emitted by an LLM is rejected even if "owned".
+    v = DeterministicValidator(
+        admitted_evidence_ids={"E1"},
+        owned_parameters={"segment_hhi"},
+        deterministic_parameter_ids={"segment_hhi"},
+    )
+    parsed = {"parameters": [{"parameter_id": "segment_hhi", "value": 0.3,
+                              "value_type": "index", "method": "llm",
+                              "status": "ok", "evidence_ids": ["E1"]}]}
+    outcome = v.validate(parsed)
+    assert any(i.check is ValidationCheck.PARAMETER_OWNERSHIP for i in outcome.issues)
+
+
+def test_substantive_parameter_without_evidence_rejected():
+    v = DeterministicValidator(owned_parameters={"pricing_power_assessment"})
+    parsed = {"parameters": [{"parameter_id": "pricing_power_assessment",
+                              "value": "strong", "value_type": "category",
+                              "status": "ok", "evidence_ids": []}]}
+    outcome = v.validate(parsed)
+    assert any(i.check is ValidationCheck.CITATION_VALID for i in outcome.issues)
+
+
+def test_unavailable_parameter_without_evidence_allowed():
+    v = DeterministicValidator(owned_parameters={"pricing_power_assessment"})
+    parsed = {"parameters": [{"parameter_id": "pricing_power_assessment",
+                              "value": None, "value_type": "category",
+                              "status": "unavailable", "evidence_ids": []}]}
     assert v.validate(parsed).valid
 
 
 def test_invented_quoted_number_rejected():
-    # Orchestrator quotes a number for a parameter that has no validated value.
-    v = DeterministicValidator(known_parameters={"net_leverage": 3.07})
+    # Orchestrator quotes a result id that is not an accepted ParameterResult.
+    v = DeterministicValidator(known_parameters={"pr_lev": 3.07})
     parsed = {"overall_assessment": {"claim_id": "a", "kind": "assessment",
-                                     "quoted_values": {"interest_coverage": 5.0}}}
+                                     "quoted_values": [
+                                         {"parameter_result_id": "pr_cov", "value": 5.0}]}}
     outcome = v.validate(parsed)
     assert any(i.check is ValidationCheck.NUMERIC_CORRESPONDENCE for i in outcome.issues)
 
 
 def test_mismatched_quoted_number_rejected():
-    v = DeterministicValidator(known_parameters={"net_leverage": 3.07})
+    v = DeterministicValidator(known_parameters={"pr_lev": 3.07})
     parsed = {"overall_assessment": {"claim_id": "a", "kind": "assessment",
-                                     "quoted_values": {"net_leverage": 2.6}}}
+                                     "quoted_values": [
+                                         {"parameter_result_id": "pr_lev", "value": 2.6}]}}
     outcome = v.validate(parsed)
     assert any(i.check is ValidationCheck.NUMERIC_CORRESPONDENCE for i in outcome.issues)
 
 
 def test_exact_quoted_number_accepted():
-    v = DeterministicValidator(known_parameters={"net_leverage": 3.07})
+    v = DeterministicValidator(known_parameters={"pr_lev": 3.07})
+    parsed = {"overall_assessment": {"claim_id": "a", "kind": "assessment",
+                                     "quoted_values": [
+                                         {"parameter_result_id": "pr_lev", "value": 3.07}]}}
+    assert v.validate(parsed).valid
+
+
+def test_legacy_logical_name_quote_is_rejected():
+    # Item 6: a logical-name dict mapping must be rejected (ambiguous after reruns).
+    v = DeterministicValidator(known_parameters={"pr_lev": 3.07})
     parsed = {"overall_assessment": {"claim_id": "a", "kind": "assessment",
                                      "quoted_values": {"net_leverage": 3.07}}}
-    assert v.validate(parsed).valid
+    outcome = v.validate(parsed)
+    assert any(i.check is ValidationCheck.NUMERIC_CORRESPONDENCE for i in outcome.issues)
 
 
 def test_semantic_support_is_advisory_not_a_gate():
@@ -121,13 +174,11 @@ def test_semantic_support_is_advisory_not_a_gate():
 
 def test_clean_output_passes():
     v = DeterministicValidator.for_packet(
-        _packet(["E1", "E2"]), owned_parameters={"net_leverage"},
-        known_parameters={"net_leverage": 3.07},
+        _packet(["E1", "E2"]), owned_parameters={"pricing_power_assessment"},
     )
     parsed = {
-        "parameters": [{"parameter_id": "net_leverage"}],
-        "overall_assessment": {"claim_id": "a", "kind": "assessment",
-                               "evidence_ids": ["E1"],
-                               "quoted_values": {"net_leverage": 3.07}},
+        "parameters": [{"parameter_id": "pricing_power_assessment",
+                        "value": "strong", "value_type": "category",
+                        "status": "ok", "evidence_ids": ["E1"]}],
     }
     assert v.validate(parsed).valid

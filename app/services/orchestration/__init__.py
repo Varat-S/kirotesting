@@ -21,6 +21,8 @@ from app.services.orchestration.conclusions import (
 from app.services.orchestration.credit import verify_cross_topic_inputs
 from app.services.orchestration.promotion import (
     ParameterPromoter,
+    PromotionRejected,
+    ValidatedAgentOutput,
     promote_mitigant_output,
     promote_narrow_output,
 )
@@ -31,6 +33,8 @@ from app.services.orchestration.structuring import (
 
 __all__ = [
     "ParameterPromoter",
+    "ValidatedAgentOutput",
+    "PromotionRejected",
     "promote_narrow_output",
     "promote_mitigant_output",
     "ConclusionStore",

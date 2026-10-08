@@ -33,11 +33,24 @@ from app.core.hashing import content_hash
 from app.schemas.agentic import ModelTier, Topic
 from app.services.agents.router import RoutingSpec, Selector
 
-AGENT_REGISTRY_VERSION = "agent-registry-1.0.0"
+AGENT_REGISTRY_VERSION = "agent-registry-1.1.0"
 
 
 class AgentRegistryError(ValueError):
     """Raised when the declared agent roster is invalid."""
+
+
+def deterministic_parameter_ids() -> frozenset[str]:
+    """The canonical set of parameter IDs produced ONLY by the deterministic
+    Parameter Engine (Remediation item 1).
+
+    No LLM agent may own any of these; they originate from versioned formulas.
+    Imported lazily to avoid a module-load cycle (the parameters package imports
+    agentic schemas, not this registry).
+    """
+    from app.services.parameters.registry import default_parameter_definitions
+
+    return frozenset(d.parameter_id for d in default_parameter_definitions())
 
 
 @dataclass(frozen=True)
@@ -49,7 +62,14 @@ class AgentDefinition:
     task_type: str  # extract|interpret|classify|orchestrate|challenge|mitigant
     model_tier: ModelTier
     dependencies: tuple[str, ...] = ()
+    # LLM-SEMANTIC parameters the agent owns (interpretations/classifications).
+    # These must NEVER be deterministic-engine parameter IDs (item 1).
     owned_parameters: tuple[str, ...] = ()
+    # HYBRID parameters: numeric contractual terms the agent EXTRACTS from text
+    # (e.g. a covenant threshold) that then feed a deterministic engine. These
+    # are allowed to be consumed deterministically but are produced as a
+    # validated hybrid ParameterResult first.
+    hybrid_parameters: tuple[str, ...] = ()
     prompt_name: str | None = None
     response_schema_ref: str | None = None
     # Routing selectors describing which evidence the agent may receive. The
@@ -74,6 +94,7 @@ class AgentDefinition:
                 "model_tier": self.model_tier.value,
                 "dependencies": sorted(self.dependencies),
                 "owned_parameters": sorted(self.owned_parameters),
+                "hybrid_parameters": sorted(self.hybrid_parameters),
                 "prompt_name": self.prompt,
                 "response_schema_ref": self.response_schema_ref,
                 "selector_identity": sorted(self.selector_identity),
@@ -115,16 +136,28 @@ class AgentRegistry:
                     raise AgentRegistryError(
                         f"Agent {d.agent_id!r} depends on unknown agent {dep!r}."
                     )
-        # Parameter ownership is unique (Req 5.2).
+        # Parameter ownership is unique (Req 5.2); hybrid params also unique.
         owner: dict[str, str] = {}
         for d in definitions:
-            for p in d.owned_parameters:
+            for p in (*d.owned_parameters, *d.hybrid_parameters):
                 if p in owner:
                     raise AgentRegistryError(
                         f"Parameter {p!r} owned by both {owner[p]!r} and "
                         f"{d.agent_id!r}; ownership must be unique."
                     )
                 owner[p] = d.agent_id
+        # No LLM agent may OWN a deterministic parameter (item 1). A deterministic
+        # id may only appear as a declared HYBRID extraction target.
+        deterministic = deterministic_parameter_ids()
+        for d in definitions:
+            bad = set(d.owned_parameters) & deterministic
+            if bad:
+                raise AgentRegistryError(
+                    f"Agent {d.agent_id!r} owns deterministic parameter(s) "
+                    f"{sorted(bad)}; deterministic parameters are produced only by "
+                    "the Parameter Engine. Declare them as hybrid_parameters if the "
+                    "agent merely extracts an input for a deterministic formula."
+                )
         self._check_acyclic(definitions)
 
     @staticmethod
@@ -165,10 +198,18 @@ class AgentRegistry:
         return agent_id in self._by_id
 
     def owner_of(self, parameter_id: str) -> str | None:
+        """The agent that OWNS a semantic parameter, or None.
+
+        A deterministic parameter id returns None (it has no LLM owner) unless it
+        is explicitly a HYBRID extraction target of some agent (item 1).
+        """
         for d in self._by_id.values():
-            if parameter_id in d.owned_parameters:
+            if parameter_id in d.owned_parameters or parameter_id in d.hybrid_parameters:
                 return d.agent_id
         return None
+
+    def is_hybrid(self, parameter_id: str) -> bool:
+        return any(parameter_id in d.hybrid_parameters for d in self._by_id.values())
 
     def definition_hash(self, agent_id: str) -> str:
         return self.get(agent_id).definition_hash()
@@ -303,47 +344,73 @@ def _structuring_routing(agent_id: str) -> tuple[RoutingSpec, tuple[str, ...]]:
 # the competitive-position corpus, etc. This keeps packets tight and cuts
 # correlated hallucination / prompt-injection surface.
 _BUSINESS_NARROW = [
-    ("business_model", ("segment_share", "segment_hhi", "revenue_model_stability"),
+    # owned params are SEMANTIC classifications/assessments only — the numeric
+    # concentration/HHI/stability measures are produced by the Parameter Engine.
+    ("business_model",
+     ("business_model_classification", "revenue_recurrence_assessment"),
      ("corporate_structure",)),
-    ("competition_pricing", ("competitive_position", "pricing_power"),
+    ("competition_pricing",
+     ("competitive_position_assessment", "pricing_power_assessment",
+      "switching_cost_assessment"),
      ("competitive_position", "industry_risk")),
     ("customer_supplier_contract",
-     ("customer_concentration", "supplier_dependence", "contract_termination_risk"),
+     ("customer_dependence_assessment", "supplier_dependence_assessment",
+      "contract_termination_risk_assessment"),
      ("industry_risk",)),
     ("management_governance",
-     ("management_quality", "key_person_dependency", "governance_concern"),
+     ("management_quality_assessment", "key_person_dependency_assessment",
+      "governance_concern_assessment"),
      ("management", "ownership")),
-    ("ma_capex_execution", ("acquisition_strategy", "integration_risk", "capex_strategy"),
+    ("ma_capex_execution",
+     ("acquisition_strategy_assessment", "integration_risk_assessment",
+      "capex_strategy_assessment"),
      ("corporate_structure",)),
     ("regulatory_material_events",
-     ("regulatory_dependency", "litigation_risk", "material_event"),
+     ("regulatory_dependency_assessment", "litigation_risk_assessment",
+      "material_event_assessment"),
      ("industry_risk",)),
 ]
 
-# Financial narrow (6)
+# Financial narrow (6). owned params are SEMANTIC assessments; covenant
+# extraction additionally declares HYBRID numeric terms it extracts from legal
+# text (thresholds) that feed the deterministic covenant-headroom engine.
 _FINANCIAL_NARROW = [
     ("ebitda_adjustments", "ebitda_adjustments",
-     ("ebitda_addback_quality", "recurring_vs_exceptional")),
+     ("ebitda_addback_quality_assessment", "recurring_vs_exceptional_assessment")),
     ("cashflow_working_capital", "cashflow_working_capital",
-     ("cash_conversion_sustainability", "working_capital_driver")),
+     ("cash_conversion_sustainability_assessment", "working_capital_driver_assessment")),
     ("debt_liquidity_terms", "debt_liquidity_terms",
-     ("accessible_revolver", "restricted_cash_caveat", "financing_dependency")),
-    ("covenant_extraction", "covenant_extraction",
-     ("max_net_leverage_covenant", "min_coverage_covenant", "covenant_testing")),
+     ("accessible_revolver_assessment", "restricted_cash_caveat_assessment",
+      "financing_dependency_assessment")),
     ("accounting_audit_quality", "accounting_audit_quality",
-     ("audit_opinion_quality", "going_concern_flag", "restatement_flag")),
+     ("audit_opinion_quality_assessment", "going_concern_flag_assessment",
+      "restatement_flag_assessment")),
     ("forecast_stress_drivers", "forecast_stress_drivers",
-     ("downside_driver", "stress_sensitivity")),
+     ("downside_driver_assessment", "stress_sensitivity_assessment")),
 ]
 
-# Early Structuring extraction (3)
+# covenant_extraction is special: it OWNS a semantic covenant-type assessment and
+# EXTRACTS hybrid numeric thresholds. Declared explicitly below.
+_COVENANT_OWNED = ("covenant_type_assessment", "covenant_testing_assessment")
+_COVENANT_HYBRID = ("max_net_leverage_covenant_threshold",
+                    "min_coverage_covenant_threshold")
+
+# Early Structuring extraction (3). These agents EXTRACT structured facility /
+# collateral / legal terms from documents (hybrid: numeric amounts/tenors feed
+# the deterministic candidate-economics engine; the LLM never computes LTV/DSCR).
 _STRUCTURING_EXTRACTION = [
+    # (agent_id, task_type, owned_semantic, hybrid_extracted)
     ("facility_terms", "facility_terms",
-     ("facility_amount_term", "tenor_term", "amortization_term")),
+     ("facility_type_assessment",),
+     ("facility_amount_term", "tenor_term", "amortization_term",
+      "interest_rate_term")),
     ("collateral_security_guarantee", "collateral_security_guarantee",
-     ("collateral_term", "guarantee_term", "security_term")),
+     ("security_quality_assessment",),
+     ("collateral_value_term", "guarantee_amount_term", "security_ranking_term")),
     ("legal_undertakings_conditions", "legal_undertakings_conditions",
-     ("undertaking_term", "condition_precedent", "mandatory_prepayment_term")),
+     ("undertaking_assessment", "condition_precedent_assessment",
+      "mandatory_prepayment_assessment"),
+     ()),
 ]
 
 # Risk-to-mitigant (4) — depend on accepted Business+Financial conclusions + obligor score
@@ -386,12 +453,6 @@ def default_registry() -> AgentRegistry:
                    narrative_topics=narrative_topics)
         )
     for agent_id, prompt, params in _FINANCIAL_NARROW:
-        covenant = agent_id == "covenant_extraction"
-        routing = RoutingSpec(
-            agent_id=agent_id,
-            covenant_term_selector=_always() if covenant else None,
-            narrative_selector=_topic_in("qualitative_debt_terms") if not covenant else None,
-        )
         defs.append(
             AgentDefinition(
                 agent_id=agent_id,
@@ -401,12 +462,30 @@ def default_registry() -> AgentRegistry:
                 owned_parameters=tuple(params),
                 prompt_name=agent_id,
                 response_schema_ref=agent_id,
-                routing=routing,
-                selector_identity=("covenant_terms",) if covenant
-                else ("narrative:qualitative_debt_terms",),
+                routing=RoutingSpec(
+                    agent_id=agent_id,
+                    narrative_selector=_topic_in("qualitative_debt_terms"),
+                ),
+                selector_identity=("narrative:qualitative_debt_terms",),
             )
         )
-    for agent_id, prompt, params in _STRUCTURING_EXTRACTION:
+    # covenant_extraction: semantic owned + HYBRID extracted thresholds.
+    defs.append(
+        AgentDefinition(
+            agent_id="covenant_extraction",
+            topic=Topic.FINANCIAL,
+            task_type="covenant_extraction",
+            model_tier=ModelTier.NARROW,
+            owned_parameters=_COVENANT_OWNED,
+            hybrid_parameters=_COVENANT_HYBRID,
+            prompt_name="covenant_extraction",
+            response_schema_ref="covenant_extraction",
+            routing=RoutingSpec(agent_id="covenant_extraction",
+                                covenant_term_selector=_always()),
+            selector_identity=("covenant_terms",),
+        )
+    )
+    for agent_id, prompt, owned, hybrid in _STRUCTURING_EXTRACTION:
         routing, identity = _structuring_routing(agent_id)
         defs.append(
             AgentDefinition(
@@ -414,7 +493,8 @@ def default_registry() -> AgentRegistry:
                 topic=Topic.STRUCTURING,
                 task_type=prompt,
                 model_tier=ModelTier.NARROW,
-                owned_parameters=tuple(params),
+                owned_parameters=tuple(owned),
+                hybrid_parameters=tuple(hybrid),
                 prompt_name=agent_id,
                 response_schema_ref=agent_id,
                 routing=routing,
@@ -422,11 +502,12 @@ def default_registry() -> AgentRegistry:
             )
         )
 
+    financial_narrow_ids = [d[0] for d in _FINANCIAL_NARROW] + ["covenant_extraction"]
     # Orchestrators
     defs.append(_orchestrator("business_orchestrator", Topic.BUSINESS,
                               [d[0] for d in _BUSINESS_NARROW]))
     defs.append(_orchestrator("financial_orchestrator", Topic.FINANCIAL,
-                              [d[0] for d in _FINANCIAL_NARROW]))
+                              financial_narrow_ids))
     # Challengers (depend on their orchestrator)
     defs.append(_challenger("business_challenge", Topic.BUSINESS,
                             "business_orchestrator"))

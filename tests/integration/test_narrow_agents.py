@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from app.models.orm import AgenticAnalysisRun as RunRow
 from app.models.orm import ParameterResultRow
 from app.prompts.registry import PromptRegistry
@@ -26,6 +28,8 @@ from app.services.agents.validation import DeterministicValidator
 from app.services.llm.client import FakeLLMBackend, LLMClient
 from app.services.orchestration.promotion import (
     ParameterPromoter,
+    PromotionRejected,
+    ValidatedAgentOutput,
     promote_narrow_output,
 )
 
@@ -54,20 +58,28 @@ def _client(db_session, backend):
     return LLMClient(backend, prompts=reg, session=db_session)
 
 
-def test_business_model_agent_promotes_only_owned_parameters(db_session):
+def _validate(agent, parsed, evidence_ids=("E1",)):
+    from app.schemas.agentic import EvidencePacket
+
+    packet = EvidencePacket(
+        case_id="C1", snapshot_version=1, router_version="r",
+        analysis_run_id="AR1", agent_id=agent.agent_id,
+        evidence_ids=list(evidence_ids), packet_hash="pkt",
+    )
+    return DeterministicValidator.for_agent(packet, agent).validate(parsed)
+
+
+def test_valid_owned_output_promotes_through_the_gate(db_session):
     reg = default_registry()
     agent = reg.get("business_model")
     backend = FakeLLMBackend()
-    # Agent emits one owned parameter + one NOT owned; only the owned one is
-    # promoted (ownership enforced).
     backend.register(
         "business_model",
         {
             "parameters": [
-                {"parameter_id": "segment_hhi", "value": 0.3, "value_type": "index",
-                 "method": "llm", "evidence_ids": ["E1"]},
-                {"parameter_id": "net_leverage", "value": 3.0, "value_type": "ratio",
-                 "method": "llm", "evidence_ids": ["E1"]},
+                {"parameter_id": "business_model_classification",
+                 "value": "network-carrier", "value_type": "category",
+                 "method": "llm", "status": "ok", "evidence_ids": ["E1"]},
             ]
         },
     )
@@ -81,26 +93,38 @@ def test_business_model_agent_promotes_only_owned_parameters(db_session):
     )
     out = runtime.run(task, {}, agent_definition_hash=agent.definition_hash(),
                       evidence_ids=["E1"])
-    assert out.execution.status.value == "ok"
+    outcome = _validate(agent, out.execution.parsed)
+    assert outcome.valid
 
-    # Validation gates on ownership.
-    validator = DeterministicValidator(
-        admitted_evidence_ids={"E1"},
-        owned_parameters=set(agent.owned_parameters),
-    )
-    # The non-owned 'net_leverage' triggers an ownership issue.
-    assert not validator.validate(out.execution.parsed).valid
-
-    # Promotion keeps only owned parameters.
-    results = promote_narrow_output(
-        agent, out.execution.parsed, analysis_run_id="AR1",
+    validated = ValidatedAgentOutput.gate(
+        agent, out.execution.parsed, outcome, analysis_run_id="AR1",
         agent_run_id=out.agent_run.run_id,
     )
+    results = promote_narrow_output(validated)
     pids = {r.parameter_id for r in results}
-    assert "segment_hhi" in pids
-    assert "net_leverage" not in pids
+    assert "business_model_classification" in pids
     assert all(r.method is Method.LLM for r in results)
-    assert all(r.agent_run_id == out.agent_run.run_id for r in results)
+
+
+def test_llm_emitting_deterministic_param_fails_validation_and_cannot_promote(db_session):
+    reg = default_registry()
+    agent = reg.get("business_model")
+    # The LLM tries to emit a deterministic id + a non-owned id => validation
+    # fails, and the promotion GATE refuses to construct a ValidatedAgentOutput.
+    parsed = {
+        "parameters": [
+            {"parameter_id": "business_model_classification", "value": "x",
+             "value_type": "category", "method": "llm", "status": "ok",
+             "evidence_ids": ["E1"]},
+            {"parameter_id": "segment_hhi", "value": 0.3, "value_type": "index",
+             "method": "llm", "status": "ok", "evidence_ids": ["E1"]},
+        ]
+    }
+    outcome = _validate(agent, parsed)
+    assert not outcome.valid  # deterministic id rejected
+    with pytest.raises(PromotionRejected):
+        ValidatedAgentOutput.gate(agent, parsed, outcome, analysis_run_id="AR1",
+                                  agent_run_id="run-1")
 
 
 def test_covenant_extraction_emits_hybrid_numeric_term(db_session):
@@ -112,8 +136,8 @@ def test_covenant_extraction_emits_hybrid_numeric_term(db_session):
         {
             "parameters": [
                 {
-                    "parameter_id": "max_net_leverage_covenant",
-                    "value_type": "number",
+                    "parameter_id": "max_net_leverage_covenant_threshold",
+                    "value_type": "number", "method": "hybrid", "status": "ok",
                     "evidence_ids": ["E_cov"],
                     "extracted_term": {"name": "max_net_leverage",
                                        "numeric_value": 3.5, "unit": "x"},
@@ -132,32 +156,38 @@ def test_covenant_extraction_emits_hybrid_numeric_term(db_session):
     )
     out = runtime.run(task, {}, agent_definition_hash=agent.definition_hash(),
                       evidence_ids=["E_cov"])
-    results = promote_narrow_output(
-        agent, out.execution.parsed, analysis_run_id="AR1",
+    outcome = _validate(agent, out.execution.parsed, evidence_ids=["E_cov"])
+    assert outcome.valid  # the hybrid threshold IS allowed for this agent
+    validated = ValidatedAgentOutput.gate(
+        agent, out.execution.parsed, outcome, analysis_run_id="AR1",
         agent_run_id=out.agent_run.run_id,
     )
-    term = next(r for r in results if r.parameter_id == "max_net_leverage_covenant")
+    results = promote_narrow_output(validated)
+    term = next(r for r in results
+                if r.parameter_id == "max_net_leverage_covenant_threshold")
     assert term.method is Method.HYBRID  # extracted numeric term => hybrid
     assert term.value == 3.5
 
 
 def test_narrow_agents_run_concurrently_in_wave0(db_session):
     # All 15 narrow / early-extraction agents are ready in Wave 0 and promote
-    # validated parameters through the executor. Each narrow agent has a unique
-    # task_type (== agent_id), so the fake backend is keyed by task_type.
+    # validated parameters through the gate. Each emits only its owned/hybrid
+    # params, with status + evidence, so validation passes.
     reg = default_registry()
     narrow = [a for a in reg.all()
               if a.task_type not in {"orchestrate", "challenge", "mitigant"}]
     backend = FakeLLMBackend()
     for agent in narrow:
-        backend.register(
-            agent.task_type,
-            {"parameters": [
-                {"parameter_id": p, "value": 1, "value_type": "number",
-                 "method": "llm", "evidence_ids": ["E1"]}
-                for p in agent.owned_parameters
-            ]},
-        )
+        params = []
+        for p in agent.owned_parameters:
+            params.append({"parameter_id": p, "value": "x", "value_type": "category",
+                           "method": "llm", "status": "ok", "evidence_ids": ["E1"]})
+        for p in agent.hybrid_parameters:
+            params.append({"parameter_id": p, "value_type": "number",
+                           "method": "hybrid", "status": "ok", "evidence_ids": ["E1"],
+                           "extracted_term": {"name": p, "numeric_value": 3.5,
+                                              "unit": "x"}})
+        backend.register(agent.task_type, {"parameters": params})
     client = _client(db_session, backend)
     promoter = ParameterPromoter(db_session)
 
@@ -177,10 +207,12 @@ def test_narrow_agents_run_concurrently_in_wave0(db_session):
         )
 
     def on_result(agent, parsed, context):
-        for r in promote_narrow_output(
-            agent, parsed, analysis_run_id=context.analysis_run_id,
+        outcome = _validate(agent, parsed)
+        validated = ValidatedAgentOutput.gate(
+            agent, parsed, outcome, analysis_run_id=context.analysis_run_id,
             agent_run_id=context.run_ids[agent.agent_id],
-        ):
+        )
+        for r in promote_narrow_output(validated):
             promoter.persist(r, case_id="C1", snapshot_version=1)
 
     ex = DagExecutor(db_session, reg, AgentRuntime(client), max_concurrency=6)
@@ -190,5 +222,4 @@ def test_narrow_agents_run_concurrently_in_wave0(db_session):
     rows = db_session.query(ParameterResultRow).all()
     assert len(rows) > 0
     assert all(r.acceptance_state == "accepted" for r in rows)
-    # No orchestrators/challengers/mitigants ran (returned None from builder).
     assert "business_orchestrator" not in report.executed

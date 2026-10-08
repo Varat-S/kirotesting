@@ -18,33 +18,92 @@ Hard rules preserved:
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
 from app.models.orm import ParameterResultRow
 from app.schemas.agentic import (
     AcceptanceState,
-    AgentRun,
     Method,
     ParameterResult,
     ParameterStatus,
-    Topic,
 )
 from app.services.agents.registry import AgentDefinition
+from app.services.agents.validation import ValidationOutcome
+
+
+class PromotionRejected(ValueError):
+    """Raised when promotion is attempted on output that failed validation.
+
+    This makes it STRUCTURALLY impossible to promote invalid agent output: a
+    ParameterResult can only be produced from a ``ValidatedAgentOutput``, which
+    exists only when deterministic validation passed in full (item 2).
+    """
+
+
+@dataclass(frozen=True)
+class ValidatedAgentOutput:
+    """A parsed agent output that has PASSED deterministic validation (item 2).
+
+    The ONLY constructor is :meth:`gate`, which raises ``PromotionRejected``
+    unless ``outcome.valid`` is True. No invalid subset is ever retained — a
+    single invalid parameter fails the whole payload.
+    """
+
+    agent: AgentDefinition
+    parsed: dict
+    analysis_run_id: str
+    agent_run_id: str
+    model_id: str | None = None
+    prompt_id: str | None = None
+    input_hash: str | None = None
+
+    @classmethod
+    def gate(
+        cls,
+        agent: AgentDefinition,
+        parsed: dict,
+        outcome: ValidationOutcome,
+        *,
+        analysis_run_id: str,
+        agent_run_id: str,
+        model_id: str | None = None,
+        prompt_id: str | None = None,
+        input_hash: str | None = None,
+    ) -> "ValidatedAgentOutput":
+        if not outcome.valid:
+            raise PromotionRejected(
+                f"Agent {agent.agent_id!r} output failed validation; nothing is "
+                f"promoted (no partial retention). Issues: {outcome.reasons()}"
+            )
+        return cls(
+            agent=agent,
+            parsed=parsed,
+            analysis_run_id=analysis_run_id,
+            agent_run_id=agent_run_id,
+            model_id=model_id,
+            prompt_id=prompt_id,
+            input_hash=input_hash,
+        )
 
 
 def promote_narrow_output(
-    agent: AgentDefinition,
-    parsed: dict,
-    *,
-    analysis_run_id: str,
-    agent_run_id: str,
-    model_id: str | None = None,
-    prompt_id: str | None = None,
-    input_hash: str | None = None,
+    validated: ValidatedAgentOutput,
 ) -> list[ParameterResult]:
-    """Convert a validated narrow-agent output into owned ParameterResults."""
-    owned = set(agent.owned_parameters)
+    """Convert a VALIDATED narrow-agent output into owned ParameterResults.
+
+    Accepts only a :class:`ValidatedAgentOutput` (item 2): invalid output cannot
+    reach this function because the gate refuses to construct one.
+    """
+    agent = validated.agent
+    parsed = validated.parsed
+    analysis_run_id = validated.analysis_run_id
+    agent_run_id = validated.agent_run_id
+    model_id = validated.model_id
+    prompt_id = validated.prompt_id
+    input_hash = validated.input_hash
+    owned = set(agent.owned_parameters) | set(agent.hybrid_parameters)
     results: list[ParameterResult] = []
     for item in parsed.get("parameters", []):
         if not isinstance(item, dict):
@@ -101,44 +160,54 @@ def _value(item: dict):
 
 
 def promote_mitigant_output(
-    agent: AgentDefinition,
-    parsed: dict,
-    *,
-    analysis_run_id: str,
-    agent_run_id: str,
+    validated: ValidatedAgentOutput,
 ) -> list[ParameterResult]:
-    """Convert a validated mitigant-agent output into bounded proposal parameters.
+    """Convert a VALIDATED mitigant output into bounded proposal parameters (M15).
 
-    A risk-to-mitigant agent proposes BOUNDED mitigants (M15); each proposal is
-    recorded as an owned ParameterResult (method ``llm``) that later feeds
-    candidate structures (M16). The agent proposes; it computes nothing.
+    Only proposals explicitly marked ``bounded: true`` are promoted (item 11); a
+    proposal missing ``bounded`` or set to false cannot feed candidate
+    generation. The agent proposes; it computes nothing.
     """
+    agent = validated.agent
     owned = set(agent.owned_parameters)
     results: list[ParameterResult] = []
-    for item in parsed.get("proposals", []):
+    for item in validated.parsed.get("proposals", []):
         if not isinstance(item, dict):
             continue
         pid = item.get("parameter_id")
         if pid not in owned:
             continue
+        if item.get("bounded") is not True:
+            continue  # unbounded/vague proposals cannot feed candidate generation
         results.append(
             ParameterResult(
                 parameter_result_id=f"pr_{uuid.uuid4().hex[:16]}",
-                analysis_run_id=analysis_run_id,
+                analysis_run_id=validated.analysis_run_id,
                 parameter_id=pid,
                 topic=agent.topic,
-                value=item.get("mitigant"),
-                value_type="text",
+                value=_mitigant_value(item),
+                value_type="structured_mitigant",
                 method=Method.LLM,
                 status=ParameterStatus.OK,
                 evidence_ids=list(item.get("evidence_ids", [])),
                 agent_id=agent.agent_id,
-                agent_run_id=agent_run_id,
+                agent_run_id=validated.agent_run_id,
                 notes=item.get("addresses_risk"),
                 acceptance_state=AcceptanceState.ACCEPTED,
             )
         )
     return results
+
+
+def _mitigant_value(item: dict) -> dict:
+    """A structured, testable mitigant payload (item 11)."""
+    return {
+        "mitigant_type": item.get("mitigant_type") or item.get("mitigant"),
+        "proposed_value": item.get("proposed_value"),
+        "unit": item.get("unit"),
+        "addresses_risk": item.get("addresses_risk"),
+        "bounded": True,
+    }
 
 
 class ParameterPromoter:

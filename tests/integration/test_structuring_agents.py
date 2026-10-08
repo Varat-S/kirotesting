@@ -10,7 +10,7 @@ bounded mitigants that promote to owned ParameterResults.
 from __future__ import annotations
 
 from app.services.agents.registry import default_registry
-from app.services.orchestration.promotion import promote_mitigant_output
+from app.services.orchestration.promotion import promote_mitigant_output  # noqa: F401
 
 EXTRACTION_AGENTS = {
     "facility_terms",
@@ -46,27 +46,40 @@ def test_mitigant_agents_wait_for_business_and_financial():
         assert position[m] > 0
 
 
+def _validated_mitigant(agent, parsed):
+    from app.schemas.agentic import EvidencePacket
+    from app.services.agents.validation import ValidationOutcome
+    from app.services.orchestration.promotion import ValidatedAgentOutput
+
+    # Mitigant outputs have their own schema; the gate just needs a valid outcome.
+    outcome = ValidationOutcome(valid=True)
+    return ValidatedAgentOutput.gate(agent, parsed, outcome,
+                                     analysis_run_id="AR1", agent_run_id="run-m")
+
+
 def test_mitigant_promotion_keeps_only_owned_bounded_proposals():
     reg = default_registry()
     agent = reg.get("liquidity_refinancing_mitigant")
     parsed = {
         "proposals": [
             {"parameter_id": "liquidity_refinancing_mitigant_proposal",
-             "mitigant": "Require a minimum-liquidity covenant of $500m.",
-             "addresses_risk": "downside liquidity", "bounded": True},
-            {"parameter_id": "not_owned_proposal", "mitigant": "unrelated"},
+             "mitigant_type": "minimum_liquidity_covenant", "proposed_value": 500,
+             "unit": "USDm", "addresses_risk": "downside liquidity",
+             "bounded": True},
+            # Unbounded proposal -> not eligible to feed candidate generation.
+            {"parameter_id": "liquidity_refinancing_mitigant_proposal",
+             "mitigant_type": "vague", "bounded": False},
+            {"parameter_id": "not_owned_proposal", "mitigant_type": "x",
+             "bounded": True},
         ]
     }
-    results = promote_mitigant_output(
-        agent, parsed, analysis_run_id="AR1", agent_run_id="run-m",
-    )
-    pids = {r.parameter_id for r in results}
-    assert "liquidity_refinancing_mitigant_proposal" in pids
-    assert "not_owned_proposal" not in pids  # ownership enforced
+    results = promote_mitigant_output(_validated_mitigant(agent, parsed))
+    assert len(results) == 1  # only the owned, bounded proposal
     r = results[0]
-    assert r.value_type == "text"
+    assert r.parameter_id == "liquidity_refinancing_mitigant_proposal"
+    assert r.value["mitigant_type"] == "minimum_liquidity_covenant"
+    assert r.value["proposed_value"] == 500
     assert r.agent_run_id == "run-m"
-    assert r.notes == "downside liquidity"
 
 
 def test_structuring_orchestrator_waits_for_extraction_and_mitigants():
