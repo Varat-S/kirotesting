@@ -122,6 +122,7 @@ def test_requested_scope_may_name_parameters(db_session):
         "challenges": [
             {"challenge_id": "c", "issue_type": "x", "severity": "high",
              "reason": "r", "affected_parameter_ids": ["net_leverage"],
+             "requires_reanalysis": True,
              "requested_rerun_scope": ["financial_orchestrator", "net_leverage"]}
         ]
     }

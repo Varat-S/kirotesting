@@ -45,6 +45,7 @@ class ChallengeDecision:
     findings: list[ChallengeFinding] = field(default_factory=list)
     rerun_scope: set[str] = field(default_factory=set)  # agents to re-execute
     rerun_parameter_ids: set[str] = field(default_factory=set)
+    deterministic_only: bool = False  # recompute without an LLM (item 9)
     escalated: bool = False
 
     @property
@@ -105,15 +106,43 @@ class ChallengeLoop:
         case_id: str,
         snapshot_version: int,
         round_index: int,
+        topic: str = "",
     ) -> ChallengeDecision:
-        """Decide the rerun scope for a challenge pass; escalate when bounded out."""
+        """Decide the rerun scope for a challenge pass; escalate when bounded out.
+
+        Respects ``requires_reanalysis`` (item 9):
+        * material + requires_reanalysis=True  -> targeted automatic rerun;
+        * material + requires_reanalysis=False -> NO auto rerun; escalate for
+          human review / accepted residual risk.
+        A deterministic-parameter-only issue (``affected_parameter_ids`` but no
+        agent in scope) marks ``deterministic_only`` so the caller recomputes
+        without an LLM call.
+        """
         decision = ChallengeDecision(findings=findings)
-        self._persist(findings, case_id=case_id, snapshot_version=snapshot_version)
+        self._persist(findings, case_id=case_id, snapshot_version=snapshot_version,
+                      topic=topic)
 
         material = [f for f in findings if f.severity in MATERIAL]
         if not material:
             return decision  # clean
 
+        # Item 9: a material finding that does NOT request reanalysis is not
+        # auto-rerun; it goes to human review.
+        reanalysis = [f for f in material if f.requires_reanalysis]
+        if not reanalysis:
+            self._escalation.raise_escalation(
+                rule_id=RULE_UNRESOLVED_CHALLENGE,
+                category=EscalationCategory.AI_DETERMINISTIC_CONFLICT,
+                severity=Severity.MANDATORY,
+                reason="Material challenge without requested reanalysis; human "
+                       "review / accepted residual risk required.",
+                evidence_refs=[f.challenge_id for f in material],
+                case_id=case_id,
+            )
+            decision.escalated = True
+            return decision
+
+        material = reanalysis
         if round_index >= self._max_rounds:
             # Bounded out: unresolved material issue -> MANDATORY human review.
             self._escalation.raise_escalation(
@@ -142,12 +171,19 @@ class ChallengeLoop:
                     decision.rerun_parameter_ids.add(item)
             decision.rerun_parameter_ids.update(f.affected_parameter_ids)
 
-        descendants = self._registry.descendants_of(requested_agents) if requested_agents else set()
+        descendants = (self._registry.descendants_of(requested_agents)
+                       if requested_agents else set())
         decision.rerun_scope = requested_agents | descendants
+        # Item 9: a deterministic-parameter-only issue (no agent in scope) is a
+        # recompute, not an LLM rerun.
+        decision.deterministic_only = (
+            not requested_agents and bool(decision.rerun_parameter_ids)
+        )
         return decision
 
     def _persist(
-        self, findings: list[ChallengeFinding], *, case_id: str, snapshot_version: int
+        self, findings: list[ChallengeFinding], *, case_id: str,
+        snapshot_version: int, topic: str = "",
     ) -> None:
         for f in findings:
             if self._session.get(ChallengeFindingRow, f.challenge_id) is not None:
@@ -158,7 +194,7 @@ class ChallengeLoop:
                     analysis_run_id=f.analysis_run_id,
                     case_id=case_id,
                     snapshot_version=snapshot_version,
-                    topic="",  # set by the caller's topic context if needed
+                    topic=topic,  # item 21: persist the actual topic
                     target=f.target,
                     affected_agent_ids=list(f.affected_agent_ids),
                     affected_parameter_ids=list(f.affected_parameter_ids),

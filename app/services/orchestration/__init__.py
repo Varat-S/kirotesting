@@ -32,6 +32,7 @@ from app.services.orchestration.mitigants import (
     MitigantEligibility,
     mitigants_eligible,
 )
+from app.services.orchestration.rerun import RerunController, RerunOutcome
 from app.services.orchestration.promotion import (
     ParameterPromoter,
     PromotionRejected,
@@ -59,6 +60,8 @@ __all__ = [
     "verify_cross_topic_inputs",
     "mitigants_eligible",
     "MitigantEligibility",
+    "RerunController",
+    "RerunOutcome",
     "build_business_orchestrator_input",
     "build_financial_orchestrator_input",
     "BusinessOrchestratorInput",
