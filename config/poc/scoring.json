@@ -37,13 +37,19 @@
       {"max": 0.4, "band": 3},
       {"band": 4}
     ],
-    "competitive_position": [
+    "competitive_position_risk_signal": [
       {"max": 1, "band": 1},
       {"max": 2, "band": 2},
       {"max": 3, "band": 3},
       {"band": 4}
     ],
-    "management_governance": [
+    "management_governance_risk_signal": [
+      {"max": 1, "band": 1},
+      {"max": 2, "band": 2},
+      {"max": 3, "band": 3},
+      {"band": 4}
+    ],
+    "covenant_protection_score": [
       {"max": 1, "band": 1},
       {"max": 2, "band": 2},
       {"max": 3, "band": 3},
@@ -66,18 +72,51 @@
       {"min": 0.6, "band": 2},
       {"min": 0.3, "band": 3},
       {"band": 4}
-    ],
-    "covenant_package": [
-      {"min": 0.9, "band": 1},
-      {"min": 0.6, "band": 2},
-      {"min": 0.3, "band": 3},
-      {"band": 4}
     ]
   },
   "business_weights": {
     "customer_hhi": 0.3,
-    "competitive_position": 0.4,
-    "management_governance": 0.3
+    "competitive_position_risk_signal": 0.4,
+    "management_governance_risk_signal": 0.3
+  },
+  "rubrics": {
+    "competitive_position_risk_signal": {
+      "label": "ILLUSTRATIVE - NOT BANK POLICY",
+      "dimensions": {
+        "market_position": {"leading": 1, "strong": 1, "average": 2,
+                             "weak": 3, "marginal": 4},
+        "switching_costs": {"high": 1, "moderate": 2, "low": 3},
+        "pricing_power": {"strong": 1, "moderate": 2, "weak": 3},
+        "competitive_pressure": {"low": 1, "moderate": 2, "elevated": 3,
+                                 "severe": 4}
+      },
+      "aggregate": "max"
+    },
+    "management_governance_risk_signal": {
+      "label": "ILLUSTRATIVE - NOT BANK POLICY",
+      "dimensions": {
+        "management_quality": {"strong": 1, "adequate": 2, "weak": 3},
+        "key_person_dependency": {"low": 1, "moderate": 2, "high": 3},
+        "governance_concern": {"none": 1, "minor": 2, "material": 3,
+                               "severe": 4},
+        "auditor_issue": {"none": 1, "qualified": 3, "adverse": 4},
+        "related_party_concern": {"none": 1, "present": 3}
+      },
+      "aggregate": "max"
+    },
+    "covenant_protection_score": {
+      "label": "ILLUSTRATIVE - NOT BANK POLICY",
+      "dimensions": {
+        "leverage_covenant_present": {"true": 1, "false": 3},
+        "coverage_covenant_present": {"true": 1, "false": 3},
+        "min_liquidity_covenant_present": {"true": 1, "false": 3},
+        "testing_frequency": {"quarterly": 1, "semi_annual": 2, "annual": 3,
+                              "none": 4},
+        "reporting_frequency": {"monthly": 1, "quarterly": 1, "annual": 2,
+                                "none": 3}
+      },
+      "aggregate": "weighted_average"
+    }
   },
   "financial_weights": {
     "net_leverage": 0.3,
@@ -89,7 +128,7 @@
     "business": {
       "min_coverage": 0.6,
       "allow_partial": true,
-      "critical_dimensions": ["competitive_position"]
+      "critical_dimensions": ["competitive_position_risk_signal"]
     },
     "financial": {
       "min_coverage": 0.7,
@@ -118,6 +157,6 @@
   "structure_protection_weights": {
     "collateral_coverage": 0.4,
     "guarantee_support": 0.3,
-    "covenant_package": 0.3
+    "covenant_protection_score": 0.3
   }
 }

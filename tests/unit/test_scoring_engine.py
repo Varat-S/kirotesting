@@ -99,7 +99,7 @@ def test_partial_non_critical_coverage_is_provisional():
     # min 0.6 and allow_partial => provisional.
     params = [
         _param("customer_hhi", 0.1, Topic.BUSINESS),
-        _param("competitive_position", 1, Topic.BUSINESS),
+        _param("competitive_position_risk_signal", 1, Topic.BUSINESS),
     ]
     score = e.score_business(params, analysis_run_id="AR1")
     assert score.status is ScoreStatus.PROVISIONAL
@@ -162,8 +162,8 @@ def test_obligor_floor_on_covenant_breach_dominates():
     business = e.score_business(
         [
             _param("customer_hhi", 0.1, Topic.BUSINESS),
-            _param("competitive_position", 1, Topic.BUSINESS),
-            _param("management_governance", 1, Topic.BUSINESS),
+            _param("competitive_position_risk_signal", 1, Topic.BUSINESS),
+            _param("management_governance_risk_signal", 1, Topic.BUSINESS),
         ],
         analysis_run_id="AR1",
     )
@@ -191,8 +191,8 @@ def test_severe_risk_not_washed_out_by_benign_average():
     business = e.score_business(
         [
             _param("customer_hhi", 0.1, Topic.BUSINESS),
-            _param("competitive_position", 1, Topic.BUSINESS),
-            _param("management_governance", 1, Topic.BUSINESS),
+            _param("competitive_position_risk_signal", 1, Topic.BUSINESS),
+            _param("management_governance_risk_signal", 1, Topic.BUSINESS),
         ],
         analysis_run_id="AR1",
     )
@@ -217,8 +217,8 @@ def test_facility_unavailable_when_no_protection():
     business = e.score_business(
         [
             _param("customer_hhi", 0.1, Topic.BUSINESS),
-            _param("competitive_position", 1, Topic.BUSINESS),
-            _param("management_governance", 1, Topic.BUSINESS),
+            _param("competitive_position_risk_signal", 1, Topic.BUSINESS),
+            _param("management_governance_risk_signal", 1, Topic.BUSINESS),
         ],
         analysis_run_id="AR1",
     )
@@ -242,7 +242,7 @@ def test_structure_protection_score_strong():
     params = [
         _param("collateral_coverage", 1.6, Topic.STRUCTURING),
         _param("guarantee_support", 0.95, Topic.STRUCTURING),
-        _param("covenant_package", 0.95, Topic.STRUCTURING),
+        _param("covenant_protection_score", 0.95, Topic.STRUCTURING),
     ]
     score = e.score_structure_protection(params, analysis_run_id="AR1")
     assert score.kind is ScoreKind.STRUCTURE_PROTECTION
@@ -262,8 +262,8 @@ def test_facility_uses_structure_protection_score():
     business = e.score_business(
         [
             _param("customer_hhi", 0.3, Topic.BUSINESS),
-            _param("competitive_position", 2, Topic.BUSINESS),
-            _param("management_governance", 2, Topic.BUSINESS),
+            _param("competitive_position_risk_signal", 2, Topic.BUSINESS),
+            _param("management_governance_risk_signal", 2, Topic.BUSINESS),
         ],
         analysis_run_id="AR1",
     )
@@ -281,7 +281,7 @@ def test_facility_uses_structure_protection_score():
         [
             _param("collateral_coverage", 1.6, Topic.STRUCTURING),
             _param("guarantee_support", 0.95, Topic.STRUCTURING),
-            _param("covenant_package", 0.95, Topic.STRUCTURING),
+            _param("covenant_protection_score", 0.95, Topic.STRUCTURING),
         ],
         analysis_run_id="AR1",
     )
@@ -305,6 +305,68 @@ def test_scores_are_deterministic_on_replay():
     assert a.band == b.band
     assert a.coverage_weight == b.coverage_weight
     assert a.method == "deterministic"
+
+
+def test_rubric_maps_observations_to_deterministic_signal():
+    rubric = _config().rubric_engine()
+    pr = rubric.score(
+        "competitive_position_risk_signal",
+        {"market_position": "leading", "switching_costs": "high",
+         "competitive_pressure": "elevated"},
+        analysis_run_id="AR1", topic=Topic.BUSINESS,
+    )
+    assert pr.method.value == "deterministic"  # NOT an LLM-assigned band
+    assert pr.risk_signal == 3  # max(1,1,3) — worst dimension dominates
+    assert pr.value == 3
+
+
+def test_rubric_unknown_observation_is_strict():
+    import pytest as _pytest
+
+    from app.services.scoring.rubric import RubricError
+
+    rubric = _config().rubric_engine()
+    with _pytest.raises(RubricError):
+        rubric.score("competitive_position_risk_signal",
+                     {"market_position": "banana"},
+                     analysis_run_id="AR1", topic=Topic.BUSINESS)
+
+
+def test_rubric_no_observations_is_unavailable():
+    rubric = _config().rubric_engine()
+    pr = rubric.score("management_governance_risk_signal", {},
+                      analysis_run_id="AR1", topic=Topic.BUSINESS)
+    assert pr.status is ParameterStatus.UNAVAILABLE
+    assert pr.value is None
+
+
+def test_covenant_protection_derived_from_clauses_not_llm():
+    rubric = _config().rubric_engine()
+    pr = rubric.score(
+        "covenant_protection_score",
+        {"leverage_covenant_present": True, "coverage_covenant_present": True,
+         "min_liquidity_covenant_present": False, "testing_frequency": "quarterly",
+         "reporting_frequency": "quarterly"},
+        analysis_run_id="AR1", topic=Topic.STRUCTURING,
+    )
+    assert pr.method.value == "deterministic"
+    assert pr.value in (1, 2, 3, 4)  # a real derived band, not a magic 0.7
+
+
+def test_business_score_consumes_rubric_signals():
+    # The Business score now bands rubric-produced risk signals (deterministic),
+    # never an LLM-assigned competitive_position number.
+    e = ScoringEngine(_config())
+    score = e.score_business(
+        [
+            _param("customer_hhi", 0.1, Topic.BUSINESS),
+            _param("competitive_position_risk_signal", 1, Topic.BUSINESS),
+            _param("management_governance_risk_signal", 1, Topic.BUSINESS),
+        ],
+        analysis_run_id="AR1",
+    )
+    assert score.status is ScoreStatus.FINAL
+    assert score.band == 1
 
 
 def test_scoring_is_a_versioned_hashed_registry_artifact(db_session):

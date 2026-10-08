@@ -48,6 +48,13 @@ class ScoringConfig:
     def get(self, key: str, default: Any = None) -> Any:
         return self.content.get(key, default)
 
+    def rubric_engine(self):
+        """Build the deterministic rubric engine from this config (items 16-17)."""
+        from app.services.scoring.rubric import RubricEngine
+
+        return RubricEngine(self.content.get("rubrics", {}),
+                            config_version=self.version, config_hash=self.content_hash)
+
     @classmethod
     def from_registry(cls, registry, *, version: int | None = None) -> "ScoringConfig":
         """Load the ``scoring`` artifact from a ConfigRegistry (pinned or latest)."""

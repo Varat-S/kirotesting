@@ -12,5 +12,6 @@ moves a risk band.
 from __future__ import annotations
 
 from app.services.scoring.engine import ScoringConfig, ScoringEngine
+from app.services.scoring.rubric import RubricEngine, RubricError
 
-__all__ = ["ScoringEngine", "ScoringConfig"]
+__all__ = ["ScoringEngine", "ScoringConfig", "RubricEngine", "RubricError"]
