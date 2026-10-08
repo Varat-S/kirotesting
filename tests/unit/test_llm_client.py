@@ -107,3 +107,85 @@ def test_same_request_is_deterministic(db_session):
     r1 = client.extract({}, case_id="C1")
     r2 = client.extract({}, case_id="C1")
     assert r1.raw_response == r2.raw_response
+
+
+# --- Milestone 2.1: DB-free provider path --------------------------------
+
+
+def test_generate_only_performs_no_db_writes(db_session):
+    client, backend, _ = _client(db_session)
+    backend.register("extract", _valid_extraction_payload())
+    request = client.build_request("extract", "qualitative_extraction", {}, case_id="C1")
+
+    before = db_session.query(ModelRun).count()
+    result = client.generate_only(request)
+    # No model_run row written by generate_only, even uncommitted/pending.
+    db_session.flush()
+    after = db_session.query(ModelRun).count()
+
+    assert before == after == 0
+    assert result.is_valid
+    assert result.parsed is not None
+    assert result.request.prompt.name == "qualitative_extraction"
+
+
+def test_log_run_persists_a_generate_only_result(db_session):
+    client, backend, _ = _client(db_session)
+    backend.register("analyze", {"business_overview": [], "repayment_analysis": [],
+                                 "key_risks": [], "mitigants": [],
+                                 "data_limitations": [], "questions_for_human": []})
+    request = client.build_request("analyze", "business_analysis", {}, case_id="C1")
+    result = client.generate_only(request)
+    assert db_session.query(ModelRun).count() == 0
+
+    run = client.log_run(result)
+    db_session.flush()
+    assert db_session.query(ModelRun).count() == 1
+    assert run.validation_outcome == "valid"
+    assert run.method == "analyze"
+
+
+def test_generate_only_rejects_invalid_without_db_writes(db_session):
+    client, backend, _ = _client(db_session)
+    backend.register("challenge", "not valid json")
+    request = client.build_request("challenge", "challenge", {}, case_id="C1")
+    result = client.generate_only(request)
+    db_session.flush()
+    assert db_session.query(ModelRun).count() == 0
+    assert not result.is_valid
+    assert result.validation_detail
+
+
+def test_generate_only_async_matches_sync(db_session):
+    import asyncio
+
+    client, backend, _ = _client(db_session)
+    backend.register("extract", _valid_extraction_payload())
+    request = client.build_request("extract", "qualitative_extraction", {}, case_id="C1")
+
+    async def run():
+        return await client.generate_only_async(request)
+
+    result = asyncio.run(run())
+    db_session.flush()
+    assert db_session.query(ModelRun).count() == 0  # async path is also DB-free
+    assert result.is_valid
+    assert result.parsed == client.generate_only(request).parsed
+
+
+def test_backend_generate_async_offloads_sync(db_session):
+    import asyncio
+
+    _, backend, _ = _client(db_session)
+    backend.register("extract", _valid_extraction_payload())
+    registry = PromptRegistry(db_session)
+    prompt = registry.latest("qualitative_extraction")
+    from app.services.llm.client import LLMRequest
+
+    request = LLMRequest(method="extract", prompt=prompt)
+
+    async def run():
+        return await backend.generate_async(request)
+
+    raw = asyncio.run(run())
+    assert raw.model_id == FakeLLMBackend.MODEL_ID

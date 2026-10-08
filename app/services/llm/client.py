@@ -83,7 +83,18 @@ class LLMBackend(ABC):
 
     @abstractmethod
     def generate(self, request: LLMRequest) -> LLMRawResult:
-        """Return the raw model response for ``request``."""
+        """Return the raw model response for ``request`` (synchronous I/O)."""
+
+    async def generate_async(self, request: LLMRequest) -> LLMRawResult:
+        """Async entry point used by the concurrent agent executor (Req 30).
+
+        The default offloads the synchronous :meth:`generate` to a worker thread
+        via ``asyncio.to_thread`` so a blocking provider call NEVER blocks the
+        event loop. A backend with a native async client may override this.
+        """
+        import asyncio
+
+        return await asyncio.to_thread(self.generate, request)
 
 
 class FakeLLMBackend(LLMBackend):
@@ -145,6 +156,28 @@ class ModelRunResult:
     raw_response: str
     prompt_id: str
     model_id: str
+
+    @property
+    def is_valid(self) -> bool:
+        return self.validation_outcome == "valid"
+
+
+@dataclass(frozen=True)
+class GenerateOnlyResult:
+    """A validated-but-UNLOGGED provider result (Milestone 2.1 / Req 6.5).
+
+    Produced by :meth:`LLMClient.generate_only` and its async variant. It carries
+    everything :meth:`LLMClient.log_run` needs to persist the run LATER, serially,
+    off the concurrent provider path — so provider I/O can run with NO database
+    mutation (the agentic executor requirement, Req 6.5 / 30). No ``run_id`` is
+    assigned until the result is logged.
+    """
+
+    request: LLMRequest
+    raw: LLMRawResult
+    parsed: dict[str, Any] | None
+    validation_outcome: str  # "valid" | "rejected"
+    validation_detail: str | None
 
     @property
     def is_valid(self) -> bool:
@@ -251,6 +284,32 @@ class LLMClient:
         case_version: int | None,
         key: str | None,
     ) -> ModelRunResult:
+        request = self.build_request(
+            method,
+            prompt_name,
+            inputs,
+            evidence_ids=evidence_ids,
+            case_id=case_id,
+            case_version=case_version,
+            key=key,
+        )
+        prompt = request.prompt
+        raw, parsed, outcome, detail = self._generate_and_validate(request)
+        run = self._log_run(request, raw, parsed, outcome, detail)
+        return ModelRunResult(
+            run_id=run.run_id,
+            method=method,
+            validation_outcome=outcome,
+            parsed=parsed,
+            raw_response=raw.raw_response,
+            prompt_id=prompt.prompt_id,
+            model_id=raw.model_id,
+        )
+
+    # -- DB-free provider path (Milestone 2.1) --------------------------------
+
+    def resolve_prompt(self, prompt_name: str) -> RegisteredPrompt:
+        """Resolve the pinned-or-latest prompt (no silent default, Req 21)."""
         prompt = (
             self._prompts.get(prompt_name, self._prompt_versions[prompt_name])
             if self._prompt_versions is not None
@@ -261,10 +320,23 @@ class LLMClient:
                 f"No registered prompt named {prompt_name!r}; register the prompt "
                 "catalogue before running the LLMClient (no silent default)."
             )
+        return prompt
 
-        request = LLMRequest(
+    def build_request(
+        self,
+        method: str,
+        prompt_name: str,
+        inputs: dict[str, Any],
+        *,
+        evidence_ids: list[str] | None = None,
+        case_id: str | None = None,
+        case_version: int | None = None,
+        key: str | None = None,
+    ) -> LLMRequest:
+        """Build an immutable :class:`LLMRequest` without touching the DB."""
+        return LLMRequest(
             method=method,
-            prompt=prompt,
+            prompt=self.resolve_prompt(prompt_name),
             inputs=inputs,
             evidence_ids=list(evidence_ids or []),
             case_id=case_id,
@@ -272,31 +344,54 @@ class LLMClient:
             temperature=0.0,
             key=key,
         )
+
+    def _generate_and_validate(
+        self, request: LLMRequest
+    ) -> tuple[LLMRawResult, dict[str, Any] | None, str, str | None]:
+        """Call the backend (sync) and validate; NO database mutation."""
         try:
             raw = self._backend.generate(request)
         except RuntimeError as exc:
-            # Provider exceptions can contain secrets. Persist only their type.
-            raw = LLMRawResult(
-                raw_response="",
-                model_id=getattr(self._backend, "model_id", "unknown"),
-                model_config={"error_type": type(exc).__name__},
-            )
-            detail = f"Provider call failed ({type(exc).__name__})."
-            if type(exc).__module__ == "app.services.llm.providers" and hasattr(
-                exc, "public_message"
-            ):
-                detail = exc.public_message
-            run = self._log_run(request, raw, None, "rejected", detail)
-            return ModelRunResult(
-                run.run_id, method, "rejected", None, "", prompt.prompt_id, raw.model_id
-            )
+            return self._sanitize_provider_error(exc)
+        return self._validate_raw(request, raw)
 
+    async def _generate_and_validate_async(
+        self, request: LLMRequest
+    ) -> tuple[LLMRawResult, dict[str, Any] | None, str, str | None]:
+        """Await the backend off the event loop and validate; NO DB mutation."""
+        try:
+            raw = await self._backend.generate_async(request)
+        except RuntimeError as exc:
+            return self._sanitize_provider_error(exc)
+        return self._validate_raw(request, raw)
+
+    def _sanitize_provider_error(
+        self, exc: RuntimeError
+    ) -> tuple[LLMRawResult, None, str, str]:
+        """Turn a provider exception into a rejected result WITHOUT leaking secrets."""
+        raw = LLMRawResult(
+            raw_response="",
+            model_id=getattr(self._backend, "model_id", "unknown"),
+            model_config={"error_type": type(exc).__name__},
+        )
+        detail = f"Provider call failed ({type(exc).__name__})."
+        if type(exc).__module__ == "app.services.llm.providers" and hasattr(
+            exc, "public_message"
+        ):
+            detail = exc.public_message
+        return raw, None, "rejected", detail
+
+    def _validate_raw(
+        self, request: LLMRequest, raw: LLMRawResult
+    ) -> tuple[LLMRawResult, dict[str, Any] | None, str, str | None]:
         parsed: dict[str, Any] | None = None
         outcome = "valid"
         detail: str | None = None
         try:
             parsed_obj = json.loads(raw.raw_response)
-            jsonschema.validate(instance=parsed_obj, schema=prompt.response_schema)
+            jsonschema.validate(
+                instance=parsed_obj, schema=request.prompt.response_schema
+            )
             parsed = parsed_obj
         except json.JSONDecodeError as exc:
             outcome = "rejected"
@@ -304,16 +399,35 @@ class LLMClient:
         except jsonschema.ValidationError as exc:
             outcome = "rejected"
             detail = f"Response failed schema validation: {exc.message}"
+        return raw, parsed, outcome, detail
 
-        run = self._log_run(request, raw, parsed, outcome, detail)
-        return ModelRunResult(
-            run_id=run.run_id,
-            method=method,
-            validation_outcome=outcome,
-            parsed=parsed,
-            raw_response=raw.raw_response,
-            prompt_id=prompt.prompt_id,
-            model_id=raw.model_id,
+    def generate_only(self, request: LLMRequest) -> GenerateOnlyResult:
+        """Call the provider and validate WITHOUT any database mutation.
+
+        The concurrent agent executor uses this on the hot path so provider I/O
+        never touches the SQLAlchemy session; logging happens later via
+        :meth:`log_run` on the serial persist phase (Req 6.5).
+        """
+        raw, parsed, outcome, detail = self._generate_and_validate(request)
+        return GenerateOnlyResult(request, raw, parsed, outcome, detail)
+
+    async def generate_only_async(self, request: LLMRequest) -> GenerateOnlyResult:
+        """Async, DB-free provider call for the concurrent executor (Req 30)."""
+        raw, parsed, outcome, detail = await self._generate_and_validate_async(request)
+        return GenerateOnlyResult(request, raw, parsed, outcome, detail)
+
+    def log_run(self, result: GenerateOnlyResult) -> ModelRun:
+        """Persist a previously-generated :class:`GenerateOnlyResult` (serial).
+
+        Mirrors the logging ``_run`` performs, but is called off the concurrent
+        provider path so all DB mutation is serialized (Req 6.5 / 30).
+        """
+        return self._log_run(
+            result.request,
+            result.raw,
+            result.parsed,
+            result.validation_outcome,
+            result.validation_detail,
         )
 
     def _log_run(
