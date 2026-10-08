@@ -39,6 +39,12 @@ from app.services.agents.executor import (
 )
 from app.services.agents.resolution import accepted, accepted_one, supersede
 from app.services.agents.runtime import AgentRuntime
+from app.services.agents.validation import (
+    DeterministicValidator,
+    ValidationCheck,
+    ValidationIssue,
+    ValidationOutcome,
+)
 
 __all__ = [
     "AgentRuntime",
@@ -62,4 +68,8 @@ __all__ = [
     "AgentRegistryError",
     "default_registry",
     "AGENT_REGISTRY_VERSION",
+    "DeterministicValidator",
+    "ValidationOutcome",
+    "ValidationIssue",
+    "ValidationCheck",
 ]
