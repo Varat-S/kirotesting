@@ -12,6 +12,13 @@ provider calls occur in automated tests.
 
 from __future__ import annotations
 
+from app.services.agents.registry import (
+    AGENT_REGISTRY_VERSION,
+    AgentDefinition,
+    AgentRegistry,
+    AgentRegistryError,
+    default_registry,
+)
 from app.services.agents.router import (
     ROUTER_VERSION,
     EvidenceRouter,
@@ -26,4 +33,9 @@ __all__ = [
     "RouterInputs",
     "RoutingSpec",
     "ROUTER_VERSION",
+    "AgentRegistry",
+    "AgentDefinition",
+    "AgentRegistryError",
+    "default_registry",
+    "AGENT_REGISTRY_VERSION",
 ]
