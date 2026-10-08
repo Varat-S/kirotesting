@@ -12,6 +12,7 @@ build/
 dist/
 .venv/
 .venv-verify/
+.venv*/
 .python/
 .uv-cache/
 venv/
