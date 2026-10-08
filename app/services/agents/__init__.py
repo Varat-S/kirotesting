@@ -25,6 +25,12 @@ from app.services.agents.router import (
     RouterInputs,
     RoutingSpec,
 )
+from app.services.agents.cache import (
+    AgentResultCache,
+    CacheHit,
+    CacheIdentity,
+    compute_cache_key,
+)
 from app.services.agents.executor import (
     DagExecutor,
     ExecutionContext,
@@ -43,6 +49,10 @@ __all__ = [
     "accepted",
     "accepted_one",
     "supersede",
+    "AgentResultCache",
+    "CacheIdentity",
+    "CacheHit",
+    "compute_cache_key",
     "EvidenceRouter",
     "RouterInputs",
     "RoutingSpec",
