@@ -253,3 +253,103 @@ def test_only_subset_runs_for_resume(db_session):
     report = ex.run(_run_row(db_session), build_task=_builder, only={"d"})
     assert report.executed == ["d"]
     assert "a" not in report.executed
+
+
+# --- Milestone 6 wiring: cache integrated into the DAG executor -------------
+
+
+def _counting_builder(call_counter):
+    def builder(agent, context):
+        pt = _builder(agent, context)
+        pt.router_version = "router-1"
+        pt.packet_hash = f"packet-{agent.agent_id}"
+        return pt
+
+    return builder
+
+
+def test_cache_persists_cache_key(db_session):
+    from app.models.orm import AgentRunRow as _Row
+
+    backend = _ok_backend()
+    ex = _executor(db_session, backend, max_concurrency=4)
+    ex.run(_run_row(db_session), build_task=_counting_builder([]))
+    keys = [r.cache_key for r in db_session.query(_Row).all()]
+    assert all(k is not None for k in keys)  # cache_key is written, not None
+
+
+def test_second_run_reuses_cached_results(db_session):
+    class CountingBackend(FakeLLMBackend):
+        calls = 0
+
+        def generate(self, request: LLMRequest) -> LLMRawResult:
+            CountingBackend.calls += 1
+            return super().generate(request)
+
+    backend = CountingBackend()
+    backend.register("extract", {"facts": []})
+
+    # First run: all 4 agents call the provider.
+    ex1 = _executor(db_session, backend, max_concurrency=4)
+    ex1.run(_run_row(db_session), build_task=_counting_builder([]))
+    first_calls = CountingBackend.calls
+    assert first_calls == 4
+    assert ex1.cache_hits == 0
+
+    # Second run over the SAME identity inputs: every agent is a cache hit, so
+    # the provider is NOT called again.
+    db_session.add(
+        AgenticAnalysisRunRow(
+            analysis_run_id="AR2", case_id="C1", evidence_snapshot_version=1,
+            status="created", router_version="router-1",
+            agent_registry_version="reg-1", agent_registry_hash="rh",
+            scoring_config_version=1, scoring_config_hash="sh",
+        )
+    )
+    db_session.flush()
+    run2 = AgenticAnalysisRun(
+        analysis_run_id="AR2", case_id="C1", evidence_snapshot_version=1,
+        started_at=datetime.now(timezone.utc), router_version="router-1",
+        agent_registry_version="reg-1", agent_registry_hash="rh",
+        scoring_config_version=1, scoring_config_hash="sh",
+    )
+    ex2 = _executor(db_session, backend, max_concurrency=4)
+    report2 = ex2.run(run2, build_task=_counting_builder([]))
+    assert CountingBackend.calls == first_calls  # no new provider calls
+    assert ex2.cache_hits == 4
+    assert set(report2.executed) == {"a", "b", "c", "d"}
+
+
+def test_force_regenerate_bypasses_cache(db_session):
+    class CountingBackend(FakeLLMBackend):
+        calls = 0
+
+        def generate(self, request: LLMRequest) -> LLMRawResult:
+            CountingBackend.calls += 1
+            return super().generate(request)
+
+    backend = CountingBackend()
+    backend.register("extract", {"facts": []})
+    ex1 = _executor(db_session, backend, max_concurrency=4)
+    ex1.run(_run_row(db_session), build_task=_counting_builder([]))
+    assert CountingBackend.calls == 4
+
+    db_session.add(
+        AgenticAnalysisRunRow(
+            analysis_run_id="AR2", case_id="C1", evidence_snapshot_version=1,
+            status="created", router_version="router-1",
+            agent_registry_version="reg-1", agent_registry_hash="rh",
+            scoring_config_version=1, scoring_config_hash="sh",
+        )
+    )
+    db_session.flush()
+    run2 = AgenticAnalysisRun(
+        analysis_run_id="AR2", case_id="C1", evidence_snapshot_version=1,
+        started_at=datetime.now(timezone.utc), router_version="router-1",
+        agent_registry_version="reg-1", agent_registry_hash="rh",
+        scoring_config_version=1, scoring_config_hash="sh",
+    )
+    ex2 = _executor(db_session, backend, max_concurrency=4)
+    ex2.run(run2, build_task=_counting_builder([]), force_regenerate=True)
+    assert CountingBackend.calls == 8  # bypassed cache; called again
+    assert ex2.cache_hits == 0

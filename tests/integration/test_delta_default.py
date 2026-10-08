@@ -1,5 +1,6 @@
 """The default case uses the supplied PDFs and distinguishes quarter/year/basis."""
 
+import shutil
 from copy import deepcopy
 from pathlib import Path
 
@@ -11,6 +12,34 @@ from app.services.extraction.pdf_table import PdfTableParser
 from app.services.pipeline.default_case import DEFAULT_CASE_ID, default_package
 from tests.integration.test_upload_preview import client as client
 from tests.integration.test_upload_preview import count, payload
+
+
+def _ocr_available() -> bool:
+    """True when an OCR engine (Tesseract, or Windows OCR) is usable.
+
+    The default Delta case includes an image-only non-GAAP supplement whose
+    contents can only be recognized with OCR, so this test cannot pass without
+    an OCR engine. It is skipped (not failed) in environments that lack one,
+    exactly as the PDF-export test skips without a native HTML->PDF backend.
+    """
+    if shutil.which("tesseract"):
+        try:
+            import pytesseract  # noqa: F401
+
+            return True
+        except Exception:
+            return False
+    # Native Windows OCR fallback used by app.services.extraction.pdf_capture.
+    import sys
+
+    return sys.platform.startswith("win")
+
+
+pytestmark = pytest.mark.skipif(
+    not _ocr_available(),
+    reason="No OCR engine (Tesseract/Windows OCR) available; the default Delta "
+    "case requires OCR for its image-only supplement.",
+)
 
 
 def test_default_delta_case_and_source_viewer(client, db_session):

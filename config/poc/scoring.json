@@ -54,6 +54,24 @@
       {"min": 1.2, "band": 2},
       {"min": 1.0, "band": 3},
       {"band": 4}
+    ],
+    "collateral_coverage": [
+      {"min": 1.5, "band": 1},
+      {"min": 1.2, "band": 2},
+      {"min": 1.0, "band": 3},
+      {"band": 4}
+    ],
+    "guarantee_support": [
+      {"min": 0.9, "band": 1},
+      {"min": 0.6, "band": 2},
+      {"min": 0.3, "band": 3},
+      {"band": 4}
+    ],
+    "covenant_package": [
+      {"min": 0.9, "band": 1},
+      {"min": 0.6, "band": 2},
+      {"min": 0.3, "band": 3},
+      {"band": 4}
     ]
   },
   "business_weights": {
@@ -77,6 +95,11 @@
       "min_coverage": 0.7,
       "allow_partial": true,
       "critical_dimensions": ["net_leverage", "liquidity"]
+    },
+    "structure_protection": {
+      "min_coverage": 0.5,
+      "allow_partial": true,
+      "critical_dimensions": []
     },
     "renormalize_missing_weights": false
   },

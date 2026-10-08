@@ -41,10 +41,31 @@ ADDITIONS = {
     },
 }
 
+# Agentic credit-analysis tables (Milestone 1.2). These are whole NEW tables
+# (not column additions), so the migration detects which are absent BEFORE
+# ``init_db`` creates them and reports each as an explicit, observable change.
+# No existing evidence/snapshot/audit/review payload is touched.
+AGENTIC_TABLES = (
+    "agentic_analysis_runs",
+    "parameter_results",
+    "agent_runs",
+    "evidence_packets",
+    "topic_conclusions",
+    "challenge_findings",
+    "candidate_structures",
+    "candidate_feasibility",
+    "risk_scores",
+)
+
 
 def migrate(engine):
-    init_db(engine)  # Creates CaseEntity and any tables absent from the old schema.
-    changes = []
+    # Which agentic tables are missing in the EXISTING schema (before init_db)?
+    with engine.connect() as connection:
+        before_tables = set(inspect(connection).get_table_names())
+    new_agentic_tables = [t for t in AGENTIC_TABLES if t not in before_tables]
+
+    init_db(engine)  # Creates CaseEntity + any tables absent from the old schema.
+    changes = [f"table:{t}" for t in new_agentic_tables]
     with engine.begin() as connection:
         inspector = inspect(connection)
         for table, columns in ADDITIONS.items():

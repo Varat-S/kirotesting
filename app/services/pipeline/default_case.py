@@ -51,8 +51,18 @@ def prepare_default_case(session, *, data_root, output_root, case_id=DEFAULT_CAS
             if a.name.startswith("document_")
         ]
         scanned = next(
-            c for c in captures if any(p["method"] == "ocr" for p in c["pages"])
+            (c for c in captures if any(p["method"] == "ocr" for p in c["pages"])),
+            None,
         )
+        if scanned is None:
+            # The image-only supplement needs OCR; without an engine no OCR page
+            # exists. Fail with a clear, actionable message rather than letting a
+            # bare StopIteration surface as an opaque RuntimeError.
+            raise ValueError(
+                "The default Delta case requires OCR for its image-only "
+                "non-GAAP supplement, but no OCR page was produced. Install "
+                "Tesseract and the project's 'ocr' extra, or use Windows OCR."
+            )
         checks["ocr_recognition"] = ocr_reference_checks(scanned, ocr_reference)
         checks["document_coverage"] = [
             {"document_id": c["document_id"], **c["coverage"]} for c in captures

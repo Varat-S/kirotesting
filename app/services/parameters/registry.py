@@ -80,35 +80,20 @@ class ParameterDefinitionRegistry:
 
 
 def default_parameter_definitions() -> list[ParameterDefinition]:
-    """The illustrative default deterministic parameter set (Req 7.2-7.4)."""
+    """The illustrative default deterministic parameter set (Req 7.2-7.4).
+
+    Composed from the per-topic modules (``business`` / ``financial`` /
+    ``structuring``) so the three deterministic domains stay separable, matching
+    the design intent.
+    """
+    # Imported lazily to avoid a circular import (the per-topic modules import
+    # ParameterDefinition from this module).
+    from app.services.parameters.business import business_parameter_definitions
+    from app.services.parameters.financial import financial_parameter_definitions
+    from app.services.parameters.structuring import structuring_parameter_definitions
+
     return [
-        # Business concentration / stability
-        ParameterDefinition("segment_hhi", Topic.BUSINESS, "hhi", "index",
-                            description="Segment revenue concentration (HHI)."),
-        ParameterDefinition("geographic_hhi", Topic.BUSINESS, "hhi", "index",
-                            description="Geographic revenue concentration (HHI)."),
-        ParameterDefinition("customer_hhi", Topic.BUSINESS, "hhi", "index",
-                            description="Customer concentration (HHI)."),
-        ParameterDefinition("top5_customer_concentration", Topic.BUSINESS,
-                            "top_n_concentration", "ratio",
-                            description="Top-5 customer share of revenue."),
-        ParameterDefinition("revenue_volatility", Topic.BUSINESS, "volatility", "ratio",
-                            description="Coefficient of variation of revenue."),
-        # Financial trend / ratios
-        ParameterDefinition("revenue_cagr", Topic.FINANCIAL, "cagr", "ratio",
-                            description="Revenue CAGR."),
-        ParameterDefinition("margin_trend", Topic.FINANCIAL, "trend_direction", "number",
-                            description="Operating-margin trend slope."),
-        ParameterDefinition("fcf_conversion", Topic.FINANCIAL, "safe_ratio", "ratio",
-                            description="FCF / EBITDA conversion."),
-        ParameterDefinition("maturity_to_ebitda", Topic.FINANCIAL, "safe_ratio", "ratio",
-                            description="Upcoming maturities / EBITDA."),
-        # Financial stress
-        ParameterDefinition("downside_ebitda", Topic.FINANCIAL, "downside_stress",
-                            "number", description="Base-case EBITDA under downside shock."),
-        # Structuring
-        ParameterDefinition("ltv", Topic.STRUCTURING, "safe_ratio", "ratio",
-                            description="Loan-to-value under a candidate structure."),
-        ParameterDefinition("bullet_to_fcf", Topic.STRUCTURING, "safe_ratio", "ratio",
-                            description="Bullet exposure / FCF."),
+        *business_parameter_definitions(),
+        *financial_parameter_definitions(),
+        *structuring_parameter_definitions(),
     ]

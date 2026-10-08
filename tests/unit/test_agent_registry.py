@@ -151,3 +151,68 @@ def test_registry_and_definition_hashes_change_on_semantic_edit():
 def test_prompt_defaults_to_agent_id():
     d = AgentDefinition("some_agent", Topic.BUSINESS, "x", ModelTier.NARROW)
     assert d.prompt == "some_agent"
+
+
+# --- routing fixes (review points 5 & 6) ------------------------------------
+
+
+def test_collateral_agent_is_routed_collateral_and_guarantor_evidence():
+    # Previously this agent had NO selector and received nothing (review point 5).
+    from app.services.agents.router import EvidenceRouter, RouterInputs
+
+    reg = default_registry()
+    spec = reg.get("collateral_security_guarantee").routing
+    inputs = RouterInputs(
+        case_id="C1", snapshot_version=1, analysis_run_id="AR1",
+        facility_terms=[
+            {"id": "ft_amt", "term": "facility_amount", "value": 1000},
+            {"id": "ft_col", "term": "collateral", "value": "fleet aircraft"},
+            {"id": "ft_grt", "term": "guarantee", "value": "parent guarantee"},
+        ],
+        entity_relationships=[
+            {"entity_id": "SUB", "entity_type": "guarantor"},
+            {"entity_id": "PARENT", "entity_type": "parent"},
+        ],
+    )
+    packet = EvidenceRouter().build_packet(spec, inputs)
+    kinds = {t.get("term") for t in packet.facility_terms}
+    assert "collateral" in kinds and "guarantee" in kinds
+    assert "facility_amount" not in kinds  # core terms go to facility_terms agent
+    assert any(e["entity_id"] == "SUB" for e in packet.entity_relationships)
+    assert all(e["entity_id"] != "PARENT" for e in packet.entity_relationships)
+
+
+def test_facility_terms_agent_excludes_collateral():
+    from app.services.agents.router import EvidenceRouter, RouterInputs
+
+    reg = default_registry()
+    spec = reg.get("facility_terms").routing
+    inputs = RouterInputs(
+        case_id="C1", snapshot_version=1, analysis_run_id="AR1",
+        facility_terms=[
+            {"id": "ft_amt", "term": "facility_amount", "value": 1000},
+            {"id": "ft_col", "term": "collateral", "value": "fleet"},
+        ],
+    )
+    packet = EvidenceRouter().build_packet(spec, inputs)
+    kinds = {t.get("term") for t in packet.facility_terms}
+    assert "facility_amount" in kinds
+    assert "collateral" not in kinds
+
+
+def test_business_agents_have_distinct_narrow_topics():
+    reg = default_registry()
+    bm = set(reg.get("business_model").selector_identity)
+    mg = set(reg.get("management_governance").selector_identity)
+    cp = set(reg.get("competition_pricing").selector_identity)
+    # business_model does not pull the management corpus; management_governance
+    # does not pull the competitive-position corpus (review point 6).
+    assert "narrative:management" not in bm
+    assert "narrative:competitive_position" not in mg
+    assert "narrative:management" in mg
+    assert "narrative:competitive_position" in cp
+    # The six business agents are not all identical.
+    identities = {d.agent_id: tuple(d.selector_identity)
+                  for d in reg.all() if d.topic.value == "business"
+                  and d.task_type not in {"orchestrate", "challenge"}}
+    assert len(set(identities.values())) > 1

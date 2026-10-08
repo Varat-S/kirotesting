@@ -210,8 +210,12 @@ def test_migration_adds_agentic_tables_to_legacy_db(tmp_path):
         before = set(inspect(connection).get_table_names())
     assert not (AGENTIC_TABLES & before)  # legacy really lacks them
 
-    migrate(engine)
-    assert migrate(engine) == []  # idempotent
+    changes = migrate(engine)
+    # The migration explicitly REPORTS each new agentic table (observable
+    # upgrade-in-place, not an implicit init_db side effect).
+    for table in AGENTIC_TABLES:
+        assert f"table:{table}" in changes
+    assert migrate(engine) == []  # idempotent: nothing new on a second run
 
     with engine.connect() as connection:
         after = set(inspect(connection).get_table_names())

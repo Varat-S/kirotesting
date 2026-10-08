@@ -43,7 +43,7 @@ class AgentRuntimeOutput:
 
     execution: AgentExecutionResult
     agent_run: AgentRun
-    generate_result: GenerateOnlyResult
+    generate_result: GenerateOnlyResult | None
 
 
 _OUTCOME_TO_EXECUTION = {

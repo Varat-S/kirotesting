@@ -237,6 +237,61 @@ def test_facility_unavailable_when_no_protection():
     assert facility.band is None
 
 
+def test_structure_protection_score_strong():
+    e = ScoringEngine(_config())
+    params = [
+        _param("collateral_coverage", 1.6, Topic.STRUCTURING),
+        _param("guarantee_support", 0.95, Topic.STRUCTURING),
+        _param("covenant_package", 0.95, Topic.STRUCTURING),
+    ]
+    score = e.score_structure_protection(params, analysis_run_id="AR1")
+    assert score.kind is ScoreKind.STRUCTURE_PROTECTION
+    assert score.status is ScoreStatus.FINAL
+    assert score.band == 1  # strong protection
+
+
+def test_structure_protection_unavailable_without_evidence():
+    e = ScoringEngine(_config())
+    score = e.score_structure_protection([], analysis_run_id="AR1")
+    assert score.status is ScoreStatus.UNAVAILABLE
+    assert score.band is None
+
+
+def test_facility_uses_structure_protection_score():
+    e = ScoringEngine(_config())
+    business = e.score_business(
+        [
+            _param("customer_hhi", 0.3, Topic.BUSINESS),
+            _param("competitive_position", 2, Topic.BUSINESS),
+            _param("management_governance", 2, Topic.BUSINESS),
+        ],
+        analysis_run_id="AR1",
+    )
+    financial = e.score_financial(
+        [
+            _param("net_leverage", 3.2, Topic.FINANCIAL),
+            _param("interest_coverage", 4.0, Topic.FINANCIAL),
+            _param("fcf_conversion", 0.5, Topic.FINANCIAL),
+            _param("liquidity", 1.3, Topic.FINANCIAL),
+        ],
+        analysis_run_id="AR1",
+    )
+    obligor = e.score_obligor(business, financial, analysis_run_id="AR1")
+    protection = e.score_structure_protection(
+        [
+            _param("collateral_coverage", 1.6, Topic.STRUCTURING),
+            _param("guarantee_support", 0.95, Topic.STRUCTURING),
+            _param("covenant_package", 0.95, Topic.STRUCTURING),
+        ],
+        analysis_run_id="AR1",
+    )
+    facility = e.score_facility(obligor, protection, analysis_run_id="AR1")
+    assert facility.status in (ScoreStatus.FINAL, ScoreStatus.PROVISIONAL)
+    assert facility.band is not None
+    # Strong protection pulls facility risk at or below obligor risk.
+    assert facility.band <= obligor.band
+
+
 def test_scores_are_deterministic_on_replay():
     e = ScoringEngine(_config())
     params = [

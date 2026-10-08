@@ -53,6 +53,10 @@ class RoutingSpec:
     entity_relationship_selector: Selector | None = None
     facility_term_selector: Selector | None = None
     covenant_term_selector: Selector | None = None
+    # Collateral / security / guarantee terms route through the facility-term
+    # channel too, but a dedicated selector lets an agent opt into ONLY those
+    # (e.g. collateral_security_guarantee) without pulling pricing/tenor terms.
+    collateral_term_selector: Selector | None = None
     # Conflicts/limitations relevant to the agent are filtered by the fields
     # the agent is allowed to see; by default they follow the fact selector.
     include_conflicts: bool = True
@@ -143,7 +147,10 @@ class EvidenceRouter:
         entity_rels = _select(
             inputs.entity_relationships, spec.entity_relationship_selector
         )
-        facility_terms = _select(inputs.facility_terms, spec.facility_term_selector)
+        facility_terms = _merge(
+            _select(inputs.facility_terms, spec.facility_term_selector),
+            _select(inputs.facility_terms, spec.collateral_term_selector),
+        )
         covenant_terms = _select(inputs.covenant_terms, spec.covenant_term_selector)
 
         # Only surface conflicts/limitations about fields the agent can see.
@@ -194,6 +201,19 @@ def _select(items: list[dict[str, Any]], selector: Selector | None) -> list[dict
     if selector is None:
         return []
     return [item for item in items if selector(item)]
+
+
+def _merge(*collections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Union of selected items, de-duplicated by identity, order-preserving."""
+    out: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for collection in collections:
+        for item in collection:
+            marker = id(item)
+            if marker not in seen:
+                seen.add(marker)
+                out.append(item)
+    return out
 
 
 def _relevant(entry: dict[str, Any], visible_fields: set) -> bool:

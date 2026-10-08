@@ -12,7 +12,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 1 — Typed contracts + additive migrations
 
-- [ ] 1.1 Add typed contracts (`app/schemas/agentic.py`): `AgenticAnalysisRun`,
+- [x] 1.1 Add typed contracts (`app/schemas/agentic.py`): `AgenticAnalysisRun`,
   `ParameterResult`, `AgentTask`, `AgentRun`, `AgentExecutionResult`,
   `ConclusionClaim`, `TopicConclusion`, `StructuringConclusion`,
   `ChallengeFinding`, `CandidateStructure`, `CandidateFeasibility`, `RiskScore`,
@@ -38,7 +38,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
     IDs; `CandidateStructure` has no `selected` field.
   - _Done:_ models validate/serialize; invariants enforced; schemas importable.
 
-- [ ] 1.2 Add ORM tables (`agentic_analysis_runs`, `parameter_results`,
+- [x] 1.2 Add ORM tables (`agentic_analysis_runs`, `parameter_results`,
   `agent_runs`, `evidence_packets`, `topic_conclusions`, `challenge_findings`,
   `candidate_structures`, `candidate_feasibility`, `risk_scores`) and extend
   `app/migrate.py` `ADDITIONS` (additive only). Every analytical table carries
@@ -56,7 +56,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
   - _Done:_ `init_db` creates tables; migration adds them to a legacy DB without
     touching evidence/snapshot/audit/review rows.
 
-- [ ] 1.3 Extend `FinalCaseSnapshot` (schema v1.1→v1.2, additive) with
+- [x] 1.3 Extend `FinalCaseSnapshot` (schema v1.1→v1.2, additive) with
   `accepted_analysis_run_id`, frozen accepted artifact IDs/hashes
   (`accepted_parameter_result_ids`, `accepted_score_ids`,
   `accepted_topic_conclusion_ids`, `selected_candidate_id`,
@@ -72,7 +72,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 2 — Generic agent runtime [LLM choke point preserved]
 
-- [ ] 2.1 Add async-friendly, DB-free provider path to `LLMClient`
+- [x] 2.1 Add async-friendly, DB-free provider path to `LLMClient`
   (`generate_only(...)`) separating HTTP from logging; keep existing `_run`
   behavior for legacy.
   - _Areas:_ `app/services/llm/client.py`.
@@ -82,7 +82,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
   - _Done:_ provider call and persistence are separable; no session touched
     during `generate_only`.
 
-- [ ] 2.2 Agent runtime (`app/services/agents/runtime.py`): execute one
+- [x] 2.2 Agent runtime (`app/services/agents/runtime.py`): execute one
   `AgentTask` → raw result → parsed; build `AgentRun` (no persistence here).
   - _Areas:_ `app/services/agents/runtime.py`.
   - _Deps:_ 2.1. _Requirements:_ 19.2, 25.1.
@@ -92,7 +92,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 3 — Evidence Router [DET]
 
-- [ ] 3.1 `EvidencePacket` builder (`app/services/agents/router.py`) with
+- [x] 3.1 `EvidencePacket` builder (`app/services/agents/router.py`) with
   per-agent `evidence_selectors`, exclusion guarantees, `packet_hash` via
   `content_hash`, persistence to `evidence_packets`.
   - _Areas:_ `app/services/agents/router.py`, `app/core/hashing.py` (reuse).
@@ -105,7 +105,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 4 — Agent registry [DET]
 
-- [ ] 4.1 Registry (`app/services/agents/registry.py`) declaring all **27**
+- [x] 4.1 Registry (`app/services/agents/registry.py`) declaring all **27**
   logical LLM jobs (15 narrow / early extraction + 4 risk-to-mitigant + 4
   orchestrators + 4 challengers) with topic, task_type, deps, selectors, owned
   parameters, prompt refs, response-schema refs, model tier, and **declared input
@@ -124,7 +124,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 5 — Async DAG executor + concurrency safety [DET orchestration of LLM calls]
 
-- [ ] 5.1 Executor (`app/services/agents/executor.py`): topological waves,
+- [x] 5.1 Executor (`app/services/agents/executor.py`): topological waves,
   `asyncio.TaskGroup` + `asyncio.Semaphore(AGENT_MAX_CONCURRENCY)`, per-call
   `asyncio.wait_for(AGENT_TIMEOUT_SECONDS)`; provider I/O awaited via
   `backend.generate_async(...)` where supported, else
@@ -151,7 +151,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 6 — Cache / idempotency [DET]
 
-- [ ] 6.1 Cache (`app/services/agents/cache.py`) keyed by `content_hash(analysis
+- [x] 6.1 Cache (`app/services/agents/cache.py`) keyed by `content_hash(analysis
   run context, case, snapshot, agent_id, agent_definition_hash, prompt_hash,
   response_schema_hash, model_id, model_config, router_version, packet_hash)`
   over `agent_runs.cache_key`; `reused_from_cache`; `force_regenerate`
@@ -166,7 +166,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 7 — Deterministic Parameter Engine [DET]
 
-- [ ] 7.1 `ParameterDefinitionRegistry` + business/financial/structuring formula
+- [x] 7.1 `ParameterDefinitionRegistry` + business/financial/structuring formula
   modules (`app/services/parameters/`), reusing `MetricEngine`/
   `MetricDefinitionRegistry`/`TrendAnalyzer`/`PeerBenchmarker`; emit
   deterministic `ParameterResult`s with versioned `formula_id`; zero-safe states;
@@ -180,7 +180,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 8 — Deterministic validation layer [DET]
 
-- [ ] 8.1 Validation pipeline (`app/services/agents/validation.py`) with an
+- [x] 8.1 Validation pipeline (`app/services/agents/validation.py`) with an
   explicit split (Remediation 10). **Bucket A — deterministic evidence
   validation** (gates storage), reusing `jsonschema.validate` and reconciliation
   compatibility helpers: schema, evidence-ID existence, admitted-source, entity/
@@ -205,7 +205,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 9 — Scoring engine [DET]
 
-- [ ] 9.1 `config/poc/scoring.json` (`ILLUSTRATIVE — NOT BANK POLICY`) + register
+- [x] 9.1 `config/poc/scoring.json` (`ILLUSTRATIVE — NOT BANK POLICY`) + register
   `scoring` artifact kind in `ConfigRegistry` (`ARTIFACT_KINDS`) + bootstrap.
   - _Areas:_ `config/poc/scoring.json`, `app/core/config_registry.py`,
     `app/core/bootstrap.py`.
@@ -214,7 +214,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
     loads, versions, hashes; label guard.
   - _Done:_ scoring config is a versioned/hashed registry artifact.
 
-- [ ] 9.2 `ScoringEngine` + `overlays` (`app/services/scoring/`): parameter risk
+- [x] 9.2 `ScoringEngine` + `overlays` (`app/services/scoring/`): parameter risk
   signals, Business/Financial/Obligor/StructureProtection/Facility scores with
   `status`/`band`/`coverage_weight`/missing-dimension tracking (Remediation 3);
   floors/overrides; averaging cannot wash out severe risk; evidence quality never

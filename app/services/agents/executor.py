@@ -41,7 +41,9 @@ from app.schemas.agentic import (
     AgenticAnalysisRun,
     ExecutionStatus,
     RunStatus,
+    ValidationStatus,
 )
+from app.services.agents.cache import AgentResultCache, CacheIdentity
 from app.services.agents.registry import AgentDefinition, AgentRegistry
 from app.services.agents.runtime import AgentRuntime, AgentRuntimeOutput
 
@@ -67,6 +69,15 @@ class PreparedTask:
     agent_definition_hash: str
     evidence_ids: list[str] = field(default_factory=list)
     parent_run_ids: list[str] = field(default_factory=list)
+    # Cache-identity inputs (Milestone 6 wiring). ``packet_hash`` defaults to the
+    # task's ``packet_ref``; router_version/response_schema_hash are optional and
+    # fall back to safe defaults when the builder does not supply them.
+    router_version: str = "router-unknown"
+    response_schema_hash: str | None = None
+    packet_hash: str | None = None
+
+    def resolved_packet_hash(self) -> str:
+        return self.packet_hash or self.task.packet_ref
 
 
 @dataclass
@@ -113,8 +124,31 @@ class DagExecutor:
         self._max_concurrency = max(1, int(max_concurrency))
         self._timeout = float(timeout_seconds)
         self._audit = audit
-        # Observability hook: records the max observed concurrency (for tests).
+        self._cache = AgentResultCache(session) if session is not None else None
+        # Observability hooks (for tests): max observed concurrency + cache stats.
         self.peak_concurrency = 0
+        self.cache_hits = 0
+
+    def _cache_identity(self, pt: PreparedTask) -> CacheIdentity | None:
+        """Compose the cache identity for a prepared task (Milestone 6 / Req 18)."""
+        try:
+            prompt = self._runtime._client.resolve_prompt(pt.task.prompt_name)  # noqa: SLF001
+        except Exception:
+            return None
+        backend = getattr(self._runtime._client, "_backend", None)  # noqa: SLF001
+        model_id = getattr(backend, "model_id", getattr(backend, "MODEL_ID", "unknown"))
+        return CacheIdentity(
+            case_id=pt.task.case_id,
+            evidence_snapshot_version=pt.task.snapshot_version,
+            agent_id=pt.task.agent_id,
+            agent_definition_hash=pt.agent_definition_hash,
+            prompt_hash=prompt.content_hash,
+            response_schema_hash=pt.response_schema_hash,
+            model_id=model_id,
+            model_config={"temperature": 0.0},
+            router_version=pt.router_version,
+            packet_hash=pt.resolved_packet_hash(),
+        )
 
     def run(
         self,
@@ -123,11 +157,13 @@ class DagExecutor:
         build_task: TaskBuilder,
         on_result: Callable[[AgentDefinition, dict, ExecutionContext], None] | None = None,
         only: set[str] | None = None,
+        force_regenerate: bool = False,
     ) -> ExecutionReport:
         """Synchronous entry point (drives the async core via ``asyncio.run``)."""
         return asyncio.run(
             self.run_async(
-                analysis_run, build_task=build_task, on_result=on_result, only=only
+                analysis_run, build_task=build_task, on_result=on_result,
+                only=only, force_regenerate=force_regenerate,
             )
         )
 
@@ -138,6 +174,7 @@ class DagExecutor:
         build_task: TaskBuilder,
         on_result: Callable[[AgentDefinition, dict, ExecutionContext], None] | None = None,
         only: set[str] | None = None,
+        force_regenerate: bool = False,
     ) -> ExecutionReport:
         context = ExecutionContext(
             analysis_run_id=analysis_run.analysis_run_id,
@@ -157,8 +194,9 @@ class DagExecutor:
             if not ready:
                 continue
 
-            # ---- phase 1: BUILD (sync, no provider I/O) ----
+            # ---- phase 1: BUILD + CACHE LOOKUP (sync, no provider I/O) ----
             prepared: dict[str, PreparedTask] = {}
+            cache_keys: dict[str, str | None] = {}
             for agent_id in ready:
                 agent = self._registry.get(agent_id)
                 if self._blocked_by_failure(agent, report):
@@ -168,6 +206,19 @@ class DagExecutor:
                 if pt is None:
                     report.skipped[agent_id] = "no_task"
                     continue
+
+                # Idempotent reuse: a valid prior run with the same identity is a
+                # hit (Milestone 6 / Req 18). force_regenerate bypasses.
+                identity = None if self._cache is None else self._cache_identity(pt)
+                cache_keys[agent_id] = identity.key() if identity is not None else None
+                if identity is not None:
+                    hit = self._cache.lookup(identity, force_regenerate=force_regenerate)
+                    if hit is not None:
+                        self._record_cache_hit(
+                            agent, pt, hit, identity.key(), wave_index, context,
+                            report, on_result,
+                        )
+                        continue
                 prepared[agent_id] = pt
 
             if not prepared:
@@ -210,7 +261,8 @@ class DagExecutor:
             # ---- phase 3+4: GATHER + PERSIST (serial) ----
             for agent_id in sorted(outputs):
                 self._persist_and_record(
-                    agent_id, outputs[agent_id], context, report, on_result
+                    agent_id, outputs[agent_id], context, report, on_result,
+                    cache_key=cache_keys.get(agent_id),
                 )
 
         self._set_status(
@@ -232,6 +284,8 @@ class DagExecutor:
         context: ExecutionContext,
         report: ExecutionReport,
         on_result: Callable[[AgentDefinition, dict, ExecutionContext], None] | None,
+        *,
+        cache_key: str | None = None,
     ) -> None:
         execution = output.execution
         report.results[agent_id] = execution
@@ -244,7 +298,7 @@ class DagExecutor:
             except Exception:  # pragma: no cover - logging must not crash the run
                 logged = False
 
-        self._persist_agent_run(output.agent_run)
+        self._persist_agent_run(output.agent_run, cache_key=cache_key)
 
         if execution.status is ExecutionStatus.OK and execution.parsed is not None:
             report.executed.append(agent_id)
@@ -257,7 +311,55 @@ class DagExecutor:
         else:  # rejected
             report.failed[agent_id] = "rejected"
 
-    def _persist_agent_run(self, run: AgentRun) -> None:
+    def _record_cache_hit(
+        self,
+        agent: AgentDefinition,
+        pt: PreparedTask,
+        hit,
+        cache_key: str,
+        wave_index: int,
+        context: ExecutionContext,
+        report: ExecutionReport,
+        on_result: Callable[[AgentDefinition, dict, ExecutionContext], None] | None,
+    ) -> None:
+        """Reuse a valid prior run WITHOUT calling the provider (Req 18.4)."""
+        import uuid
+
+        self.cache_hits += 1
+        run = AgentRun(
+            run_id=str(uuid.uuid4()),
+            analysis_run_id=pt.task.analysis_run_id,
+            agent_id=agent.agent_id,
+            agent_definition_hash=pt.agent_definition_hash,
+            topic=agent.topic,
+            case_id=pt.task.case_id,
+            snapshot_version=pt.task.snapshot_version,
+            prompt_id=pt.task.prompt_name,
+            prompt_hash="",
+            model_id="cache",
+            input_hash=pt.resolved_packet_hash(),
+            input_evidence_ids=list(pt.evidence_ids),
+            parsed_response=hit.parsed,
+            validation_status=ValidationStatus.VALID,
+            validation_detail=f"Reused from cache (run {hit.run_id}).",
+            execution_wave=wave_index,
+            reused_from_cache=True,
+        )
+        self._persist_agent_run(run, cache_key=cache_key)
+        report.results[agent.agent_id] = AgentExecutionResult(
+            agent_id=agent.agent_id,
+            analysis_run_id=pt.task.analysis_run_id,
+            status=ExecutionStatus.OK,
+            parsed=hit.parsed,
+        )
+        report.executed.append(agent.agent_id)
+        if hit.parsed is not None:
+            context.completed[agent.agent_id] = hit.parsed
+        context.run_ids[agent.agent_id] = run.run_id
+        if on_result is not None and hit.parsed is not None:
+            on_result(agent, hit.parsed, context)
+
+    def _persist_agent_run(self, run: AgentRun, *, cache_key: str | None = None) -> None:
         if self._session is None:
             return
         self._session.add(
@@ -276,7 +378,7 @@ class DagExecutor:
                 model_id=run.model_id,
                 model_config_json=dict(run.model_config_payload),
                 input_hash=run.input_hash,
-                cache_key=None,
+                cache_key=cache_key,
                 input_evidence_ids=list(run.input_evidence_ids),
                 raw_response=run.raw_response,
                 parsed_response=run.parsed_response,

@@ -242,24 +242,82 @@ def _always() -> Selector:
     return lambda item: True
 
 
+_COLLATERAL_KINDS = {"collateral", "security", "guarantee", "pledge", "lien"}
+
+
+def _is_collateral_term(item: dict) -> bool:
+    kind = (item.get("term") or item.get("kind") or item.get("type") or "").lower()
+    return any(k in kind for k in _COLLATERAL_KINDS) or bool(
+        item.get("collateral") or item.get("guarantee") or item.get("security")
+    )
+
+
+def _is_core_facility_term(item: dict) -> bool:
+    # Facility amount/tenor/amortization/pricing terms — NOT collateral/security.
+    return not _is_collateral_term(item)
+
+
+def _structuring_routing(agent_id: str) -> tuple[RoutingSpec, tuple[str, ...]]:
+    """Routing for the three early-structuring extraction agents (Req 4.3).
+
+    * ``facility_terms`` -> core facility terms (amount/tenor/amortization),
+      excluding collateral/security.
+    * ``collateral_security_guarantee`` -> collateral/security/guarantee terms
+      AND guarantor entity relationships (previously routed NOTHING — review
+      point 5).
+    * ``legal_undertakings_conditions`` -> covenant / undertaking / condition
+      terms.
+    """
+    if agent_id == "facility_terms":
+        return (
+            RoutingSpec(agent_id=agent_id, facility_term_selector=_is_core_facility_term),
+            ("facility_terms:core",),
+        )
+    if agent_id == "collateral_security_guarantee":
+        return (
+            RoutingSpec(
+                agent_id=agent_id,
+                collateral_term_selector=_is_collateral_term,
+                entity_relationship_selector=lambda e: (
+                    bool(e.get("guarantor_flag"))
+                    or e.get("entity_type") == "guarantor"
+                    or e.get("role") == "guarantor"
+                ),
+            ),
+            ("facility_terms:collateral", "entity:guarantor"),
+        )
+    # legal_undertakings_conditions
+    return (
+        RoutingSpec(agent_id=agent_id, covenant_term_selector=_always()),
+        ("covenant_terms",),
+    )
+
+
 # ---------------------------------------------------------------------------
 # The default 27-job roster
 # ---------------------------------------------------------------------------
 
-# Business narrow (6)
+# Business narrow (6). Each entry declares its OWN narrow set of narrative
+# topics (Req 4.3 / review point 6): the business-model agent does not receive
+# the full management/competitive corpus, the management agent does not receive
+# the competitive-position corpus, etc. This keeps packets tight and cuts
+# correlated hallucination / prompt-injection surface.
 _BUSINESS_NARROW = [
-    ("business_model", "business_model",
-     ("segment_share", "segment_hhi", "revenue_model_stability")),
-    ("competition_pricing", "competition_pricing",
-     ("competitive_position", "pricing_power")),
-    ("customer_supplier_contract", "customer_supplier_contract",
-     ("customer_concentration", "supplier_dependence", "contract_termination_risk")),
-    ("management_governance", "management_governance",
-     ("management_quality", "key_person_dependency", "governance_concern")),
-    ("ma_capex_execution", "ma_capex_execution",
-     ("acquisition_strategy", "integration_risk", "capex_strategy")),
-    ("regulatory_material_events", "regulatory_material_events",
-     ("regulatory_dependency", "litigation_risk", "material_event")),
+    ("business_model", ("segment_share", "segment_hhi", "revenue_model_stability"),
+     ("corporate_structure",)),
+    ("competition_pricing", ("competitive_position", "pricing_power"),
+     ("competitive_position", "industry_risk")),
+    ("customer_supplier_contract",
+     ("customer_concentration", "supplier_dependence", "contract_termination_risk"),
+     ("industry_risk",)),
+    ("management_governance",
+     ("management_quality", "key_person_dependency", "governance_concern"),
+     ("management", "ownership")),
+    ("ma_capex_execution", ("acquisition_strategy", "integration_risk", "capex_strategy"),
+     ("corporate_structure",)),
+    ("regulatory_material_events",
+     ("regulatory_dependency", "litigation_risk", "material_event"),
+     ("industry_risk",)),
 ]
 
 # Financial narrow (6)
@@ -322,11 +380,11 @@ def default_registry() -> AgentRegistry:
             ),
         )
 
-    for agent_id, prompt, params in _BUSINESS_NARROW:
-        defs.append(narrow(agent_id, prompt, params, Topic.BUSINESS,
-                           narrative_topics=("management", "competitive_position",
-                                             "industry_risk", "ownership",
-                                             "corporate_structure")))
+    for agent_id, params, narrative_topics in _BUSINESS_NARROW:
+        defs.append(
+            narrow(agent_id, agent_id, params, Topic.BUSINESS,
+                   narrative_topics=narrative_topics)
+        )
     for agent_id, prompt, params in _FINANCIAL_NARROW:
         covenant = agent_id == "covenant_extraction"
         routing = RoutingSpec(
@@ -349,12 +407,7 @@ def default_registry() -> AgentRegistry:
             )
         )
     for agent_id, prompt, params in _STRUCTURING_EXTRACTION:
-        routing = RoutingSpec(
-            agent_id=agent_id,
-            facility_term_selector=_always() if agent_id == "facility_terms" else None,
-            covenant_term_selector=_always()
-            if agent_id == "legal_undertakings_conditions" else None,
-        )
+        routing, identity = _structuring_routing(agent_id)
         defs.append(
             AgentDefinition(
                 agent_id=agent_id,
@@ -365,7 +418,7 @@ def default_registry() -> AgentRegistry:
                 prompt_name=agent_id,
                 response_schema_ref=agent_id,
                 routing=routing,
-                selector_identity=("facility_terms", "covenant_terms"),
+                selector_identity=identity,
             )
         )
 

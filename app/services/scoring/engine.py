@@ -180,6 +180,22 @@ class ScoringEngine:
             weights_key="financial_weights", coverage_key="financial",
         )
 
+    def score_structure_protection(self, parameters, *, analysis_run_id) -> RiskScore:
+        """StructureProtectionScore from collateral/guarantee/covenant protection.
+
+        The protection a transaction provides (collateral coverage, guarantee
+        support, covenant package). A strong protection parameter bands LOW
+        (band 1 = strong protection). When no protection evidence exists the
+        score is ``unavailable`` (not fabricated), which flows through to an
+        unavailable FacilityRiskScore (Req 9.12).
+        """
+        return self.score_topic(
+            ScoreKind.STRUCTURE_PROTECTION, parameters,
+            analysis_run_id=analysis_run_id,
+            weights_key="structure_protection_weights",
+            coverage_key="structure_protection",
+        )
+
     # -- obligor --------------------------------------------------------------
 
     def score_obligor(

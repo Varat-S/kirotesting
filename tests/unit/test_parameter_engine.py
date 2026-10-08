@@ -144,3 +144,147 @@ def test_formula_version_is_stable_and_specific():
     d2 = reg.get("customer_hhi")
     assert d1.formula_version == reg.get("segment_hhi").formula_version
     assert d1.formula_version != d2.formula_version
+
+
+# --- expanded parameter coverage (remediation point 3) ---------------------
+
+
+def test_default_set_spans_all_three_topics_and_is_large():
+    from app.services.parameters import (
+        business_parameter_definitions,
+        financial_parameter_definitions,
+        structuring_parameter_definitions,
+    )
+    from app.services.parameters.registry import default_parameter_definitions
+
+    defs = default_parameter_definitions()
+    topics = {d.topic for d in defs}
+    assert topics == {Topic.BUSINESS, Topic.FINANCIAL, Topic.STRUCTURING}
+    # The per-topic modules compose the default set (design intent).
+    assert len(defs) == (
+        len(business_parameter_definitions())
+        + len(financial_parameter_definitions())
+        + len(structuring_parameter_definitions())
+    )
+    # Substantial coverage, not a token subset.
+    assert len(defs) >= 40
+
+
+@pytest.mark.parametrize(
+    "parameter_id,inputs,expected",
+    [
+        ("seasonality_index", {"periods": [100, 100, 100, 400]}, 2.285714),
+        ("management_turnover", {"departures": 2, "headcount": 10}, 0.2),
+        ("management_tenure", {"series": [4, 6, 8]}, 6.0),
+        ("acquisition_frequency", {"count": 6, "years": 3}, 2.0),
+        ("goodwill_growth", {"begin": 100, "end": 150}, 0.5),
+        ("dso", {"balance": 50, "flow": 365, "days": 365}, 50.0),
+        ("cash_conversion_cycle", {"dso": 50, "dio": 30, "dpo": 40}, 40.0),
+        ("debt_capacity", {"ebitda": 100, "max_leverage": 3.5, "net_debt": 200}, 150.0),
+    ],
+)
+def test_new_business_and_financial_formulas(parameter_id, inputs, expected):
+    out = _engine().compute(parameter_id, inputs, analysis_run_id="AR1")
+    assert out.result.status is ParameterStatus.OK
+    assert out.result.value == pytest.approx(expected, abs=1e-4)
+
+
+def test_price_volume_decomposition():
+    out = _engine().compute(
+        "price_volume_split",
+        {"price_begin": 10, "price_end": 12, "volume_begin": 100,
+         "volume_end": 110},
+        analysis_run_id="AR1",
+    )
+    # rev 1000 -> 1320; price effect (12-10)*110 = 220 of 320 total.
+    assert out.result.value == pytest.approx(220 / 320, abs=1e-4)
+
+
+def test_structuring_amortization_bullet_and_coverage():
+    e = _engine()
+    bullet = e.compute("amortization_bullet",
+                       {"principal": 1000, "amortization": [100, 100, 100]},
+                       analysis_run_id="AR1")
+    assert bullet.result.value == pytest.approx(700.0)
+
+    cov = e.compute("collateral_coverage", {"available": 1500, "required": 1000},
+                    analysis_run_id="AR1")
+    assert cov.result.value == pytest.approx(1.5)
+
+    dscr = e.compute("candidate_dscr", {"available": 120, "required": 100},
+                     analysis_run_id="AR1")
+    assert dscr.result.value == pytest.approx(1.2)
+
+
+def test_covenant_headroom_breach_is_negative():
+    out = _engine().compute(
+        "covenant_headroom", {"actual": 4.0, "limit": 3.5, "direction": "max"},
+        analysis_run_id="AR1",
+    )
+    assert out.result.value < 0  # breach
+
+
+def test_max_feasible_facility_never_negative():
+    out = _engine().compute(
+        "max_feasible_facility",
+        {"ebitda": 100, "max_leverage": 2.0, "net_debt": 500},
+        analysis_run_id="AR1",
+    )
+    assert out.result.value == 0.0  # already over-levered => no capacity
+
+
+def test_sensitivity_estimates_slope():
+    out = _engine().compute(
+        "rate_sensitivity",
+        {"base_output": 100, "shocked_output": 90, "shock_size": 0.01},
+        analysis_run_id="AR1",
+    )
+    assert out.result.value == pytest.approx(-1000.0)
+
+
+def test_metric_adapter_wraps_metric_result_as_parameter():
+    from app.services.metrics.engine import MetricResult, MetricState
+    from app.services.parameters import metric_to_parameter
+
+    metric = MetricResult(
+        metric_name="net_debt_to_ebitda",
+        metric_definition_id="net_debt_to_ebitda",
+        metric_definition_version=1,
+        formula_id="net_debt_to_ebitda_v1",
+        engine_version="metric-engine-1.1.0",
+        inputs={"net_debt": 20000, "ebitda": 6500},
+        input_fact_ids=["f_nd", "f_ebitda"],
+        state=MetricState.OK,
+        result=3.07,
+        units="x",
+    )
+    pr = metric_to_parameter(metric, analysis_run_id="AR1")
+    assert pr.method.value == "deterministic"
+    assert pr.parameter_id == "net_debt_to_ebitda"
+    assert pr.value == 3.07
+    assert pr.formula_id == "net_debt_to_ebitda"
+    assert pr.formula_version == "1"
+    assert pr.source_fact_ids == ["f_nd", "f_ebitda"]
+    assert pr.agent_run_id is None  # deterministic => no agent run
+
+
+def test_metric_adapter_maps_explicit_state_to_unavailable():
+    from app.services.metrics.engine import MetricResult, MetricState
+    from app.services.parameters import metric_to_parameter
+
+    metric = MetricResult(
+        metric_name="interest_coverage",
+        metric_definition_id="interest_coverage",
+        metric_definition_version=1,
+        formula_id="interest_coverage_v1",
+        engine_version="metric-engine-1.1.0",
+        inputs={},
+        input_fact_ids=[],
+        state=MetricState.MISSING_INPUT,
+        result=None,
+        detail="Input 'interest_expense' is missing.",
+    )
+    pr = metric_to_parameter(metric, analysis_run_id="AR1")
+    assert pr.status is ParameterStatus.UNAVAILABLE
+    assert pr.value is None
+    assert pr.missing_information
