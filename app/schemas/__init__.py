@@ -7,6 +7,21 @@ JSON Schema validate-on-write entrypoint.
 
 from __future__ import annotations
 
+from app.schemas.agentic import (
+    AgenticAnalysisRun,
+    AgentExecutionResult,
+    AgentRun,
+    AgentTask,
+    CandidateFeasibility,
+    CandidateStructure,
+    ChallengeFinding,
+    ConclusionClaim,
+    EvidencePacket,
+    ParameterResult,
+    RiskScore,
+    StructuringConclusion,
+    TopicConclusion,
+)
 from app.schemas.enums import (
     NON_VALUE_STATUSES,
     EntityType,
@@ -41,4 +56,18 @@ __all__ = [
     "CanonicalEvidenceSnapshot",
     "EvidenceSnapshotRef",
     "FinalCaseSnapshot",
+    # agentic contracts (Milestone 1.1)
+    "AgenticAnalysisRun",
+    "ParameterResult",
+    "AgentTask",
+    "AgentRun",
+    "AgentExecutionResult",
+    "ConclusionClaim",
+    "TopicConclusion",
+    "StructuringConclusion",
+    "ChallengeFinding",
+    "CandidateStructure",
+    "CandidateFeasibility",
+    "RiskScore",
+    "EvidencePacket",
 ]
