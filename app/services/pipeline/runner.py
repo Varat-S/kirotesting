@@ -101,12 +101,19 @@ class CreditMemoPipeline:
         output_root="output",
         backend: LLMBackend | None = None,
         prompt_versions: dict[str, int] | None = None,
+        analysis_mode: str = "legacy",
     ):
         self.session = session
         self.data_root = Path(data_root)
         self.output_root = Path(output_root)
         self.backend = backend
         self.prompt_versions = prompt_versions
+        # Downstream analysis path selector (Req 24): 'legacy' preserves the
+        # baseline single-pass _ai; 'agentic' delegates to the bounded multi-
+        # agent orchestrator after the SAME CanonicalEvidenceSnapshot boundary.
+        if analysis_mode not in ("legacy", "agentic"):
+            raise ValueError("analysis_mode must be 'legacy' or 'agentic'.")
+        self.analysis_mode = analysis_mode
 
     def run_case(
         self,
@@ -1102,6 +1109,50 @@ class CreditMemoPipeline:
         return trends, benchmarks, outcomes
 
     def _ai(
+        self,
+        case_id,
+        evidence,
+        metrics,
+        trends,
+        benchmarks,
+        completeness,
+        configs,
+        escalation,
+        audit,
+        flag,
+    ):
+        """Thin façade over the downstream analysis path (Req 24).
+
+        ``legacy`` runs the baseline single-pass path unchanged; ``agentic``
+        delegates to the bounded multi-agent orchestrator after the SAME
+        CanonicalEvidenceSnapshot boundary. This method stays small — it is NOT
+        a 27-call monolith.
+        """
+        if self.analysis_mode == "agentic":
+            from app.services.pipeline.agentic_runner import AgenticAnalysisOrchestrator
+
+            return AgenticAnalysisOrchestrator(
+                self.session,
+                backend=self.backend,
+                prompt_versions=self.prompt_versions,
+            ).run(
+                case_id,
+                evidence,
+                metrics,
+                trends,
+                benchmarks,
+                completeness,
+                configs,
+                escalation,
+                audit,
+                flag,
+            )
+        return self._legacy_ai(
+            case_id, evidence, metrics, trends, benchmarks, completeness,
+            configs, escalation, audit, flag,
+        )
+
+    def _legacy_ai(
         self,
         case_id,
         evidence,

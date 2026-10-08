@@ -411,7 +411,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 21 — Pipeline façade + mode switch + Delta acceptance [FLAG]
 
-- [ ] 21.1 `analysis_mode` (`legacy`|`agentic`) threaded through
+- [x] 21.1 `analysis_mode` (`legacy`|`agentic`) threaded through
   `CreditMemoPipeline` + `continue_preview` + inspection continue route; `_ai()`
   becomes a thin façade delegating to `AgenticAnalysisOrchestrator` (which opens
   exactly one `AgenticAnalysisRun`); legacy path unchanged; `FinalSnapshotAssembler`
@@ -429,7 +429,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
   - _Done:_ both modes coexist; legacy intact; agentic produces finalizable draft;
     consistency checks enforced.
 
-- [ ] 21.2 Delta end-to-end acceptance (`tests/end_to_end/test_delta_agentic.py`):
+- [x] 21.2 Delta end-to-end acceptance (`tests/end_to_end/test_delta_agentic.py`):
   full agentic path on the Delta fixture; missing structuring inputs → explicit
   Not Available / `unavailable` scores; prove agents consume saved reviewed
   evidence, not re-parsed source.
