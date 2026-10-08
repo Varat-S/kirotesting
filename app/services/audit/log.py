@@ -75,6 +75,15 @@ class EventType(str, Enum):
     SNAPSHOT_FINALIZED = "snapshot_finalized"
     MEMO_GENERATED = "memo_generated"
     CASE_FINALIZED = "case_finalized"
+    # Agentic credit-analysis events (Milestone 1.2+).
+    ANALYSIS_RUN_CREATED = "analysis_run_created"
+    AGENT_RUN = "agent_run"
+    PARAMETER_COMPUTED = "parameter_computed"
+    PARAMETER_VALIDATED = "parameter_validated"
+    SCORE_COMPUTED = "score_computed"
+    RERUN_TRIGGERED = "rerun_triggered"
+    DESCENDANT_INVALIDATED = "descendant_invalidated"
+    CANDIDATE_EVALUATED = "candidate_evaluated"
 
 
 def install_immutability_guard(session: Session) -> None:

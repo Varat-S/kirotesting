@@ -14,21 +14,30 @@ from app.models.base import (
     utcnow,
 )
 from app.models.orm import (
+    AgenticAnalysisRun,
+    AgentRunRow,
     AuditEvent,
     Benchmark,
+    CandidateFeasibilityRow,
+    CandidateStructureRow,
     Case,
+    ChallengeFindingRow,
     ConfigVersion,
     Document,
     Entity,
     Escalation,
+    EvidencePacketRow,
     Fact,
     FactSourceRef,
     HumanReview,
     Metric,
     MetricDefinition,
+    ParameterResultRow,
+    RiskScoreRow,
     Rule,
     RuleVersion,
     Snapshot,
+    TopicConclusionRow,
 )
 
 __all__ = [
@@ -52,4 +61,14 @@ __all__ = [
     "Rule",
     "RuleVersion",
     "Snapshot",
+    # agentic rows (Milestone 1.2)
+    "AgenticAnalysisRun",
+    "ParameterResultRow",
+    "AgentRunRow",
+    "EvidencePacketRow",
+    "TopicConclusionRow",
+    "ChallengeFindingRow",
+    "CandidateStructureRow",
+    "CandidateFeasibilityRow",
+    "RiskScoreRow",
 ]

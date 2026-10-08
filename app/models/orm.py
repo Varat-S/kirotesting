@@ -771,3 +771,339 @@ class ConfigVersion(Base):
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, default=utcnow, nullable=False
     )
+
+
+# ===========================================================================
+# Agentic credit-analysis tables (Milestone 1.2).
+#
+# All tables are additive (created by ``init_db``; no existing payload is
+# rewritten). Every analytical row carries ``analysis_run_id`` so repeated
+# analyses of the same CanonicalEvidenceSnapshot never co-mingle (Remediation 1),
+# and versioned-by-rerun rows carry append-only lineage/acceptance columns
+# (``supersedes_id`` / ``parent_id`` / ``rerun_of`` / ``acceptance_state``,
+# Remediations 12-13).
+# ===========================================================================
+
+
+class AgenticAnalysisRun(Base):
+    """One complete agentic downstream execution (Remediation 1 / Req 27).
+
+    Owns every analytical artifact produced by that execution. Two runs over the
+    same evidence snapshot are distinct ``analysis_run_id``s and never leak into
+    one another. The accepted ``FinalCaseSnapshot`` identifies exactly one run.
+    """
+
+    __tablename__ = "agentic_analysis_runs"
+
+    analysis_run_id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    evidence_snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="created")
+    analysis_mode: Mapped[str] = mapped_column(
+        String, nullable=False, default="agentic"
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    parent_analysis_run_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    supersedes_analysis_run_id: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
+    router_version: Mapped[str] = mapped_column(String, nullable=False)
+    router_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_registry_version: Mapped[str] = mapped_column(String, nullable=False)
+    agent_registry_hash: Mapped[str] = mapped_column(String, nullable=False)
+    scoring_config_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    scoring_config_hash: Mapped[str] = mapped_column(String, nullable=False)
+    model_configuration: Mapped[dict] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    config_versions: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    total_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    failure_state: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ParameterResultRow(Base):
+    """One versioned ``ParameterResult`` (Req 2). Append-only across reruns."""
+
+    __tablename__ = "parameter_results"
+
+    parameter_result_id: Mapped[str] = mapped_column(String, primary_key=True)
+    analysis_run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("agentic_analysis_runs.analysis_run_id"),
+        nullable=False, index=True,
+    )
+    case_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    parameter_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    topic: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    method: Mapped[str] = mapped_column(String, nullable=False)
+    value: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    value_type: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    risk_signal: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    evidence_quality: Mapped[str | None] = mapped_column(String, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    materiality: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_fact_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    source_parameter_ids: Mapped[list] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    evidence_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    formula_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    formula_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    agent_run_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    prompt_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    model_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    input_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    contradictions: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    missing_information: Mapped[list] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    supersedes_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    parent_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    rerun_of: Mapped[str | None] = mapped_column(String, nullable=True)
+    acceptance_state: Mapped[str] = mapped_column(
+        String, nullable=False, default="accepted", index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class AgentRunRow(Base):
+    """One agent execution (mirrors ``model_runs``) and the cache store (Req 19.2).
+
+    ``cache_key`` composes the agentic cache identity (Remediation 7) so a valid
+    prior run can be reused when all identity inputs are unchanged.
+    """
+
+    __tablename__ = "agent_runs"
+
+    run_id: Mapped[str] = mapped_column(String, primary_key=True)
+    analysis_run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("agentic_analysis_runs.analysis_run_id"),
+        nullable=False, index=True,
+    )
+    agent_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    agent_definition_hash: Mapped[str] = mapped_column(String, nullable=False)
+    topic: Mapped[str] = mapped_column(String, nullable=False)
+    case_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt_id: Mapped[str] = mapped_column(String, nullable=False)
+    prompt_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    prompt_hash: Mapped[str] = mapped_column(String, nullable=False)
+    response_schema_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    model_id: Mapped[str] = mapped_column(String, nullable=False)
+    model_config_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    input_hash: Mapped[str] = mapped_column(String, nullable=False)
+    cache_key: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    input_evidence_ids: Mapped[list] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    raw_response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parsed_response: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    validation_status: Mapped[str] = mapped_column(String, nullable=False)
+    validation_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parent_run_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    execution_wave: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    usage: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error_state: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rerun_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reused_from_cache: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class EvidencePacketRow(Base):
+    """A routed evidence packet, persisted for run reconstruction (Req 4.4)."""
+
+    __tablename__ = "evidence_packets"
+    __table_args__ = (
+        UniqueConstraint(
+            "analysis_run_id", "agent_id", "packet_hash", name="uq_packet_run_agent"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    packet_hash: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    analysis_run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("agentic_analysis_runs.analysis_run_id"),
+        nullable=False, index=True,
+    )
+    case_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    router_version: Mapped[str] = mapped_column(String, nullable=False)
+    agent_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    evidence_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class TopicConclusionRow(Base):
+    """A topic/structuring conclusion version (Req 35). Append-only across reruns."""
+
+    __tablename__ = "topic_conclusions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    analysis_run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("agentic_analysis_runs.analysis_run_id"),
+        nullable=False, index=True,
+    )
+    case_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    topic: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    selected_candidate_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    challenge_status: Mapped[str] = mapped_column(
+        String, nullable=False, default="clean"
+    )
+    orchestrator_run_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    supersedes_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    acceptance_state: Mapped[str] = mapped_column(
+        String, nullable=False, default="accepted", index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class ChallengeFindingRow(Base):
+    """A challenge agent's finding (Req 15). Challenges never mutate artifacts."""
+
+    __tablename__ = "challenge_findings"
+
+    challenge_id: Mapped[str] = mapped_column(String, primary_key=True)
+    analysis_run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("agentic_analysis_runs.analysis_run_id"),
+        nullable=False, index=True,
+    )
+    case_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    topic: Mapped[str] = mapped_column(String, nullable=False)
+    target: Mapped[str | None] = mapped_column(String, nullable=True)
+    affected_agent_ids: Mapped[list] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    affected_parameter_ids: Mapped[list] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    issue_type: Mapped[str] = mapped_column(String, nullable=False)
+    severity: Mapped[str] = mapped_column(String, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    requires_reanalysis: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    requested_rerun_scope: Mapped[list] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    rerun_of: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class CandidateStructureRow(Base):
+    """An IMMUTABLE candidate structure proposal (Remediation 11 / Req 36).
+
+    There is deliberately NO ``selected`` column; selection is recorded on
+    ``topic_conclusions.selected_candidate_id``.
+    """
+
+    __tablename__ = "candidate_structures"
+
+    candidate_id: Mapped[str] = mapped_column(String, primary_key=True)
+    analysis_run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("agentic_analysis_runs.analysis_run_id"),
+        nullable=False, index=True,
+    )
+    case_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class CandidateFeasibilityRow(Base):
+    """A versioned/append-only deterministic feasibility result (Req 36.3)."""
+
+    __tablename__ = "candidate_feasibility"
+
+    feasibility_id: Mapped[str] = mapped_column(String, primary_key=True)
+    analysis_run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("agentic_analysis_runs.analysis_run_id"),
+        nullable=False, index=True,
+    )
+    candidate_id: Mapped[str] = mapped_column(
+        String, ForeignKey("candidate_structures.candidate_id"), nullable=False,
+        index=True,
+    )
+    feasible: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    feasibility_detail: Mapped[dict] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    supersedes_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    acceptance_state: Mapped[str] = mapped_column(
+        String, nullable=False, default="accepted", index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class RiskScoreRow(Base):
+    """A deterministic risk score with status/coverage (Req 9 / Remediation 3).
+
+    Append-only across reruns. A score may be ``unavailable``/``provisional``
+    with a NULL band; missing weighted dimensions are tracked explicitly.
+    """
+
+    __tablename__ = "risk_scores"
+
+    score_id: Mapped[str] = mapped_column(String, primary_key=True)
+    analysis_run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("agentic_analysis_runs.analysis_run_id"),
+        nullable=False, index=True,
+    )
+    case_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    band: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    scoring_config_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    scoring_config_hash: Mapped[str] = mapped_column(String, nullable=False)
+    contributing_parameter_ids: Mapped[list] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    missing_required_parameter_ids: Mapped[list] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    critical_missing_parameter_ids: Mapped[list] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    coverage_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    applied_overlays: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    method: Mapped[str] = mapped_column(
+        String, nullable=False, default="deterministic"
+    )
+    supersedes_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    acceptance_state: Mapped[str] = mapped_column(
+        String, nullable=False, default="accepted", index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )

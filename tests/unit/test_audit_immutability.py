@@ -64,6 +64,17 @@ def test_all_required_event_types_present() -> None:
         "memo_generated",
         "case_finalized",
     }
+    agentic = {
+        # Agentic credit-analysis events (Milestone 1.2+).
+        "analysis_run_created",
+        "agent_run",
+        "parameter_computed",
+        "parameter_validated",
+        "score_computed",
+        "rerun_triggered",
+        "descendant_invalidated",
+        "candidate_evaluated",
+    }
     assert {e.value for e in EventType} == required | {
         "evidence_rejected",
         "mapping_review_required",
@@ -76,7 +87,7 @@ def test_all_required_event_types_present() -> None:
         "narrative_evidence_extracted",
         "proxy_linked",
         "subsidiaries_extracted",
-    }
+    } | agentic
 
 
 def test_audit_log_has_no_update_or_delete_methods() -> None:
