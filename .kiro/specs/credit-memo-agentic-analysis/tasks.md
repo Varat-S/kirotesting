@@ -378,7 +378,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 19 — Workbench / UI [DET, read-only]
 
-- [ ] 19.1 Extend `WorkbenchService` + Jinja2 partials with read-only agentic
+- [x] 19.1 Extend `WorkbenchService` + Jinja2 partials with read-only agentic
   sections (parameters, provenance, formulas, scores, obligor/facility, evidence
   quality, agent runs, packets, prompt/model identity, token usage, challenges,
   reruns, candidate structures, policy failures, structure results, topic/cross-

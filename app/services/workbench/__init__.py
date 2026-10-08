@@ -15,6 +15,12 @@ The workbench is a VIEW: it never mutates a case/snapshot/escalation/review
 new version referencing its predecessor (Req 24.4).
 """
 
+from app.services.workbench.agentic import (
+    AGENTIC_SECTIONS,
+    AgenticWorkbenchService,
+    AgenticWorkbenchView,
+    AnalysisRunNotFoundError,
+)
 from app.services.workbench.service import (
     WORKBENCH_SECTIONS,
     CaseNotFoundError,
@@ -37,4 +43,8 @@ __all__ = [
     "WorkbenchHeader",
     "WorkbenchService",
     "WorkbenchView",
+    "AGENTIC_SECTIONS",
+    "AgenticWorkbenchService",
+    "AgenticWorkbenchView",
+    "AnalysisRunNotFoundError",
 ]

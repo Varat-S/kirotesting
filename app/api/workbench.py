@@ -163,6 +163,42 @@ def get_memo_json(
     return _memo(session, case_id, snapshot_version)
 
 
+# --- Agentic analysis workbench (Milestone 19; read-only) --------------------
+
+
+@router.get("/{case_id}/agentic/runs")
+def list_agentic_runs(
+    case_id: str, session: Session = Depends(get_session)
+) -> dict:
+    """List the agentic analysis runs for a case (multiple runs per snapshot)."""
+    from app.services.workbench.agentic import AgenticWorkbenchService
+
+    return {"case_id": case_id,
+            "runs": AgenticWorkbenchService(session).runs_for_case(case_id)}
+
+
+@router.get("/{case_id}/agentic/runs/{analysis_run_id}")
+def get_agentic_workbench(
+    case_id: str,
+    analysis_run_id: str,
+    session: Session = Depends(get_session),
+) -> dict:
+    """Return the read-only agentic workbench view for an explicit run."""
+    from app.services.workbench.agentic import (
+        AgenticWorkbenchService,
+        AnalysisRunNotFoundError,
+    )
+
+    try:
+        view = AgenticWorkbenchService(session).assemble(analysis_run_id)
+    except AnalysisRunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if view.case_id != case_id:
+        raise HTTPException(status_code=404,
+                            detail="Analysis run does not belong to this case.")
+    return view.to_dict()
+
+
 @router.get("/{case_id}/memo.html", response_class=HTMLResponse)
 def get_memo_html(
     case_id: str,
