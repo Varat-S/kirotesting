@@ -13,9 +13,20 @@ identify defects that drive targeted, descendant-aware reruns.
 
 from __future__ import annotations
 
+from app.services.orchestration.conclusions import (
+    ConclusionStore,
+    build_topic_conclusion,
+)
 from app.services.orchestration.promotion import (
     ParameterPromoter,
+    promote_mitigant_output,
     promote_narrow_output,
 )
 
-__all__ = ["ParameterPromoter", "promote_narrow_output"]
+__all__ = [
+    "ParameterPromoter",
+    "promote_narrow_output",
+    "promote_mitigant_output",
+    "ConclusionStore",
+    "build_topic_conclusion",
+]

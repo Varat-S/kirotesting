@@ -100,6 +100,47 @@ def _value(item: dict):
     return item.get("value")
 
 
+def promote_mitigant_output(
+    agent: AgentDefinition,
+    parsed: dict,
+    *,
+    analysis_run_id: str,
+    agent_run_id: str,
+) -> list[ParameterResult]:
+    """Convert a validated mitigant-agent output into bounded proposal parameters.
+
+    A risk-to-mitigant agent proposes BOUNDED mitigants (M15); each proposal is
+    recorded as an owned ParameterResult (method ``llm``) that later feeds
+    candidate structures (M16). The agent proposes; it computes nothing.
+    """
+    owned = set(agent.owned_parameters)
+    results: list[ParameterResult] = []
+    for item in parsed.get("proposals", []):
+        if not isinstance(item, dict):
+            continue
+        pid = item.get("parameter_id")
+        if pid not in owned:
+            continue
+        results.append(
+            ParameterResult(
+                parameter_result_id=f"pr_{uuid.uuid4().hex[:16]}",
+                analysis_run_id=analysis_run_id,
+                parameter_id=pid,
+                topic=agent.topic,
+                value=item.get("mitigant"),
+                value_type="text",
+                method=Method.LLM,
+                status=ParameterStatus.OK,
+                evidence_ids=list(item.get("evidence_ids", [])),
+                agent_id=agent.agent_id,
+                agent_run_id=agent_run_id,
+                notes=item.get("addresses_risk"),
+                acceptance_state=AcceptanceState.ACCEPTED,
+            )
+        )
+    return results
+
+
 class ParameterPromoter:
     """Persists promoted ParameterResults, append-only."""
 
