@@ -233,7 +233,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 10 — Business agents [LLM]
 
-- [ ] 10.1 Six Business agent prompts in `PROMPT_CATALOGUE`; wire agents to
+- [x] 10.1 Six Business agent prompts in `PROMPT_CATALOGUE`; wire agents to
   registry + router + runtime; owned parameters validated.
   - _Areas:_ `app/prompts/templates.py`, `app/services/agents/*`.
   - _Deps:_ 3.1, 4.1, 7.1, 8.1. _Requirements:_ 11.1, 5.
@@ -243,7 +243,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 11 — Financial agents [LLM]
 
-- [ ] 11.1 Six Financial agent prompts + wiring; forecast/stress agent emits
+- [x] 11.1 Six Financial agent prompts + wiring; forecast/stress agent emits
   drivers only (no arithmetic).
   - _Areas:_ `app/prompts/templates.py`, `app/services/agents/*`.
   - _Deps:_ 3.1, 4.1, 7.1, 8.1. _Requirements:_ 12.1, 12.2.
@@ -254,7 +254,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 12 — Business/Financial orchestrators [LLM]
 
-- [ ] 12.1 `business.py` + `financial.py` orchestrators
+- [x] 12.1 `business.py` + `financial.py` orchestrators
   (`app/services/orchestration/`): consume only validated params + score +
   limitations; emit a `TopicConclusion` of typed `ConclusionClaim`s (each with
   `parameter_result_ids` + `evidence_ids`, Remediation 4). Reject **newly
@@ -272,7 +272,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 13 — Business/Financial challengers + targeted rerun [LLM + DET loop]
 
-- [ ] 13.1 `challenge_loop.py` controller + Business/Financial challenge agents;
+- [x] 13.1 `challenge_loop.py` controller + Business/Financial challenge agents;
   `ChallengeFinding`s target an exact `claim_id`; targeted rerun that
   **(a) re-executes requested node(s), (b) compares changed output,
   (c) invalidates affected descendants via registry traversal, (d) recomputes the
@@ -296,7 +296,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 14 — Early Structuring extraction agents [LLM]
 
-- [ ] 14.1 Three extraction agents (`facility_terms`,
+- [x] 14.1 Three extraction agents (`facility_terms`,
   `collateral_security_guarantee`, `legal_undertakings_conditions`) runnable in
   Wave 0 concurrently with Business/Financial.
   - _Areas:_ `app/prompts/templates.py`, `app/services/agents/*`.
@@ -307,7 +307,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 15 — Risk-to-mitigant agents [LLM]
 
-- [ ] 15.1 Four risk-to-mitigant agents gated on accepted Business/Financial
+- [x] 15.1 Four risk-to-mitigant agents gated on accepted Business/Financial
   conclusions + `ObligorRiskScore`; produce bounded mitigant proposals.
   - _Areas:_ `app/prompts/templates.py`, `app/services/agents/*`.
   - _Deps:_ 12.1, 13.1, 9.2. _Requirements:_ 13.2.
@@ -317,7 +317,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 16 — Deterministic structuring engine [DET]
 
-- [ ] 16.1 `candidates.py` + `engine.py` + `stress.py` (`app/services/
+- [x] 16.1 `candidates.py` + `engine.py` + `stress.py` (`app/services/
   structuring/`): assemble **immutable** `CandidateStructure`s; emit versioned
   append-only `CandidateFeasibility` per candidate (feasibility + policy tests);
   base/downside stress; infeasible candidates unselectable. **No mutable
@@ -334,7 +334,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
 
 ## Milestone 17 — Structuring orchestrator/challenge + final cross-topic [LLM]
 
-- [ ] 17.1 Structuring orchestrator (selects feasible only via
+- [x] 17.1 Structuring orchestrator (selects feasible only via
   `StructuringConclusion.selected_candidate_id`, cannot override a deterministic
   failure; re-selection creates a new conclusion version preserving the prior,
   Remediation 11) + Structuring challenge; `StructureProtectionScore` +
@@ -350,7 +350,7 @@ an LLM; **[FLAG]** gated behind `analysis_mode="agentic"`.
   - _Done:_ structuring conclusion + facility/protection scores produced;
     selection append-only.
 
-- [ ] 17.2 Credit orchestrator + cross-topic challenge
+- [x] 17.2 Credit orchestrator + cross-topic challenge
   (`app/services/orchestration/credit.py`): consume only accepted conclusions +
   scores + escalations; detect cross-topic contradictions; bounded reanalysis or
   escalation.

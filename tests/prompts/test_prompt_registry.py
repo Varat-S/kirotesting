@@ -12,16 +12,26 @@ def test_prompt_id_format():
 
 def test_register_catalogue_assigns_versioned_ids(db_session):
     registry = PromptRegistry(db_session)
-    registered = registry.register_catalogue()
 
-    names = {p.name for p in registered}
-    assert names == {e["name"] for e in PROMPT_CATALOGUE}
+    # The baseline catalogue (no agent prompts) registers exactly its own names.
+    baseline = registry.register_catalogue(include_agents=False)
+    assert {p.name for p in baseline} == {e["name"] for e in PROMPT_CATALOGUE}
 
     analysis = registry.latest("business_analysis")
     assert analysis is not None
     assert analysis.prompt_id == "business_analysis_v1.0"
     assert analysis.version == 1
     assert analysis.content_hash  # a stable content hash exists
+
+
+def test_register_catalogue_includes_agent_prompts_by_default(db_session):
+    registry = PromptRegistry(db_session)
+    registered = registry.register_catalogue()  # include_agents=True default
+    names = {p.name for p in registered}
+    # Baseline prompts plus the 27 agentic agent prompts.
+    assert {e["name"] for e in PROMPT_CATALOGUE} <= names
+    assert "business_model" in names and "credit_orchestrator" in names
+    assert len(names) == len(PROMPT_CATALOGUE) + 27
 
 
 def test_register_is_idempotent_for_identical_content(db_session):

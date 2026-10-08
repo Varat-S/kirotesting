@@ -13,14 +13,20 @@ identify defects that drive targeted, descendant-aware reruns.
 
 from __future__ import annotations
 
+from app.services.orchestration.challenge_loop import ChallengeLoop, parse_findings
 from app.services.orchestration.conclusions import (
     ConclusionStore,
     build_topic_conclusion,
 )
+from app.services.orchestration.credit import verify_cross_topic_inputs
 from app.services.orchestration.promotion import (
     ParameterPromoter,
     promote_mitigant_output,
     promote_narrow_output,
+)
+from app.services.orchestration.structuring import (
+    feasible_candidate_ids,
+    validate_selection,
 )
 
 __all__ = [
@@ -29,4 +35,9 @@ __all__ = [
     "promote_mitigant_output",
     "ConclusionStore",
     "build_topic_conclusion",
+    "ChallengeLoop",
+    "parse_findings",
+    "validate_selection",
+    "feasible_candidate_ids",
+    "verify_cross_topic_inputs",
 ]
