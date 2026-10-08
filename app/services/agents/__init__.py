@@ -25,10 +25,24 @@ from app.services.agents.router import (
     RouterInputs,
     RoutingSpec,
 )
+from app.services.agents.executor import (
+    DagExecutor,
+    ExecutionContext,
+    ExecutionReport,
+    PreparedTask,
+)
+from app.services.agents.resolution import accepted, accepted_one, supersede
 from app.services.agents.runtime import AgentRuntime
 
 __all__ = [
     "AgentRuntime",
+    "DagExecutor",
+    "PreparedTask",
+    "ExecutionContext",
+    "ExecutionReport",
+    "accepted",
+    "accepted_one",
+    "supersede",
     "EvidenceRouter",
     "RouterInputs",
     "RoutingSpec",

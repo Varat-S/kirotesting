@@ -57,6 +57,14 @@ class Settings(BaseSettings):
     llm_max_input_bytes: int = Field(default=1500000, ge=1000)
     sec_user_agent: str | None = Field(default=None)
 
+    # --- Agentic analysis executor (Milestone 5) ---
+    # Max concurrent provider calls on the DAG; default 6, configurable up to >=15.
+    agent_max_concurrency: int = Field(default=6, ge=1, le=64)
+    # Per-call provider timeout; a timeout is captured as a typed error, never a hang.
+    agent_timeout_seconds: float = Field(default=120, ge=1, le=600)
+    # Upper bound on automatic challenge-driven rerun rounds (Req 15.4).
+    max_challenge_rerun_rounds: int = Field(default=1, ge=0, le=5)
+
 
 @lru_cache
 def get_settings() -> Settings:

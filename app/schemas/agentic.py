@@ -336,7 +336,7 @@ class AgentRun(BaseModel):
     case_id: str
     snapshot_version: int
     prompt_id: str
-    prompt_version: int
+    prompt_version: int | None = None
     prompt_hash: str
     response_schema_hash: str | None = None
     model_id: str
