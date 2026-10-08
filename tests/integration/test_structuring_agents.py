@@ -9,6 +9,8 @@ bounded mitigants that promote to owned ParameterResults.
 
 from __future__ import annotations
 
+import pytest
+
 from app.services.agents.registry import default_registry
 from app.services.orchestration.promotion import promote_mitigant_output  # noqa: F401
 
@@ -87,3 +89,81 @@ def test_structuring_orchestrator_waits_for_extraction_and_mitigants():
     deps = set(reg.get("structuring_orchestrator").dependencies)
     assert EXTRACTION_AGENTS <= deps
     assert MITIGANT_AGENTS <= deps
+
+
+# --- item 10: ObligorRiskScore barrier --------------------------------------
+
+
+def _conclusion(topic, run="AR1", accepted=True):
+    from app.schemas.agentic import (
+        AcceptanceState,
+        ClaimCategory,
+        ConclusionClaim,
+        TopicConclusion,
+    )
+    claim = ConclusionClaim(claim_id="c", category=ClaimCategory.ASSESSMENT,
+                            text="x")
+    return TopicConclusion(
+        topic=topic, analysis_run_id=run, overall_assessment=claim,
+        score_reference="S:1", orchestrator_run_id="r",
+        acceptance_state=(AcceptanceState.ACCEPTED if accepted
+                          else AcceptanceState.SUPERSEDED),
+    )
+
+
+def _obligor(run="AR1", accepted=True, status="final"):
+    from app.schemas.agentic import AcceptanceState, RiskScore, ScoreKind, ScoreStatus
+    return RiskScore(
+        score_id="s_ob", analysis_run_id=run, kind=ScoreKind.OBLIGOR,
+        status=ScoreStatus(status),
+        band=(2 if status in ("final", "provisional") else None),
+        scoring_config_version=1, scoring_config_hash="h",
+        acceptance_state=(AcceptanceState.ACCEPTED if accepted
+                          else AcceptanceState.SUPERSEDED),
+    )
+
+
+def test_mitigants_eligible_only_when_all_accepted():
+    from app.schemas.agentic import Topic
+    from app.services.orchestration import mitigants_eligible
+
+    ok = mitigants_eligible(
+        analysis_run_id="AR1",
+        conclusions=[_conclusion(Topic.BUSINESS), _conclusion(Topic.FINANCIAL)],
+        obligor_score=_obligor(),
+    )
+    assert ok.eligible
+
+
+@pytest.mark.parametrize("conclusions,obligor,why", [
+    ([], None, "no business"),
+    (["business_only"], None, "no financial"),
+    (["both"], None, "no obligor"),
+    (["both"], "unavailable", "obligor unavailable"),
+    (["both"], "superseded", "obligor superseded"),
+    (["business_super"], "ok", "business superseded"),
+])
+def test_mitigants_blocked_without_full_preconditions(conclusions, obligor, why):
+    from app.schemas.agentic import Topic
+    from app.services.orchestration import mitigants_eligible
+
+    cs = []
+    if conclusions == ["business_only"]:
+        cs = [_conclusion(Topic.BUSINESS)]
+    elif conclusions == ["both"]:
+        cs = [_conclusion(Topic.BUSINESS), _conclusion(Topic.FINANCIAL)]
+    elif conclusions == ["business_super"]:
+        cs = [_conclusion(Topic.BUSINESS, accepted=False),
+              _conclusion(Topic.FINANCIAL)]
+
+    ob = None
+    if obligor == "ok":
+        ob = _obligor()
+    elif obligor == "unavailable":
+        ob = _obligor(status="unavailable")
+    elif obligor == "superseded":
+        ob = _obligor(accepted=False)
+
+    result = mitigants_eligible(analysis_run_id="AR1", conclusions=cs,
+                                obligor_score=ob)
+    assert not result.eligible, why

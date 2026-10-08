@@ -8,6 +8,8 @@ contradictions are surfaced, not resolved.
 
 from __future__ import annotations
 
+import pytest
+
 from app.prompts.registry import PromptRegistry
 from app.schemas.agentic import AgentTask, Topic
 from app.services.agents.registry import default_registry
@@ -102,6 +104,67 @@ def test_invented_number_is_rejected(db_session):
     assert not outcome.valid
     assert any(i.check is ValidationCheck.NUMERIC_CORRESPONDENCE
                for i in outcome.issues)
+
+
+def test_financial_orchestrator_input_contains_only_contracted_inputs():
+    from app.schemas.agentic import (
+        AcceptanceState,
+        Method,
+        ParameterResult,
+        ParameterStatus,
+        RiskScore,
+        ScoreKind,
+        ScoreStatus,
+        Topic,
+    )
+    from app.services.orchestration import build_financial_orchestrator_input
+
+    def _p(pid, run="AR1", accepted=True, topic=Topic.FINANCIAL):
+        return ParameterResult(
+            parameter_result_id=f"pr_{pid}", analysis_run_id=run,
+            parameter_id=pid, topic=topic, value=1.0, value_type="ratio",
+            method=Method.DETERMINISTIC, status=ParameterStatus.OK,
+            formula_id="f", formula_version="1",
+            acceptance_state=(AcceptanceState.ACCEPTED if accepted
+                              else AcceptanceState.SUPERSEDED),
+        )
+
+    score = RiskScore(score_id="s_fin", analysis_run_id="AR1",
+                      kind=ScoreKind.FINANCIAL, status=ScoreStatus.FINAL, band=2,
+                      scoring_config_version=1, scoring_config_hash="h")
+    inp = build_financial_orchestrator_input(
+        analysis_run_id="AR1",
+        parameters=[
+            _p("net_leverage"),
+            _p("net_leverage_super", accepted=False),       # superseded -> excluded
+            _p("mgmt_quality", topic=Topic.BUSINESS),        # wrong topic -> excluded
+        ],
+        financial_score=score,
+        stress_results=[{"scenario": "downside", "dscr": 1.1}],
+        covenant_results=[{"covenant": "max_net_leverage", "headroom": 0.1}],
+    )
+    payload = inp.as_prompt_inputs()
+    pids = {p["parameter_id"] for p in payload["parameters"]}
+    assert pids == {"net_leverage"}  # only accepted Financial params
+    assert payload["score"]["kind"] == "financial"
+    assert payload["stress_results"] and payload["covenant_results"]
+    # The contract has no slot for raw documents.
+    assert "documents" not in payload and "raw_sources" not in payload
+
+
+def test_orchestrator_input_rejects_wrong_score_kind():
+    from app.schemas.agentic import RiskScore, ScoreKind, ScoreStatus
+    from app.services.orchestration import (
+        OrchestratorInputError,
+        build_business_orchestrator_input,
+    )
+
+    fin = RiskScore(score_id="s", analysis_run_id="AR1", kind=ScoreKind.FINANCIAL,
+                    status=ScoreStatus.FINAL, band=2, scoring_config_version=1,
+                    scoring_config_hash="h")
+    with pytest.raises(OrchestratorInputError):
+        build_business_orchestrator_input(
+            analysis_run_id="AR1", parameters=[], business_score=fin)
 
 
 def test_business_orchestrator_conclusion(db_session):

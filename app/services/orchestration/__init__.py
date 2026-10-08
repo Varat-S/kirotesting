@@ -13,12 +13,25 @@ identify defects that drive targeted, descendant-aware reruns.
 
 from __future__ import annotations
 
+from app.services.orchestration.business import (
+    BusinessOrchestratorInput,
+    OrchestratorInputError,
+    build_business_orchestrator_input,
+)
 from app.services.orchestration.challenge_loop import ChallengeLoop, parse_findings
 from app.services.orchestration.conclusions import (
     ConclusionStore,
     build_topic_conclusion,
 )
+from app.services.orchestration.financial import (
+    FinancialOrchestratorInput,
+    build_financial_orchestrator_input,
+)
 from app.services.orchestration.credit import verify_cross_topic_inputs
+from app.services.orchestration.mitigants import (
+    MitigantEligibility,
+    mitigants_eligible,
+)
 from app.services.orchestration.promotion import (
     ParameterPromoter,
     PromotionRejected,
@@ -44,4 +57,11 @@ __all__ = [
     "validate_selection",
     "feasible_candidate_ids",
     "verify_cross_topic_inputs",
+    "mitigants_eligible",
+    "MitigantEligibility",
+    "build_business_orchestrator_input",
+    "build_financial_orchestrator_input",
+    "BusinessOrchestratorInput",
+    "FinancialOrchestratorInput",
+    "OrchestratorInputError",
 ]
