@@ -34,3 +34,5 @@ output/**
 !output/**/.gitkeep
 *.db
 *.sqlite3
+# macOS metadata
+.DS_Store

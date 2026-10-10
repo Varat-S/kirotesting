@@ -50,10 +50,21 @@ def prepare_default_case(session, *, data_root, output_root, case_id=DEFAULT_CAS
             )
             if a.name.startswith("document_")
         ]
+        # OCR reference checks apply only when a document actually produced an
+        # OCR-recognised page. When no OCR engine is installed (or every page is
+        # native/blank), there is NO scanned page -- record that explicitly
+        # instead of letting a bare next() raise StopIteration (which escapes the
+        # API coroutine as RuntimeError). Never fabricate a scanned page.
         scanned = next(
-            c for c in captures if any(p["method"] == "ocr" for p in c["pages"])
+            (c for c in captures if any(p["method"] == "ocr" for p in c["pages"])),
+            None,
         )
-        checks["ocr_recognition"] = ocr_reference_checks(scanned, ocr_reference)
+        checks["ocr_recognition"] = (
+            ocr_reference_checks(scanned, ocr_reference)
+            if scanned is not None
+            else {"status": "skipped", "reason": "no OCR-recognised page available "
+                  "(no OCR engine installed or all pages are native/blank)"}
+        )
         checks["document_coverage"] = [
             {"document_id": c["document_id"], **c["coverage"]} for c in captures
         ]
