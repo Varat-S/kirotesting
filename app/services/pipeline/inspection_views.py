@@ -67,7 +67,7 @@ def metric_review(preview, definitions):
 def stage_outputs(preview):
     """Combined extraction/mapping is stored; do not invent separate intermediates."""
     evidence = preview["evidence"]
-    return {
+    outputs = {
         "admission": (
             "Source admission and cutoff",
             {
@@ -110,6 +110,14 @@ def stage_outputs(preview):
         "llm_input": ("Exact prepared LLM input", preview["next_llm_input"]),
         "full_preview": ("Complete saved pre-LLM result", preview),
     }
+    if preview.get("industry_benchmarking") is not None:
+        # Only present for a case that opted into sector benchmarking, so the
+        # export manifest of every other case is unchanged.
+        outputs["industry_benchmarking"] = (
+            "Industry-aggregate benchmark comparisons (contextual)",
+            preview["industry_benchmarking"],
+        )
+    return outputs
 
 
 def output_manifest(preview):

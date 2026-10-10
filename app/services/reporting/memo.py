@@ -178,6 +178,7 @@ class MemoReportGenerator:
             # The full FinalCaseSnapshot content (source of truth).
             "final_case_snapshot": snapshot_payload,
         }
+        _attach_agentic_provenance(memo_json, snapshot_payload)
 
         if self._audit is not None:
             linked = [f"snapshot:{FINAL_SNAPSHOT_TYPE}:{row.snapshot_version}"]
@@ -227,7 +228,7 @@ class MemoReportGenerator:
             raise ValueError("Use generate_json for a finalized snapshot.")
         payload = validate_snapshot(row.payload)
         as_of, cutoff = self._resolve_evidence_dates(case_id, payload)
-        return {
+        memo_json = {
             "output_version": MEMO_OUTPUT_VERSION,
             "output_type": "credit_memo_draft",
             "source_snapshot": {
@@ -244,6 +245,8 @@ class MemoReportGenerator:
             "final_status": "draft",
             "final_case_snapshot": payload,
         }
+        _attach_agentic_provenance(memo_json, payload)
+        return memo_json
 
     # -- 8.2: deterministic rendering from the JSON ---------------------------
 
@@ -442,6 +445,20 @@ class MemoReportGenerator:
 
 
 # -- PDF backend detection (offline, optional) --------------------------------
+
+
+def _attach_agentic_provenance(memo_json: dict[str, Any], payload: dict[str, Any]) -> None:
+    """Surface the agentic provenance block at the top of the memo JSON.
+
+    The agentic path records the accepted ``analysis_run_id``, scores and
+    accepted parameter ids under ``business_analysis.agentic``. It is copied
+    (not moved) to a top-level ``agentic`` key so a reader of the memo can find
+    the exact accepted run without knowing that nesting. Legacy memos have no
+    such block and gain no key, so their JSON is unchanged.
+    """
+    agentic = (payload.get("business_analysis") or {}).get("agentic")
+    if agentic:
+        memo_json["agentic"] = agentic
 
 
 def detect_pdf_backend() -> str | None:

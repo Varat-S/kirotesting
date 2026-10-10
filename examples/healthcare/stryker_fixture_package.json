@@ -1,0 +1,53 @@
+{
+  "as_of_date": "2024-12-31",
+  "evidence_cutoff_timestamp": "2025-02-15T00:00:00Z",
+  "borrower_entity_id": "SYK_FIXTURE",
+  "entities": [
+    {
+      "entity_id": "SYK_FIXTURE",
+      "legal_name": "Stryker Corporation (SYNTHETIC FIXTURE - NOT REPORTED FINANCIALS)",
+      "tickers": ["SYK"],
+      "entity_type": "borrower",
+      "borrower_flag": true,
+      "expected_consolidation_scope": "consolidated"
+    }
+  ],
+  "sources": [
+    {
+      "filename": "financials.csv",
+      "path": "stryker-fixture/financials.csv",
+      "parser": "csv",
+      "tags": ["financial_statements"],
+      "entity_id": "SYK_FIXTURE",
+      "scope": "consolidated",
+      "accounting_basis": "GAAP",
+      "available_at": "2025-02-12T00:00:00Z",
+      "notes": [
+        "SYNTHETIC illustrative values in USD millions. They are NOT Stryker Corporation's reported financial statements and must not be used for any credit view of Stryker."
+      ],
+      "parse_options": {
+        "scale": "millions",
+        "currency": "USD",
+        "period_headers": {
+          "2021": {"fiscal_year": 2021},
+          "2022": {"fiscal_year": 2022},
+          "2023": {"fiscal_year": 2023},
+          "2024": {"fiscal_year": 2024}
+        }
+      }
+    }
+  ],
+  "sector_benchmark": {
+    "sector_id": "medical_devices",
+    "reference_workbook": "reference/Healthcare_Financial_Overview_Benchmarks.xlsx",
+    "reference_workbook_sha256": "25ae2845901d77a9bb3e798a6da63b0b660088734c20c0ad0d4dc7c72241baa2",
+    "identity": {
+      "cik": "310764",
+      "ticker": "SYK",
+      "reported_sic": 3841,
+      "sic_source": "Declared in the fixture package from the reference workbook's 'Individual companies' sheet (row 686); NOT read from SEC EDGAR for this case.",
+      "sic_retrieved_at": "2026-10-08",
+      "identity_verification": "declared_unverified"
+    }
+  }
+}

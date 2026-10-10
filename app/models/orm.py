@@ -1107,3 +1107,73 @@ class RiskScoreRow(Base):
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, default=utcnow, nullable=False
     )
+
+
+# ---------------------------------------------------------------------------
+# Sector benchmarking (healthcare / medical devices extension)
+# ---------------------------------------------------------------------------
+
+
+class SectorClassificationRow(Base):
+    """A sector classification for one case entity (append-only).
+
+    A human override appends a NEW row and marks the prior one ``superseded``;
+    the payload of an existing row is never edited.
+    """
+
+    __tablename__ = "sector_classifications"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    entity_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    sector_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    industry_label: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    confidence: Mapped[str] = mapped_column(String, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    classification_hash: Mapped[str] = mapped_column(String, nullable=False)
+    supersedes_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    acceptance_state: Mapped[str] = mapped_column(
+        String, nullable=False, default="accepted", index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class IndustryBenchmarkComparisonRow(Base):
+    """One borrower-vs-industry-AGGREGATE comparison (append-only).
+
+    Deliberately separate from ``benchmarks`` (the empirical peer table): an
+    industry aggregate has no peer values, rank, median or percentiles, so this
+    table has no such columns. ``input_hash`` covers the source workbook hash,
+    the reference dataset, the sector configuration and the borrower inputs; a
+    comparison whose inputs changed is superseded, never rewritten.
+    """
+
+    __tablename__ = "industry_benchmark_comparisons"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    analysis_run_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
+    sector_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    comparison_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    benchmark_method: Mapped[str] = mapped_column(String, nullable=False)
+    comparison_state: Mapped[str] = mapped_column(String, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    source_sha256: Mapped[str] = mapped_column(String, nullable=False)
+    dataset_hash: Mapped[str] = mapped_column(String, nullable=False)
+    dataset_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    sector_config_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    sector_config_hash: Mapped[str] = mapped_column(String, nullable=False)
+    input_hash: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    supersedes_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    acceptance_state: Mapped[str] = mapped_column(
+        String, nullable=False, default="accepted", index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )

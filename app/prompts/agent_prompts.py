@@ -31,6 +31,12 @@ _NARROW_TEMPLATE = (
     "- Cite evidence IDs from the packet on every parameter; never invent IDs.\n"
     "- If required evidence is absent, mark the parameter unavailable rather "
     "than guessing.\n"
+    "- If the input carries 'sector_context', ALSO return 'sector_observations': "
+    "one entry per listed risk dimension that the routed evidence addresses, with "
+    "dimension_id, relevance, direction, confidence, evidence_ids, review_flag and "
+    "a short note. Use relevance 'not_assessable' when the evidence does not "
+    "address a dimension; never infer one, and never attach a score, band or "
+    "rating to an observation.\n"
     "Return JSON: {{\"parameters\": [...]}} matching the response schema."
 )
 
@@ -72,6 +78,26 @@ _ORCHESTRATOR_TEMPLATE = (
     "Return JSON matching the TopicConclusion response schema."
 )
 
+# Extra rules for the Financial Orchestrator only: how to use the bounded
+# industry-benchmark context when (and only when) the input carries one.
+_FINANCIAL_BENCHMARK_RULES = (
+    "- If the input carries 'benchmark_context', it holds validated industry-"
+    "AGGREGATE comparisons (not medians, percentiles or peer ranks). Interpret "
+    "the deviations and the relevant industry context; contrast the position "
+    "versus the aggregate with the borrower's own_history; point out where a "
+    "favourable comparison conflicts with a deteriorating trend; state the "
+    "uncertainty an aggregate-versus-company comparison carries; and recommend "
+    "further review where warranted.\n"
+    "- Treat every comparison as contextual. A favourable comparison is not "
+    "evidence of low default risk. Do not discuss items whose comparison_state "
+    "is not_comparable or unavailable except to note the limitation.\n"
+    "- Any number in your text MUST also appear in that claim's 'quoted_values' "
+    "bound to the parameter_result_id given in benchmark_context; cite the "
+    "aggregate's reference_id in evidence_ids. Never compute a ratio, difference "
+    "or percentage yourself, and never assign or change a score, band or "
+    "rating.\n"
+)
+
 _CREDIT_ORCHESTRATOR_TEMPLATE = (
     "You are the credit_orchestrator. You build a coherent CROSS-TOPIC credit "
     "view from ONLY the accepted Business, Financial and Structuring conclusions "
@@ -108,7 +134,12 @@ def _template_for(agent) -> str:
     if agent.task_type == "orchestrate":
         if agent.agent_id == "credit_orchestrator":
             return _CREDIT_ORCHESTRATOR_TEMPLATE
-        return _ORCHESTRATOR_TEMPLATE.format(agent_id=agent.agent_id)
+        template = _ORCHESTRATOR_TEMPLATE.format(agent_id=agent.agent_id)
+        if agent.agent_id == "financial_orchestrator":
+            marker = "Return JSON matching"
+            head, tail = template.split(marker, 1)
+            template = head + _FINANCIAL_BENCHMARK_RULES + marker + tail
+        return template
     if agent.task_type == "challenge":
         if agent.agent_id == "cross_topic_challenge":
             return _CROSS_TOPIC_CHALLENGE_TEMPLATE

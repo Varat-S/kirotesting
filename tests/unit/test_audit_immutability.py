@@ -75,7 +75,15 @@ def test_all_required_event_types_present() -> None:
         "descendant_invalidated",
         "candidate_evaluated",
     }
-    assert {e.value for e in EventType} == required | {
+    sector_benchmarking = {
+        # Sector benchmarking events (healthcare / medical devices extension).
+        "reference_dataset_imported",
+        "sector_classified",
+        "sector_classification_overridden",
+        "industry_benchmark_compared",
+        "industry_benchmark_superseded",
+    }
+    assert {e.value for e in EventType} == required | sector_benchmarking | {
         "evidence_rejected",
         "mapping_review_required",
         "draft_memo_generated",

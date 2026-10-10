@@ -44,6 +44,20 @@ See [`AGENTIC_ANALYSIS_REPORT.md`](AGENTIC_ANALYSIS_REPORT.md) for the overview
 and the live-Vertex run instructions, and the full spec in
 [`.kiro/specs/credit-memo-agentic-analysis/`](.kiro/specs/credit-memo-agentic-analysis/).
 
+## Sector benchmarking (medical devices)
+
+A case can opt into contextual industry benchmarking by adding
+`sector_benchmark` to its source package. A validated benchmark workbook supplies
+published industry aggregates (not peer medians or percentiles); borrower metrics
+are compared only where their definitions are compatible, and the result informs
+the memo narrative without touching official risk scores. Cases that do not opt
+in are unaffected.
+
+See [`HEALTHCARE_BENCHMARKING_REPORT.md`](HEALTHCARE_BENCHMARKING_REPORT.md) for
+what is and is not verified, [`examples/healthcare/`](examples/healthcare/README.md)
+for the offline pilot (synthetic fixture values), and the spec in
+[`.kiro/specs/credit-memo-healthcare-benchmarking/`](.kiro/specs/credit-memo-healthcare-benchmarking/).
+
 ## Technology stack
 
 - Python 3.11+

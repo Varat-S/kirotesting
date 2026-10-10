@@ -84,7 +84,8 @@ def default_parameter_definitions() -> list[ParameterDefinition]:
 
     Composed from the per-topic modules (``business`` / ``financial`` /
     ``structuring``) so the three deterministic domains stay separable, matching
-    the design intent.
+    the design intent. The sector-benchmarking ratios are FINANCIAL parameters and
+    are composed into the financial module's set.
     """
     # Imported lazily to avoid a circular import (the per-topic modules import
     # ParameterDefinition from this module).

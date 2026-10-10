@@ -147,6 +147,28 @@ def safe_ratio(values: dict[str, Any], floor: float) -> FormulaOutput:
     return (round(numerator / denominator, 6), MetricState.OK, None)
 
 
+def positive_denominator_ratio(values: dict[str, Any], floor: float) -> FormulaOutput:
+    """Ratio that is only meaningful over a POSITIVE denominator.
+
+    Used for leverage, coverage and margin ratios where a negative denominator
+    (negative EBITDA, negative interest, negative revenue) would produce a
+    number with the wrong economic sign. A near-zero denominator is unstable
+    (``requires_review``); a negative one is ``not_meaningful``. Neither is ever
+    reported as a value, and a missing input is never treated as zero.
+    """
+    guard = _require(values, "numerator", "denominator")
+    if guard:
+        return guard
+    numerator = float(values["numerator"])
+    denominator = float(values["denominator"])
+    if abs(denominator) <= floor:
+        return (None, MetricState.REQUIRES_REVIEW, "Denominator near zero.")
+    if denominator < 0:
+        return (None, MetricState.NOT_MEANINGFUL,
+                "Negative denominator; the ratio is not economically meaningful.")
+    return (round(numerator / denominator, 6), MetricState.OK, None)
+
+
 def downside_stress(values: dict[str, Any], floor: float) -> FormulaOutput:
     """Apply a multiplicative downside shock to a base value.
 
@@ -362,6 +384,7 @@ FORMULA_LIBRARY: dict[str, Formula] = {
     "average": average,
     "count_rate": count_rate,
     "safe_ratio": safe_ratio,
+    "positive_denominator_ratio": positive_denominator_ratio,
     "days_outstanding": days_outstanding,
     "cash_conversion_cycle": cash_conversion_cycle,
     "price_volume_decomposition": price_volume_decomposition,

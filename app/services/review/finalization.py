@@ -305,6 +305,18 @@ class FinalSnapshotAssembler:
                 "unresolved exceptions first (Req 14.7 / 15.5)."
             )
 
+        # A snapshot carrying industry-benchmark comparisons may only be
+        # finalized while those comparisons are current: the reference dataset
+        # and sector configuration it was built from must still be the latest
+        # registered, and its comparison rows must not have been superseded.
+        from app.services.benchmarking.aggregates import ensure_benchmark_current
+
+        ensure_benchmark_current(
+            self._session,
+            self._registry,
+            (snapshot.financial_analysis or {}).get("industry_benchmarking"),
+        )
+
         finalized_snapshot = snapshot.model_copy(
             update={
                 "finalized": True,

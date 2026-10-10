@@ -1,0 +1,1006 @@
+{
+  "label": "ILLUSTRATIVE - NOT BANK POLICY",
+  "schema_version": "sector-benchmark-config-1.0",
+  "sector_id": "medical_devices",
+  "display_name": "Medical Devices",
+  "memo_section_title": "Healthcare Industry Benchmarking",
+  "analytical_status": "illustrative",
+  "analytical_status_note": "Contextual comparison only. Not analytically validated; never a credit threshold and never an input to official risk scores.",
+  "benchmark": {
+    "method": "industry_aggregate_damodaran_v1",
+    "industry_label": "Healthcare Products",
+    "source_name": "Damodaran Online (NYU Stern) US industry datasets, as presented in the supplied workbook",
+    "expected_vintage": "2026-01",
+    "in_line_relative_band": 0.05,
+    "max_period_gap_months": 18,
+    "empirical_peer_method": "empirical_rank_v1",
+    "empirical_min_sample_for_percentiles": 8
+  },
+  "inapplicable_base_metrics": ["casm", "load_factor"],
+  "inapplicable_source_tags": ["fuel"],
+  "required_metadata": [
+    "source.sha256",
+    "vintage.data_as_of",
+    "documentation.sources",
+    "importer_version",
+    "mapping_hash"
+  ],
+  "workbook_mapping": {
+    "sheets": {
+      "sic_codes": "Healthcare SIC Codes",
+      "companies": "Individual companies",
+      "benchmarks": "Benchmarks",
+      "assumptions": "Assumptions"
+    },
+    "expected_industries": [
+      "Drugs (Biotechnology)",
+      "Drugs (Pharmaceutical)",
+      "Healthcare Products",
+      "Healthcare Support Services",
+      "Healthcare Information and Technology",
+      "Hospitals/Healthcare Facilities"
+    ],
+    "industry_aliases": {
+      "Heathcare Information and Technology": "Healthcare Information and Technology"
+    },
+    "benchmarks_sheet": {
+      "header_row": 1,
+      "label_column": "A",
+      "definition_column": "B",
+      "notes_header": "Notes",
+      "section_prefixes": {
+        "A": "A. ",
+        "B": "B. ",
+        "C": "C. "
+      },
+      "source_aggregate_section": "B",
+      "unavailable_literals": ["n/a"],
+      "unavailable_prefixes": ["n/a", "n/m"]
+    },
+    "sic_sheet": {
+      "header_row": 5,
+      "documentation_rows": [2, 3, 4],
+      "columns": {
+        "tier": "Tier",
+        "segment": "Segment",
+        "sic_code": "SIC Code",
+        "title": "Industry Title",
+        "sec_office": "SEC Office",
+        "notes": "Notes",
+        "alternative": "Alternative / Split",
+        "mapping_confidence": "Mapping Confidence"
+      }
+    },
+    "companies_sheet": {
+      "header_row": 1,
+      "columns": {
+        "name": "Company Name",
+        "ticker": "Exchange:Ticker",
+        "industry_group": "Industry Group",
+        "sector": "Primary Sector",
+        "sic_code": "SIC Code",
+        "sic_title": "Industry Title"
+      }
+    },
+    "assumptions_sheet": {
+      "inputs": [
+        {
+          "key": "short_term_debt_share",
+          "cell": "B5",
+          "kind": "placeholder",
+          "note": "Placeholder: the source has no maturity data. Never an observed principal repayment."
+        },
+        {
+          "key": "icr_basis_switch",
+          "cell": "B6",
+          "kind": "methodology_switch",
+          "note": "Selects how Damodaran's interest coverage ratio is interpreted when backing out interest expense."
+        },
+        {
+          "key": "days_per_year",
+          "cell": "B7",
+          "kind": "constant",
+          "note": "Day-count convention for DSO, DIO and DPO."
+        }
+      ],
+      "limitations_rows": [11, 25],
+      "sources_rows": [28, 33],
+      "vintage_cells": ["A27"]
+    },
+    "vintage_cells": [
+      {"sheet": "Benchmarks", "cell": "A22"},
+      {"sheet": "Assumptions", "cell": "A27"},
+      {"sheet": "Assumptions", "cell": "B12"}
+    ],
+    "external_reference_policy": "rebind_to_local_sheet_when_cached_value_matches",
+    "reconciliation": {
+      "relative_tolerance": 1e-9,
+      "absolute_tolerance": 1e-9
+    },
+    "cross_checks": [
+      {
+        "label": "Derived sales vs cross-check",
+        "max_abs": 0.01,
+        "note": "Workbook's own tolerance: derived sales within about 1% of the independent route."
+      }
+    ],
+    "metric_rows": [
+      {"section": "A", "label": "DSCR", "benchmark_metric_id": "workbook_dscr_proxy"},
+      {"section": "A", "label": "ICR (EBIT)", "benchmark_metric_id": "ebit_interest_coverage"},
+      {"section": "A", "label": "ICR (EBITDA)", "benchmark_metric_id": "ebitda_interest_coverage"},
+      {"section": "A", "label": "FCCR", "benchmark_metric_id": "workbook_fccr_proxy"},
+      {"section": "A", "label": "UFCF / Sales", "benchmark_metric_id": "ufcf_to_sales"},
+      {"section": "A", "label": "UFCF / EBITDA", "benchmark_metric_id": "ufcf_to_ebitda"},
+      {"section": "A", "label": "Net debt / EBITDA", "benchmark_metric_id": "net_debt_to_ebitda"},
+      {"section": "A", "label": "Gross debt / EBITDA (memo)", "benchmark_metric_id": "gross_debt_to_ebitda_memo"},
+      {"section": "A", "label": "Gearing", "benchmark_metric_id": "gearing"},
+      {"section": "A", "label": "CFO / EBITDA", "benchmark_metric_id": "cfo_to_ebitda"},
+      {"section": "A", "label": "DSO (days)", "benchmark_metric_id": "dso"},
+      {"section": "A", "label": "DIO (days)", "benchmark_metric_id": "dio"},
+      {"section": "A", "label": "DPO (days)", "benchmark_metric_id": "dpo"},
+      {"section": "A", "label": "CCC (days)", "benchmark_metric_id": "cash_conversion_cycle"},
+      {"section": "A", "label": "Total payout ratio", "benchmark_metric_id": "total_payout_ratio"},
+      {"section": "A", "label": "Gross margin", "benchmark_metric_id": "gross_margin_derived"},
+      {"section": "A", "label": "COGS / Sales", "benchmark_metric_id": "cogs_to_sales_derived"},
+      {"section": "A", "label": "Gross margin change (%)", "benchmark_metric_id": "gross_margin_change"},
+      {"section": "A", "label": "Cost pass-through", "benchmark_metric_id": "cost_pass_through"},
+      {"section": "B", "label": "Net margin", "benchmark_metric_id": "net_margin"},
+      {"section": "B", "label": "Gross margin", "benchmark_metric_id": "gross_margin"},
+      {"section": "B", "label": "COGS / Sales", "benchmark_metric_id": "cogs_to_sales"},
+      {"section": "B", "label": "EBITDA / Sales", "benchmark_metric_id": "ebitda_margin"},
+      {"section": "B", "label": "EBIT / Sales (pre-tax, unadjusted)", "benchmark_metric_id": "operating_margin"},
+      {"section": "B", "label": "Interest coverage ratio (Damodaran)", "benchmark_metric_id": "damodaran_interest_coverage"},
+      {"section": "B", "label": "Debt / EBITDA (gross)", "benchmark_metric_id": "gross_debt_to_ebitda"},
+      {"section": "B", "label": "Effective tax rate", "benchmark_metric_id": "effective_tax_rate"},
+      {"section": "B", "label": "Net CapEx / Sales, for sales cross-check only", "benchmark_metric_id": "net_capex_to_sales"},
+      {"section": "B", "label": "Net R&D ($mm), for sales cross-check only", "benchmark_metric_id": "net_rnd_amount"}
+    ]
+  },
+  "benchmark_metrics": {
+    "net_debt_to_ebitda": {
+      "use": "comparison",
+      "units": "x",
+      "plausible_range": [-20, 50],
+      "descriptor": {
+        "numerator": "net_debt",
+        "denominator": "ebitda",
+        "debt_basis": "net",
+        "ebitda_basis": "unadjusted",
+        "lease_treatment": "unknown",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": [
+        "Net debt is backed out of gross Debt/EBITDA using Cash/Firm value and EBITDA/EV; it is not a published figure."
+      ]
+    },
+    "gross_debt_to_ebitda": {
+      "use": "comparison",
+      "units": "x",
+      "plausible_range": [0, 50],
+      "descriptor": {
+        "numerator": "gross_debt",
+        "denominator": "ebitda",
+        "debt_basis": "gross",
+        "ebitda_basis": "unadjusted",
+        "lease_treatment": "unknown",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": []
+    },
+    "ebit_interest_coverage": {
+      "use": "comparison",
+      "units": "x",
+      "plausible_range": [-100, 500],
+      "descriptor": {
+        "numerator": "ebit",
+        "denominator": "interest_expense",
+        "interest_basis": "interest_expense_backed_out",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": [
+        "Industry interest expense is backed out of Damodaran's coverage ratio under the workbook's ICR basis switch; capitalized interest is not visible."
+      ]
+    },
+    "ebitda_interest_coverage": {
+      "use": "comparison",
+      "units": "x",
+      "plausible_range": [-100, 500],
+      "descriptor": {
+        "numerator": "ebitda",
+        "denominator": "interest_expense",
+        "ebitda_basis": "unadjusted",
+        "interest_basis": "interest_expense_backed_out",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": [
+        "Industry interest expense is backed out of Damodaran's coverage ratio under the workbook's ICR basis switch; capitalized interest is not visible."
+      ]
+    },
+    "damodaran_interest_coverage": {
+      "use": "context_only",
+      "units": "x",
+      "plausible_range": [-100, 500],
+      "descriptor": {
+        "numerator": "ebit_after_tax",
+        "denominator": "interest_expense",
+        "interest_basis": "interest_expense",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Documented as EBIT(1-t) / interest expense; no borrower metric uses this numerator."]
+    },
+    "cfo_to_ebitda": {
+      "use": "comparison",
+      "units": "ratio",
+      "plausible_range": [-5, 5],
+      "descriptor": {
+        "numerator": "cfo_proxy",
+        "denominator": "ebitda",
+        "ebitda_basis": "unadjusted",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": [
+        "Industry CFO is a proxy (FCFE before debt flows + CapEx); it omits impairments and stock compensation."
+      ]
+    },
+    "operating_margin": {
+      "use": "comparison",
+      "units": "ratio",
+      "plausible_range": [-2, 1],
+      "descriptor": {
+        "numerator": "ebit",
+        "denominator": "revenue",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": []
+    },
+    "ebitda_margin": {
+      "use": "comparison",
+      "units": "ratio",
+      "plausible_range": [-2, 1],
+      "descriptor": {
+        "numerator": "ebitda",
+        "denominator": "revenue",
+        "ebitda_basis": "unadjusted",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": []
+    },
+    "gross_margin": {
+      "use": "comparison",
+      "units": "ratio",
+      "plausible_range": [-1, 1],
+      "descriptor": {
+        "numerator": "gross_profit",
+        "denominator": "revenue",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": []
+    },
+    "dso": {
+      "use": "comparison",
+      "units": "days",
+      "plausible_range": [0, 1000],
+      "descriptor": {
+        "numerator": "receivables",
+        "denominator": "revenue",
+        "balance_basis": "year_end",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Year-end balances over annual flows."]
+    },
+    "dio": {
+      "use": "comparison",
+      "units": "days",
+      "plausible_range": [0, 2000],
+      "descriptor": {
+        "numerator": "inventory",
+        "denominator": "cogs",
+        "balance_basis": "year_end",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Year-end balances over annual flows."]
+    },
+    "dpo": {
+      "use": "comparison",
+      "units": "days",
+      "plausible_range": [0, 2000],
+      "descriptor": {
+        "numerator": "payables",
+        "denominator": "cogs",
+        "balance_basis": "year_end",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Year-end balances over annual flows."]
+    },
+    "cash_conversion_cycle": {
+      "use": "comparison",
+      "units": "days",
+      "plausible_range": [-1000, 3000],
+      "descriptor": {
+        "numerator": "dso_plus_dio_minus_dpo",
+        "denominator": "none",
+        "balance_basis": "year_end",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Year-end balances over annual flows."]
+    },
+    "effective_tax_rate": {
+      "use": "comparison",
+      "units": "ratio",
+      "plausible_range": [-1, 1],
+      "descriptor": {
+        "numerator": "taxes_paid",
+        "denominator": "taxable_income",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Documented as taxes paid / taxable income as reported; aggregate includes loss-making firms."]
+    },
+    "ufcf_to_sales": {
+      "use": "context_only",
+      "units": "ratio",
+      "plausible_range": [-5, 5],
+      "descriptor": {
+        "numerator": "unlevered_free_cash_flow",
+        "denominator": "revenue",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Unlevered free cash flow (NOPAT + D&A - increase in NWC - CapEx), not CFO - CapEx."]
+    },
+    "ufcf_to_ebitda": {
+      "use": "context_only",
+      "units": "ratio",
+      "plausible_range": [-5, 5],
+      "descriptor": {
+        "numerator": "unlevered_free_cash_flow",
+        "denominator": "ebitda",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Unlevered free cash flow, not CFO - CapEx."]
+    },
+    "net_capex_to_sales": {
+      "use": "context_only",
+      "units": "ratio",
+      "plausible_range": [-1, 1],
+      "descriptor": {
+        "numerator": "net_capex_including_acquisitions_and_rnd",
+        "denominator": "revenue",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Damodaran Net CapEx (CapEx - D&A + acquisitions + net R&D); not gross CapEx / revenue."]
+    },
+    "net_rnd_amount": {
+      "use": "diagnostic_only",
+      "units": "usd_mm",
+      "plausible_range": [-1000000, 1000000],
+      "descriptor": {
+        "numerator": "net_rnd_after_amortization",
+        "denominator": "none",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["A dollar amount net of R&D amortization, used only for the workbook's sales cross-check; not R&D expense / revenue."]
+    },
+    "workbook_dscr_proxy": {
+      "use": "context_only",
+      "units": "x",
+      "plausible_range": [-100, 100],
+      "descriptor": {
+        "numerator": "ebit_less_cash_taxes",
+        "denominator": "interest_plus_assumed_principal",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": [
+        "Principal is the 10% short-term-debt-share placeholder, not contractual debt service.",
+        "Numerator is EBIT less cash taxes, not CFADS."
+      ]
+    },
+    "workbook_fccr_proxy": {
+      "use": "context_only",
+      "units": "x",
+      "plausible_range": [-100, 100],
+      "descriptor": {
+        "numerator": "ebitda_less_capex_less_cash_taxes",
+        "denominator": "assumed_principal_plus_interest_plus_leases",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": [
+        "Principal is the 10% short-term-debt-share placeholder.",
+        "Under US GAAP the lease term double counts."
+      ]
+    },
+    "gearing": {
+      "use": "context_only",
+      "units": "ratio",
+      "plausible_range": [-5, 5],
+      "descriptor": {
+        "numerator": "net_debt",
+        "denominator": "net_debt_plus_book_equity",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Book equity is backed out of Book debt/capital."]
+    },
+    "total_payout_ratio": {
+      "use": "context_only",
+      "units": "ratio",
+      "plausible_range": [-100, 100],
+      "descriptor": {
+        "numerator": "dividends_plus_buybacks",
+        "denominator": "cfo_proxy_less_capex",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Buybacks are gross of issuance."]
+    },
+    "net_margin": {
+      "use": "context_only",
+      "units": "ratio",
+      "plausible_range": [-5, 1],
+      "descriptor": {
+        "numerator": "net_income",
+        "denominator": "revenue",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": []
+    },
+    "cogs_to_sales": {
+      "use": "context_only",
+      "units": "ratio",
+      "plausible_range": [0, 5],
+      "descriptor": {
+        "numerator": "cogs",
+        "denominator": "revenue",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": []
+    },
+    "gross_debt_to_ebitda_memo": {
+      "use": "diagnostic_only",
+      "units": "x",
+      "plausible_range": [0, 50],
+      "descriptor": {
+        "numerator": "gross_debt",
+        "denominator": "ebitda",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Round trip of the published Debt/EBITDA; use the published row."]
+    },
+    "gross_margin_derived": {
+      "use": "diagnostic_only",
+      "units": "ratio",
+      "plausible_range": [-1, 1],
+      "descriptor": {
+        "numerator": "gross_profit",
+        "denominator": "revenue",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Round trip of the published gross margin; use the published row."]
+    },
+    "cogs_to_sales_derived": {
+      "use": "diagnostic_only",
+      "units": "ratio",
+      "plausible_range": [0, 5],
+      "descriptor": {
+        "numerator": "cogs",
+        "denominator": "revenue",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Round trip of the published COGS/Sales; use the published row."]
+    },
+    "gross_margin_change": {
+      "use": "context_only",
+      "units": "ratio",
+      "plausible_range": [-1, 1],
+      "descriptor": {
+        "numerator": "gross_margin_change",
+        "denominator": "none",
+        "period_basis": "two_period",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Needs two periods; the source is a single-date cross-section."]
+    },
+    "cost_pass_through": {
+      "use": "context_only",
+      "units": "ratio",
+      "plausible_range": [-100, 100],
+      "descriptor": {
+        "numerator": "revenue_growth",
+        "denominator": "cogs_growth",
+        "period_basis": "two_period",
+        "accounting_basis": "GAAP"
+      },
+      "caveats": ["Needs two periods; the source is a single-date cross-section."]
+    }
+  },
+  "borrower_metrics": {
+    "net_debt_to_ebitda": {
+      "source": "metric_engine",
+      "metric": "net_debt_to_ebitda",
+      "units": "x",
+      "adverse_direction": "up",
+      "descriptor": {
+        "numerator": "net_debt",
+        "denominator": "ebitda",
+        "debt_basis": "net",
+        "ebitda_basis": "unadjusted",
+        "lease_treatment": "operating_leases_excluded",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "gross_debt_to_ebitda": {
+      "source": "parameter_engine",
+      "parameter_id": "gross_debt_to_ebitda",
+      "inputs": {"numerator": ["total_debt"], "denominator": ["ebitda"]},
+      "units": "x",
+      "adverse_direction": "up",
+      "descriptor": {
+        "numerator": "gross_debt",
+        "denominator": "ebitda",
+        "debt_basis": "gross",
+        "ebitda_basis": "unadjusted",
+        "lease_treatment": "operating_leases_excluded",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "ebit_interest_coverage": {
+      "source": "parameter_engine",
+      "parameter_id": "ebit_interest_coverage",
+      "inputs": {"numerator": ["operating_income"], "denominator": ["interest_expense"]},
+      "units": "x",
+      "adverse_direction": "down",
+      "descriptor": {
+        "numerator": "ebit",
+        "denominator": "interest_expense",
+        "interest_basis": "interest_expense",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "ebitda_interest_coverage": {
+      "source": "metric_engine",
+      "metric": "interest_coverage",
+      "units": "x",
+      "adverse_direction": "down",
+      "descriptor": {
+        "numerator": "ebitda",
+        "denominator": "interest_expense",
+        "ebitda_basis": "unadjusted",
+        "interest_basis": "interest_expense",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "cfo_to_ebitda": {
+      "source": "metric_engine",
+      "metric": "cash_conversion",
+      "units": "ratio",
+      "adverse_direction": "down",
+      "descriptor": {
+        "numerator": "cfo",
+        "denominator": "ebitda",
+        "ebitda_basis": "unadjusted",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "operating_margin": {
+      "source": "metric_engine",
+      "metric": "operating_margin",
+      "units": "ratio",
+      "adverse_direction": "down",
+      "descriptor": {
+        "numerator": "ebit",
+        "denominator": "revenue",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "ebitda_margin": {
+      "source": "parameter_engine",
+      "parameter_id": "ebitda_margin",
+      "inputs": {"numerator": ["ebitda"], "denominator": ["revenue"]},
+      "units": "ratio",
+      "adverse_direction": "down",
+      "descriptor": {
+        "numerator": "ebitda",
+        "denominator": "revenue",
+        "ebitda_basis": "unadjusted",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "gross_margin": {
+      "source": "parameter_engine",
+      "parameter_id": "gross_margin",
+      "inputs": {"numerator": ["gross_profit"], "denominator": ["revenue"]},
+      "units": "ratio",
+      "adverse_direction": "down",
+      "descriptor": {
+        "numerator": "gross_profit",
+        "denominator": "revenue",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "revenue_growth": {
+      "source": "metric_engine",
+      "metric": "revenue_growth",
+      "units": "ratio",
+      "adverse_direction": "down",
+      "descriptor": {
+        "numerator": "revenue_change",
+        "denominator": "prior_revenue",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "revenue_cagr": {
+      "source": "parameter_engine",
+      "parameter_id": "revenue_cagr",
+      "series": {"field": "revenue"},
+      "units": "ratio",
+      "adverse_direction": "down",
+      "descriptor": {
+        "numerator": "revenue_compound_growth",
+        "denominator": "none",
+        "period_basis": "multi_year",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "free_cash_flow": {
+      "source": "metric_engine",
+      "metric": "free_cash_flow",
+      "units": "currency",
+      "adverse_direction": "down",
+      "descriptor": {
+        "numerator": "cfo_less_capex",
+        "denominator": "none",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "fcf_to_revenue": {
+      "source": "parameter_engine",
+      "parameter_id": "fcf_to_revenue",
+      "inputs": {"numerator": ["cfo", "-capex"], "denominator": ["revenue"]},
+      "units": "ratio",
+      "adverse_direction": "down",
+      "descriptor": {
+        "numerator": "cfo_less_capex",
+        "denominator": "revenue",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "capex_to_revenue": {
+      "source": "metric_engine",
+      "metric": "capex_to_revenue",
+      "units": "ratio",
+      "adverse_direction": "up",
+      "descriptor": {
+        "numerator": "capex",
+        "denominator": "revenue",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "liquidity": {
+      "source": "metric_engine",
+      "metric": "liquidity",
+      "units": "currency",
+      "adverse_direction": "down",
+      "descriptor": {
+        "numerator": "unrestricted_cash_plus_undrawn_revolver",
+        "denominator": "none",
+        "period_basis": "instant",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "dso": {
+      "source": "parameter_engine",
+      "parameter_id": "dso",
+      "inputs": {"balance": ["accounts_receivable"], "flow": ["revenue"]},
+      "units": "days",
+      "adverse_direction": "up",
+      "descriptor": {
+        "numerator": "receivables",
+        "denominator": "revenue",
+        "balance_basis": "year_end",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "dio": {
+      "source": "parameter_engine",
+      "parameter_id": "dio",
+      "inputs": {"balance": ["inventory"], "flow": ["cost_of_sales"]},
+      "units": "days",
+      "adverse_direction": "up",
+      "descriptor": {
+        "numerator": "inventory",
+        "denominator": "cogs",
+        "balance_basis": "year_end",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "dpo": {
+      "source": "parameter_engine",
+      "parameter_id": "dpo",
+      "inputs": {"balance": ["accounts_payable"], "flow": ["cost_of_sales"]},
+      "units": "days",
+      "adverse_direction": "down",
+      "descriptor": {
+        "numerator": "payables",
+        "denominator": "cogs",
+        "balance_basis": "year_end",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "cash_conversion_cycle": {
+      "source": "parameter_engine",
+      "parameter_id": "cash_conversion_cycle",
+      "from_metrics": {"dso": "dso", "dio": "dio", "dpo": "dpo"},
+      "units": "days",
+      "adverse_direction": "up",
+      "descriptor": {
+        "numerator": "dso_plus_dio_minus_dpo",
+        "denominator": "none",
+        "balance_basis": "year_end",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "rnd_to_revenue": {
+      "source": "parameter_engine",
+      "parameter_id": "rnd_to_revenue",
+      "inputs": {"numerator": ["research_and_development_expense"], "denominator": ["revenue"]},
+      "units": "ratio",
+      "adverse_direction": null,
+      "descriptor": {
+        "numerator": "rnd_expense",
+        "denominator": "revenue",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "cash_tax_burden": {
+      "source": "parameter_engine",
+      "parameter_id": "cash_tax_burden",
+      "inputs": {"numerator": ["income_taxes_paid"], "denominator": ["income_before_income_taxes"]},
+      "units": "ratio",
+      "adverse_direction": null,
+      "descriptor": {
+        "numerator": "taxes_paid",
+        "denominator": "pre_tax_income",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "goodwill_intangibles_to_total_assets": {
+      "source": "parameter_engine",
+      "parameter_id": "goodwill_intangibles_to_total_assets",
+      "inputs": {"numerator": ["goodwill", "intangible_assets"], "denominator": ["total_assets"]},
+      "units": "ratio",
+      "adverse_direction": "up",
+      "descriptor": {
+        "numerator": "goodwill_plus_intangibles",
+        "denominator": "total_assets",
+        "period_basis": "instant",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "acquisitions_to_cfo": {
+      "source": "parameter_engine",
+      "parameter_id": "acquisitions_to_cfo",
+      "inputs": {"numerator": ["acquisitions_net_of_cash"], "denominator": ["cfo"]},
+      "units": "ratio",
+      "adverse_direction": "up",
+      "descriptor": {
+        "numerator": "acquisition_spend",
+        "denominator": "cfo",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    },
+    "dscr": {
+      "source": "parameter_engine",
+      "parameter_id": "dscr",
+      "inputs": {"available": ["cfads"], "required": ["contractual_debt_service"]},
+      "units": "x",
+      "adverse_direction": "down",
+      "descriptor": {
+        "numerator": "cfads",
+        "denominator": "contractual_debt_service",
+        "period_basis": "annual",
+        "accounting_basis": "GAAP"
+      }
+    }
+  },
+  "comparisons": [
+    {"comparison_id": "net_debt_to_ebitda", "borrower_metric": "net_debt_to_ebitda", "benchmark_metric": "net_debt_to_ebitda"},
+    {"comparison_id": "gross_debt_to_ebitda", "borrower_metric": "gross_debt_to_ebitda", "benchmark_metric": "gross_debt_to_ebitda"},
+    {"comparison_id": "ebit_interest_coverage", "borrower_metric": "ebit_interest_coverage", "benchmark_metric": "ebit_interest_coverage"},
+    {"comparison_id": "ebitda_interest_coverage", "borrower_metric": "ebitda_interest_coverage", "benchmark_metric": "ebitda_interest_coverage"},
+    {"comparison_id": "cfo_to_ebitda", "borrower_metric": "cfo_to_ebitda", "benchmark_metric": "cfo_to_ebitda"},
+    {"comparison_id": "operating_margin", "borrower_metric": "operating_margin", "benchmark_metric": "operating_margin"},
+    {"comparison_id": "ebitda_margin", "borrower_metric": "ebitda_margin", "benchmark_metric": "ebitda_margin"},
+    {"comparison_id": "gross_margin", "borrower_metric": "gross_margin", "benchmark_metric": "gross_margin"},
+    {"comparison_id": "dso", "borrower_metric": "dso", "benchmark_metric": "dso"},
+    {"comparison_id": "dio", "borrower_metric": "dio", "benchmark_metric": "dio"},
+    {"comparison_id": "dpo", "borrower_metric": "dpo", "benchmark_metric": "dpo"},
+    {"comparison_id": "cash_conversion_cycle", "borrower_metric": "cash_conversion_cycle", "benchmark_metric": "cash_conversion_cycle"},
+    {"comparison_id": "cash_tax_burden", "borrower_metric": "cash_tax_burden", "benchmark_metric": "effective_tax_rate"},
+    {"comparison_id": "fcf_to_revenue", "borrower_metric": "fcf_to_revenue", "benchmark_metric": "ufcf_to_sales"},
+    {"comparison_id": "capex_to_revenue", "borrower_metric": "capex_to_revenue", "benchmark_metric": "net_capex_to_sales"},
+    {"comparison_id": "rnd_to_revenue", "borrower_metric": "rnd_to_revenue", "benchmark_metric": "net_rnd_amount"},
+    {"comparison_id": "dscr", "borrower_metric": "dscr", "benchmark_metric": "workbook_dscr_proxy"},
+    {"comparison_id": "revenue_growth", "borrower_metric": "revenue_growth", "benchmark_metric": null},
+    {"comparison_id": "revenue_cagr", "borrower_metric": "revenue_cagr", "benchmark_metric": null},
+    {"comparison_id": "free_cash_flow", "borrower_metric": "free_cash_flow", "benchmark_metric": null},
+    {"comparison_id": "liquidity", "borrower_metric": "liquidity", "benchmark_metric": null},
+    {"comparison_id": "goodwill_intangibles_to_total_assets", "borrower_metric": "goodwill_intangibles_to_total_assets", "benchmark_metric": null},
+    {"comparison_id": "acquisitions_to_cfo", "borrower_metric": "acquisitions_to_cfo", "benchmark_metric": null}
+  ],
+  "comparability": {
+    "dimension_rules": {
+      "numerator": {"mismatch": "not_comparable"},
+      "denominator": {"mismatch": "not_comparable"},
+      "debt_basis": {"mismatch": "not_comparable"},
+      "ebitda_basis": {"mismatch": "not_comparable", "unknown": "caveat"},
+      "interest_basis": {"mismatch": "caveat", "unknown": "caveat"},
+      "lease_treatment": {"mismatch": "not_comparable", "unknown": "caveat"},
+      "balance_basis": {"mismatch": "caveat", "unknown": "caveat"},
+      "period_basis": {"mismatch": "not_comparable"},
+      "accounting_basis": {"mismatch": "caveat"},
+      "units": {"mismatch": "not_comparable"}
+    },
+    "equivalences": {
+      "numerator": [
+        ["cfo", "cfo_proxy"],
+        ["taxes_paid", "taxes_paid"]
+      ],
+      "denominator": [
+        ["pre_tax_income", "taxable_income"]
+      ],
+      "interest_basis": [],
+      "accounting_basis": []
+    },
+    "equivalence_caveats": {
+      "numerator:cfo~cfo_proxy": "Borrower CFO is reported; industry CFO is a derived proxy.",
+      "denominator:pre_tax_income~taxable_income": "Borrower denominator is pre-tax income; the industry denominator is taxable income as reported."
+    },
+    "value_status_rules": {
+      "source_aggregate": null,
+      "derived": "Industry figure is derived by the workbook from published aggregates, not published directly.",
+      "assumed": "not_comparable",
+      "unavailable": "unavailable",
+      "invalid": "unavailable"
+    },
+    "standing_limitations": [
+      "Industry figures are cumulated aggregates (sum of numerators over sum of denominators); large firms dominate. They are not medians, percentiles or peer observations.",
+      "A single-date cross-section; it says nothing about the borrower's own trajectory.",
+      "Aggregate includes firms with different accounting bases and fiscal year ends."
+    ]
+  },
+  "rules": {
+    "warnings": [
+      {"id": "W-HC-ASSUMED-PRINCIPAL", "when": "benchmark_status_assumed", "message": "Workbook debt-service ratios rest on a placeholder principal assumption and are never compared with borrower DSCR."},
+      {"id": "W-HC-DERIVED", "when": "benchmark_status_derived", "message": "Industry figure is derived, not published."},
+      {"id": "W-HC-PERIOD-GAP", "when": "period_gap_exceeds_max", "message": "Borrower period and industry data vintage differ by more than the configured gap."}
+    ],
+    "informational": [
+      {"id": "I-HC-AGGREGATE", "message": "Comparison is against an industry aggregate; no percentile or rank is available."},
+      {"id": "I-HC-CONTEXT-ONLY", "message": "Benchmark comparisons inform narrative and challenge only; they do not alter official risk scores."}
+    ]
+  },
+  "classification": {
+    "provisional_industry": "Healthcare Products",
+    "device_sic_codes": [3841, 3842, 3843, 3844, 3845],
+    "segment_to_industry": {
+      "Medical Devices & Supplies": "Healthcare Products"
+    },
+    "conflicting_sic_ranges": [
+      {"min": 2833, "max": 2836, "category": "pharmaceutical_or_biotech"}
+    ],
+    "device_keywords": [
+      "medical device", "medical devices", "medical technology", "surgical", "orthopaedic", "orthopedic",
+      "implant", "implants", "endoscopy", "neurovascular", "neurotechnology", "instruments", "medsurg"
+    ],
+    "pharma_keywords": [
+      "pharmaceutical", "pharmaceuticals", "biologic", "biologics", "drug", "drugs", "biotechnology", "therapeutics"
+    ],
+    "diversified_keywords": [
+      "health insurance", "managed care", "pharmacy benefit", "hospital operator", "drug distribution"
+    ],
+    "min_corroborating_signals": 1,
+    "sic_mapping_confidence_required": ["High"],
+    "unverified_identity_confidence_cap": "medium",
+    "evidence_requirements": [
+      "A company identity record with a CIK.",
+      "A current reported SIC code with its source and retrieval date.",
+      "At least one corroborating signal: the workbook company list industry group or a business/segment description."
+    ]
+  },
+  "financial_mapping_extension": [
+    {"source_type": "table_label", "source_key": "Net sales", "canonical_name": "revenue"},
+    {"source_type": "table_label", "source_key": "Cost of sales", "canonical_name": "cost_of_sales"},
+    {"source_type": "table_label", "source_key": "Gross profit", "canonical_name": "gross_profit"},
+    {"source_type": "table_label", "source_key": "Research, development and engineering expenses", "canonical_name": "research_and_development_expense"},
+    {"source_type": "table_label", "source_key": "Accounts receivable", "canonical_name": "accounts_receivable"},
+    {"source_type": "table_label", "source_key": "Inventories", "canonical_name": "inventory"},
+    {"source_type": "table_label", "source_key": "Other intangibles, net", "canonical_name": "intangible_assets"},
+    {"source_type": "table_label", "source_key": "Total assets", "canonical_name": "total_assets"},
+    {"source_type": "table_label", "source_key": "Income taxes paid", "canonical_name": "income_taxes_paid"},
+    {"source_type": "table_label", "source_key": "Acquisitions, net of cash acquired", "canonical_name": "acquisitions_net_of_cash"},
+    {"source_type": "table_label", "source_key": "Earnings before income taxes", "canonical_name": "income_before_income_taxes"},
+    {"source_type": "xbrl", "source_key": "us-gaap:CostOfGoodsAndServicesSold", "canonical_name": "cost_of_sales"},
+    {"source_type": "xbrl", "source_key": "us-gaap:GrossProfit", "canonical_name": "gross_profit"},
+    {"source_type": "xbrl", "source_key": "us-gaap:ResearchAndDevelopmentExpense", "canonical_name": "research_and_development_expense"},
+    {"source_type": "xbrl", "source_key": "us-gaap:AccountsReceivableNetCurrent", "canonical_name": "accounts_receivable"},
+    {"source_type": "xbrl", "source_key": "us-gaap:InventoryNet", "canonical_name": "inventory"},
+    {"source_type": "xbrl", "source_key": "us-gaap:AccountsPayableCurrent", "canonical_name": "accounts_payable"},
+    {"source_type": "xbrl", "source_key": "us-gaap:Goodwill", "canonical_name": "goodwill"},
+    {"source_type": "xbrl", "source_key": "us-gaap:IntangibleAssetsNetExcludingGoodwill", "canonical_name": "intangible_assets"},
+    {"source_type": "xbrl", "source_key": "us-gaap:Assets", "canonical_name": "total_assets"},
+    {"source_type": "xbrl", "source_key": "us-gaap:IncomeTaxesPaidNet", "canonical_name": "income_taxes_paid"},
+    {"source_type": "xbrl", "source_key": "us-gaap:PaymentsToAcquireBusinessesNetOfCashAcquired", "canonical_name": "acquisitions_net_of_cash"},
+    {"source_type": "xbrl", "source_key": "us-gaap:DepreciationDepletionAndAmortization", "canonical_name": "depreciation_amortization"},
+    {"source_type": "xbrl", "source_key": "us-gaap:IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest", "canonical_name": "income_before_income_taxes"}
+  ],
+  "trend": {
+    "break_threshold": 0.5,
+    "min_years": 3,
+    "max_years": 5
+  },
+  "qualitative_risk_dimensions": [
+    {"id": "regulatory_approval_exposure", "title": "FDA and other regulatory approval / exposure", "agents": ["regulatory_material_events"]},
+    {"id": "product_recalls_adverse_events", "title": "Product recalls and adverse events", "agents": ["regulatory_material_events"]},
+    {"id": "product_liability_litigation", "title": "Product liability litigation", "agents": ["regulatory_material_events"]},
+    {"id": "patent_ip_exposure", "title": "Patent expiration and intellectual property disputes", "agents": ["competition_pricing"]},
+    {"id": "hospital_capital_spending_cycle", "title": "Hospital capital-spending cycles", "agents": ["business_model", "forecast_stress_drivers"]},
+    {"id": "reimbursement_change", "title": "Reimbursement changes", "agents": ["regulatory_material_events", "forecast_stress_drivers"]},
+    {"id": "product_concentration", "title": "Product concentration", "agents": ["business_model"]},
+    {"id": "manufacturing_supply_chain", "title": "Manufacturing and supply-chain disruption", "agents": ["customer_supplier_contract"]},
+    {"id": "physician_adoption_switching_costs", "title": "Physician adoption and switching costs", "agents": ["competition_pricing"]},
+    {"id": "pricing_pressure", "title": "Pricing pressure and competitive positioning", "agents": ["competition_pricing"]},
+    {"id": "acquisition_integration", "title": "Integration risk from acquisitions", "agents": ["ma_capex_execution"]},
+    {"id": "rnd_pipeline_concentration", "title": "R&D pipeline concentration", "agents": ["business_model", "ma_capex_execution"]},
+    {"id": "quality_system_compliance", "title": "Quality-system or compliance issues", "agents": ["regulatory_material_events", "accounting_audit_quality"]},
+    {"id": "working_capital_inventory", "title": "Inventory movements and potential obsolescence", "agents": ["cashflow_working_capital"]},
+    {"id": "acquisition_financing", "title": "Acquisition financing and leverage trajectory", "agents": ["debt_liquidity_terms"]},
+    {"id": "goodwill_intangible_exposure", "title": "Goodwill / intangible asset exposure and R&D capitalization treatment", "agents": ["accounting_audit_quality"]}
+  ],
+  "sector_observation_schema": {
+    "relevance": ["relevant", "not_relevant", "not_assessable"],
+    "direction": ["adverse", "neutral", "favourable", "unclear"],
+    "confidence": ["low", "medium", "high"]
+  }
+}

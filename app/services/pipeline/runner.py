@@ -204,6 +204,17 @@ class CreditMemoPipeline:
             entities.register(entity, case_id)
         resolver = EntityResolver(self.session, audit)
         mapper = FinancialMapper.from_registry(registry, versions["financial_mappings"])
+        # Optional sector benchmarking (opt-in per package). The sector
+        # configuration is versioned through the same registry; a case without
+        # ``sector_benchmark`` takes none of the branches below.
+        from app.services.pipeline.sector import register_for_package
+
+        sector_cfg = register_for_package(registry, package)
+        if sector_cfg is not None:
+            mapper = mapper.extended(
+                sector_cfg.get("financial_mapping_extension", []),
+                sector_cfg.content_hash,
+            )
         escalation = EscalationEngine(
             self.session, audit=audit, case_id=case_id, deterministic_ids=True
         )
@@ -658,7 +669,18 @@ class CreditMemoPipeline:
         )
         for tag in completeness.missing_critical:
             flag("missing_critical", f"Missing critical evidence: {tag}.")
+        # A sector configuration may declare base (airline-oriented) source tags
+        # and metrics that do not apply to the sector; they are still reported
+        # as missing but do not raise an escalation for a sector case.
+        sector_inapplicable_tags = set(
+            sector_cfg.get("inapplicable_source_tags", []) if sector_cfg else []
+        )
+        sector_inapplicable_metrics = set(
+            sector_cfg.get("inapplicable_base_metrics", []) if sector_cfg else []
+        )
         for tag in completeness.missing_important:
+            if tag in sector_inapplicable_tags:
+                continue
             flag("missing_important", f"Reduced coverage: missing {tag}.")
         groups = defaultdict(list)
         for fact in facts:
@@ -707,7 +729,13 @@ class CreditMemoPipeline:
             evidence_cutoff_timestamp=package.evidence_cutoff_timestamp,
         )
         # Exact pinned versions, rather than whatever became latest subsequently.
-        evidence.config_versions = versions
+        # A sector case also records the sector configuration that extended the
+        # field mapping; the reference dataset is NOT evidence and is recorded
+        # on the draft only.
+        evidence.config_versions = {
+            **versions,
+            **({sector_cfg.kind: sector_cfg.version} if sector_cfg is not None else {}),
+        }
         evidence.sec_filings = sec_filings
         evidence.narrative_evidence = sorted(narrative, key=lambda p: p["evidence_id"])
         evidence.financials = {
@@ -734,7 +762,9 @@ class CreditMemoPipeline:
         )
         recorder.record("metrics", {k: v.as_payload() for k, v in metrics.items()})
         required_missing = [
-            name for name, metric in metrics.items() if metric.state.value != "ok"
+            name
+            for name, metric in metrics.items()
+            if metric.state.value != "ok" and name not in sector_inapplicable_metrics
         ]
         if required_missing:
             flag(
@@ -758,6 +788,33 @@ class CreditMemoPipeline:
         for outcome in outcomes:
             escalation.raise_from_outcome(outcome)
         recorder.record("context", {"trends": trends, "benchmarks": benchmarks})
+        sector_stage = None
+        if sector_cfg is not None:
+            from app.services.pipeline.sector import run_sector_benchmark
+
+            sector_stage = run_sector_benchmark(
+                self.session,
+                case_id=case_id,
+                package=package,
+                evidence=evidence,
+                metrics=metrics,
+                all_metrics=all_metrics,
+                registry=registry,
+                config=sector_cfg,
+                audit=audit,
+                near_zero_floor=configs["tolerances"]["near_zero_floor"],
+            )
+            if not sector_stage.completed:
+                flag(
+                    "weak_evidence",
+                    "Sector classification requires review; industry "
+                    "benchmarking was not run: "
+                    + ", ".join(
+                        f["code"]
+                        for f in sector_stage.payload["classification"]["blocking_flags"]
+                    ),
+                )
+            recorder.record("sector_benchmark", sector_stage.payload)
         if prepare_only:
             prepared = PreparedCaseResult(
                 evidence,
@@ -774,6 +831,9 @@ class CreditMemoPipeline:
                 rejected,
                 issues,
                 asdict(completeness),
+                industry_benchmarking=(
+                    sector_stage.payload if sector_stage is not None else None
+                ),
             )
             from app.services.pipeline.inspection_views import stage_outputs
 
@@ -794,7 +854,37 @@ class CreditMemoPipeline:
             escalation,
             audit,
             flag,
+            sector_context=(
+                sector_stage.payload if sector_stage is not None else None
+            ),
         )
+        financial_analysis = {
+            "trends": trends,
+            "grounding": grounding,
+            "qualitative_facts": qualitative,
+            "data_limitations": asdict(completeness),
+        }
+        draft_versions = versions
+        if sector_stage is not None:
+            from app.services.pipeline.sector import persist_comparisons
+
+            # Persisted only now, so each comparison row carries the analysis
+            # run (if any) and the accepted parameter-result ids from creation.
+            run_id = (analysis.get("agentic") or {}).get("accepted_analysis_run_id")
+            sector_stage.payload["analysis_run_id"] = run_id
+            sector_stage.payload["comparison_row_ids"] = persist_comparisons(
+                self.session,
+                sector_stage,
+                case_id=case_id,
+                snapshot_version=evidence.snapshot_version,
+                analysis_run_id=run_id,
+                audit=audit,
+            )
+            financial_analysis["industry_benchmarking"] = sector_stage.payload
+            draft_versions = {
+                **versions,
+                **sector_stage.config_versions(include_dataset=True),
+            }
         final = FinalSnapshotAssembler(self.session, registry, audit=audit)
         # Timestamp resolution can change ordering across otherwise equal runs.
         # Canonical memo content uses stable IDs instead of wall-clock order.
@@ -808,12 +898,7 @@ class CreditMemoPipeline:
             metrics={k: v.as_payload() for k, v in metrics.items()},
             benchmarks=benchmarks,
             business_analysis=analysis,
-            financial_analysis={
-                "trends": trends,
-                "grounding": grounding,
-                "qualitative_facts": qualitative,
-                "data_limitations": asdict(completeness),
-            },
+            financial_analysis=financial_analysis,
             risks=analysis.get("key_risks", []),
             mitigants=analysis.get("mitigants", []),
             escalations=esc_payloads,
@@ -831,7 +916,7 @@ class CreditMemoPipeline:
                 ),
             },
         )
-        draft.config_versions = versions
+        draft.config_versions = draft_versions
         draft_row = final.persist_draft(draft)
         recorder.record("llm_runs", runs)
         recorder.record(
@@ -879,6 +964,9 @@ class CreditMemoPipeline:
                 "coverage": asdict(completeness),
                 "unsupported_claims": sum(not g["is_grounded"] for g in grounding),
             },
+            industry_benchmarking=(
+                sector_stage.payload if sector_stage is not None else None
+            ),
         )
 
     def _persist_fact(self, fact, case_id):
@@ -925,44 +1013,12 @@ class CreditMemoPipeline:
             )
         # Only FY duration/instant observations sharing the exact year-end are
         # eligible. Quarterly/YTD observations stay in the evidence snapshot.
-        pools = defaultdict(lambda: defaultdict(list))
-        facts_by_id = {f["fact_id"]: f for f in evidence.facts}
-        for key, dq in evidence.data_quality.items():
-            entity, year, period_type, end, name, *identity = json.loads(key)
-            dimensional = identity and bool(identity[0])
-            selected = facts_by_id.get(dq.selected_fact_id, {})
-            basis = (
-                identity[2] if len(identity) > 2 else selected.get("accounting_basis")
-            )
-            consolidated = selected.get("consolidation_scope") in {None, "consolidated"}
-            if (
-                year is not None
-                and period_type in {"FY", "instant"}
-                and not dimensional
-                and consolidated
-                and basis in {None, "GAAP"}
-                and end <= evidence.as_of_date.isoformat()
-            ):
-                pools[(entity, int(year), end)][name].append(dq)
+        from app.services.pipeline.inputs import fiscal_pools, metric_inputs
+
+        pools, facts_by_id = fiscal_pools(evidence)
         all_metrics = defaultdict(dict)
         for (entity, year, end), fields in sorted(pools.items()):
-            inputs = {}
-            for name, states in fields.items():
-                if len(states) != 1:
-                    inputs[name] = MetricInput(name, None, FactStatus.CONFLICTING)
-                else:
-                    dq = states[0]
-                    inputs[name] = MetricInput(
-                        name,
-                        dq.value,
-                        FactStatus.UNVERIFIED
-                        if facts_by_id.get(dq.selected_fact_id, {}).get("created_by")
-                        == "deterministic_derived"
-                        and dq.selected_fact_id
-                        not in evidence.provenance.get("human_verified_fact_ids", [])
-                        else FactStatus(dq.state),
-                        dq.selected_fact_id,
-                    )
+            inputs = metric_inputs(fields, facts_by_id, evidence)
             prior_periods = [
                 k
                 for k in pools
@@ -1120,6 +1176,7 @@ class CreditMemoPipeline:
         escalation,
         audit,
         flag,
+        sector_context=None,
     ):
         """Thin façade over the downstream analysis path (Req 24).
 
@@ -1146,7 +1203,10 @@ class CreditMemoPipeline:
                 escalation,
                 audit,
                 flag,
+                sector_context=sector_context,
             )
+        # The legacy single-pass path does not interpret sector benchmarks; the
+        # deterministic comparisons still reach the memo unchanged.
         return self._legacy_ai(
             case_id, evidence, metrics, trends, benchmarks, completeness,
             configs, escalation, audit, flag,

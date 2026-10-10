@@ -74,6 +74,80 @@
   {% if not financial_analysis.summary and not financial_analysis.claims %}
     <p class="empty">No financial overview content present in the snapshot.</p>
   {% endif %}
+  {% if financial_analysis.industry_benchmarking %}
+  {% set ib = financial_analysis.industry_benchmarking %}
+  <div class="industry-benchmarking" data-subsection="industry_benchmarking">
+  <h3>{{ ib.sector.memo_section_title }}</h3>
+  <p class="benchmark-usage" data-field="benchmark_usage">
+    Contextual comparison only ({{ ib.sector.label }}; {{ ib.sector.analytical_status }}).
+    It informs narrative and challenge; it does not set or alter any official risk score.
+  </p>
+  <dl class="benchmark-reference">
+    <dt>Sector</dt><dd data-field="benchmark_sector">{{ ib.sector.display_name }}</dd>
+    <dt>Classification</dt>
+    <dd data-field="benchmark_classification">{{ ib.classification.status }} (confidence: {{ ib.classification.confidence }}){% for note in ib.classification.review_notes %}; {{ note.code }}{% endfor %}{% for flag in ib.classification.blocking_flags %}; {{ flag.code }}{% endfor %}</dd>
+    <dt>Reference industry</dt><dd data-field="benchmark_industry">{{ ib.industry_label if ib.industry_label is not none else "not assigned" }}</dd>
+    <dt>Reference data date</dt><dd data-field="benchmark_vintage">{{ ib.reference.data_vintage }}</dd>
+    <dt>Methodology</dt><dd data-field="benchmark_method">{{ ib.benchmark_method }} — {{ ib.reference.aggregate_nature }}</dd>
+    <dt>Source</dt><dd data-field="benchmark_source">{{ ib.reference.source_name }}</dd>
+  </dl>
+  {% if ib.status != "completed" %}
+    <p class="empty" data-field="benchmark_status">Industry benchmarking was not run: sector classification requires human review.</p>
+  {% else %}
+  <table class="industry-benchmarks">
+    <thead><tr><th>Metric</th><th>Borrower</th><th>Industry aggregate</th><th>Comparison</th><th>Own history</th><th>Notes</th><th>Source</th></tr></thead>
+    <tbody>
+    {% for c in ib.comparisons %}
+      <tr data-comparison="{{ c.comparison_id }}" data-comparison-state="{{ c.comparison_state }}">
+        <td>{{ c.comparison_id }}</td>
+        <td data-borrower-metric="{{ c.comparison_id }}">{% if c.borrower.state == "ok" %}{{ c.borrower.value }}{% if c.borrower.units %} ({{ c.borrower.units }}){% endif %}{% else %}{{ c.borrower.state }}{% endif %}</td>
+        <td data-industry-aggregate="{{ c.comparison_id }}">{% if c.industry_aggregate and c.industry_aggregate.value is not none %}{{ c.industry_aggregate.value }} ({{ c.industry_aggregate.value_status }}){% elif c.industry_aggregate %}not compared{% else %}not available{% endif %}</td>
+        <td>{{ c.comparison_state }}{% if c.position_vs_aggregate != "not_assessed" %}: {{ c.position_vs_aggregate }}{% endif %}</td>
+        <td>{{ c.own_history.direction if c.own_history else "indeterminate" }}</td>
+        <td>{% for reason in c.reasons %}<span class="reason">{{ reason }}</span>; {% endfor %}{% for caveat in c.caveats %}<span class="caveat">{{ caveat }}</span> {% endfor %}{% if c.borrower.detail %}<span class="detail">{{ c.borrower.detail }}</span>{% endif %}</td>
+        <td>{% if c.industry_aggregate %}{{ c.industry_aggregate.source.sheet }}!{{ c.industry_aggregate.source.cell }}{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="benchmark-note">The industry column is a single aggregate per metric. No percentile, rank or peer distribution exists for it, so none is shown.</p>
+  {% endif %}
+  <h4>Comparison limitations</h4>
+  <ul class="benchmark-limitations">
+    {% for limitation in ib.standing_limitations %}
+    <li>{{ limitation }}</li>
+    {% endfor %}
+  </ul>
+  {% if ib.agentic_interpretation and ib.agentic_interpretation.narrative_claims %}
+  <h4>Interpretation (validated against accepted results)</h4>
+  {% for claim in ib.agentic_interpretation.narrative_claims %}
+    <p data-claim="industry_benchmarking.{{ claim.category }}"
+       data-evidence="{{ claim.evidence_ids | join(',') }}"
+       data-parameters="{{ claim.parameter_result_ids | join(',') }}">{{ claim.text }}</p>
+  {% endfor %}
+  {% for item in ib.agentic_interpretation.unresolved_contradictions %}
+    <p class="contradiction" data-field="benchmark_contradiction">{{ item }}</p>
+  {% endfor %}
+  {% endif %}
+  {% if ib.agentic_interpretation and ib.agentic_interpretation.qualitative_observations %}
+  <h4>Sector qualitative observations (not scores)</h4>
+  <ul class="sector-observations">
+    {% for o in ib.agentic_interpretation.qualitative_observations %}
+    <li data-observation="{{ o.dimension_id }}" data-evidence="{{ o.evidence_ids | join(',') }}">{{ o.dimension_id }}: {{ o.relevance }}, {{ o.direction }} (confidence {{ o.confidence }}){% if o.note %} — {{ o.note }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <h4>Source lineage</h4>
+  <dl class="benchmark-lineage">
+    <dt>Workbook</dt><dd data-field="benchmark_workbook">{{ ib.reference.source_workbook_filename }}</dd>
+    <dt>Workbook SHA-256</dt><dd data-field="benchmark_workbook_sha256">{{ ib.reference.source_workbook_sha256 }}</dd>
+    <dt>Reference dataset</dt><dd data-field="benchmark_dataset">{{ ib.reference.reference_dataset_kind }} v{{ ib.reference.reference_dataset_version }} ({{ ib.reference.reference_dataset_hash }})</dd>
+    <dt>Importer</dt><dd data-field="benchmark_importer">{{ ib.reference.importer_version }}</dd>
+    <dt>Sector configuration</dt><dd data-field="benchmark_config">{{ ib.sector.config_kind }} v{{ ib.sector.config_version }} ({{ ib.sector.config_hash }})</dd>
+    <dt>Analysis run</dt><dd data-field="benchmark_analysis_run">{{ ib.analysis_run_id if ib.analysis_run_id else "none (deterministic comparison only)" }}</dd>
+  </dl>
+  </div>
+  {% endif %}
 
 {% elif key == "metrics_trends" %}
   {% if metrics %}

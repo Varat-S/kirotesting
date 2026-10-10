@@ -45,6 +45,38 @@ class SecBundleInput(BaseModel):
     accounting_basis: str = "GAAP"
 
 
+class CompanyIdentityInput(BaseModel):
+    """Declared company identity used for sector classification.
+
+    ``identity_verification`` is ``sec_verified`` only when the CIK and SIC were
+    read from SEC EDGAR for this case; otherwise ``declared_unverified``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    cik: str | None = None
+    ticker: str | None = None
+    reported_sic: int | None = None
+    sic_source: str | None = None
+    sic_retrieved_at: date | None = None
+    identity_verification: Literal["sec_verified", "declared_unverified"] = (
+        "declared_unverified"
+    )
+
+
+class SectorBenchmarkInput(BaseModel):
+    """Opt-in sector benchmarking for a case.
+
+    The reference workbook is BENCHMARK REFERENCE DATA: it is never ingested as
+    borrower evidence and never enters the CanonicalEvidenceSnapshot.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    sector_id: str
+    reference_workbook: str
+    reference_workbook_sha256: str | None = None
+    identity: CompanyIdentityInput = Field(default_factory=CompanyIdentityInput)
+
+
 class SourcePackage(BaseModel):
     model_config = ConfigDict(extra="forbid")
     as_of_date: date
@@ -53,6 +85,7 @@ class SourcePackage(BaseModel):
     entities: list[EntityRecord]
     sources: list[SourceInput]
     sec_bundles: list[SecBundleInput] = Field(default_factory=list)
+    sector_benchmark: SectorBenchmarkInput | None = None
 
     @model_validator(mode="after")
     def validate_package(self):
@@ -79,6 +112,15 @@ class SourcePackage(BaseModel):
                 )
             entry["bundle"] = SecFilingBundle.load(bundle_path)
         package = cls.model_validate(raw)
+        if package.sector_benchmark is not None:
+            workbook = (
+                manifest.parent / package.sector_benchmark.reference_workbook
+            ).resolve()
+            if not workbook.is_relative_to(manifest.parent) or not workbook.is_file():
+                raise ValueError(
+                    "The reference workbook must be a file inside the package directory."
+                )
+            package.sector_benchmark.reference_workbook = str(workbook)
         for source in package.sources:
             resolved = (manifest.parent / source.path).resolve()
             if not resolved.is_relative_to(manifest.parent):

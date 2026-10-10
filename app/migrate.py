@@ -57,12 +57,22 @@ AGENTIC_TABLES = (
     "risk_scores",
 )
 
+# Sector benchmarking tables (healthcare / medical devices extension). Whole new
+# tables, created by ``init_db`` and reported like the agentic ones.
+SECTOR_BENCHMARK_TABLES = (
+    "sector_classifications",
+    "industry_benchmark_comparisons",
+)
+
 
 def migrate(engine):
     # Which agentic tables are missing in the EXISTING schema (before init_db)?
     with engine.connect() as connection:
         before_tables = set(inspect(connection).get_table_names())
-    new_agentic_tables = [t for t in AGENTIC_TABLES if t not in before_tables]
+    new_agentic_tables = [
+        t for t in (*AGENTIC_TABLES, *SECTOR_BENCHMARK_TABLES)
+        if t not in before_tables
+    ]
 
     init_db(engine)  # Creates CaseEntity + any tables absent from the old schema.
     changes = [f"table:{t}" for t in new_agentic_tables]

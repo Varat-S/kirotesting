@@ -35,3 +35,8 @@ output/**
 !output/**/.gitkeep
 *.db
 *.sqlite3
+
+# Benchmark reference workbook and its generated artifacts are kept local
+# (not published); see examples/healthcare/README.md.
+examples/healthcare/reference/*
+!examples/healthcare/reference/.gitkeep

@@ -53,6 +53,27 @@ ARTIFACT_KINDS: frozenset[str] = frozenset(
     }
 )
 
+# Optional, per-sector artifact families. They use the SAME versioning, hashing
+# and audit lifecycle as the kinds above but are registered only for cases that
+# opt into a sector benchmark, so they are never required by ``bootstrap_config``
+# or by a pinned run and never appear in the default ``config_versions_map``.
+# The full kind is ``<prefix><sector_id>`` (e.g. ``sector_benchmark.medical_devices``).
+OPTIONAL_KIND_PREFIXES: tuple[str, ...] = (
+    "sector_benchmark.",
+    "industry_reference_dataset.",
+)
+
+
+def is_known_kind(artifact_kind: str) -> bool:
+    """True for a core kind or a non-empty optional per-sector kind."""
+    if artifact_kind in ARTIFACT_KINDS:
+        return True
+    return any(
+        artifact_kind.startswith(prefix) and len(artifact_kind) > len(prefix)
+        for prefix in OPTIONAL_KIND_PREFIXES
+    )
+
+
 # An audit callback accepts (event_type, artifact_kind, version, before, after).
 AuditHook = Callable[[str, str, int, dict | None, dict], None]
 
@@ -88,10 +109,11 @@ class ConfigRegistry:
         otherwise allocates the next version. Raises ``ValueError`` for an
         unknown artifact kind (no silent defaults, Req 21.1).
         """
-        if artifact_kind not in ARTIFACT_KINDS:
+        if not is_known_kind(artifact_kind):
             raise ValueError(
                 f"Unknown configuration artifact kind: {artifact_kind!r}. "
-                f"Known kinds: {sorted(ARTIFACT_KINDS)}"
+                f"Known kinds: {sorted(ARTIFACT_KINDS)} or one of the optional "
+                f"per-sector prefixes {list(OPTIONAL_KIND_PREFIXES)}."
             )
 
         new_hash = content_hash(content)

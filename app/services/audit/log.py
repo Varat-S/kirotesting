@@ -84,6 +84,12 @@ class EventType(str, Enum):
     RERUN_TRIGGERED = "rerun_triggered"
     DESCENDANT_INVALIDATED = "descendant_invalidated"
     CANDIDATE_EVALUATED = "candidate_evaluated"
+    # Sector benchmarking events (healthcare / medical devices extension).
+    REFERENCE_DATASET_IMPORTED = "reference_dataset_imported"
+    SECTOR_CLASSIFIED = "sector_classified"
+    SECTOR_CLASSIFICATION_OVERRIDDEN = "sector_classification_overridden"
+    INDUSTRY_BENCHMARK_COMPARED = "industry_benchmark_compared"
+    INDUSTRY_BENCHMARK_SUPERSEDED = "industry_benchmark_superseded"
 
 
 def install_immutability_guard(session: Session) -> None:

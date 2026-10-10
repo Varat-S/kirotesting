@@ -24,6 +24,24 @@ class FinancialMapper:
             raise ValueError(f"Financial mapping version {version} is unavailable.")
         return cls(row.content, version, row.content_hash)
 
+    def extended(self, extra_rules: list[dict], extension_hash: str) -> "FinancialMapper":
+        """A mapper with additional rules from a versioned sector configuration.
+
+        The base ``financial_mappings`` artifact is not modified or re-versioned.
+        The returned mapper keeps the base version and records a combined hash,
+        so every mapped fact stays attributable to both the base mapping and the
+        exact sector configuration that extended it.
+        """
+        if not extra_rules:
+            return self
+        from app.core.hashing import content_hash
+
+        return FinancialMapper(
+            {"rules": [*self.rules, *extra_rules]},
+            self.version,
+            content_hash({"base": self.content_hash, "extension": extension_hash}),
+        )
+
     def map_fact(self, fact: CanonicalFact, source_type: str) -> MappingResult:
         key = fact.taxonomy_concept or fact.source_label or fact.name
         candidates = set()

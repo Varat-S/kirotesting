@@ -230,6 +230,25 @@ class SecEdgarClient:
                 }
         raise EdgarError(f"Ticker {wanted!r} was not found in the SEC ticker list.")
 
+    def company_profile(self, cik):
+        """Identity and current SIC code as reported in the SEC submissions file.
+
+        Used for sector classification: the SIC here is read from SEC EDGAR for
+        this case (``sec_verified``), not typed into a package.
+        """
+        if not re.fullmatch(r"\d{1,10}", str(cik)):
+            raise ValueError("Invalid CIK.")
+        url = f"https://data.sec.gov/submissions/CIK{int(cik):010d}.json"
+        sub = self.get(url)
+        sic = str(sub.get("sic") or "")
+        return {
+            "cik": str(int(cik)),
+            "name": sub.get("name"),
+            "sic": int(sic) if sic.isdigit() else None,
+            "sic_description": sub.get("sicDescription"),
+            "source_url": url,
+        }
+
     def list_filings(self, cik):
         if not re.fullmatch(r"\d{1,10}", str(cik)):
             raise ValueError("Invalid CIK.")

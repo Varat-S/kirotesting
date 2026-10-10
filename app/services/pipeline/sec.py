@@ -6,7 +6,8 @@ from .package import SourcePackage, SecBundleInput
 
 
 def sec_source_package(
-    bundle, *, cutoff, entity_id=None, legal_name=None, as_of_date=None
+    bundle, *, cutoff, entity_id=None, legal_name=None, as_of_date=None,
+    sector_benchmark=None,
 ):
     entity_id = entity_id or bundle.ticker or bundle.cik
     entity = EntityRecord(
@@ -25,4 +26,6 @@ def sec_source_package(
         entities=[entity],
         sources=[],
         sec_bundles=[SecBundleInput(bundle=bundle, entity_id=entity_id)],
+        # Optional sector benchmarking (reference data, not borrower evidence).
+        sector_benchmark=sector_benchmark,
     )

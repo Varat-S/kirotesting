@@ -148,14 +148,54 @@ class AgenticWorkbenchService:
             "exceptions": self._exceptions(challenges),
             "approvals": [],  # human approvals surface via the baseline workbench
         }
+        industry = self._industry_benchmarks(analysis_run_id)
+        if industry:
+            # Present only for a run with a sector benchmark, so the view of
+            # every other run is unchanged.
+            sections["industry_benchmarks"] = industry
         return AgenticWorkbenchView(
             analysis_run_id=analysis_run_id,
             case_id=run.case_id,
             snapshot_version=run.evidence_snapshot_version,
             status=run.status,
             sections=sections,
-            section_order=[{"key": k, "title": t} for k, t in AGENTIC_SECTIONS],
+            section_order=[
+                *({"key": k, "title": t} for k, t in AGENTIC_SECTIONS),
+                *([{"key": "industry_benchmarks",
+                    "title": "Industry Aggregate Benchmarks (contextual)"}]
+                  if industry else []),
+            ],
         )
+
+    def _industry_benchmarks(self, run_id: str) -> list[dict[str, Any]]:
+        """Accepted industry-AGGREGATE comparisons for the run (read-only)."""
+        from app.models.orm import IndustryBenchmarkComparisonRow
+
+        rows = self._session.execute(
+            select(IndustryBenchmarkComparisonRow)
+            .where(IndustryBenchmarkComparisonRow.analysis_run_id == run_id)
+            .where(IndustryBenchmarkComparisonRow.acceptance_state == "accepted")
+            .order_by(IndustryBenchmarkComparisonRow.comparison_id)
+        ).scalars().all()
+        return [
+            {
+                "id": r.id,
+                "comparison_id": r.comparison_id,
+                "benchmark_method": r.benchmark_method,
+                "comparison_state": r.comparison_state,
+                "borrower": r.payload["borrower"],
+                "industry_aggregate": r.payload["industry_aggregate"],
+                "position_vs_aggregate": r.payload["position_vs_aggregate"],
+                "own_history_direction": (r.payload.get("own_history") or {}).get(
+                    "direction"),
+                "reasons": r.payload["reasons"],
+                "caveats": r.payload["caveats"],
+                "parameter_result_ids": r.payload.get("parameter_result_ids"),
+                "provenance": r.payload["provenance"],
+                "usage": r.payload["usage"],
+            }
+            for r in rows
+        ]
 
     # -- queries (read-only) --------------------------------------------------
 

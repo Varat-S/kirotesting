@@ -28,6 +28,12 @@ def main(argv=None):
         "--database", default="data/credit_memo.db", help="SQLite database path"
     )
     parser.add_argument("--output", default="output")
+    parser.add_argument(
+        "--analysis-mode",
+        choices=["legacy", "agentic"],
+        default="legacy",
+        help="Downstream analysis path; agentic runs offline with a fake backend",
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     run = commands.add_parser(
         "run-case", help="Process evidence and produce an unapproved draft"
@@ -72,6 +78,31 @@ def main(argv=None):
     sec_run.add_argument("--as-of", type=date.fromisoformat)
     sec_run.add_argument("--entity-id")
     sec_run.add_argument("--entity-name")
+    sec_run.add_argument(
+        "--sector", help="Opt into sector benchmarking, e.g. medical_devices"
+    )
+    sec_run.add_argument(
+        "--reference-workbook", type=Path, help="Industry benchmark workbook (.xlsx)"
+    )
+    sec_run.add_argument("--reported-sic", type=int)
+    sec_run.add_argument("--sic-source")
+    sec_run.add_argument("--sic-retrieved-at", type=date.fromisoformat)
+    benchmark_import = commands.add_parser(
+        "benchmark-import",
+        help="Validate a benchmark workbook; write the normalized dataset and report",
+    )
+    benchmark_import.add_argument("workbook", type=Path)
+    benchmark_import.add_argument("--sector", default="medical_devices")
+    benchmark_import.add_argument("--out", type=Path, required=True)
+    override = commands.add_parser(
+        "classify-override",
+        help="Record a human override of a case's sector classification",
+    )
+    override.add_argument("case_id")
+    override.add_argument("--sector", default="medical_devices")
+    override.add_argument("--industry", required=True)
+    override.add_argument("--reviewer", required=True)
+    override.add_argument("--rationale", required=True)
     approve = commands.add_parser(
         "approve", help="Record your explicit approval of the exact draft content"
     )
@@ -93,6 +124,9 @@ def main(argv=None):
         and (bool(args.fy) == bool(args.accession))
     ):
         parser.error("A live SEC run requires exactly one of --fy or --accession.")
+    if args.command == "benchmark-import":
+        print(json.dumps(_benchmark_import(args), indent=2))
+        return
     database = Path(args.database).resolve()
     database.parent.mkdir(parents=True, exist_ok=True)
     engine, factory = create_engine_and_session(f"sqlite:///{database.as_posix()}")
@@ -100,8 +134,15 @@ def main(argv=None):
     try:
         with factory() as session:
             runner = CreditMemoPipeline(
-                session, data_root=database.parent, output_root=args.output
+                session,
+                data_root=database.parent,
+                output_root=args.output,
+                analysis_mode=args.analysis_mode,
             )
+            if args.command == "classify-override":
+                print(json.dumps(_classify_override(session, args), indent=2))
+                session.commit()
+                return
             if args.command in {"sec-list", "sec-fetch"} or (
                 args.command == "run-sec-case" and args.ticker
             ):
@@ -176,6 +217,12 @@ def main(argv=None):
                         legal_name=args.entity_name
                         or (company["name"] if args.ticker else None),
                         as_of_date=args.as_of,
+                        sector_benchmark=_sector_request(
+                            args,
+                            client if args.ticker else None,
+                            company if args.ticker else None,
+                            bundle,
+                        ),
                     )
                 else:
                     package = SourcePackage.load(args.package)
@@ -193,6 +240,14 @@ def main(argv=None):
                         for e in result.escalations
                     ),
                 }
+                if result.industry_benchmarking is not None:
+                    bench = result.industry_benchmarking
+                    summary["industry_benchmarking"] = {
+                        "status": bench["status"],
+                        "classification": bench["classification"]["status"],
+                        "industry_label": bench["industry_label"],
+                        "comparison_states": bench["summary"],
+                    }
             elif args.command == "approve":
                 row = session.scalars(
                     select(Snapshot).where(
@@ -237,6 +292,130 @@ def main(argv=None):
             print(json.dumps(summary, indent=2))
     finally:
         engine.dispose()
+
+
+
+
+def _benchmark_import(args):
+    """Validate a workbook and write its normalized dataset + report (no DB)."""
+    from app.core.hashing import canonical_json
+    from app.services.benchmarking.sector_config import load_sector_config_content
+    from app.services.benchmarking.workbook import import_workbook
+
+    config = load_sector_config_content(args.sector)
+    imported = import_workbook(
+        args.workbook.read_bytes(), config, filename=args.workbook.name
+    )
+    args.out.mkdir(parents=True, exist_ok=True)
+    for name, payload in (
+        ("normalized_dataset.json", imported.dataset),
+        ("validation_report.json", imported.report),
+    ):
+        (args.out / name).write_text(
+            canonical_json(payload) + "\n", encoding="utf-8", newline="\n"
+        )
+    report = imported.report
+    return {
+        "workbook": str(args.workbook),
+        "source_sha256": imported.source_sha256,
+        "dataset_hash": imported.dataset_hash,
+        "industries": report["industries"],
+        "data_vintage": report["vintage"]["data_as_of"],
+        "status_counts": report["status_counts"],
+        "issue_counts": report["issue_counts"],
+        "eligible_values": report["acceptance"]["eligible_count"],
+        "excluded_values": report["acceptance"]["excluded_count"],
+        "outputs": [
+            str(args.out / "normalized_dataset.json"),
+            str(args.out / "validation_report.json"),
+        ],
+    }
+
+
+def _sector_request(args, client, company, bundle):
+    """Build the optional sector-benchmark request for an SEC run."""
+    if not getattr(args, "sector", None):
+        return None
+    from app.services.pipeline.package import (
+        CompanyIdentityInput,
+        SectorBenchmarkInput,
+    )
+
+    if args.reference_workbook is None:
+        raise ValueError("--sector requires --reference-workbook.")
+    if client is not None:
+        # Live run: identity and SIC are read from SEC EDGAR for this case.
+        profile = client.company_profile(company["cik"])
+        source = "SEC EDGAR submissions (" + profile["source_url"] + ")"
+        identity = CompanyIdentityInput(
+            cik=profile["cik"],
+            ticker=company["ticker"],
+            reported_sic=profile["sic"],
+            sic_source=source,
+            sic_retrieved_at=date.today(),
+            identity_verification="sec_verified",
+        )
+    else:
+        identity = CompanyIdentityInput(
+            cik=bundle.cik,
+            ticker=bundle.ticker,
+            reported_sic=args.reported_sic,
+            sic_source=args.sic_source,
+            sic_retrieved_at=args.sic_retrieved_at,
+            identity_verification="declared_unverified",
+        )
+    return SectorBenchmarkInput(
+        sector_id=args.sector,
+        reference_workbook=str(args.reference_workbook.resolve()),
+        identity=identity,
+    )
+
+
+def _classify_override(session, args):
+    """Append a human override of the case's accepted sector classification."""
+    from app.core.config_registry import ConfigRegistry
+    from app.models.orm import SectorClassificationRow
+    from app.services.benchmarking.classification import SectorClassifier
+    from app.services.benchmarking.sector_config import register_sector_config
+
+    registry = ConfigRegistry(session)
+    config = register_sector_config(registry, args.sector)
+    latest = registry.latest(config.dataset_kind)
+    if latest is None:
+        raise ValueError("No reference dataset is registered; run the case first.")
+    dataset = registry.get(config.dataset_kind, latest.version).content
+    prior = session.scalars(
+        select(SectorClassificationRow)
+        .where(
+            SectorClassificationRow.case_id == args.case_id,
+            SectorClassificationRow.sector_id == args.sector,
+            SectorClassificationRow.acceptance_state == "accepted",
+        )
+        .order_by(SectorClassificationRow.created_at.desc())
+    ).first()
+    if prior is None:
+        raise ValueError("No sector classification exists for this case.")
+    classifier = SectorClassifier(
+        config, dataset, session=session, audit=AuditLog(session)
+    )
+    updated = classifier.override(
+        prior.payload,
+        industry_label=args.industry,
+        reviewer=args.reviewer,
+        rationale=args.rationale,
+    )
+    row = classifier.persist(updated, case_id=args.case_id, supersedes_id=prior.id)
+    return {
+        "case_id": args.case_id,
+        "classification_id": row.id,
+        "supersedes": prior.id,
+        "status": row.status,
+        "industry_label": row.industry_label,
+        "next_step": (
+            "Re-run the case; the override applies while the automatic "
+            "classification inputs are unchanged."
+        ),
+    }
 
 
 if __name__ == "__main__":

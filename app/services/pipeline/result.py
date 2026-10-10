@@ -19,10 +19,12 @@ class PreparedCaseResult:
     mapping_issues: list[dict]
     coverage: dict
     recorded_stages: list[dict] = field(default_factory=list)
+    # Deterministic sector benchmark payload; None unless the package opted in.
+    industry_benchmarking: dict | None = None
 
     def as_payload(self):
         evidence = self.evidence_snapshot.model_dump(mode="json")
-        return {
+        payload = {
             "stage": "before_llm",
             "case_id": evidence["case_id"],
             "evidence_version": evidence["snapshot_version"],
@@ -41,6 +43,9 @@ class PreparedCaseResult:
             "llm_calls": 0,
             "recorded_stages": self.recorded_stages,
         }
+        if self.industry_benchmarking is not None:
+            payload["industry_benchmarking"] = self.industry_benchmarking
+        return payload
 
 
 @dataclass
@@ -60,3 +65,4 @@ class PipelineResult:
     output_paths: dict[str, Path] = field(default_factory=dict)
     final_snapshot: Snapshot | None = None
     evaluation_artifacts: dict = field(default_factory=dict)
+    industry_benchmarking: dict | None = None

@@ -58,11 +58,33 @@ _AGENT_PARAMETER: dict[str, Any] = {
     "additionalProperties": True,
 }
 
+# A structured, NON-SCORING sector observation (e.g. a medical-device risk
+# dimension). Emitted only when the task input carries ``sector_context``.
+SECTOR_OBSERVATION_RELEVANCE = ["relevant", "not_relevant", "not_assessable"]
+SECTOR_OBSERVATION_DIRECTION = ["adverse", "neutral", "favourable", "unclear"]
+SECTOR_OBSERVATION_CONFIDENCE = ["low", "medium", "high"]
+
+_SECTOR_OBSERVATION: dict[str, Any] = {
+    "type": "object",
+    "required": ["dimension_id", "relevance"],
+    "properties": {
+        "dimension_id": {"type": "string"},
+        "relevance": {"type": "string", "enum": SECTOR_OBSERVATION_RELEVANCE},
+        "direction": {"type": "string", "enum": SECTOR_OBSERVATION_DIRECTION},
+        "confidence": {"type": "string", "enum": SECTOR_OBSERVATION_CONFIDENCE},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}},
+        "review_flag": {"type": "boolean"},
+        "note": {"type": "string"},
+    },
+    "additionalProperties": True,
+}
+
 NARROW_AGENT_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["parameters"],
     "properties": {
         "parameters": {"type": "array", "items": _AGENT_PARAMETER},
+        "sector_observations": {"type": "array", "items": _SECTOR_OBSERVATION},
         "missing_information": {"type": "array", "items": {"type": "string"}},
         "notes": {"type": "string"},
     },

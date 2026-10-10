@@ -19,7 +19,13 @@ _F = Topic.FINANCIAL
 
 
 def financial_parameter_definitions() -> list[ParameterDefinition]:
+    # Imported here: the sector module imports ParameterDefinition from the
+    # registry, exactly as this module does.
+    from app.services.parameters.sector import sector_parameter_definitions
+
     return [
+        # Sector-benchmarking ratios (leverage / coverage / margin variants).
+        *sector_parameter_definitions(),
         # Growth / trend (CAGR + slope not in the metric engine)
         ParameterDefinition("revenue_cagr", _F, "cagr", "ratio",
                             description="Revenue CAGR over the window."),
