@@ -1,0 +1,19 @@
+{
+ "as_of_date": "2025-12-31",
+ "evidence_cutoff_timestamp": "2026-03-31T00:00:00Z",
+ "borrower_entity_id": "HCA",
+ "entities": [
+  {
+   "entity_id": "HCA",
+   "legal_name": "HCA Healthcare, Inc.",
+   "tickers": ["HCA"],
+   "entity_type": "borrower",
+   "borrower_flag": true,
+   "expected_consolidation_scope": "consolidated"
+  }
+ ],
+ "sources": [],
+ "sec_bundles": [
+  {"bundle": "filing/bundle.json", "entity_id": "HCA"}
+ ]
+}

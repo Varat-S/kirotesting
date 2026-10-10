@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Business Overview workbench</title>{% include 'browser_style.html.j2' %}
+<style>
+  .ok { color: #2f6b45; font-weight: bold; } .bad { color: #9a3324; font-weight: bold; } .warn { color: #8a6d1c; font-weight: bold; }
+  iframe { width: 100%; height: 720px; border: 1px solid #c9d1da; background: #fff; }
+  form.review input[type=text] { width: 22rem; max-width: 100%; }
+</style></head>
+<body>
+{% macro st(v) %}<span class="{{ 'ok' if v in ['validated', 'accepted', 'completed', 'supported'] else 'bad' if v in ['rejected', 'failed', 'unavailable', 'human_review_required', 'blocked'] else 'warn' }}">{{ v|replace('_', ' ') }}</span>{% endmacro %}
+<header><span class="badge">Business Overview only</span><h1>Business Overview workbench</h1>
+<p class="subtle">Read-only inspection of recorded Business Overview runs. Approval is a separate, explicit reviewer action.</p>
+<div class="actions"><a href="/">All cases</a><a href="/bo">All Business Overview runs</a></div></header>
+<main>
+<section><h2>Case and run selection</h2>
+{% if runs %}
+<div class="table-wrap"><table><thead><tr><th>Case</th><th>Run</th><th>Started</th><th>Mode</th><th>Conclusion</th><th>Human review</th><th>Open</th></tr></thead><tbody>
+{% for r in runs %}<tr{% if view and r.analysis_run_id == view.analysis_run_id %} style="background:#eef3f8"{% endif %}><td>{{ r.case_id }}</td><td><code>{{ r.analysis_run_id }}</code></td><td>{{ r.started_at }}</td><td>{{ r.execution_mode|replace('_', ' ') }}</td><td>{{ st(r.conclusion_status) }}</td><td>{{ st(r.human_review_status) }}</td><td><a href="/cases/{{ r.case_id }}/bo.html?analysis_run_id={{ r.analysis_run_id }}">Inspect</a></td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p>No Business Overview run has been recorded. Use <code>python -m app.cli run-bo-case</code>.</p>{% endif %}
+</section>
+{% if view %}
+{% set base = '/cases/' ~ view.case.case_id ~ '/bo/runs/' ~ view.analysis_run_id %}
+<section><h2>{{ view.case.borrower or view.case.case_id }} &mdash; run {{ view.analysis_run_id }}</h2>
+{% if view.run.execution_mode == 'offline_simulation' %}<p class="notice"><strong>{{ view.run.execution_label }}</strong></p>{% endif %}
+<p>Conclusion: {{ st(view.conclusion_status) }}. {{ view.status_text }}</p>
+<div class="actions"><a href="#evidence">Evidence status</a><a href="#agents">Agent execution</a><a href="#accepted">Accepted hypotheses</a><a href="#rejected">Rejected hypotheses</a><a href="#contradictions">Contradictions</a><a href="#open">Open questions</a><a href="#memo">Memo preview</a><a href="#audit">Audit preview</a><a href="#review">Review</a></div>
+<p class="subtle">Downloads: <a href="{{ base }}/memo.html">memo HTML</a> · <a href="{{ base }}/memo.json">memo JSON</a> · <a href="{{ base }}/audit.html">audit HTML</a> · <a href="{{ base }}/audit.json">audit JSON</a> · <a href="{{ base }}/handoff.json">handoff JSON</a></p>
+</section>
+
+<section id="evidence"><h2>Evidence status</h2>
+{% set e = view.evidence_status %}
+<p>Evidence snapshot v{{ e.snapshot_version }} (<code>{{ e.content_hash[:16] }}</code>) · {{ e.documents }} admitted documents · {{ e.rejected_sources }} rejected · {{ e.facts }} facts · {{ e.narrative_passages }} narrative passages · {{ e.human_verified_facts }} human-verified facts · {{ e.retrieval_gaps }} retrieval gap(s).</p>
+<p class="subtle">As of {{ view.case.as_of_date }}; evidence cut-off {{ view.case.evidence_cutoff }}.</p>
+</section>
+
+<section id="agents"><h2>Agent execution status</h2>
+<p>AI calls: {{ view.execution.ai_calls }} · runtime {{ view.execution.runtime_seconds }} s · tokens: {{ view.execution.token_usage }}</p>
+<div class="table-wrap"><table><thead><tr><th>Code</th><th>Agent</th><th>Role</th><th>Status</th><th>Runs</th><th>Detail</th></tr></thead><tbody>
+{% for a in view.agents %}<tr><td>{{ a.code or '' }}</td><td><code>{{ a.agent_id }}</code></td><td>{{ a.role }}</td><td>{{ st(a.status) }}</td><td>{{ a.runs }}</td><td>{{ a.detail or '' }}{% for i in a.validation_issues %}<br>{{ i }}{% endfor %}</td></tr>{% endfor %}
+</tbody></table></div>
+<p>Challenger: {% if view.challenger.rounds is string %}{{ st(view.challenger.rounds) }}{% else %}{% for r in view.challenger.rounds %}round {{ r.round }} {{ st(r.outcome) }} ({{ r.findings|length }} finding(s)){{ '; ' if not loop.last }}{% endfor %}{% endif %}. Rerun: {% if view.rerun is string %}{{ view.rerun|replace('_', ' ') }}{% else %}one round, scope {{ view.rerun.executed_scope|join(', ') }}{% endif %}.</p>
+<p>BusinessRiskScore: {{ st(view.score.status) }}{% if view.score.band is not none %}, band {{ view.score.band }}{% else %}, no band{% endif %}. {{ view.score.explanation }}</p>
+</section>
+
+{% macro hypotheses(items) %}
+{% if items %}<div class="table-wrap"><table><thead><tr><th>Id</th><th>Claim</th><th>Type</th><th>Direction</th><th>Disposition</th><th>Confidence</th><th>Notes</th></tr></thead><tbody>
+{% for h in items %}<tr><td><code>{{ h.hypothesis_id }}</code></td><td>{{ h.claim }}{% if h.corrects_hypothesis_id %}<br><span class="subtle">corrects {{ h.corrects_hypothesis_id }}</span>{% endif %}</td><td>{{ h.claim_type|replace('_', ' ') }}</td><td>{{ h.direction }}</td><td>{{ st(h.disposition) }}<br><span class="subtle">{{ h.admissibility|replace('_', ' ') }}</span></td><td>{{ h.confidence|replace('_', ' ') }}</td><td>{% for n in h.validation_notes %}{{ n }}<br>{% endfor %}{% for m in h.missing_information %}<span class="subtle">missing: {{ m }}</span><br>{% endfor %}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p>None.</p>{% endif %}
+{% endmacro %}
+<section id="accepted"><h2>Accepted and qualified hypotheses</h2>{{ hypotheses(view.accepted_hypotheses) }}</section>
+<section id="rejected"><h2>Rejected hypotheses</h2>{{ hypotheses(view.rejected_hypotheses) }}
+<h3>Unverified hypotheses</h3>{{ hypotheses(view.unverified_hypotheses) }}</section>
+
+<section id="contradictions"><h2>Contradictions</h2>
+{% if view.contradictions %}<ul>{% for c in view.contradictions %}<li>{{ c.kind|replace('_', ' ') }}: <code>{{ c.hypothesis_ids|join(' vs ') }}</code></li>{% endfor %}</ul>{% else %}<p>No cross-agent contradiction was detected.</p>{% endif %}
+{% if view.open_questions.unresolved_contradictions %}<ul>{% for c in view.open_questions.unresolved_contradictions %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">Duplicate groups merged across specialists: {{ view.duplicate_groups|length }}.</p>
+</section>
+
+<section id="open"><h2>Open questions</h2>
+{% for title, items in [('Open questions', view.open_questions.open_questions), ('Missing information', view.open_questions.missing_information), ('Coverage and retrieval limitations', view.open_questions.data_limitations)] %}
+<h3>{{ title }}</h3>{% if items %}<ul>{% for i in items %}<li>{{ i }}</li>{% endfor %}</ul>{% else %}<p>None recorded.</p>{% endif %}{% endfor %}
+<h3>Unresolved challenger findings</h3>
+{% if view.handoff.unresolved_challenges %}<ul>{% for f in view.handoff.unresolved_challenges %}<li><strong>{{ f.severity }}</strong> {{ f.issue_type|replace('_', ' ') }}: {{ f.reason }}</li>{% endfor %}</ul>{% else %}<p>None.</p>{% endif %}
+</section>
+
+<section id="memo"><h2>Business memo preview</h2><iframe title="Business Overview memo" src="{{ base }}/memo.html"></iframe></section>
+<section id="audit"><h2>Audit report preview</h2><iframe title="Business Overview audit report" src="{{ base }}/audit.html"></iframe></section>
+
+<section id="review"><h2>Human review</h2>
+<p>Handoff <code>{{ view.handoff.handoff_id }}</code>: {{ st(view.handoff.human_review_status) }}{% if view.handoff.reviewer %} by {{ view.handoff.reviewer }} at {{ view.handoff.reviewed_at }}{% endif %}.</p>
+{% if view.handoff.human_review_status == 'pending' %}
+<form class="review" method="post" action="{{ base }}/review">
+<p><label>Reviewer <input type="text" name="reviewer" required></label></p>
+<p><label>Reason <input type="text" name="reason" required></label></p>
+{% if view.handoff.unresolved_challenges %}<p><label><input type="checkbox" name="acknowledge_unresolved" value="true"> I acknowledge the unresolved challenger findings listed above; they remain recorded on the handoff.</label></p>{% endif %}
+<p>{% if view.handoff.can_accept %}<button type="submit" name="decision" value="accept">Accept this Business Overview</button> {% endif %}<button type="submit" name="decision" value="reject">Reject</button></p>
+{% if not view.handoff.can_accept %}<p class="notice">There is no validated conclusion to accept.</p>{% endif %}
+</form>
+{% else %}<p class="subtle">This decision is recorded and is not revised in place.</p>{% endif %}
+</section>
+{% endif %}
+</main></body></html>

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Business Overview - {{ memo.case.borrower or memo.case.case_id }}</title>
+<style>
+  body { font-family: Georgia, "Times New Roman", serif; color: #1c2430; max-width: 900px; margin: 2.2rem auto; padding: 0 1.4rem; line-height: 1.5; font-size: 15px; }
+  h1 { font-size: 1.7rem; margin: 0 0 .2rem; }
+  h2 { font-size: 1.15rem; margin: 2rem 0 .5rem; padding-bottom: .25rem; border-bottom: 2px solid #1c2430; }
+  h3 { font-size: 1rem; margin: 1.1rem 0 .3rem; }
+  .meta, .small { font-family: Arial, Helvetica, sans-serif; font-size: .8rem; color: #55606e; }
+  .banner { font-family: Arial, Helvetica, sans-serif; font-size: .85rem; padding: .6rem .8rem; margin: .8rem 0; border-left: 4px solid #8a6d1c; background: #fbf6e6; }
+  .banner.sim { border-color: #9a3324; background: #fbeeea; }
+  .banner.block { border-color: #9a3324; background: #fbeeea; font-weight: bold; }
+  .claim { margin: .55rem 0 .8rem; }
+  .tag { font-family: Arial, Helvetica, sans-serif; font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; padding: .08rem .4rem; border-radius: 3px; border: 1px solid #c3cad3; color: #404b59; margin-right: .3rem; white-space: nowrap; }
+  .tag.positive { border-color: #2f6b45; color: #2f6b45; }
+  .tag.negative { border-color: #9a3324; color: #9a3324; }
+  .tag.mixed { border-color: #8a6d1c; color: #8a6d1c; }
+  .qual { font-style: italic; color: #55606e; }
+  sup a { text-decoration: none; color: #23527c; font-family: Arial, Helvetica, sans-serif; font-size: .7rem; }
+  table { border-collapse: collapse; width: 100%; font-family: Arial, Helvetica, sans-serif; font-size: .8rem; margin: .5rem 0; }
+  th, td { text-align: left; vertical-align: top; padding: .3rem .5rem; border-bottom: 1px solid #d9dee4; }
+  th { background: #f1f3f6; }
+  ul { margin: .3rem 0 .6rem 1.2rem; padding: 0; }
+  .cols { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  .cols > div { flex: 1 1 320px; }
+  .notice { font-family: Arial, Helvetica, sans-serif; font-size: .8rem; color: #6b7480; }
+  .src { word-break: break-word; }
+</style>
+</head>
+<body>
+{% macro cites(c) %}{% for n in c.citations %}<sup><a href="#src-{{ n }}">[{{ n }}]</a></sup>{% endfor %}{% endmacro %}
+{% macro claim(c) %}
+<div class="claim" id="claim-{{ c.claim_id }}">
+  <span class="tag {{ c.signal }}">{{ c.signal }}</span>{% if c.claim_type %}<span class="tag">{{ c.claim_type|replace('_', ' ') }}</span>{% endif %}<span class="tag">{{ c.materiality }} materiality</span><br>
+  {% if c.title %}<strong>{{ c.title }}.</strong> {% endif %}{{ c.text }}{{ cites(c) }}
+  {% if c.uncertainty %}<div class="qual">Qualification: {{ c.uncertainty }}</div>{% endif %}
+  {% for q in c.quoted_values %}<div class="small">Calculation: {{ q.label }} = {{ q.value }}{% if q.unit %} ({{ q.unit }}){% endif %}{% if q.denominator %}, denominator {{ q.denominator }}{% endif %}{% if q.period %}, period {{ q.period }}{% endif %}</div>{% endfor %}
+</div>
+{% endmacro %}
+
+<h1>Business Overview</h1>
+<div class="meta">
+  {{ memo.case.borrower or memo.case.case_id }} &middot; case {{ memo.case.case_id }} &middot; as of {{ memo.case.as_of_date }} &middot; evidence cut-off {{ memo.case.evidence_cutoff }} &middot; evidence snapshot v{{ memo.case.evidence_snapshot_version }}<br>
+  Analysis run {{ memo.run.analysis_run_id }} &middot; registry {{ memo.run.agent_registry_version }} &middot; scope: Business Overview only
+</div>
+{% if memo.run.execution_mode == 'offline_simulation' %}<div class="banner sim">{{ memo.run.execution_label }}</div>{% endif %}
+<div class="banner{% if memo.status.conclusion_status in ['human_review_required', 'unavailable'] %} block{% endif %}">
+  Status: {{ memo.status.conclusion_status|replace('_', ' ') }}. {{ memo.status.text }}
+  Human review: {{ memo.status.human_review_status }}.
+</div>
+
+<h2>Executive Business Credit Assessment</h2>
+{% if memo.executive.provisional_view %}
+<h3>Provisional business credit view</h3>
+{{ claim(memo.executive.provisional_view) }}
+<div class="cols">
+  <div><h3>Material business strengths</h3>
+    {% if memo.executive.strengths %}<ul>{% for s in memo.executive.strengths %}<li><a href="#claim-{{ s.claim_id }}">{{ s.title }}</a></li>{% endfor %}</ul>{% else %}<p class="notice">None selected.</p>{% endif %}</div>
+  <div><h3>Material business weaknesses</h3>
+    {% if memo.executive.weaknesses %}<ul>{% for s in memo.executive.weaknesses %}<li><a href="#claim-{{ s.claim_id }}">{{ s.title }}</a></li>{% endfor %}</ul>{% else %}<p class="notice">None selected.</p>{% endif %}</div>
+</div>
+<h3>Principal uncertainties</h3>
+{% if memo.executive.principal_uncertainties %}<ul>{% for u in memo.executive.principal_uncertainties %}<li>{{ u }}</li>{% endfor %}</ul>{% else %}<p class="notice">None recorded.</p>{% endif %}
+<h3>Required follow-up</h3>
+{% if memo.executive.follow_up %}<ul>{% for u in memo.executive.follow_up %}<li>{{ u }}</li>{% endfor %}</ul>{% else %}<p class="notice">None recorded.</p>{% endif %}
+{% else %}
+<p class="notice">No validated Business conclusion is available for this run.</p>
+{% endif %}
+
+{% for s in memo.sections %}
+<h2>{{ s.title }}</h2>
+{% for c in s.claims %}{{ claim(c) }}{% endfor %}
+{% if s.headline_refs %}<p class="notice">Headline finding{{ 's' if s.headline_refs|length > 1 }} set out under Key Credit Strengths and Vulnerabilities: {% for r in s.headline_refs %}<a href="#claim-{{ r.claim_id }}">{{ r.title }}</a>{{ '; ' if not loop.last }}{% endfor %}.</p>{% endif %}
+{% if s.notice %}<p class="notice">{{ s.notice }}</p>{% endif %}
+{% endfor %}
+
+<h2>Key Credit Strengths and Vulnerabilities</h2>
+<div class="cols">
+  <div><h3>Strengths</h3>{% for c in memo.strengths_vulnerabilities.strengths %}{{ claim(c) }}{% else %}<p class="notice">None selected.</p>{% endfor %}</div>
+  <div><h3>Vulnerabilities</h3>{% for c in memo.strengths_vulnerabilities.weaknesses %}{{ claim(c) }}{% else %}<p class="notice">None selected.</p>{% endfor %}</div>
+</div>
+
+<h2>Outstanding Questions / Data Limitations</h2>
+{% set o = memo.outstanding %}
+{% for title, items in [('Open questions', o.open_questions), ('Unresolved contradictions', o.unresolved_contradictions), ('Information not available in the admitted evidence', o.missing_information), ('Coverage and retrieval limitations', o.data_limitations)] %}
+<h3>{{ title }}</h3>
+{% if items %}<ul>{% for i in items %}<li>{{ i }}</li>{% endfor %}</ul>{% else %}<p class="notice">None recorded.</p>{% endif %}
+{% endfor %}
+<h3>Unresolved challenger findings</h3>
+{% if o.unresolved_challenges %}
+<table><tr><th>Severity</th><th>Issue</th><th>Finding</th><th>Claim</th></tr>
+{% for f in o.unresolved_challenges %}<tr><td>{{ f.severity }}</td><td>{{ f.issue_type|replace('_', ' ') }}</td><td>{{ f.reason }}</td><td>{{ f.target or '' }}</td></tr>{% endfor %}
+</table>{% else %}<p class="notice">None. Challenger outcome: {{ memo.status.challenge|replace('_', ' ') }}.</p>{% endif %}
+
+<h2>BusinessRiskScore</h2>
+<p><strong>Status: {{ memo.score.status }}</strong>{% if memo.score.band is not none %} &middot; band {{ memo.score.band }} ({{ memo.score.scale[memo.score.band|string] }}){% else %} &middot; no band is shown because the score is {{ memo.score.status }}{% endif %} &middot; coverage {{ memo.score.coverage_weight }}</p>
+<p class="small">{{ memo.score.explanation }} Scoring configuration v{{ memo.score.scoring_config_version }}{% if memo.score.label %} ({{ memo.score.label }}){% endif %}.</p>
+<table><tr><th>Dimension</th><th>Weight</th><th>Input</th><th>Band</th></tr>
+{% for pid, w in memo.score.weights.items() %}<tr><td>{{ pid }}</td><td>{{ w }}</td>
+{% if pid in memo.score.components %}<td>{{ memo.score.components[pid].value }}</td><td>{{ memo.score.components[pid].band }}</td>{% else %}<td colspan="2">not available</td>{% endif %}</tr>{% endfor %}
+</table>
+{% for n in memo.score.notes %}<p class="small">{{ n }}</p>{% endfor %}
+
+{% if memo.calculations %}
+<h2>Deterministic Calculations Referenced</h2>
+<table><tr><th>Indicator</th><th>Value</th><th>Unit</th><th>Period</th><th>Numerator</th><th>Denominator</th><th>Formula</th><th>State</th></tr>
+{% for c in memo.calculations %}<tr><td>{{ c.label }}{% if c.caveat %}<br><span class="qual">{{ c.caveat }}</span>{% endif %}</td><td>{{ c.value }}</td><td>{{ c.units }}</td><td>{{ c.period }}</td><td>{{ c.numerator.name if c.numerator else '' }}</td><td>{{ c.denominator.name if c.denominator else 'n/a' }}</td><td>{{ c.formula_id }}</td><td>{{ c.calculation_state }}</td></tr>{% endfor %}
+</table>
+{% endif %}
+
+<h2>Evidence Cited</h2>
+{% if memo.sources %}
+<table><tr><th>#</th><th>Source</th><th>Location</th><th>Excerpt</th></tr>
+{% for s in memo.sources %}<tr id="src-{{ s.n }}"><td>{{ s.n }}</td><td class="src">{{ s.form or '' }} {{ s.filename or '' }}<br>{{ s.sec_accession or '' }}<br><span class="small">{{ s.evidence_id[:16] }}</span></td><td>{{ s.section or '' }}{% if s.location is not none %}, offset {{ s.location }}{% endif %}{% if s.page %}, p.{{ s.page }}{% endif %}</td><td>{{ s.excerpt }}&hellip;</td></tr>{% endfor %}
+</table>{% else %}<p class="notice">No evidence is cited.</p>{% endif %}
+<p class="small">Generated {{ memo.run.completed_at }} &middot; {{ memo.document }} {{ memo.version }}. Rendered from the memo JSON; the accompanying audit report records every agent execution, hypothesis and validation.</p>
+</body>
+</html>

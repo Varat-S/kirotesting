@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Business Overview Audit - {{ audit.case.case_id }}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; color: #1c2430; max-width: 1180px; margin: 1.6rem auto; padding: 0 1.2rem; font-size: 13px; line-height: 1.45; }
+  h1 { font-size: 1.5rem; margin-bottom: .2rem; }
+  h2 { font-size: 1.05rem; margin: 1.8rem 0 .4rem; padding: .3rem .5rem; background: #1c2430; color: #fff; }
+  h3 { font-size: .95rem; margin: 1rem 0 .3rem; }
+  table { border-collapse: collapse; width: 100%; margin: .4rem 0 .8rem; }
+  th, td { text-align: left; vertical-align: top; padding: .25rem .45rem; border: 1px solid #d5dbe2; word-break: break-word; }
+  th { background: #eef1f5; }
+  code, .mono { font-family: Consolas, "Courier New", monospace; font-size: .78rem; }
+  .banner { padding: .5rem .7rem; margin: .6rem 0; border-left: 4px solid #8a6d1c; background: #fbf6e6; }
+  .banner.sim { border-color: #9a3324; background: #fbeeea; font-weight: bold; }
+  .s-validated, .s-valid, .s-supported, .s-accepted, .s-performed { color: #2f6b45; font-weight: bold; }
+  .s-rejected, .s-failed, .s-error, .s-no_results, .s-human_review_required, .s-unavailable { color: #9a3324; font-weight: bold; }
+  .s-qualified, .s-unverified, .s-not_executed, .s-not_performed, .s-skipped, .s-superseded, .s-accepted_with_qualification, .s-rerun_required { color: #8a6d1c; font-weight: bold; }
+  .muted { color: #68727f; }
+  ul { margin: .2rem 0 .4rem 1.1rem; padding: 0; }
+  nav a { margin-right: .7rem; }
+</style>
+</head>
+<body>
+{% macro st(v) %}<span class="s-{{ v }}">{{ v }}</span>{% endmacro %}
+{% macro short(v) %}<span class="mono">{{ (v or '')[:14] }}</span>{% endmacro %}
+<h1>Business Overview &mdash; Explainability and Audit Report</h1>
+<div class="muted">{{ audit.case.borrower or '' }} &middot; case {{ audit.case.case_id }} &middot; run <span class="mono">{{ audit.run.analysis_run_id }}</span> &middot; {{ audit.document }} {{ audit.version }}</div>
+{% if audit.run.execution_mode == 'offline_simulation' %}<div class="banner sim">{{ audit.run.execution_label }}</div>{% else %}<div class="banner">{{ audit.run.execution_label }}</div>{% endif %}
+<div class="banner">{{ audit.notice }} Conclusion status: {{ st(audit.conclusion_status) }}.</div>
+<nav>{% for n, t in [(1,'Sources'),(2,'Snapshot'),(3,'Registry'),(4,'Agents'),(5,'Execution'),(6,'Prompts'),(7,'Evidence packets'),(8,'Hypotheses'),(10,'Retrieval'),(12,'Calculations'),(13,'Reconciliation'),(14,'BO6'),(15,'Orchestrator'),(16,'Challenger'),(17,'Rerun'),(18,'Missing'),(19,'Score'),(20,'Conclusion')] %}<a href="#s{{ n }}">{{ n }}. {{ t }}</a>{% endfor %}</nav>
+
+<h2 id="s1">1. Case and source metadata</h2>
+<p>As of {{ audit.case.as_of_date }} &middot; evidence cut-off {{ audit.case.evidence_cutoff }}</p>
+<table><tr><th>File</th><th>Role</th><th>Form</th><th>Accession</th><th>Filed</th><th>Available at</th><th>SHA-256</th><th>URL</th></tr>
+{% for d in audit.sources.documents %}<tr><td>{{ d.filename }}</td><td>{{ d.role or d.parser }}</td><td>{{ d.form }}</td><td>{{ d.accession }}</td><td>{{ d.filing_date }}</td><td>{{ d.available_at }}</td><td class="mono">{{ d.sha256 }}</td><td>{{ d.source_url or '' }}</td></tr>{% endfor %}
+</table>
+<p>Rejected sources: {{ audit.sources.rejected_sources|length }}{% for r in audit.sources.rejected_sources %} &middot; {{ r.filename }} ({{ r.reason }}){% endfor %}</p>
+
+<h2 id="s2">2. Canonical evidence snapshot</h2>
+<p>Snapshot v{{ audit.evidence_snapshot.snapshot_version }} (schema {{ audit.evidence_snapshot.schema_version }}) &middot; content hash <span class="mono">{{ audit.evidence_snapshot.content_hash }}</span><br>
+{{ audit.evidence_snapshot.fact_count }} facts &middot; {{ audit.evidence_snapshot.narrative_passage_count }} narrative passages &middot; {{ audit.evidence_snapshot.human_verified_fact_count }} human-verified facts</p>
+
+<h2 id="s3">3. Agent registry</h2>
+<p>{{ audit.registry.version }} &middot; hash <span class="mono">{{ audit.registry.hash }}</span> &middot; {{ audit.registry.total_registered_jobs }} registered jobs, {{ audit.registry.active_agent_ids|length }} active in this BO-only run.<br>
+<span class="muted">Registered but not executed (out of scope): {{ audit.registry.inactive_registered_agent_ids|join(', ') }}</span></p>
+
+<h2 id="s4">4. Agents and roles</h2>
+<table><tr><th>Code</th><th>Agent</th><th>Role</th><th>Tier</th><th>Depends on</th><th>Owned parameters</th><th>Definition hash</th><th>Status</th></tr>
+{% for a in audit.agents %}<tr><td>{{ a.code or '' }}</td><td class="mono">{{ a.agent_id }}</td><td>{{ a.role }}{% if a.task_sections %}<br><span class="muted">sections: {{ a.task_sections|join(', ') }}</span>{% endif %}</td><td>{{ a.model_tier }}</td><td class="mono">{{ a.dependencies|join(', ') }}</td><td class="mono">{{ a.owned_parameters|join(', ') }}</td><td>{{ short(a.agent_definition_hash) }}</td><td>{{ st(a.status) }}{% if a.detail %}<br>{{ a.detail }}{% endif %}</td></tr>{% endfor %}
+</table>
+
+<h2 id="s5">5. Execution record</h2>
+<p>AI calls: {{ audit.execution.ai_calls }} &middot; cache reuses: {{ audit.execution.cache_reuses }} &middot; agent-run records: {{ audit.execution.agent_run_records }} &middot; runtime: {{ audit.execution.runtime_seconds }} s &middot; tokens: {{ audit.execution.token_usage }}</p>
+<table><tr><th>Stage</th><th>Round</th><th>Requested</th><th>Executed</th><th>Failed</th><th>Skipped</th><th>Peak concurrency</th><th>Cache hits</th></tr>
+{% for s in audit.execution.stages %}<tr><td>{{ s.stage }}</td><td>{{ s.round }}</td><td class="mono">{{ s.requested|join(', ') }}</td><td class="mono">{{ s.executed|join(', ') }}</td><td>{{ s.failed }}</td><td>{{ s.skipped }}</td><td>{{ s.peak_concurrency }}</td><td>{{ s.cache_hits }}</td></tr>{% endfor %}
+</table>
+<table><tr><th>Agent</th><th>Run</th><th>Wave</th><th>Validation</th><th>Model</th><th>Prompt</th><th>Latency ms</th><th>Usage</th><th>Cache</th><th>Rerun reason</th></tr>
+{% for a in audit.agents %}{% for r in a.runs %}<tr><td class="mono">{{ a.agent_id }}</td><td>{{ short(r.agent_run_id) }}</td><td>{{ r.execution_wave }}</td><td>{{ st(r.validation_status) }}{% if r.validation_status != 'valid' %}<br>{{ r.validation_detail }}{% endif %}{% if r.error_state %}<br>{{ r.error_state }}{% endif %}</td><td>{{ r.model_id }}</td><td>{{ r.prompt_id }}<br>{{ short(r.prompt_hash) }}</td><td>{{ r.latency_ms }}</td><td>{{ r.usage or 'not reported' }}</td><td>{{ 'reused' if r.reused_from_cache else 'no' }}</td><td>{{ r.rerun_reason or '' }}</td></tr>{% else %}<tr><td class="mono">{{ a.agent_id }}</td><td colspan="9">{{ st('not_executed') }} {{ a.detail or '' }}</td></tr>{% endfor %}{% endfor %}
+</table>
+{% for a in audit.agents %}{% if a.validation_issues or a.validator_adjustments %}
+<h3>{{ a.agent_id }}: validation detail</h3>
+{% if a.validation_issues %}<ul>{% for i in a.validation_issues %}<li class="s-rejected">{{ i }}</li>{% endfor %}</ul>{% endif %}
+{% if a.validator_adjustments %}<ul>{% for i in a.validator_adjustments %}<li><span class="mono">{{ i.hypothesis_id }}</span>: {{ i.note }}</li>{% endfor %}</ul>{% endif %}
+{% endif %}{% endfor %}
+
+<h2 id="s6">6. Prompt, schema and model versions</h2>
+<table><tr><th>Prompt name</th><th>Prompt id</th><th>Version</th><th>Content hash</th><th>Response schema hash</th></tr>
+{% for name, p in audit.prompts.items() %}<tr><td class="mono">{{ name }}</td><td>{{ p.prompt_id }}</td><td>{{ p.version }}</td><td class="mono">{{ p.content_hash }}</td><td class="mono">{{ p.response_schema_hash }}</td></tr>{% endfor %}
+</table>
+
+<h2 id="s7">7. Evidence packets</h2>
+<table><tr><th>Agent</th><th>Packet hash</th><th>Passages</th><th>Indicators</th><th>Evidence (file / section / offset)</th><th>Instruction-like passages</th></tr>
+{% for p in audit.evidence_packets %}<tr><td class="mono">{{ p.agent_id }}</td><td>{{ short(p.packet_hash) }}</td><td>{{ p.passage_count }}</td><td>{{ p.indicator_count }}</td><td>{% for e in p.evidence %}{{ short(e.evidence_id) }} {{ e.filename }} / {{ e.section }} / {{ e.location }}<br>{% endfor %}</td><td>{% for e in p.instruction_like_passages %}{{ short(e) }} {% else %}none{% endfor %}</td></tr>{% endfor %}
+</table>
+
+<h2 id="s8">8, 9, 11. Hypothesis records, evidence and dispositions</h2>
+<table><tr><th>Agent</th><th>Supported</th><th>Qualified</th><th>Rejected</th><th>Unverified</th></tr>
+{% for a, t in audit.hypotheses.statistics.by_agent.items() %}<tr><td class="mono">{{ a }}</td><td>{{ t.supported }}</td><td>{{ t.qualified }}</td><td>{{ t.rejected }}</td><td>{{ t.unverified }}</td></tr>{% endfor %}
+<tr><th>All (current versions)</th><th>{{ audit.hypotheses.statistics.overall.supported }}</th><th>{{ audit.hypotheses.statistics.overall.qualified }}</th><th>{{ audit.hypotheses.statistics.overall.rejected }}</th><th>{{ audit.hypotheses.statistics.overall.unverified }}</th></tr>
+</table>
+<table><tr><th>Id</th><th>Claim</th><th>Type / direction</th><th>Disposition</th><th>Admissibility</th><th>Confidence / materiality</th><th>Supporting</th><th>Contradicting</th><th>Verified quotes</th><th>Validator notes / missing</th><th>State</th></tr>
+{% for h in audit.hypotheses.records %}<tr><td class="mono">{{ h.hypothesis_id }}</td><td>{{ h.claim }}{% if h.corrects_hypothesis_id %}<br><span class="muted">corrects {{ h.corrects_hypothesis_id }}</span>{% endif %}{% if h.mitigant %}<br><span class="muted">mitigant: {{ h.mitigant.capability }} &mdash; existence {{ h.mitigant.existence }}, effectiveness {{ h.mitigant.effectiveness }}</span>{% endif %}{% if h.component_hypothesis_ids %}<br><span class="muted">{{ h.interaction_kind }} of {{ h.component_hypothesis_ids|join(', ') }}</span>{% endif %}</td><td>{{ h.claim_type }}<br>{{ h.direction }}</td><td>{{ st(h.disposition) }}</td><td>{{ h.admissibility }}<br>{{ h.display_priority }}</td><td>{{ h.confidence }} / {{ h.materiality }}</td><td>{% for e in h.supporting_evidence_ids %}{{ short(e) }}<br>{% endfor %}{% for q in h.quoted_values %}calc {{ short(q.parameter_result_id) }} = {{ q.value }}<br>{% endfor %}</td><td>{% for e in h.contradicting_evidence_ids %}{{ short(e) }}<br>{% endfor %}</td><td>{% for q in h.evidence_quotes %}&ldquo;{{ q.quote }}&rdquo;<br>{% endfor %}</td><td>{% for n in h.validation_notes %}{{ n }}<br>{% endfor %}{% for m in h.missing_information %}<span class="muted">missing: {{ m }}</span><br>{% endfor %}</td><td>{{ st(h.acceptance_state) }}</td></tr>{% endfor %}
+</table>
+<p>Rejected-and-corrected pairs: {% for c in audit.hypotheses.corrections %}<span class="mono">{{ c.rejected }} &rarr; {{ c.corrected_by }}</span> {% else %}none{% endfor %}</p>
+
+<h2 id="s10">10. Evidence-retrieval attempts</h2>
+<p>Retrieval searches admitted passages only; nothing is fetched. Agent-requested follow-up: {% if audit.retrieval.follow_up == 'not_performed' %}{{ st('not_performed') }}{% else %}{{ audit.retrieval.follow_up|length }} search(es){% endif %}. Budget: {{ audit.retrieval.budget }}</p>
+<table><tr><th>Agent</th><th>Query</th><th>Purpose</th><th>Origin</th><th>Terms</th><th>Searched</th><th>Status</th><th>Results (section / offset / score)</th></tr>
+{% for a in audit.retrieval.attempts %}<tr><td class="mono">{{ a.agent_id }}</td><td class="mono">{{ a.query_id }}</td><td>{{ a.purpose }}</td><td>{{ a.origin }}</td><td class="mono">{{ a.terms|join(' | ') }}</td><td>{{ a.passages_searched }}</td><td>{{ st(a.status) }}</td><td>{% for r in a.results %}{{ short(r.evidence_id) }} {{ r.section }} / {{ r.location }} / {{ r.score }}<br>{% endfor %}</td></tr>{% endfor %}
+</table>
+
+<h2 id="s12">12. Deterministic calculations</h2>
+<table><tr><th>Indicator</th><th>Value</th><th>Unit</th><th>Period</th><th>Numerator</th><th>Denominator</th><th>Formula / definition</th><th>State</th><th>Source facts</th></tr>
+{% for c in audit.calculations %}<tr><td>{{ c.label }}<br><span class="mono">{{ c.parameter_id }}</span>{% if c.caveat %}<br><span class="muted">{{ c.caveat }}</span>{% endif %}</td><td>{{ c.value }}</td><td>{{ c.units }}</td><td>{{ c.period }}</td><td>{{ c.numerator.name if c.numerator else '' }}{% if c.numerator and c.numerator.value is defined %} = {{ c.numerator.value }}{% endif %}</td><td>{{ c.denominator.name if c.denominator else 'n/a' }}{% if c.denominator and c.denominator.value is defined %} = {{ c.denominator.value }}{% endif %}</td><td>{{ c.formula_id }}<br>{{ short(c.definition_version) }}</td><td>{{ st(c.calculation_state) }}</td><td>{% for f in c.source_fact_ids %}{{ short(f) }} {% endfor %}</td></tr>{% else %}<tr><td colspan="9">No deterministic indicator was computable from the admitted facts.</td></tr>{% endfor %}
+</table>
+
+<h2 id="s13">13. Cross-agent duplicate and contradiction resolution</h2>
+<h3>Duplicate groups (deterministic)</h3>
+{% if audit.reconciliation.duplicate_groups %}<table><tr><th>Group</th><th>Hypotheses</th><th>Canonical</th><th>Shared evidence</th></tr>{% for g in audit.reconciliation.duplicate_groups %}<tr><td class="mono">{{ g.group_id }}</td><td class="mono">{{ g.hypothesis_ids|join(', ') }}</td><td class="mono">{{ g.canonical_hypothesis_id }}</td><td>{% for e in g.shared_evidence_ids %}{{ short(e) }} {% endfor %}</td></tr>{% endfor %}</table>{% else %}<p>None detected.</p>{% endif %}
+<h3>Contradictions</h3>
+{% if audit.reconciliation.contradictions %}<table><tr><th>Id</th><th>Kind</th><th>Hypotheses</th><th>Similarity</th></tr>{% for g in audit.reconciliation.contradictions %}<tr><td class="mono">{{ g.contradiction_id }}</td><td>{{ g.kind }}</td><td class="mono">{{ g.hypothesis_ids|join(' vs ') }}</td><td>{{ g.similarity }}</td></tr>{% endfor %}</table>{% else %}<p>None detected.</p>{% endif %}
+<p>Passages cited by more than one specialist: {{ audit.reconciliation.overlapping_evidence|length }} &middot; hypotheses carrying their own counter-evidence: {{ audit.reconciliation.disconfirming|length }} &middot; duplicates merged by the orchestrator: {{ audit.reconciliation.orchestrator_merged_duplicates|length }}</p>
+
+<h2 id="s14">14. BO6 interaction and mitigant analysis</h2>
+{% if audit.resilience_analysis is string %}<p>{{ st(audit.resilience_analysis) }}</p>{% else %}
+<table><tr><th>Id</th><th>Kind</th><th>Finding</th><th>Built from</th><th>Disposition</th></tr>
+{% for h in audit.resilience_analysis %}<tr><td class="mono">{{ h.hypothesis_id }}</td><td>{{ h.interaction_kind }}</td><td>{{ h.claim }}</td><td class="mono">{{ h.component_hypothesis_ids|join(', ') }}</td><td>{{ st(h.disposition) }}</td></tr>{% endfor %}</table>{% endif %}
+
+<h2 id="s15">15. Orchestrator execution and claim references</h2>
+{% if audit.orchestrator.history is string %}<p>{{ st(audit.orchestrator.history) }}</p>{% else %}
+<table><tr><th>Round</th><th>Agent run</th><th>Status</th><th>Claims</th><th>Issues</th></tr>
+{% for h in audit.orchestrator.history %}<tr><td>{{ h.round }}</td><td>{{ short(h.agent_run_id) }}</td><td>{{ st(h.status) }}</td><td>{{ h.claims }}</td><td>{% for i in h.issues %}{{ i }}<br>{% endfor %}</td></tr>{% endfor %}</table>{% endif %}
+<table><tr><th>Claim</th><th>List / section</th><th>Type</th><th>Text</th><th>Hypotheses</th><th>Evidence</th><th>Calculations</th></tr>
+{% for c in audit.orchestrator.claims %}<tr><td class="mono">{{ c.claim_id }}</td><td>{{ c.list }}<br>{{ c.section }}</td><td>{{ c.claim_type }}</td><td>{{ c.text }}</td><td>{% for h in c.hypotheses %}<span class="mono">{{ h.hypothesis_id }}</span> ({{ h.disposition }}, {{ h.admissibility }})<br>{% endfor %}</td><td>{% for e in c.evidence %}{{ short(e.evidence_id) }} {{ e.section }} / {{ e.location }}<br>{% endfor %}</td><td>{% for q in c.quoted_values %}{{ short(q.parameter_result_id) }} = {{ q.value }}<br>{% endfor %}</td></tr>{% else %}<tr><td colspan="7">No accepted conclusion claims.</td></tr>{% endfor %}
+</table>
+
+<h2 id="s16">16. Challenger findings and disposition</h2>
+{% if audit.challenger.rounds is string %}<p>{{ st(audit.challenger.rounds) }}</p>{% else %}
+{% for r in audit.challenger.rounds %}
+<h3>Round {{ r.round }} &mdash; run {{ short(r.agent_run_id) }} &mdash; execution {{ st(r.status) }} &mdash; recorded outcome {{ st(r.outcome) }}</h3>
+<p class="muted">Challenged conclusion {{ r.conclusion_id }}. Model-stated outcome (advisory): {{ r.model_stated_outcome or 'none' }}. {{ r.summary or '' }}</p>
+{% if r.issues %}<ul>{% for i in r.issues %}<li class="s-rejected">{{ i }}</li>{% endfor %}</ul>{% endif %}
+{% if r.findings %}<table><tr><th>Severity</th><th>Issue</th><th>Target claim</th><th>Reason</th><th>Agents</th><th>Reanalysis</th></tr>
+{% for f in r.findings %}<tr><td>{{ f.severity }}</td><td>{{ f.issue_type }}</td><td class="mono">{{ f.target }}</td><td>{{ f.reason }}</td><td class="mono">{{ f.affected_agent_ids|join(', ') }}</td><td>{{ f.requires_reanalysis }}</td></tr>{% endfor %}</table>{% else %}<p>No findings were returned (recorded as an executed, validated outcome).</p>{% endif %}
+{% if r.decision %}<p>Decision: rerun required = {{ r.decision.requires_rerun }}; escalated = {{ r.decision.escalated }}; scope = <span class="mono">{{ r.decision.rerun_scope|join(', ') }}</span></p>{% endif %}
+{% endfor %}{% endif %}
+
+<h2 id="s17">17. Rerun lineage</h2>
+{% if audit.rerun is string %}<p>{{ st(audit.rerun) }}</p>{% else %}
+<p>Round {{ audit.rerun.round }} &middot; executed scope <span class="mono">{{ audit.rerun.executed_scope|join(', ') }}</span><br>
+Requested scope incl. descendants: <span class="mono">{{ audit.rerun.requested_scope|join(', ') }}</span><br>
+Invalidated but outside a BO-only run (not executed): <span class="mono">{{ audit.rerun.deferred_descendants|join(', ') or 'none' }}</span><br>
+Superseded: {{ audit.rerun.superseded.parameters|length }} parameter results, {{ audit.rerun.superseded.hypotheses|length }} hypothesis records, {{ audit.rerun.superseded.scores|length }} score(s), {{ audit.rerun.superseded.conclusions|length }} conclusion(s). Prior versions remain stored.</p>{% endif %}
+<table><tr><th>Conclusion</th><th>Orchestrator run</th><th>Supersedes</th><th>Challenge status</th><th>State</th></tr>
+{% for c in audit.conclusions %}<tr><td class="mono">{{ c.conclusion_id }}</td><td>{{ short(c.orchestrator_run_id) }}</td><td class="mono">{{ c.supersedes_id or '' }}</td><td>{{ c.challenge_status }}</td><td>{{ st(c.acceptance_state) }}</td></tr>{% else %}<tr><td colspan="5">No conclusion was persisted.</td></tr>{% endfor %}
+</table>
+
+<h2 id="s18">18. Missing information</h2>
+{% if audit.missing_information %}<ul>{% for m in audit.missing_information %}<li>{{ m }}</li>{% endfor %}</ul>{% else %}<p>None recorded.</p>{% endif %}
+<p>Retrieval gaps: {{ audit.retrieval.gaps|length }}{% for g in audit.retrieval.gaps %} &middot; <span class="mono">{{ g.query_id }}</span> ({{ g.purpose }}){% endfor %}</p>
+
+<h2 id="s19">19. BusinessRiskScore coverage and status</h2>
+<p>Status {{ st(audit.score.status) }} &middot; band {{ audit.score.band if audit.score.band is not none else 'none' }} &middot; coverage {{ audit.score.coverage_weight }} &middot; config v{{ audit.score.scoring_config_version }} <span class="mono">{{ audit.score.scoring_config_hash[:14] }}</span><br>{{ audit.score.explanation }}</p>
+<table><tr><th>Score</th><th>Status</th><th>Band</th><th>Contributing</th><th>Missing</th><th>Supersedes</th><th>State</th></tr>
+{% for s in audit.scores_history %}<tr><td class="mono">{{ s.score_id }}</td><td>{{ s.status }}</td><td>{{ s.band }}</td><td class="mono">{{ s.contributing_parameter_ids|join(', ') }}</td><td class="mono">{{ s.missing_required_parameter_ids|join(', ') }}</td><td class="mono">{{ s.supersedes_id or '' }}</td><td>{{ st(s.acceptance_state) }}</td></tr>{% endfor %}
+</table>
+
+<h2 id="s20">20. Final BO conclusion provenance</h2>
+{% if audit.final_conclusion is string %}<p>{{ st(audit.final_conclusion) }}</p>{% else %}
+<p>Conclusion <span class="mono">{{ audit.final_conclusion.conclusion_id }}</span> &middot; orchestrator run {{ short(audit.final_conclusion.orchestrator_run_id) }} &middot; score reference <span class="mono">{{ audit.final_conclusion.score_reference }}</span> &middot; challenge status {{ audit.final_conclusion.challenge_status }} &middot; supersedes {{ audit.final_conclusion.supersedes_id or 'nothing' }}. Claim-level references are listed in section 15.</p>{% endif %}
+</body>
+</html>

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
@@ -210,3 +210,107 @@ def get_memo_html(
             _memo(session, case_id, snapshot_version)
         )
     )
+
+
+# --- Business Overview workbench (BO-only module) -----------------------------
+# GET routes are read-only views over recorded artifacts. The single POST
+# records the reviewer's explicit decision through the existing human-review
+# workflow; nothing here approves a handoff implicitly.
+
+
+def _bo_call(fn, *args):
+    from app.services.bo.workbench import BoRunNotFoundError
+
+    try:
+        return fn(*args)
+    except BoRunNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+def _bo_run_for_case(session: Session, case_id: str, analysis_run_id: str) -> dict:
+    from app.services.bo.workbench import bo_view
+
+    view = _bo_call(bo_view, session, analysis_run_id)
+    if view["case"]["case_id"] != case_id:
+        raise HTTPException(status_code=404,
+                            detail="Business Overview run does not belong to this case.")
+    return view
+
+
+@router.get("/{case_id}/bo/runs")
+def list_bo_runs(case_id: str, session: Session = Depends(get_session)) -> dict:
+    from app.services.bo.workbench import bo_runs
+
+    return {"case_id": case_id, "runs": bo_runs(session, case_id)}
+
+
+@router.get("/{case_id}/bo/runs/{analysis_run_id}")
+def get_bo_run(
+    case_id: str, analysis_run_id: str, session: Session = Depends(get_session)
+) -> dict:
+    return _bo_run_for_case(session, case_id, analysis_run_id)
+
+
+@router.get("/{case_id}/bo.html", response_class=HTMLResponse)
+def get_bo_workbench_html(
+    case_id: str,
+    analysis_run_id: str | None = Query(default=None),
+    session: Session = Depends(get_session),
+) -> HTMLResponse:
+    from app.services.bo.workbench import bo_runs
+
+    runs = bo_runs(session, case_id)
+    selected = analysis_run_id or (runs[0]["analysis_run_id"] if runs else None)
+    view = _bo_run_for_case(session, case_id, selected) if selected else None
+    return HTMLResponse(
+        _env.get_template("bo_workbench.html.j2").render(runs=runs, view=view))
+
+
+@router.get("/{case_id}/bo/runs/{analysis_run_id}/{kind}.json")
+def get_bo_artifact_json(
+    case_id: str, analysis_run_id: str, kind: str,
+    session: Session = Depends(get_session),
+) -> dict:
+    from app.services.bo.workbench import bo_artifact
+
+    _bo_run_for_case(session, case_id, analysis_run_id)
+    return _bo_call(bo_artifact, session, analysis_run_id, kind)
+
+
+@router.get("/{case_id}/bo/runs/{analysis_run_id}/{kind}.html",
+            response_class=HTMLResponse)
+def get_bo_artifact_html(
+    case_id: str, analysis_run_id: str, kind: str,
+    session: Session = Depends(get_session),
+) -> HTMLResponse:
+    from app.services.bo.reporting import render_audit_html, render_memo_html
+    from app.services.bo.workbench import bo_artifact
+
+    if kind not in ("memo", "audit"):
+        raise HTTPException(status_code=404, detail="Unknown Business Overview page.")
+    _bo_run_for_case(session, case_id, analysis_run_id)
+    payload = _bo_call(bo_artifact, session, analysis_run_id, kind)
+    render = render_memo_html if kind == "memo" else render_audit_html
+    return HTMLResponse(render(payload))
+
+
+@router.post("/{case_id}/bo/runs/{analysis_run_id}/review")
+def review_bo_run(
+    case_id: str,
+    analysis_run_id: str,
+    reviewer: str = Form(...),
+    reason: str = Form(...),
+    decision: str = Form(...),
+    acknowledge_unresolved: bool = Form(default=False),
+    session: Session = Depends(get_session),
+) -> dict:
+    from app.services.bo.handoff import HandoffError, review_handoff
+
+    view = _bo_run_for_case(session, case_id, analysis_run_id)
+    try:
+        return review_handoff(
+            session, view["handoff"]["handoff_id"], reviewer=reviewer,
+            reason=reason, decision=decision,
+            acknowledge_unresolved=acknowledge_unresolved)
+    except HandoffError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

@@ -9,7 +9,7 @@ input packet; anything outside the contract is dropped.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from app.schemas.agentic import ParameterResult, RiskScore, ScoreKind, Topic
@@ -26,6 +26,10 @@ class BusinessOrchestratorInput:
     score: dict[str, Any]
     open_conflicts: list[dict[str, Any]]
     data_limitations: list[dict[str, Any]]
+    # Additional VALIDATED structure (Business Overview v2): hypothesis records,
+    # contradictions, duplicate groups, resilience findings, deterministic
+    # context. Only the named keys are accepted, so raw documents cannot ride in.
+    extras: dict[str, Any] = field(default_factory=dict)
 
     def as_prompt_inputs(self) -> dict[str, Any]:
         return {
@@ -34,7 +38,16 @@ class BusinessOrchestratorInput:
             "score": self.score,
             "open_conflicts": self.open_conflicts,
             "data_limitations": self.data_limitations,
+            **self.extras,
         }
+
+
+# The only extra input sections the Business Orchestrator may receive.
+ALLOWED_ORCHESTRATOR_EXTRAS = frozenset({
+    "data_notice", "sections", "hypotheses", "audit_only_hypotheses",
+    "duplicate_groups", "contradictions", "resilience_findings", "indicators",
+    "coverage", "score_explanation", "challenge_feedback",
+})
 
 
 def build_business_orchestrator_input(
@@ -44,10 +57,16 @@ def build_business_orchestrator_input(
     business_score: RiskScore,
     open_conflicts: list[dict[str, Any]] | None = None,
     data_limitations: list[dict[str, Any]] | None = None,
+    extras: dict[str, Any] | None = None,
 ) -> BusinessOrchestratorInput:
     """Construct the strict Business Orchestrator input (item 7)."""
     if business_score.kind is not ScoreKind.BUSINESS:
         raise OrchestratorInputError("Expected a BusinessRiskScore.")
+    unknown = set(extras or {}) - ALLOWED_ORCHESTRATOR_EXTRAS
+    if unknown:
+        raise OrchestratorInputError(
+            f"Unsupported orchestrator input section(s): {sorted(unknown)}."
+        )
     accepted = _accepted_topic_params(parameters, Topic.BUSINESS, analysis_run_id)
     return BusinessOrchestratorInput(
         analysis_run_id=analysis_run_id,
@@ -55,6 +74,7 @@ def build_business_orchestrator_input(
         score=_score_payload(business_score),
         open_conflicts=list(open_conflicts or []),
         data_limitations=list(data_limitations or []),
+        extras=dict(extras or {}),
     )
 
 

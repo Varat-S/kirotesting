@@ -1,0 +1,87 @@
+{
+ "manifest_version": "bo-review-manifest-1.0",
+ "borrower": "HCA Healthcare, Inc.",
+ "filing": {
+  "form": "10-K",
+  "fiscal_year": 2025,
+  "ticker": "HCA",
+  "cik": null,
+  "accession": null,
+  "filing_date": null,
+  "primary_document_sha256": null
+ },
+ "verification_status": "unverified_pending_filing",
+ "reviewer": null,
+ "reviewer_note": "TEMPLATE. The HCA FY2025 Form 10-K has not been downloaded or processed in this workspace, so nothing below has been checked against the source. The entries name the concepts a reviewer must confirm; they contain no HCA figures. Before use: fetch the filing, fill 'filing', replace each source_patterns entry with a verified_quote copied from the filing, add recomputed_values from the deterministic indicators, and only then set verification_status to 'reviewer_verified'. The groupmate's reference document may suggest topics but is not a source.",
+ "source_confirmed_facts": [
+  {"id": "HCA-F1", "concept": "Managed-care agreements set reimbursement rates",
+   "source_patterns": ["managed care", "contracts?|agreements?", "rates?"],
+   "finding_patterns": ["managed.care", "rates?"], "verified_quote": null},
+  {"id": "HCA-F2", "concept": "Texas and Florida share, stated on a revenue basis",
+   "source_patterns": ["Texas", "Florida", "revenues?"],
+   "finding_patterns": ["Texas", "Florida", "revenue"], "verified_quote": null},
+  {"id": "HCA-F3", "concept": "Galen College of Nursing exists and is operated by the company",
+   "source_patterns": ["Galen"],
+   "finding_patterns": ["Galen"], "verified_quote": null},
+  {"id": "HCA-F4", "concept": "Revenue per equivalent admission is reported",
+   "source_patterns": ["revenues? per equivalent admission"],
+   "finding_patterns": ["revenue per equivalent admission"], "verified_quote": null},
+  {"id": "HCA-F5", "concept": "Government programme (Medicare/Medicaid) revenue dependence",
+   "source_patterns": ["Medicare", "Medicaid"],
+   "finding_patterns": ["Medicare", "Medicaid"], "verified_quote": null},
+  {"id": "HCA-F6", "concept": "Uninsured / uncompensated care exposure",
+   "source_patterns": ["uninsured|uncompensated care|charity care"],
+   "finding_patterns": ["uninsured|uncompensated|charity"], "verified_quote": null}
+ ],
+ "recomputed_values": [],
+ "acceptable_inferences": [
+  {"id": "HCA-I1", "patterns": ["essential|acute.care", "resilien|defensiv|stable"]},
+  {"id": "HCA-I2", "patterns": ["revenue per equivalent admission", "mix"]}
+ ],
+ "known_false_hypotheses": [
+  {"id": "HCA-X1", "patterns": ["recession.(?:proof|immune)"]},
+  {"id": "HCA-X2", "patterns": ["no seasonality|not seasonal|absence of seasonality"]},
+  {"id": "HCA-X3", "patterns": ["eliminat\\w+", "(?:regional|geographic) concentration"]},
+  {"id": "HCA-X4", "patterns": ["available for (?:scheduled )?debt service"]}
+ ],
+ "known_unresolved_questions": [
+  {"id": "HCA-Q1", "patterns": ["Galen|nurs", "retention|outcome|effect|cost"]},
+  {"id": "HCA-Q2", "patterns": ["rate", "mix|volume"]}
+ ],
+ "expected_coverage": {
+  "sections": ["BO1", "BO2", "BO3", "BO4", "BO5", "BO6"],
+  "concepts": [
+   {"id": "HCA-C1", "kind": "risk", "patterns": ["Medicare|Medicaid|government"]},
+   {"id": "HCA-C2", "kind": "risk", "patterns": ["Texas", "Florida"]},
+   {"id": "HCA-C3", "kind": "risk", "patterns": ["labou?r|nurs|staffing"]},
+   {"id": "HCA-C4", "kind": "risk", "patterns": ["uninsured|uncompensated|self.pay"]},
+   {"id": "HCA-C5", "kind": "risk", "patterns": ["regulat|reimbursement"]},
+   {"id": "HCA-C6", "kind": "offset", "patterns": ["Galen|training|pipeline"]},
+   {"id": "HCA-C7", "kind": "offset", "patterns": ["scale|procurement|purchasing"]}
+  ]
+ },
+ "trap_checks": [
+  {"id": "managed_care_rates_vs_volume_guarantees",
+   "description": "Contracted reimbursement rates are not contracted patient volumes.",
+   "required_all": ["managed.care", "rates?", "volumes?"],
+   "forbidden": ["(?<!not )(?<!no )(?<!without )guarantee\\w* (?:minimum |patient )*volumes"]},
+  {"id": "geography_revenue_denominator",
+   "description": "A Texas/Florida share must be stated on the basis its source uses.",
+   "number_basis": {"scope": ["Texas|Florida"], "terms": ["revenue", "admission"]}},
+  {"id": "admissions_vs_revenue",
+   "description": "An admissions percentage must not be labelled a revenue percentage.",
+   "number_basis": {"scope": ["admission"], "terms": ["revenue", "admission"]}},
+  {"id": "galen_existence_vs_effectiveness",
+   "description": "The programme can be verified; its financial effect is unproven unless measured.",
+   "required_all": ["Galen"],
+   "mitigant_must_be_unproven": ["Galen"],
+   "forbidden_as_established": ["Galen.*(?:reduc|lower|improv|sav)\\w*"]},
+  {"id": "unit_revenue_vs_pricing_power",
+   "description": "Growth in revenue per equivalent admission includes case mix and payer mix.",
+   "required_all": ["revenue per equivalent admission", "mix"],
+   "forbidden_as_established": ["pricing power"]},
+  {"id": "cfo_less_capex_vs_debt_service_capacity",
+   "description": "Operating cash flow less capex is not cash available for debt service.",
+   "forbidden": ["available for (?:scheduled )?debt service", "debt.service capacity is (?:adequate|strong|ample)"]}
+ ]
+}

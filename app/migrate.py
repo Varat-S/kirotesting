@@ -65,12 +65,21 @@ SECTOR_BENCHMARK_TABLES = (
 )
 
 
+# Business Overview v2 tables (hypotheses, retrieval attempts, BO handoff).
+BUSINESS_OVERVIEW_TABLES = (
+    "hypothesis_records",
+    "retrieval_attempts",
+    "accepted_business_overviews",
+)
+
+
 def migrate(engine):
     # Which agentic tables are missing in the EXISTING schema (before init_db)?
     with engine.connect() as connection:
         before_tables = set(inspect(connection).get_table_names())
     new_agentic_tables = [
-        t for t in (*AGENTIC_TABLES, *SECTOR_BENCHMARK_TABLES)
+        t for t in (*AGENTIC_TABLES, *SECTOR_BENCHMARK_TABLES,
+                    *BUSINESS_OVERVIEW_TABLES)
         if t not in before_tables
     ]
 

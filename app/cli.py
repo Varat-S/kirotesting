@@ -103,6 +103,48 @@ def main(argv=None):
     override.add_argument("--industry", required=True)
     override.add_argument("--reviewer", required=True)
     override.add_argument("--rationale", required=True)
+    bo_run = commands.add_parser(
+        "run-bo-case",
+        help="Run the Business Overview module only (no FO/SO/credit agents)",
+    )
+    bo_run.add_argument("case_id")
+    bo_source = bo_run.add_mutually_exclusive_group(required=True)
+    bo_source.add_argument("--package", type=Path)
+    bo_source.add_argument(
+        "--bundle", type=Path, help="A local SEC bundle manifest (bundle.json)"
+    )
+    bo_run.add_argument(
+        "--cutoff", type=lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")),
+        help="Evidence cut-off (required with --bundle)",
+    )
+    bo_run.add_argument("--entity-id")
+    bo_run.add_argument("--entity-name")
+    bo_run.add_argument(
+        "--manifest", type=Path,
+        help="Reviewer-controlled evaluation manifest; writes evaluation.json",
+    )
+    bo_backend = bo_run.add_mutually_exclusive_group()
+    bo_backend.add_argument(
+        "--responses", type=Path,
+        help="Scripted offline responses (JSON); the run is an offline simulation",
+    )
+    bo_backend.add_argument(
+        "--live", action="store_true",
+        help="Use the configured live provider (LLM_PROVIDER); incurs model cost",
+    )
+    bo_run.add_argument("--pdf", action="store_true")
+    bo_review = commands.add_parser(
+        "bo-review",
+        help="Record your explicit decision on a pending Business Overview handoff",
+    )
+    bo_review.add_argument("handoff_id")
+    bo_review.add_argument("--reviewer", required=True)
+    bo_review.add_argument("--reason", required=True)
+    bo_review.add_argument("--reject", action="store_true")
+    bo_review.add_argument(
+        "--acknowledge-unresolved", action="store_true",
+        help="Accept although challenger findings remain open (they stay recorded)",
+    )
     approve = commands.add_parser(
         "approve", help="Record your explicit approval of the exact draft content"
     )
@@ -139,6 +181,21 @@ def main(argv=None):
                 output_root=args.output,
                 analysis_mode=args.analysis_mode,
             )
+            if args.command == "run-bo-case":
+                print(json.dumps(_run_bo_case(session, database, args), indent=2))
+                session.commit()
+                return
+            if args.command == "bo-review":
+                from app.services.bo.handoff import review_handoff
+
+                print(json.dumps(review_handoff(
+                    session, args.handoff_id, reviewer=args.reviewer,
+                    reason=args.reason,
+                    decision="reject" if args.reject else "accept",
+                    acknowledge_unresolved=args.acknowledge_unresolved,
+                ), indent=2))
+                session.commit()
+                return
             if args.command == "classify-override":
                 print(json.dumps(_classify_override(session, args), indent=2))
                 session.commit()
@@ -294,6 +351,76 @@ def main(argv=None):
         engine.dispose()
 
 
+
+
+def _run_bo_case(session, database, args):
+    """Run the BO-only path and summarise the recorded outcome."""
+    from app.services.bo.runner import BusinessOverviewRunner
+
+    backend = None
+    if args.responses:
+        from app.services.bo.offline import ScriptedBoBackend
+
+        backend = ScriptedBoBackend.from_file(args.responses)
+    elif args.live:
+        settings = get_settings()
+        if settings.llm_provider == "vertex":
+            from app.services.llm.providers_vertex import VertexProviderBackend
+
+            backend = VertexProviderBackend(settings)
+        else:
+            from app.services.llm.providers import RealProviderBackend
+
+            backend = RealProviderBackend(settings)
+        backend.check_configuration()
+    if args.bundle:
+        if args.cutoff is None:
+            raise ValueError("--bundle requires --cutoff.")
+        package = sec_source_package(
+            SecFilingBundle.load(args.bundle), cutoff=args.cutoff,
+            entity_id=args.entity_id, legal_name=args.entity_name,
+        )
+    else:
+        package = SourcePackage.load(args.package)
+    manifest = None
+    if args.manifest:
+        from app.services.bo.evaluation import load_manifest
+
+        manifest = load_manifest(args.manifest)
+    result = BusinessOverviewRunner(
+        session, backend=backend, data_root=database.parent, output_root=args.output,
+    ).run_case(
+        args.case_id, package=package, produce_pdf=args.pdf, manifest=manifest,
+    )
+    evaluation = result.evaluation
+    return {
+        **({"evaluation": {
+            "ground_truth_status": evaluation["ground_truth_status"],
+            "citation_validity": evaluation["factual_correctness"]["citation_validity"],
+            "trap_checks_passed": evaluation["analytical_reasoning"]["trap_checks_passed"],
+            "trap_checks": len(evaluation["analytical_reasoning"]["trap_checks"]),
+        }} if evaluation else {}),
+        "case_id": result.case_id,
+        "analysis_run_id": result.analysis_run_id,
+        "scope": "business_overview_only",
+        "execution_mode": result.execution_mode,
+        "conclusion_status": result.conclusion_status,
+        "human_review_status": "pending",
+        "handoff_id": result.handoff["handoff_id"],
+        "business_risk_score": {
+            "status": result.memo["score"]["status"],
+            "band": result.memo["score"]["band"],
+        },
+        "agents": {a: o["status"] for a, o in result.record["agents"].items()},
+        "ai_calls": result.audit["execution"]["ai_calls"],
+        "challenge_rounds": [
+            {"round": r["round"], "outcome": r["outcome"],
+             "findings": len(r["findings"])}
+            for r in result.record["challenge_rounds"]
+        ],
+        "remediation_performed": result.record["remediation"] is not None,
+        "outputs": {k: str(v) for k, v in result.output_paths.items()},
+    }
 
 
 def _benchmark_import(args):

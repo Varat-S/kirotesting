@@ -397,6 +397,13 @@ class ConclusionClaim(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
     materiality: Materiality = Materiality.MEDIUM
     uncertainty: str | None = None
+    # Additive (Business Overview v2): the validated hypotheses a claim rests
+    # on, the memo section it belongs to, how it must be presented, and a short
+    # label. All optional, so earlier payloads validate unchanged.
+    hypothesis_ids: list[str] = Field(default_factory=list)
+    section: str | None = None
+    claim_type: str | None = None
+    title: str | None = None
 
 
 class TopicConclusion(BaseModel):

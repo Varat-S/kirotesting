@@ -34,6 +34,10 @@ from app.schemas.agentic import ModelTier, Topic
 from app.services.agents.router import RoutingSpec, Selector
 
 AGENT_REGISTRY_VERSION = "agent-registry-1.1.0"
+# The v2 Business Overview roster (hybrid six-agent arrangement). It is a
+# separate registry VERSION, not an in-place rewrite: runs recorded under 1.1.0
+# keep resolving against the unchanged v1 roster.
+AGENT_REGISTRY_VERSION_BO_V2 = "agent-registry-2.0.0"
 
 
 class AgentRegistryError(ValueError):
@@ -422,8 +426,16 @@ _MITIGANT = [
 ]
 
 
-def default_registry() -> AgentRegistry:
-    """Build the canonical 27-job agent registry."""
+def default_registry(bo_roster: str = "v1") -> AgentRegistry:
+    """Build the canonical 27-job agent registry.
+
+    ``bo_roster="v1"`` (default) is the original roster. ``bo_roster="v2"``
+    swaps the six Business narrow agents for the hybrid six-agent arrangement
+    (BO6 depends on BO1-BO5) and points the Business orchestrator/challenger at
+    their v2 prompts; the other 19 jobs are identical.
+    """
+    if bo_roster not in ("v1", "v2"):
+        raise AgentRegistryError(f"Unknown BO roster {bo_roster!r}.")
     defs: list[AgentDefinition] = []
 
     def narrow(agent_id, prompt, params, topic, *, narrative_topics=(), fact_names=()):
@@ -447,11 +459,16 @@ def default_registry() -> AgentRegistry:
             ),
         )
 
-    for agent_id, params, narrative_topics in _BUSINESS_NARROW:
-        defs.append(
-            narrow(agent_id, agent_id, params, Topic.BUSINESS,
-                   narrative_topics=narrative_topics)
-        )
+    if bo_roster == "v2":
+        defs.extend(_business_narrow_v2())
+        business_narrow_ids = [d.agent_id for d in defs]
+    else:
+        for agent_id, params, narrative_topics in _BUSINESS_NARROW:
+            defs.append(
+                narrow(agent_id, agent_id, params, Topic.BUSINESS,
+                       narrative_topics=narrative_topics)
+            )
+        business_narrow_ids = [d[0] for d in _BUSINESS_NARROW]
     for agent_id, prompt, params in _FINANCIAL_NARROW:
         defs.append(
             AgentDefinition(
@@ -504,13 +521,15 @@ def default_registry() -> AgentRegistry:
 
     financial_narrow_ids = [d[0] for d in _FINANCIAL_NARROW] + ["covenant_extraction"]
     # Orchestrators
-    defs.append(_orchestrator("business_orchestrator", Topic.BUSINESS,
-                              [d[0] for d in _BUSINESS_NARROW]))
+    defs.append(_orchestrator(
+        "business_orchestrator", Topic.BUSINESS, business_narrow_ids,
+        prompt_name=_bo_prompt(bo_roster, "orchestrator")))
     defs.append(_orchestrator("financial_orchestrator", Topic.FINANCIAL,
                               financial_narrow_ids))
     # Challengers (depend on their orchestrator)
-    defs.append(_challenger("business_challenge", Topic.BUSINESS,
-                            "business_orchestrator"))
+    defs.append(_challenger(
+        "business_challenge", Topic.BUSINESS, "business_orchestrator",
+        prompt_name=_bo_prompt(bo_roster, "challenger")))
     defs.append(_challenger("financial_challenge", Topic.FINANCIAL,
                             "financial_orchestrator"))
 
@@ -560,30 +579,84 @@ def default_registry() -> AgentRegistry:
     defs.append(_challenger("cross_topic_challenge", Topic.CROSS_TOPIC,
                             "credit_orchestrator"))
 
-    return AgentRegistry(defs)
+    return AgentRegistry(
+        defs,
+        version=AGENT_REGISTRY_VERSION_BO_V2 if bo_roster == "v2"
+        else AGENT_REGISTRY_VERSION,
+    )
 
 
-def _orchestrator(agent_id: str, topic: Topic, deps: list[str]) -> AgentDefinition:
+def _bo_prompt(bo_roster: str, role: str) -> str | None:
+    """Prompt name of the Business orchestrator/challenger for a roster."""
+    if bo_roster != "v2":
+        return None
+    from app.services.bo.plans import BO_CHALLENGER_PROMPT, BO_ORCHESTRATOR_PROMPT
+
+    return BO_ORCHESTRATOR_PROMPT if role == "orchestrator" else BO_CHALLENGER_PROMPT
+
+
+def _text_matches(*patterns: str) -> Selector:
+    """Select a narrative passage whose text matches any of the patterns."""
+    import re
+
+    compiled = [re.compile(p, re.I) for p in patterns]
+    return lambda item: any(c.search(item.get("text") or "") for c in compiled)
+
+
+def _business_narrow_v2() -> list[AgentDefinition]:
+    """The hybrid six-agent Business roster (BO1-BO5 primary, BO6 dependent)."""
+    from app.services.bo.plans import BO_AGENT_SPECS, BO_PRIMARY_AGENT_IDS
+
+    defs = []
+    for spec in BO_AGENT_SPECS:
+        defs.append(
+            AgentDefinition(
+                agent_id=spec.agent_id,
+                topic=Topic.BUSINESS,
+                task_type=spec.agent_id,
+                model_tier=ModelTier.NARROW,
+                # BO6 analyses interactions across the VALIDATED primary outputs.
+                dependencies=BO_PRIMARY_AGENT_IDS if spec.code == "BO6" else (),
+                owned_parameters=spec.owned_parameters,
+                prompt_name=spec.agent_id,
+                response_schema_ref=spec.agent_id,
+                routing=RoutingSpec(
+                    agent_id=spec.agent_id,
+                    narrative_selector=_text_matches(*spec.all_terms()),
+                    # Agents see deterministic indicators, never raw statement facts.
+                    parameter_selector=_always(),
+                ),
+                # The plan hash makes a routing change move the definition hash.
+                selector_identity=(f"retrieval_plan:{spec.plan_hash()}",
+                                   "parameters:bo_indicators"),
+            )
+        )
+    return defs
+
+
+def _orchestrator(agent_id: str, topic: Topic, deps: list[str], *,
+                  prompt_name: str | None = None) -> AgentDefinition:
     return AgentDefinition(
         agent_id=agent_id,
         topic=topic,
         task_type="orchestrate",
         model_tier=ModelTier.ORCHESTRATOR,
         dependencies=tuple(deps),
-        prompt_name=agent_id,
-        response_schema_ref=agent_id,
+        prompt_name=prompt_name or agent_id,
+        response_schema_ref=prompt_name or agent_id,
         routing=RoutingSpec(agent_id=agent_id),
     )
 
 
-def _challenger(agent_id: str, topic: Topic, orchestrator: str) -> AgentDefinition:
+def _challenger(agent_id: str, topic: Topic, orchestrator: str, *,
+                prompt_name: str | None = None) -> AgentDefinition:
     return AgentDefinition(
         agent_id=agent_id,
         topic=topic,
         task_type="challenge",
         model_tier=ModelTier.CHALLENGE,
         dependencies=(orchestrator,),
-        prompt_name=agent_id,
-        response_schema_ref=agent_id,
+        prompt_name=prompt_name or agent_id,
+        response_schema_ref=prompt_name or agent_id,
         routing=RoutingSpec(agent_id=agent_id),
     )

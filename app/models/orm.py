@@ -1177,3 +1177,84 @@ class IndustryBenchmarkComparisonRow(Base):
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, default=utcnow, nullable=False
     )
+
+
+# ---------------------------------------------------------------------------
+# Business Overview v2 (additive tables)
+# ---------------------------------------------------------------------------
+
+
+class HypothesisRecordRow(Base):
+    """One investigated BO hypothesis version. Append-only across reruns."""
+
+    __tablename__ = "hypothesis_records"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    hypothesis_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    analysis_run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("agentic_analysis_runs.analysis_run_id"),
+        nullable=False, index=True,
+    )
+    case_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    agent_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    agent_run_id: Mapped[str] = mapped_column(String, nullable=False)
+    section: Mapped[str] = mapped_column(String, nullable=False)
+    claim_type: Mapped[str] = mapped_column(String, nullable=False)
+    direction: Mapped[str] = mapped_column(String, nullable=False)
+    disposition: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    admissibility: Mapped[str] = mapped_column(String, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    supersedes_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    acceptance_state: Mapped[str] = mapped_column(
+        String, nullable=False, default="accepted", index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class RetrievalAttemptRow(Base):
+    """One recorded evidence search over admitted material (never a fetch)."""
+
+    __tablename__ = "retrieval_attempts"
+
+    attempt_id: Mapped[str] = mapped_column(String, primary_key=True)
+    analysis_run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("agentic_analysis_runs.analysis_run_id"),
+        nullable=False, index=True,
+    )
+    case_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    agent_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    query_id: Mapped[str] = mapped_column(String, nullable=False)
+    purpose: Mapped[str] = mapped_column(String, nullable=False)
+    origin: Mapped[str] = mapped_column(String, nullable=False, default="plan")
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+
+
+class AcceptedBusinessOverviewRow(Base):
+    """The BO handoff artifact. Immutable once a human has accepted it."""
+
+    __tablename__ = "accepted_business_overviews"
+
+    handoff_id: Mapped[str] = mapped_column(String, primary_key=True)
+    analysis_run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("agentic_analysis_runs.analysis_run_id"),
+        nullable=False, index=True,
+    )
+    case_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    human_review_status: Mapped[str] = mapped_column(
+        String, nullable=False, default="pending", index=True
+    )
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    artifacts: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )

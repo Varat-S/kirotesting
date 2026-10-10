@@ -1,0 +1,1655 @@
+{
+ "_comment": "Reviewer-authored OFFLINE SIMULATION script for Stryker Corporation's FY2024 Form 10-K (accession 0000310764-25-000023). No model produced these answers. Every quote is copied from the filing and is re-verified against the admitted passages at run time; evidence is referenced by anchor phrase and resolved to the case's evidence ids.",
+ "bo_business_model_revenue": {
+  "parameters": [
+   {
+    "parameter_id": "business_model_classification",
+    "value": "medical_technology_manufacturer",
+    "value_type": "category",
+    "status": "ok",
+    "evidence_ids": [
+     {
+      "$evidence": "Most of our products are marketed directly"
+     }
+    ],
+    "hypothesis_ids": [
+     "BO1-H001"
+    ]
+   },
+   {
+    "parameter_id": "cyclicality_seasonality_assessment",
+    "value": "limited_seasonality",
+    "value_type": "category",
+    "status": "ok",
+    "evidence_ids": [
+     {
+      "$evidence": "generally not seasonal in nature"
+     }
+    ],
+    "hypothesis_ids": [
+     "BO1-H002"
+    ]
+   },
+   {
+    "parameter_id": "revenue_recurrence_assessment",
+    "value": null,
+    "value_type": "category",
+    "status": "unavailable",
+    "evidence_ids": [],
+    "notes": "Recurring versus one-off revenue is not disclosed in the routed passages."
+   }
+  ],
+  "hypotheses": [
+   {
+    "hypothesis_id": "BO1-H001",
+    "claim": "Revenue comes from medical technology products in MedSurg, Neurotechnology and Orthopaedics, marketed mostly directly to doctors, hospitals and other healthcare facilities.",
+    "claim_type": "fact",
+    "direction": "neutral",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "medium",
+    "display_priority": "display",
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "Most of our products are marketed directly"
+     }
+    ],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [
+     {
+      "evidence_id": {
+       "$evidence": "Most of our products are marketed directly"
+      },
+      "quote": "Most of our products are marketed directly to doctors, hospitals and other healthcare facilities"
+     }
+    ]
+   },
+   {
+    "hypothesis_id": "BO1-H002",
+    "claim": "The filing describes the business as generally not seasonal, while capital-equipment sales are generally higher in the fourth quarter.",
+    "claim_type": "fact",
+    "direction": "mixed",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "medium",
+    "display_priority": "display",
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "generally not seasonal in nature"
+     }
+    ],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [
+     {
+      "evidence_id": {
+       "$evidence": "generally not seasonal in nature"
+      },
+      "quote": "Our business is generally not seasonal in nature"
+     },
+     {
+      "evidence_id": {
+       "$evidence": "generally not seasonal in nature"
+      },
+      "quote": "sales of capital equipment are generally higher in the fourth quarter"
+     }
+    ]
+   },
+   {
+    "hypothesis_id": "BO1-H003",
+    "claim": "Faster growth in MedSurg and Neurotechnology is favourable to overall profitability.",
+    "claim_type": "inference",
+    "direction": "positive",
+    "disposition": "rejected",
+    "confidence": "medium",
+    "materiality": "medium",
+    "display_priority": "display",
+    "supporting_evidence_ids": [],
+    "contradicting_evidence_ids": [
+     {
+      "$evidence": "segment mix to have an unfavorable impact"
+     }
+    ],
+    "evidence_quotes": []
+   },
+   {
+    "hypothesis_id": "BO1-H004",
+    "claim": "Management expects segment mix to weigh on gross margin, because the lower-margin MedSurg and Neurotechnology segment is expected to grow faster than Orthopaedics.",
+    "claim_type": "management_claim",
+    "direction": "negative",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "medium",
+    "display_priority": "display",
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "segment mix to have an unfavorable impact"
+     }
+    ],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [
+     {
+      "evidence_id": {
+       "$evidence": "segment mix to have an unfavorable impact"
+      },
+      "quote": "we generally expect segment mix to have an unfavorable impact for the foreseeable future"
+     }
+    ],
+    "corrects_hypothesis_id": "BO1-H003"
+   },
+   {
+    "hypothesis_id": "BO1-H005",
+    "claim": "Revenue grew 10.2% year on year in the latest fiscal year.",
+    "claim_type": "calculated_fact",
+    "direction": "positive",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "medium",
+    "display_priority": "display",
+    "supporting_evidence_ids": [],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [],
+    "quoted_values": [
+     {
+      "parameter_result_id": {
+       "$indicator": "revenue_growth"
+      },
+      "value": {
+       "$indicator_value": "revenue_growth"
+      },
+      "denominator": "revenue_prior"
+     }
+    ]
+   },
+   {
+    "hypothesis_id": "BO1-H006",
+    "claim": "MedSurg and Neurotechnology contributed 59.8% of consolidated revenue, with Orthopaedics the balance of the two reportable segments.",
+    "claim_type": "calculated_fact",
+    "direction": "neutral",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "medium",
+    "display_priority": "display",
+    "supporting_evidence_ids": [],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [],
+    "quoted_values": [
+     {
+      "parameter_result_id": {
+       "$indicator": "revenue_share.statement_business_segments.med_surg_and_neurotechnology"
+      },
+      "value": {
+       "$indicator_value": "revenue_share.statement_business_segments.med_surg_and_neurotechnology"
+      },
+      "denominator": "consolidated_revenue"
+     }
+    ]
+   }
+  ]
+ },
+ "bo_customers_contracts": {
+  "parameters": [
+   {
+    "parameter_id": "customer_dependence_assessment",
+    "value": "healthcare_provider_and_payer_exposure",
+    "value_type": "category",
+    "status": "ok",
+    "evidence_ids": [
+     {
+      "$evidence": "reduce or delay orders"
+     }
+    ],
+    "hypothesis_ids": [
+     "BO2-H001",
+     "BO2-H002"
+    ]
+   },
+   {
+    "parameter_id": "contract_termination_risk_assessment",
+    "value": null,
+    "value_type": "category",
+    "status": "unavailable",
+    "evidence_ids": [],
+    "notes": "Customer contract terms are not described in the routed passages."
+   }
+  ],
+  "hypotheses": [
+   {
+    "hypothesis_id": "BO2-H001",
+    "claim": "Cost-containment initiatives, provider consolidation and reimbursement changes create pricing pressure from customers and payers.",
+    "claim_type": "fact",
+    "direction": "negative",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "high",
+    "display_priority": "display",
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "reduce or delay orders"
+     }
+    ],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [
+     {
+      "evidence_id": {
+       "$evidence": "reduce or delay orders"
+      },
+      "quote": "Pricing pressure has also increased due to continued consolidation among healthcare providers"
+     }
+    ]
+   },
+   {
+    "hypothesis_id": "BO2-H002",
+    "claim": "Customers may reduce or delay orders for products and services when economic or interest-rate conditions tighten.",
+    "claim_type": "fact",
+    "direction": "negative",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "medium",
+    "display_priority": "display",
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "reduce or delay orders"
+     }
+    ],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [
+     {
+      "evidence_id": {
+       "$evidence": "reduce or delay orders"
+      },
+      "quote": "cause our customers to reduce or delay orders for our products and services"
+     }
+    ]
+   },
+   {
+    "hypothesis_id": "BO2-H003",
+    "claim": "Customer lease agreements sold under financing arrangements represented less than 3% of total revenue.",
+    "claim_type": "fact",
+    "direction": "neutral",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "low",
+    "display_priority": "on_demand",
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "represented less than 3% of our total revenue"
+     }
+    ],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [
+     {
+      "evidence_id": {
+       "$evidence": "represented less than 3% of our total revenue"
+      },
+      "quote": "represented less than 3% of our total revenue for 2024, 2023 and 2022"
+     }
+    ]
+   },
+   {
+    "hypothesis_id": "BO2-H004",
+    "claim": "No single customer accounts for a material share of revenue.",
+    "claim_type": "assumption",
+    "direction": "positive",
+    "disposition": "unverified",
+    "confidence": "medium",
+    "materiality": "medium",
+    "display_priority": "display",
+    "supporting_evidence_ids": [],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [],
+    "missing_information": [
+     "Customer concentration disclosure",
+     "Largest-customer share of net sales"
+    ]
+   }
+  ],
+  "retrieval_requests": [
+   {
+    "hypothesis_id": "BO2-H004",
+    "purpose": "support",
+    "terms": [
+     "no single customer",
+     "10% of (?:our )?(?:total |net )?(?:sales|revenue)",
+     "largest customers?"
+    ]
+   }
+  ]
+ },
+ "bo_competition_pricing": [
+  {
+   "parameters": [
+    {
+     "parameter_id": "competitive_position_assessment",
+     "value": "strong",
+     "value_type": "category",
+     "status": "ok",
+     "evidence_ids": [
+      {
+       "$evidence": "compete effectively"
+      }
+     ],
+     "hypothesis_ids": [
+      "BO3-H002"
+     ]
+    },
+    {
+     "parameter_id": "pricing_power_assessment",
+     "value": "moderate",
+     "value_type": "category",
+     "status": "ok",
+     "evidence_ids": [
+      {
+       "$evidence": "downward pricing pressures"
+      }
+     ],
+     "hypothesis_ids": [
+      "BO3-H003"
+     ]
+    },
+    {
+     "parameter_id": "competitive_pressure_assessment",
+     "value": "elevated",
+     "value_type": "category",
+     "status": "ok",
+     "evidence_ids": [
+      {
+       "$evidence": "The markets in which we compete are highly competitive"
+      }
+     ],
+     "hypothesis_ids": [
+      "BO3-H001"
+     ]
+    },
+    {
+     "parameter_id": "switching_cost_assessment",
+     "value": null,
+     "value_type": "category",
+     "status": "unavailable",
+     "evidence_ids": [],
+     "notes": "Customer switching costs are not described in the routed passages."
+    }
+   ],
+   "hypotheses": [
+    {
+     "hypothesis_id": "BO3-H001",
+     "claim": "The markets are highly competitive, and existing competitors or new entrants could render products obsolete or uneconomical.",
+     "claim_type": "fact",
+     "direction": "negative",
+     "disposition": "supported",
+     "confidence": "medium",
+     "materiality": "high",
+     "display_priority": "display",
+     "supporting_evidence_ids": [
+      {
+       "$evidence": "The markets in which we compete are highly competitive"
+      }
+     ],
+     "contradicting_evidence_ids": [],
+     "evidence_quotes": [
+      {
+       "evidence_id": {
+        "$evidence": "The markets in which we compete are highly competitive"
+       },
+       "quote": "The markets in which we compete are highly competitive"
+      }
+     ]
+    },
+    {
+     "hypothesis_id": "BO3-H002",
+     "claim": "Management believes that innovation, quality, service and reputation differentiate the company and enable it to compete effectively.",
+     "claim_type": "management_claim",
+     "direction": "positive",
+     "disposition": "qualified",
+     "confidence": "medium",
+     "materiality": "medium",
+     "display_priority": "display",
+     "supporting_evidence_ids": [
+      {
+       "$evidence": "compete effectively"
+      }
+     ],
+     "contradicting_evidence_ids": [
+      {
+       "$evidence": "new market entrants may respond more quickly"
+      }
+     ],
+     "evidence_quotes": [
+      {
+       "evidence_id": {
+        "$evidence": "compete effectively"
+       },
+       "quote": "We believe our commitment to innovation, quality and service and our reputation differentiates us"
+      }
+     ],
+     "missing_information": [
+      "Market share by product category"
+     ]
+    },
+    {
+     "hypothesis_id": "BO3-H003",
+     "claim": "Industry consolidation has produced larger customers with more bargaining power, and the company has reduced prices for certain products.",
+     "claim_type": "fact",
+     "direction": "negative",
+     "disposition": "supported",
+     "confidence": "medium",
+     "materiality": "high",
+     "display_priority": "display",
+     "supporting_evidence_ids": [
+      {
+       "$evidence": "downward pricing pressures"
+      }
+     ],
+     "contradicting_evidence_ids": [],
+     "evidence_quotes": [
+      {
+       "evidence_id": {
+        "$evidence": "downward pricing pressures"
+       },
+       "quote": "larger enterprises with more bargaining power"
+      }
+     ]
+    },
+    {
+     "hypothesis_id": "BO3-H005",
+     "claim": "Market leadership gives the company pricing power over its customers.",
+     "claim_type": "assumption",
+     "direction": "positive",
+     "disposition": "rejected",
+     "confidence": "medium",
+     "materiality": "medium",
+     "display_priority": "display",
+     "supporting_evidence_ids": [],
+     "contradicting_evidence_ids": [
+      {
+       "$evidence": "downward pricing pressures"
+      }
+     ],
+     "evidence_quotes": []
+    },
+    {
+     "hypothesis_id": "BO3-H004",
+     "claim": "A portfolio of approximately 5,600 United States patents protects the company's pricing power.",
+     "claim_type": "inference",
+     "direction": "positive",
+     "disposition": "supported",
+     "confidence": "medium",
+     "materiality": "medium",
+     "display_priority": "display",
+     "supporting_evidence_ids": [
+      {
+       "$evidence": "compete effectively"
+      }
+     ],
+     "contradicting_evidence_ids": [],
+     "evidence_quotes": [
+      {
+       "evidence_id": {
+        "$evidence": "compete effectively"
+       },
+       "quote": "we owned approximately 5,600 United States patents"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "parameters": [
+    {
+     "parameter_id": "competitive_position_assessment",
+     "value": "strong",
+     "value_type": "category",
+     "status": "ok",
+     "evidence_ids": [
+      {
+       "$evidence": "compete effectively"
+      }
+     ],
+     "hypothesis_ids": [
+      "BO3-H002"
+     ]
+    },
+    {
+     "parameter_id": "pricing_power_assessment",
+     "value": "moderate",
+     "value_type": "category",
+     "status": "ok",
+     "evidence_ids": [
+      {
+       "$evidence": "downward pricing pressures"
+      }
+     ],
+     "hypothesis_ids": [
+      "BO3-H003"
+     ]
+    },
+    {
+     "parameter_id": "competitive_pressure_assessment",
+     "value": "elevated",
+     "value_type": "category",
+     "status": "ok",
+     "evidence_ids": [
+      {
+       "$evidence": "The markets in which we compete are highly competitive"
+      }
+     ],
+     "hypothesis_ids": [
+      "BO3-H001"
+     ]
+    },
+    {
+     "parameter_id": "switching_cost_assessment",
+     "value": null,
+     "value_type": "category",
+     "status": "unavailable",
+     "evidence_ids": [],
+     "notes": "Customer switching costs are not described in the routed passages."
+    }
+   ],
+   "hypotheses": [
+    {
+     "hypothesis_id": "BO3-H001",
+     "claim": "The markets are highly competitive, and existing competitors or new entrants could render products obsolete or uneconomical.",
+     "claim_type": "fact",
+     "direction": "negative",
+     "disposition": "supported",
+     "confidence": "medium",
+     "materiality": "high",
+     "display_priority": "display",
+     "supporting_evidence_ids": [
+      {
+       "$evidence": "The markets in which we compete are highly competitive"
+      }
+     ],
+     "contradicting_evidence_ids": [],
+     "evidence_quotes": [
+      {
+       "evidence_id": {
+        "$evidence": "The markets in which we compete are highly competitive"
+       },
+       "quote": "The markets in which we compete are highly competitive"
+      }
+     ]
+    },
+    {
+     "hypothesis_id": "BO3-H002",
+     "claim": "Management believes that innovation, quality, service and reputation differentiate the company and enable it to compete effectively.",
+     "claim_type": "management_claim",
+     "direction": "positive",
+     "disposition": "qualified",
+     "confidence": "medium",
+     "materiality": "medium",
+     "display_priority": "display",
+     "supporting_evidence_ids": [
+      {
+       "$evidence": "compete effectively"
+      }
+     ],
+     "contradicting_evidence_ids": [
+      {
+       "$evidence": "new market entrants may respond more quickly"
+      }
+     ],
+     "evidence_quotes": [
+      {
+       "evidence_id": {
+        "$evidence": "compete effectively"
+       },
+       "quote": "We believe our commitment to innovation, quality and service and our reputation differentiates us"
+      }
+     ],
+     "missing_information": [
+      "Market share by product category"
+     ]
+    },
+    {
+     "hypothesis_id": "BO3-H003",
+     "claim": "Industry consolidation has produced larger customers with more bargaining power, and the company has reduced prices for certain products.",
+     "claim_type": "fact",
+     "direction": "negative",
+     "disposition": "supported",
+     "confidence": "medium",
+     "materiality": "high",
+     "display_priority": "display",
+     "supporting_evidence_ids": [
+      {
+       "$evidence": "downward pricing pressures"
+      }
+     ],
+     "contradicting_evidence_ids": [],
+     "evidence_quotes": [
+      {
+       "evidence_id": {
+        "$evidence": "downward pricing pressures"
+       },
+       "quote": "larger enterprises with more bargaining power"
+      }
+     ]
+    },
+    {
+     "hypothesis_id": "BO3-H005",
+     "claim": "Market leadership gives the company pricing power over its customers.",
+     "claim_type": "assumption",
+     "direction": "positive",
+     "disposition": "rejected",
+     "confidence": "medium",
+     "materiality": "medium",
+     "display_priority": "display",
+     "supporting_evidence_ids": [],
+     "contradicting_evidence_ids": [
+      {
+       "$evidence": "downward pricing pressures"
+      }
+     ],
+     "evidence_quotes": []
+    },
+    {
+     "hypothesis_id": "BO3-H004",
+     "claim": "The company owned approximately 5,600 United States patents at year end; the filing does not link the portfolio to pricing outcomes.",
+     "claim_type": "fact",
+     "direction": "positive",
+     "disposition": "supported",
+     "confidence": "medium",
+     "materiality": "medium",
+     "display_priority": "display",
+     "supporting_evidence_ids": [
+      {
+       "$evidence": "compete effectively"
+      }
+     ],
+     "contradicting_evidence_ids": [],
+     "evidence_quotes": [
+      {
+       "evidence_id": {
+        "$evidence": "compete effectively"
+       },
+       "quote": "we owned approximately 5,600 United States patents"
+      }
+     ],
+     "missing_information": [
+      "Evidence that patents sustain realised prices"
+     ]
+    }
+   ]
+  }
+ ],
+ "bo_operations_management": {
+  "parameters": [
+   {
+    "parameter_id": "key_person_dependency_assessment",
+    "value": "moderate",
+    "value_type": "category",
+    "status": "ok",
+    "evidence_ids": [
+     {
+      "$evidence": "Effective succession planning"
+     }
+    ],
+    "hypothesis_ids": [
+     "BO4-H001"
+    ]
+   },
+   {
+    "parameter_id": "workforce_cost_resilience_assessment",
+    "value": "inflation_partly_passed_through",
+    "value_type": "category",
+    "status": "ok",
+    "evidence_ids": [
+     {
+      "$evidence": "pass certain cost increases"
+     }
+    ],
+    "hypothesis_ids": [
+     "BO4-H003"
+    ]
+   },
+   {
+    "parameter_id": "capex_strategy_assessment",
+    "value": "moderate_capital_intensity",
+    "value_type": "category",
+    "status": "ok",
+    "evidence_ids": [
+     {
+      "$evidence": "pass certain cost increases"
+     }
+    ],
+    "hypothesis_ids": [
+     "BO4-H004"
+    ]
+   },
+   {
+    "parameter_id": "management_quality_assessment",
+    "value": null,
+    "value_type": "category",
+    "status": "unavailable",
+    "evidence_ids": [],
+    "notes": "Management track record is not described in the routed passages."
+   },
+   {
+    "parameter_id": "governance_concern_assessment",
+    "value": null,
+    "value_type": "category",
+    "status": "unavailable",
+    "evidence_ids": [],
+    "notes": "Governance detail is incorporated by reference to the proxy statement."
+   }
+  ],
+  "hypotheses": [
+   {
+    "hypothesis_id": "BO4-H001",
+    "claim": "The filing identifies succession planning and retention of senior management and key personnel as important to execution.",
+    "claim_type": "fact",
+    "direction": "negative",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "medium",
+    "display_priority": "display",
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "Effective succession planning"
+     }
+    ],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [
+     {
+      "evidence_id": {
+       "$evidence": "Effective succession planning"
+      },
+      "quote": "Effective succession planning is also important to our long-term success"
+     }
+    ]
+   },
+   {
+    "hypothesis_id": "BO4-H002",
+    "claim": "Supply chain challenges have in certain instances prevented the company from meeting demand and led to lost sales, not material to date.",
+    "claim_type": "fact",
+    "direction": "negative",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "high",
+    "display_priority": "display",
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "unable to meet demand due to supply chain challenges"
+     }
+    ],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [
+     {
+      "evidence_id": {
+       "$evidence": "unable to meet demand due to supply chain challenges"
+      },
+      "quote": "In certain instances we have been unable to meet demand due to supply chain challenges, which has led to loss of sales"
+     }
+    ]
+   },
+   {
+    "hypothesis_id": "BO4-H003",
+    "claim": "The company has passed certain cost increases on to customers, but the filing states that it has not been able to pass along all of them.",
+    "claim_type": "fact",
+    "direction": "mixed",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "medium",
+    "display_priority": "display",
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "pass certain cost increases"
+     }
+    ],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [
+     {
+      "evidence_id": {
+       "$evidence": "pass certain cost increases"
+      },
+      "quote": "Although we have been able to pass certain cost increases on to our customers"
+     }
+    ],
+    "mitigant": {
+     "capability": "Partial pass-through of cost inflation",
+     "existence": "verified",
+     "effectiveness": "unproven",
+     "outcome_evidence_ids": []
+    },
+    "missing_information": [
+     "Share of cost inflation recovered through price"
+    ]
+   },
+   {
+    "hypothesis_id": "BO4-H004",
+    "claim": "Capital expenditure was 3.3% of revenue in the latest fiscal year.",
+    "claim_type": "calculated_fact",
+    "direction": "neutral",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "medium",
+    "display_priority": "display",
+    "supporting_evidence_ids": [],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [],
+    "quoted_values": [
+     {
+      "parameter_result_id": {
+       "$indicator": "capex_to_revenue"
+      },
+      "value": {
+       "$indicator_value": "capex_to_revenue"
+      },
+      "denominator": "revenue"
+     }
+    ]
+   }
+  ]
+ },
+ "bo_regulation_external": {
+  "parameters": [
+   {
+    "parameter_id": "regulatory_dependency_assessment",
+    "value": "high",
+    "value_type": "category",
+    "status": "ok",
+    "evidence_ids": [
+     {
+      "$evidence": "subject to extensive governmental regulation"
+     }
+    ],
+    "hypothesis_ids": [
+     "BO5-H003"
+    ]
+   },
+   {
+    "parameter_id": "litigation_risk_assessment",
+    "value": "present",
+    "value_type": "category",
+    "status": "ok",
+    "evidence_ids": [
+     {
+      "$evidence": "defendants in a number of product liability matters"
+     }
+    ],
+    "hypothesis_ids": [
+     "BO5-H002"
+    ]
+   },
+   {
+    "parameter_id": "external_event_exposure_assessment",
+    "value": "manufacturing_concentration",
+    "value_type": "category",
+    "status": "ok",
+    "evidence_ids": [
+     {
+      "$evidence": "concentrated in one or more plants"
+     }
+    ],
+    "hypothesis_ids": [
+     "BO5-H001"
+    ]
+   }
+  ],
+  "hypotheses": [
+   {
+    "hypothesis_id": "BO5-H001",
+    "claim": "Manufacturing of certain product lines is concentrated in one or more plants or geographic regions, exposing supply to site disruption.",
+    "claim_type": "fact",
+    "direction": "negative",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "high",
+    "display_priority": "display",
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "concentrated in one or more plants"
+     }
+    ],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [
+     {
+      "evidence_id": {
+       "$evidence": "concentrated in one or more plants"
+      },
+      "quote": "the manufacturing of certain of our product lines is concentrated in one or more plants or geographic regions"
+     }
+    ],
+    "corrects_hypothesis_id": "BO5-H004"
+   },
+   {
+    "hypothesis_id": "BO5-H002",
+    "claim": "The company is a defendant in a number of product liability matters whose outcomes the filing describes as not predictable.",
+    "claim_type": "fact",
+    "direction": "negative",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "high",
+    "display_priority": "display",
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "defendants in a number of product liability matters"
+     }
+    ],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [
+     {
+      "evidence_id": {
+       "$evidence": "defendants in a number of product liability matters"
+      },
+      "quote": "We are currently defendants in a number of product liability matters"
+     }
+    ]
+   },
+   {
+    "hypothesis_id": "BO5-H003",
+    "claim": "Healthcare reform is an existing exposure; the filing states that its eventual form and effect cannot be predicted, so no outcome is forecast here.",
+    "claim_type": "fact",
+    "direction": "negative",
+    "disposition": "supported",
+    "confidence": "medium",
+    "materiality": "medium",
+    "display_priority": "display",
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "subject to extensive governmental regulation"
+     }
+    ],
+    "contradicting_evidence_ids": [],
+    "evidence_quotes": [
+     {
+      "evidence_id": {
+       "$evidence": "subject to extensive governmental regulation"
+      },
+      "quote": "We cannot predict what healthcare programs and regulations could ultimately be implemented"
+     }
+    ]
+   },
+   {
+    "hypothesis_id": "BO5-H004",
+    "claim": "A worldwide manufacturing footprint removes production concentration risk.",
+    "claim_type": "inference",
+    "direction": "positive",
+    "disposition": "rejected",
+    "confidence": "medium",
+    "materiality": "medium",
+    "display_priority": "display",
+    "supporting_evidence_ids": [],
+    "contradicting_evidence_ids": [
+     {
+      "$evidence": "concentrated in one or more plants"
+     }
+    ],
+    "evidence_quotes": []
+   }
+  ]
+ },
+ "bo_resilience_interactions": {
+  "parameters": [
+   {
+    "parameter_id": "compound_risk_assessment",
+    "value": "manufacturing_concentration_with_supply_constraints",
+    "value_type": "category",
+    "status": "ok",
+    "evidence_ids": [
+     {
+      "$hypothesis_evidence": "BO5-H001"
+     }
+    ],
+    "hypothesis_ids": [
+     "BO6-H001"
+    ]
+   }
+  ],
+  "hypotheses": [
+   {
+    "hypothesis_id": "BO6-H001",
+    "claim": "Concentrated manufacturing and the supply constraints already reported compound: a site disruption would fall on a supply chain that has at times been unable to meet demand.",
+    "claim_type": "inference",
+    "direction": "negative",
+    "disposition": "qualified",
+    "confidence": "medium_low",
+    "materiality": "high",
+    "display_priority": "display",
+    "supporting_evidence_ids": [
+     {
+      "$hypothesis_evidence": "BO4-H002"
+     },
+     {
+      "$hypothesis_evidence": "BO5-H001"
+     }
+    ],
+    "component_hypothesis_ids": [
+     "BO4-H002",
+     "BO5-H001"
+    ],
+    "interaction_kind": "compound_risk",
+    "missing_information": [
+     "Product lines with single-site manufacturing",
+     "Qualified alternative suppliers"
+    ]
+   },
+   {
+    "hypothesis_id": "BO6-H002",
+    "claim": "Partial pass-through of cost inflation offsets some, not all, of the pricing pressure from payers and consolidated customers.",
+    "claim_type": "inference",
+    "direction": "mixed",
+    "disposition": "qualified",
+    "confidence": "medium_low",
+    "materiality": "medium",
+    "display_priority": "on_demand",
+    "supporting_evidence_ids": [
+     {
+      "$hypothesis_evidence": "BO4-H003"
+     },
+     {
+      "$hypothesis_evidence": "BO2-H001"
+     }
+    ],
+    "component_hypothesis_ids": [
+     "BO4-H003",
+     "BO2-H001"
+    ],
+    "interaction_kind": "mitigating_capability",
+    "missing_information": [
+     "Net price change after pass-through"
+    ]
+   }
+  ]
+ },
+ "orchestrate": [
+  {
+   "overall_assessment": {
+    "claim_id": "syk_overall",
+    "category": "assessment",
+    "section": "executive",
+    "text": "Provisional view: a two-segment medical technology manufacturer with a direct sales model and limited seasonality. The business faces sustained payer and competitive pricing pressure, product liability litigation, and operational exposure from concentrated manufacturing and supply constraints.",
+    "claim_type": "inference",
+    "hypothesis_ids": [
+     "BO1-H001",
+     "BO2-H001",
+     "BO5-H002",
+     "BO5-H001"
+    ],
+    "evidence_ids": [
+     {
+      "$hypothesis_evidence": "BO1-H001"
+     },
+     {
+      "$hypothesis_evidence": "BO2-H001"
+     },
+     {
+      "$hypothesis_evidence": "BO5-H002"
+     },
+     {
+      "$hypothesis_evidence": "BO5-H001"
+     }
+    ],
+    "materiality": "high",
+    "uncertainty": "Customer concentration and pricing resilience are not established by the admitted passages."
+   },
+   "strengths": [
+    {
+     "claim_id": "syk_s1",
+     "category": "strength",
+     "section": "BO1",
+     "text": "Revenue grew 10.2% year on year, with MedSurg and Neurotechnology contributing 59.8% of consolidated revenue.",
+     "claim_type": "calculated_fact",
+     "hypothesis_ids": [
+      "BO1-H005",
+      "BO1-H006"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO1-H005"
+      },
+      {
+       "$hypothesis_evidence": "BO1-H006"
+      }
+     ],
+     "materiality": "medium",
+     "title": "Growth across two segments",
+     "quoted_values": [
+      {
+       "parameter_result_id": {
+        "$indicator": "revenue_growth"
+       },
+       "value": {
+        "$indicator_value": "revenue_growth"
+       },
+       "denominator": "revenue_prior"
+      },
+      {
+       "parameter_result_id": {
+        "$indicator": "revenue_share.statement_business_segments.med_surg_and_neurotechnology"
+       },
+       "value": {
+        "$indicator_value": "revenue_share.statement_business_segments.med_surg_and_neurotechnology"
+       },
+       "denominator": "consolidated_revenue"
+      }
+     ]
+    },
+    {
+     "claim_id": "syk_s2",
+     "category": "strength",
+     "section": "BO3",
+     "text": "A portfolio of approximately 5,600 United States patents protects pricing power.",
+     "claim_type": "inference",
+     "hypothesis_ids": [
+      "BO3-H004"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO3-H004"
+      }
+     ],
+     "materiality": "medium",
+     "title": "Patent portfolio",
+     "uncertainty": "Inferred from the size of the patent portfolio."
+    }
+   ],
+   "weaknesses": [
+    {
+     "claim_id": "syk_w1",
+     "category": "weakness",
+     "section": "BO3",
+     "text": "Consolidated customers and payers exert downward pricing pressure, and the company has reduced prices for certain products.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO3-H003",
+      "BO2-H001"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO3-H003"
+      },
+      {
+       "$hypothesis_evidence": "BO2-H001"
+      }
+     ],
+     "materiality": "high",
+     "title": "Pricing pressure"
+    }
+   ],
+   "key_drivers": [
+    {
+     "claim_id": "syk_d1",
+     "category": "driver",
+     "section": "BO1",
+     "text": "Products are marketed mostly directly to doctors, hospitals and other healthcare facilities; the business is generally not seasonal, with capital-equipment sales weighted to the fourth quarter.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO1-H001",
+      "BO1-H002"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO1-H001"
+      },
+      {
+       "$hypothesis_evidence": "BO1-H002"
+      }
+     ],
+     "materiality": "medium"
+    },
+    {
+     "claim_id": "syk_d2",
+     "category": "driver",
+     "section": "BO2",
+     "text": "Customers may reduce or delay orders when economic conditions tighten.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO2-H002"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO2-H002"
+      }
+     ],
+     "materiality": "medium"
+    },
+    {
+     "claim_id": "syk_d3",
+     "category": "driver",
+     "section": "BO3",
+     "text": "Management states that innovation, quality, service and reputation differentiate the company; the filing also warns that competitors and new entrants may respond more quickly.",
+     "claim_type": "management_claim",
+     "hypothesis_ids": [
+      "BO3-H002",
+      "BO3-H001"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO3-H002"
+      },
+      {
+       "$hypothesis_evidence": "BO3-H001"
+      }
+     ],
+     "materiality": "medium",
+     "uncertainty": "Differentiation is asserted by management and is not measured by market share in the admitted evidence."
+    },
+    {
+     "claim_id": "syk_d4",
+     "category": "driver",
+     "section": "BO4",
+     "text": "Certain cost increases were passed on to customers but not all, and capital expenditure was 3.3% of revenue.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO4-H003",
+      "BO4-H004"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO4-H003"
+      },
+      {
+       "$hypothesis_evidence": "BO4-H004"
+      }
+     ],
+     "materiality": "medium",
+     "uncertainty": "The share of cost inflation recovered is not disclosed.",
+     "quoted_values": [
+      {
+       "parameter_result_id": {
+        "$indicator": "capex_to_revenue"
+       },
+       "value": {
+        "$indicator_value": "capex_to_revenue"
+       },
+       "denominator": "revenue"
+      }
+     ]
+    }
+   ],
+   "material_risks": [
+    {
+     "claim_id": "syk_r1",
+     "category": "risk",
+     "section": "BO5",
+     "text": "The company is a defendant in a number of product liability matters with unpredictable outcomes.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO5-H002"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO5-H002"
+      }
+     ],
+     "materiality": "high"
+    },
+    {
+     "claim_id": "syk_r2",
+     "category": "risk",
+     "section": "BO4",
+     "text": "Supply chain challenges have at times prevented the company from meeting demand, leading to lost sales.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO4-H002"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO4-H002"
+      }
+     ],
+     "materiality": "high"
+    },
+    {
+     "claim_id": "syk_r3",
+     "category": "risk",
+     "section": "BO6",
+     "text": "Concentrated manufacturing would compound existing supply constraints if a site were disrupted.",
+     "claim_type": "inference",
+     "hypothesis_ids": [
+      "BO6-H001"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO6-H001"
+      }
+     ],
+     "materiality": "high",
+     "uncertainty": "Interaction inferred; single-site product lines are not identified."
+    },
+    {
+     "claim_id": "syk_r4",
+     "category": "risk",
+     "section": "BO5",
+     "text": "Healthcare reform is an existing exposure whose eventual form and effect the filing says cannot be predicted.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO5-H003"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO5-H003"
+      }
+     ],
+     "materiality": "medium"
+    }
+   ],
+   "open_questions": [
+    "Does any customer or distributor account for a material share of revenue?",
+    "Which product lines depend on a single manufacturing site?"
+   ],
+   "unresolved_contradictions": [],
+   "follow_up": [
+    "Obtain customer concentration and market-share data.",
+    "Review the proxy statement for management and governance evidence."
+   ]
+  },
+  {
+   "overall_assessment": {
+    "claim_id": "syk_overall",
+    "category": "assessment",
+    "section": "executive",
+    "text": "Provisional view: a two-segment medical technology manufacturer with a direct sales model and limited seasonality. The business faces sustained payer and competitive pricing pressure, product liability litigation, and operational exposure from concentrated manufacturing and supply constraints.",
+    "claim_type": "inference",
+    "hypothesis_ids": [
+     "BO1-H001",
+     "BO2-H001",
+     "BO5-H002",
+     "BO5-H001"
+    ],
+    "evidence_ids": [
+     {
+      "$hypothesis_evidence": "BO1-H001"
+     },
+     {
+      "$hypothesis_evidence": "BO2-H001"
+     },
+     {
+      "$hypothesis_evidence": "BO5-H002"
+     },
+     {
+      "$hypothesis_evidence": "BO5-H001"
+     }
+    ],
+    "materiality": "high",
+    "uncertainty": "Customer concentration and pricing resilience are not established by the admitted passages."
+   },
+   "strengths": [
+    {
+     "claim_id": "syk_s1",
+     "category": "strength",
+     "section": "BO1",
+     "text": "Revenue grew 10.2% year on year, with MedSurg and Neurotechnology contributing 59.8% of consolidated revenue.",
+     "claim_type": "calculated_fact",
+     "hypothesis_ids": [
+      "BO1-H005",
+      "BO1-H006"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO1-H005"
+      },
+      {
+       "$hypothesis_evidence": "BO1-H006"
+      }
+     ],
+     "materiality": "medium",
+     "title": "Growth across two segments",
+     "quoted_values": [
+      {
+       "parameter_result_id": {
+        "$indicator": "revenue_growth"
+       },
+       "value": {
+        "$indicator_value": "revenue_growth"
+       },
+       "denominator": "revenue_prior"
+      },
+      {
+       "parameter_result_id": {
+        "$indicator": "revenue_share.statement_business_segments.med_surg_and_neurotechnology"
+       },
+       "value": {
+        "$indicator_value": "revenue_share.statement_business_segments.med_surg_and_neurotechnology"
+       },
+       "denominator": "consolidated_revenue"
+      }
+     ]
+    },
+    {
+     "claim_id": "syk_s2",
+     "category": "strength",
+     "section": "BO3",
+     "text": "Product differentiation is supported by a portfolio of approximately 5,600 United States patents; no pricing benefit is evidenced.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO3-H004"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO3-H004"
+      }
+     ],
+     "materiality": "medium",
+     "title": "Patent portfolio"
+    }
+   ],
+   "weaknesses": [
+    {
+     "claim_id": "syk_w1",
+     "category": "weakness",
+     "section": "BO3",
+     "text": "Consolidated customers and payers exert downward pricing pressure, and the company has reduced prices for certain products.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO3-H003",
+      "BO2-H001"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO3-H003"
+      },
+      {
+       "$hypothesis_evidence": "BO2-H001"
+      }
+     ],
+     "materiality": "high",
+     "title": "Pricing pressure"
+    }
+   ],
+   "key_drivers": [
+    {
+     "claim_id": "syk_d1",
+     "category": "driver",
+     "section": "BO1",
+     "text": "Products are marketed mostly directly to doctors, hospitals and other healthcare facilities; the business is generally not seasonal, with capital-equipment sales weighted to the fourth quarter.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO1-H001",
+      "BO1-H002"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO1-H001"
+      },
+      {
+       "$hypothesis_evidence": "BO1-H002"
+      }
+     ],
+     "materiality": "medium"
+    },
+    {
+     "claim_id": "syk_d2",
+     "category": "driver",
+     "section": "BO2",
+     "text": "Customers may reduce or delay orders when economic conditions tighten.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO2-H002"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO2-H002"
+      }
+     ],
+     "materiality": "medium"
+    },
+    {
+     "claim_id": "syk_d3",
+     "category": "driver",
+     "section": "BO3",
+     "text": "Management states that innovation, quality, service and reputation differentiate the company; the filing also warns that competitors and new entrants may respond more quickly.",
+     "claim_type": "management_claim",
+     "hypothesis_ids": [
+      "BO3-H002",
+      "BO3-H001"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO3-H002"
+      },
+      {
+       "$hypothesis_evidence": "BO3-H001"
+      }
+     ],
+     "materiality": "medium",
+     "uncertainty": "Differentiation is asserted by management and is not measured by market share in the admitted evidence."
+    },
+    {
+     "claim_id": "syk_d4",
+     "category": "driver",
+     "section": "BO4",
+     "text": "Certain cost increases were passed on to customers but not all, and capital expenditure was 3.3% of revenue.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO4-H003",
+      "BO4-H004"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO4-H003"
+      },
+      {
+       "$hypothesis_evidence": "BO4-H004"
+      }
+     ],
+     "materiality": "medium",
+     "uncertainty": "The share of cost inflation recovered is not disclosed.",
+     "quoted_values": [
+      {
+       "parameter_result_id": {
+        "$indicator": "capex_to_revenue"
+       },
+       "value": {
+        "$indicator_value": "capex_to_revenue"
+       },
+       "denominator": "revenue"
+      }
+     ]
+    }
+   ],
+   "material_risks": [
+    {
+     "claim_id": "syk_r1",
+     "category": "risk",
+     "section": "BO5",
+     "text": "The company is a defendant in a number of product liability matters with unpredictable outcomes.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO5-H002"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO5-H002"
+      }
+     ],
+     "materiality": "high"
+    },
+    {
+     "claim_id": "syk_r2",
+     "category": "risk",
+     "section": "BO4",
+     "text": "Supply chain challenges have at times prevented the company from meeting demand, leading to lost sales.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO4-H002"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO4-H002"
+      }
+     ],
+     "materiality": "high"
+    },
+    {
+     "claim_id": "syk_r3",
+     "category": "risk",
+     "section": "BO6",
+     "text": "Concentrated manufacturing would compound existing supply constraints if a site were disrupted.",
+     "claim_type": "inference",
+     "hypothesis_ids": [
+      "BO6-H001"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO6-H001"
+      }
+     ],
+     "materiality": "high",
+     "uncertainty": "Interaction inferred; single-site product lines are not identified."
+    },
+    {
+     "claim_id": "syk_r4",
+     "category": "risk",
+     "section": "BO5",
+     "text": "Healthcare reform is an existing exposure whose eventual form and effect the filing says cannot be predicted.",
+     "claim_type": "fact",
+     "hypothesis_ids": [
+      "BO5-H003"
+     ],
+     "evidence_ids": [
+      {
+       "$hypothesis_evidence": "BO5-H003"
+      }
+     ],
+     "materiality": "medium"
+    }
+   ],
+   "open_questions": [
+    "Does any customer or distributor account for a material share of revenue?",
+    "Which product lines depend on a single manufacturing site?"
+   ],
+   "unresolved_contradictions": [],
+   "follow_up": [
+    "Obtain customer concentration and market-share data.",
+    "Review the proxy statement for management and governance evidence."
+   ]
+  }
+ ],
+ "challenge": [
+  {
+   "challenges": [
+    {
+     "challenge_id": "c1",
+     "target": "syk_s2",
+     "issue_type": "overstated_pricing_or_resilience",
+     "severity": "material",
+     "reason": "The number of patents does not establish pricing power; the same filing reports price reductions due to competition.",
+     "affected_agent_ids": [
+      "bo_competition_pricing"
+     ],
+     "requires_reanalysis": true,
+     "requested_rerun_scope": [
+      "bo_competition_pricing"
+     ]
+    }
+   ],
+   "overall_outcome": "rerun_required",
+   "summary": "One material overstatement of pricing power."
+  },
+  {
+   "challenges": [
+    {
+     "challenge_id": "c1",
+     "target": "syk_overall",
+     "issue_type": "other",
+     "severity": "medium",
+     "reason": "Management quality and governance could not be assessed from the admitted passages, so the management signal behind the score rests on key-person dependency alone."
+    }
+   ],
+   "overall_outcome": "accepted_with_qualification",
+   "summary": "Pricing claim corrected; one coverage qualification remains."
+  }
+ ]
+}

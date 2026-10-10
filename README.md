@@ -44,6 +44,27 @@ See [`AGENTIC_ANALYSIS_REPORT.md`](AGENTIC_ANALYSIS_REPORT.md) for the overview
 and the live-Vertex run instructions, and the full spec in
 [`.kiro/specs/credit-memo-agentic-analysis/`](.kiro/specs/credit-memo-agentic-analysis/).
 
+## Business Overview module (BO-only)
+
+The Business Overview can run on its own, without the Financial, Structuring or
+Credit Orchestrator agents: six narrow specialists (BO6 analyses interactions
+across the validated output of BO1–BO5), evidence-based hypothesis records, the
+Business Orchestrator, the Business Challenger with one bounded targeted rerun,
+an analyst memo, an audit report and a structured handoff that stays pending
+until a reviewer accepts it.
+
+```powershell
+python -m app.cli run-bo-case <CASE_ID> --package <package.json>
+```
+
+Without `--responses` (scripted offline simulation) or `--live` (configured
+provider), the agents assert nothing and no conclusion is produced. Inspect runs
+at `/bo` in the local browser. See
+[`BUSINESS_OVERVIEW_V2_REPORT.md`](BUSINESS_OVERVIEW_V2_REPORT.md) for status,
+including what has **not** been validated (no HCA filing, no live-model run),
+and the spec in
+[`.kiro/specs/credit-memo-business-overview-v2/`](.kiro/specs/credit-memo-business-overview-v2/).
+
 ## Sector benchmarking (medical devices)
 
 A case can opt into contextual industry benchmarking by adding

@@ -81,6 +81,10 @@ def _claim(data, default_category: str) -> ConclusionClaim:
         evidence_ids=list(data.get("evidence_ids", [])),
         materiality=materiality,
         uncertainty=data.get("uncertainty"),
+        hypothesis_ids=list(data.get("hypothesis_ids") or []),
+        section=data.get("section"),
+        claim_type=data.get("claim_type"),
+        title=data.get("title"),
     )
 
 

@@ -51,6 +51,11 @@ def home(request: Request, session: Session = Depends(get_session)) -> HTMLRespo
         }
         for case in session.scalars(select(Case).order_by(Case.case_id))
     ]
+    from app.services.bo.workbench import bo_runs
+
+    bo_cases = {run["case_id"] for run in bo_runs(session)}
+    for case in cases:
+        case["has_bo_run"] = case["case_id"] in bo_cases
     return HTMLResponse(
         _env.get_template("home.html.j2").render(
             request=request,
@@ -59,3 +64,13 @@ def home(request: Request, session: Session = Depends(get_session)) -> HTMLRespo
             default_case_id=DEFAULT_CASE_ID,
         )
     )
+
+
+@router.get("/bo", response_class=HTMLResponse)
+def business_overview_runs(session: Session = Depends(get_session)) -> HTMLResponse:
+    """Case selection for the Business Overview workbench."""
+    from app.services.bo.workbench import bo_runs
+
+    return HTMLResponse(
+        _env.get_template("bo_workbench.html.j2").render(
+            runs=bo_runs(session), view=None))
