@@ -145,6 +145,29 @@ mandatory exceptions to be resolved; approval alone cannot clear that gate.
 - Shared deployment needs authentication, durable storage and deployment-specific
   migrations. The current interface remains local to this machine.
 
+## Try the Business Overview specialists
+
+The Business Overview module has its own commands and reports; it does not use
+the upload flow above. The quickest check needs no model and no network once a
+recorded run exists:
+
+```powershell
+python -m app.cli --database data/bo_live.db --output output/bo_live `
+    run-bo-specialists HCA_2025_LIVE --package examples/healthcare/hca-2025/package.json `
+    --coverage examples/healthcare/hca-2025/coverage_checks.json `
+    --replay output/bo_live/bo/HCA_2025_LIVE/<run id>/specialists_run.json
+```
+
+Open `executive_summary.html` in the printed output folder, then
+`specialists_comparison.html` and `validation_audit.html`. Things to check by
+hand: every quoted sentence appears in the filing; any percentage states what it
+is a share of; nothing concludes on debt service or ratings; findings tagged
+"Management states" or "Disclosed risk" are not worded as facts.
+
+The HCA filing and the recorded runs are local only. See
+`examples/healthcare/hca-2025/README.md` to fetch the filing and
+`app/services/bo/README.md` for live runs.
+
 ## Run automated checks
 
 ```powershell

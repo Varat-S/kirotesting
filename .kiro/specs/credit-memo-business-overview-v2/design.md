@@ -142,3 +142,67 @@ Evidence is passed under a data key with an explicit data-not-instructions rule;
 instruction-like passages are flagged. Scores are deterministic. Reruns are
 append-only. The handoff is immutable after acceptance (ORM guard). Nothing is
 fetched during analysis.
+
+## 10. Quality remediation addendum
+
+Changes to the specialist layer made after the first live HCA run. The
+architecture in sections 1-9 is unchanged.
+
+### 10.1 Prompt structure
+
+`prompt = specialist_block(spec) + SHARED_RULES`. The specialist block holds the
+role, its analytical discipline, its own parameters and its id prefix.
+`SHARED_RULES` is byte-identical for all six and names no parameter.
+
+### 10.2 Contract additions (all additive)
+
+`HypothesisRecord`: `evidence_basis`, `model_stated`, `review_flags`,
+`transmission_mechanism`, `fo_handoffs`, `recovery`. `CalculationTrace`: `group`.
+Agent response: `evidence_basis`, `fo_handoff`, `transmission_mechanism`,
+`checklist_responses`.
+
+### 10.3 Validation layers
+
+| Layer | What | Where |
+|---|---|---|
+| A source integrity | verbatim quote; one recovery attempt (`layout_gap`, `relocated`, `unresolved`) | `recovery.py` |
+| B schema and numbers | ownership, permitted values, indicator binding (id, value, unit, period, denominator) | `hypotheses.py`, `plans.py` |
+| C inferential validity | nine lexical, negation-aware rules; effect `audit_only` or `qualify` | `inference_rules.py` |
+| D sufficiency | evidence basis from verified quotes; generic-risk-only and quote-does-not-cover-claim are qualified; company-specific parameter values need an established company-specific finding | `hypotheses.py` |
+
+Rejection granularity: schema, ownership, unadmitted evidence ids, score fields
+and bad hypothesis ids reject the specialist's whole output. Everything else
+holds back one hypothesis or one parameter. Layers C and D are heuristics and
+are recorded as such.
+
+### 10.4 Coverage
+
+A `SectorProfile` supplies a checklist (question + retrieval terms + patterns a
+validated answer must match) and sector indicators. Case coverage checks use the
+same mechanism from a per-case JSON file. A question counts as addressed only
+when a hypothesis the agent cited for it survived validation and matches the
+patterns. One bounded follow-up re-asks a specialist about unanswered questions
+that have passages.
+
+### 10.5 Indicators
+
+Grouped (`growth`, `margin`, `capital`, `cash`, `segment`, `geography`, `payer`,
+`workforce`, `realisation`); each specialist declares the groups it receives.
+Sector indicators are computed from reported concepts by the existing
+`ParameterEngine` formulas, current and prior year. Conflicting facts are left
+out, never estimated.
+
+### 10.6 BO6
+
+Requires `transmission_mechanism`; a component that is not a usable primary
+hypothesis makes the interaction unverified; an interaction cannot be more
+certain or more material than its components; management attribution carries
+through; debt-service, liquidity, covenant or rating conclusions are held back
+and converted to an FO handoff.
+
+### 10.7 Specialists-only run
+
+`BusinessOverviewRunner.run_specialists` executes phases 1-3 only. `demo.py`
+builds one payload from it and renders every report from that payload.
+`benchmark.py` replays a baseline's recorded responses through the current
+validators to separate validator effects from prompt and retrieval effects.

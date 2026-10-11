@@ -1,48 +1,63 @@
-# HCA Healthcare FY2025 — Business Overview pilot (source filing NOT yet acquired)
+# HCA Healthcare FY2025 — Business Overview demonstration case
 
-**Status: blocked at source acquisition.** The HCA FY2025 Form 10-K has not been
-downloaded into this workspace, so the real-HCA demonstration and the real-HCA
-acceptance tests have **not** been run. Nothing in this folder contains HCA
-filing data, and no HCA figure has been asserted anywhere in the repository.
+Primary demonstration borrower for the Business Overview (BO) module.
 
-What is here:
+## Status
+
+| Item | State |
+|---|---|
+| FY2025 Form 10-K fetched from SEC EDGAR | Done locally (accession `0001193125-26-044769`, filed 2026-02-10). **Not committed**: `filing/` is untracked (~10 MB). |
+| Ingestion through the SEC path | Works: 16 files admitted, 1,547 facts, 180 narrative passages |
+| Six BO specialists, live model | Run on `gemini-3.1-flash-lite`; all six validate. Latest: `ar_aaf78c0cf54943da` |
+| Full BO path (orchestrator, challenger, memo) on HCA | **Not run** with a model |
+| Review manifest | **Unverified template**: no reviewer has checked it against the filing |
+
+Results and limitations: [`BO_QUALITY_REMEDIATION_REPORT.md`](../../../BO_QUALITY_REMEDIATION_REPORT.md).
+
+## Files
 
 | File | Purpose |
 |---|---|
-| `package.json` | Source package pointing at `filing/bundle.json` (absent until fetched). |
-| `review_manifest.json` | Reviewer evaluation manifest **template**, `unverified_pending_filing`. Concepts only, no figures. |
+| `package.json` | Source package pointing at `filing/bundle.json`; as-of 2025-12-31, cut-off 2026-03-31 |
+| `coverage_checks.json` | Case-specific coverage questions (currently: Galen). Questions and search terms only, no answers |
+| `review_manifest.json` | Evaluation manifest template, `unverified_pending_filing`; concepts only, no figures |
+| `filing/` | The SEC bundle (untracked; fetch it yourself) |
 
-## 1. Acquire the filing (existing SEC path)
+## Fetch the filing
 
-SEC EDGAR requires a contact e-mail in the User-Agent. Set it locally (never
-committed), then list and fetch:
+SEC EDGAR needs a contact e-mail in the User-Agent. Set it in the terminal
+(never committed):
 
 ```powershell
 $env:SEC_USER_AGENT = "Your Name you@example.com"
-python -m app.cli sec-list HCA
-python -m app.cli sec-fetch HCA --accession <accession of the FY2025 10-K> `
-    --destination examples/healthcare/hca-2025/filing
+python -m app.cli sec-fetch HCA --fy 2025 --destination examples/healthcare/hca-2025/filing
 ```
 
-`filing/bundle.json` then records, per file: CIK, accession, form, filing date,
-report date, acceptance time, source URL and SHA-256. Copy the CIK, accession,
-filing date and primary-document hash into `review_manifest.json`.
+The destination folder must not exist. Do not type angle-bracket placeholders in
+PowerShell; `<` is a redirection operator.
 
-Confirm the evidence cut-off in `package.json` is later than the filing's
-acceptance time (files available after the cut-off are rejected by admission).
+## Run
 
-## 2. Verify the manifest against the filing
+Six specialists and reports, live (provider cost; needs `.env`, see
+`app/services/bo/README.md`):
 
-For every `source_confirmed_facts` entry, replace `source_patterns` with a
-`verified_quote` copied from the filing. Add `recomputed_values` from the
-deterministic indicators in the audit report. Only then set
-`verification_status` to `reviewer_verified`. The groupmate's
-`HCA_Module1_Six_Agent_Credit_Analysis_v3.docx` may suggest topics; it is not a
-source of facts.
+```powershell
+python -m app.cli --database data/bo_live.db --output output/bo_live `
+    run-bo-specialists HCA_2025_LIVE --package examples/healthcare/hca-2025/package.json `
+    --coverage examples/healthcare/hca-2025/coverage_checks.json --live
+```
 
-## 3. Run the Business Overview
+Add `--baseline <earlier run>/specialists_calls.json` (or `specialists_run.json`)
+for an old-versus-new benchmark. Use `--replay <run>/specialists_run.json` in
+place of `--live` to re-validate recorded responses with no model call; that
+needs the same case id (`HCA_2025_LIVE`) and database as the recorded run.
 
-Offline pipeline check (asserts nothing, calls no model):
+Outputs land in `output/bo_live/bo/HCA_2025_LIVE/<analysis_run_id>/`:
+`executive_summary.html`, `specialists_comparison.html` / `.pdf`,
+`validation_audit.html`, `benchmark.html`, `specialists_run.json`.
+
+Full BO path with no model (asserts nothing; checks ingestion and that the
+manifest's anchor concepts are in the admitted text):
 
 ```powershell
 python -m app.cli --database data/bo_demo.db --output output/bo_demo run-bo-case HCA_2025 `
@@ -50,14 +65,27 @@ python -m app.cli --database data/bo_demo.db --output output/bo_demo run-bo-case
     --manifest examples/healthcare/hca-2025/review_manifest.json
 ```
 
-Live model run (incurs provider cost; requires `LLM_PROVIDER` and the Vertex or
-OpenAI-compatible settings in `.env`):
+## Verify the manifest (open task)
 
-```powershell
-python -m app.cli --database data/bo_demo.db --output output/bo_demo run-bo-case HCA_2025 `
-    --package examples/healthcare/hca-2025/package.json `
-    --manifest examples/healthcare/hca-2025/review_manifest.json --live
-```
+For each `source_confirmed_facts` entry, replace `source_patterns` with a
+`verified_quote` copied from the filing; fill `filing` (CIK 860730, accession,
+filing date, primary-document hash from `filing/bundle.json`); add
+`recomputed_values` from the deterministic indicators; then set
+`verification_status` to `reviewer_verified` and name the reviewer. A human must
+sign this off. The groupmate's reference document may suggest topics; it is not
+a source of facts.
 
-The gated tests in `tests/integration/test_bo_real_filing.py` run automatically
-once `filing/bundle.json` exists; until then they are skipped, which is not a pass.
+## What the filing contains that matters here
+
+Found during the work, useful when judging outputs:
+
+* The Texas/Florida revenue sentence has a page number inside it in the filing
+  text, so a clean quote needs recovery to verify.
+* "Galen" appears twice: Galen College of Nursing (workforce) and Galen Health
+  Care, Inc. (a former employer in an executive biography, unrelated).
+* Revenue by payer category, salaries and benefits, supplies expense and
+  estimated implicit price concessions are tagged in XBRL and become
+  deterministic indicators.
+* Revenue per equivalent admission, admissions and state shares are text or
+  table figures only: admissible as verbatim quotes, never calculated.
+* Operating income is not tagged, so the operating-margin metric is unavailable.

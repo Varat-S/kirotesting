@@ -46,24 +46,45 @@ and the live-Vertex run instructions, and the full spec in
 
 ## Business Overview module (BO-only)
 
-The Business Overview can run on its own, without the Financial, Structuring or
-Credit Orchestrator agents: six narrow specialists (BO6 analyses interactions
-across the validated output of BO1–BO5), evidence-based hypothesis records, the
-Business Orchestrator, the Business Challenger with one bounded targeted rerun,
-an analyst memo, an audit report and a structured handoff that stays pending
-until a reviewer accepts it.
+The Business Overview runs on its own, without the Financial, Structuring or
+Credit Orchestrator agents. Six narrow specialists (BO6 analyses interactions
+across the validated output of BO1-BO5) return evidence-based hypotheses;
+deterministic code verifies quotes, numbers and known unsupported inferences
+before anything is accepted.
+
+| Command | Runs | Produces |
+|---|---|---|
+| `run-bo-specialists` | six specialists + validators | executive summary, six-specialist comparison (HTML/PDF), validation audit, old-versus-new benchmark, JSON |
+| `run-bo-case` | specialists, Business Orchestrator, Business Challenger, one bounded rerun, BusinessRiskScore | analyst memo, audit report, handoff pending human review |
 
 ```powershell
+python -m app.cli run-bo-specialists <CASE_ID> --package <package.json> --live
 python -m app.cli run-bo-case <CASE_ID> --package <package.json>
 ```
 
-Without `--responses` (scripted offline simulation) or `--live` (configured
-provider), the agents assert nothing and no conclusion is produced. Inspect runs
-at `/bo` in the local browser. See
-[`BUSINESS_OVERVIEW_V2_REPORT.md`](BUSINESS_OVERVIEW_V2_REPORT.md) for status,
-including what has **not** been validated (no HCA filing, no live-model run),
-and the spec in
-[`.kiro/specs/credit-memo-business-overview-v2/`](.kiro/specs/credit-memo-business-overview-v2/).
+Each command takes `--live` (configured provider, incurs cost), `--responses`
+(scripted offline simulation) and, for the specialists, `--replay` (re-validate
+recorded responses with no model call). `run-bo-case` with none of these asserts
+nothing and produces no conclusion. Inspect `run-bo-case` runs at `/bo` in the
+local browser.
+
+Where to read next:
+
+* [`app/services/bo/README.md`](app/services/bo/README.md) - working guide:
+  module map, validation rules, how to extend, pitfalls. **Start here if you are
+  changing the module.**
+* [`BO_QUALITY_REMEDIATION_REPORT.md`](BO_QUALITY_REMEDIATION_REPORT.md) -
+  current status, the HCA live demonstration, old-versus-new results, limits.
+* [`BUSINESS_OVERVIEW_V2_REPORT.md`](BUSINESS_OVERVIEW_V2_REPORT.md) - the
+  original build of the module.
+* [`examples/healthcare/hca-2025/`](examples/healthcare/hca-2025/) - the HCA
+  demonstration case; [`examples/healthcare/stryker-bo/`](examples/healthcare/stryker-bo/)
+  - the Stryker offline regression case.
+* Spec: [`.kiro/specs/credit-memo-business-overview-v2/`](.kiro/specs/credit-memo-business-overview-v2/).
+
+Not validated: model quality beyond one model and one filing, the logical
+correctness of accepted findings (checks are lexical and structural), and the
+full BO path (orchestrator, challenger, memo) on HCA with a live model.
 
 ## Sector benchmarking (medical devices)
 

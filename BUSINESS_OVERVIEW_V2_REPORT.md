@@ -1,5 +1,16 @@
 # Business Overview v2 — Implementation Report
 
+> **Superseded in part (12 Oct 2026).** This report describes the original
+> build at commit `c8a20c1`. Since then, on branch `feat/bo-quality-remediation`:
+> the HCA FY2025 10-K has been fetched and ingested, the six specialists have
+> been run live on it, and the specialist prompts, validation, retrieval and
+> indicators have changed. Read
+> [`BO_QUALITY_REMEDIATION_REPORT.md`](BO_QUALITY_REMEDIATION_REPORT.md) for
+> current status and [`app/services/bo/README.md`](app/services/bo/README.md)
+> for how the module works now. Still true below: the architecture, the
+> `run-bo-case` path, the handoff and workbench, and the fact that the full
+> path (orchestrator, challenger, memo) has not been run live on HCA.
+
 Hybrid six-agent Business Overview (BO) module, runnable on its own.
 Specs: `.kiro/specs/credit-memo-business-overview-v2/`.
 
