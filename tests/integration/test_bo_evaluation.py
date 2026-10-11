@@ -66,7 +66,7 @@ def test_offline_and_unverified_runs_are_labelled_as_not_proof(db_session, tmp_p
 def test_admissions_share_presented_as_revenue_share_is_caught(db_session, tmp_path):
     script = good_script()
     script["bo_regulation_external"]["hypotheses"].append(hyp(
-        "BO5-H004", "Texas generated 38% of revenue.", "fact", "negative",
+        "BO5-H005", "Texas generated 38% of revenue.", "fact", "negative",
         "supported", support=["admissions originated"],
         quotes=[("admissions originated",
                  "Approximately 38% of our admissions originated in the state of "
@@ -74,22 +74,29 @@ def test_admissions_share_presented_as_revenue_share_is_caught(db_session, tmp_p
     _, report = _evaluate(db_session, tmp_path, script)
     trap = next(t for t in report["analytical_reasoning"]["trap_checks"]
                 if t["id"] == "revenue_vs_admissions")
-    assert not trap["passed"] and "BO5-H004" in trap["problems"][0]
+    assert not trap["passed"] and "BO5-H005" in trap["problems"][0]
 
 
-def test_volume_guarantee_and_false_hypothesis_are_caught(db_session, tmp_path):
+def test_volume_guarantee_and_recession_claims_never_reach_the_evaluator(
+        db_session, tmp_path):
+    """The deterministic inference rules now hold these back before any memo."""
     script = good_script()
     script["bo_customers_contracts"]["hypotheses"][0]["claim"] = (
         "Managed-care contracts fix rates and guarantee minimum patient volumes.")
     script["bo_business_model_revenue"]["hypotheses"][2].update(
         disposition="qualified", supporting_evidence_ids=[
             {"$evidence": "Demand for acute care"}])
-    _, report = _evaluate(db_session, tmp_path, script)
-    reasoning = report["analytical_reasoning"]
-    rate = next(t for t in reasoning["trap_checks"] if t["id"] == "rate_vs_volume")
-    assert not rate["passed"]
-    false = next(f for f in reasoning["known_false_hypotheses"] if f["id"] == "X1")
-    assert not false["passed"] and "BO1-H003" in false["asserted_by"]
+    result, report = _evaluate(db_session, tmp_path, script)
+    records = {h["hypothesis_id"]: h for h in result.audit["hypotheses"]["records"]}
+    for hid, rule in (("BO2-H001", "rate_agreement_to_volume_guarantee"),
+                      ("BO1-H003", "essential_service_to_recession_resistance")):
+        assert records[hid]["admissibility"] == "audit_only"
+        assert rule in [f["rule_id"] for f in records[hid]["review_flags"]]
+    false = next(f for f in report["analytical_reasoning"]["known_false_hypotheses"]
+                 if f["id"] == "X1")
+    assert false["passed"] and false["asserted_by"] == []
+    # The orchestrator relied on the held-back hypothesis, so no conclusion stands.
+    assert result.conclusion_status == "unavailable"
 
 
 def test_missing_coverage_and_wrong_recomputed_value_are_reported(db_session, tmp_path):

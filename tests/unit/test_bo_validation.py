@@ -127,19 +127,29 @@ def test_wrong_denominator_is_rejected():
     indicators = _indicators()
     out = _validate("BO5", [_calc(indicators, denominator="total_admissions")],
                     indicators=indicators)
-    assert not out.valid
-    assert any("denominator 'total_admissions'" in i for i in out.issues)
+    record = out.records[0]
+    assert not record.usable and record.parameter_result_ids == []
+    assert any("denominator 'total_admissions'" in n for n in record.validation_notes)
+    assert record.review_flags[0]["rule_id"] == "numeric_binding_invalid"
 
 
 def test_wrong_period_and_mismatched_value_and_invented_result_are_rejected():
     indicators = _indicators()
-    assert not _validate("BO5", [_calc(indicators, period="2024-12-31")],
-                         indicators=indicators).valid
-    wrong = _validate("BO5", [_calc(indicators, value=0.52)], indicators=indicators)
-    assert any("no LLM arithmetic" in i for i in wrong.issues)
-    invented = _validate("BO5", [_calc(indicators, parameter_result_id="pr_fake")],
-                         indicators=indicators)
-    assert any("invented number" in i for i in invented.issues)
+
+    def held(**over):
+        record = _validate("BO5", [_calc(indicators, **over)],
+                           indicators=indicators).records[0]
+        assert not record.usable  # never accepted, whatever else the agent said
+        return " ".join(record.validation_notes)
+
+    assert "period '2024-12-31'" in held(period="2024-12-31")
+    assert "no LLM arithmetic" in held(value=0.52)
+    assert "invented number" in held(parameter_result_id="pr_fake")
+    # One mis-bound number does not discard the specialist's other findings.
+    both = _validate("BO5", [_calc(indicators, value=0.52),
+                             _h("BO5-H002", supporting_evidence_ids=["ev_season"])],
+                     indicators=indicators)
+    assert both.valid and [r.usable for r in both.records] == [False, True]
 
 
 def test_score_like_fields_reject_the_output():
@@ -248,7 +258,9 @@ def test_bo6_interaction_needs_validated_primary_components():
     assert good.valid and good.records[0].component_hypothesis_ids
     ghost = _validate("BO6", [{**item, "component_hypothesis_ids": ["BO4-H009"]}],
                       primary=primary)
-    assert any("not a validated primary hypothesis" in i for i in ghost.issues)
+    assert ghost.valid and not ghost.records[0].usable
+    assert any("not a validated primary hypothesis" in n
+               for n in ghost.records[0].validation_notes)
     single = _validate("BO6", [{**item, "component_hypothesis_ids": ["BO4-H001"]}],
                        primary=primary)
     assert single.records[0].disposition is Disposition.UNVERIFIED

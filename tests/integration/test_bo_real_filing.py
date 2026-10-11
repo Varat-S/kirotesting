@@ -89,8 +89,18 @@ def test_stryker_real_filing_runs_the_full_bo_path_offline(db_session, tmp_path)
     quotes = [q for h in current for q in h["evidence_quotes"]]
     assert len(quotes) >= 15
     assert all(quote_in_passage(q["quote"], passages[q["evidence_id"]]) for q in quotes)
-    assert not [a for agent in result.audit["agents"]
-                for a in agent["validator_adjustments"]]
+    notes = [a["note"] for agent in result.audit["agents"]
+             for a in agent["validator_adjustments"]]
+    assert not [n for n in notes if "not found verbatim" in n or "not verbatim" in n]
+    # Generic risk-factor language is recorded as a disclosed risk, not a fact.
+    reform = next(h for h in current if h["hypothesis_id"] == "BO5-H003")
+    assert reform["evidence_basis"] == "generic_risk_disclosure"
+    assert reform["admissibility"] == "qualified_narrative"
+    # A "strong" position resting only on management's belief is held back.
+    held = [p for p in result.audit["parameters"]
+            if p["parameter_id"] == "competitive_position_assessment"
+            and p["acceptance_state"] == "accepted"]
+    assert held and all(p["status"] == "unavailable" for p in held)
 
     # Numbers in the memo are deterministic calculations with stated denominators.
     growth = next(c for c in result.memo["calculations"]

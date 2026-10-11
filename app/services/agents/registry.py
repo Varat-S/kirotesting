@@ -603,6 +603,11 @@ def _text_matches(*patterns: str) -> Selector:
     return lambda item: any(c.search(item.get("text") or "") for c in compiled)
 
 
+def _indicator_groups(groups: tuple[str, ...]) -> Selector:
+    allowed = set(groups)
+    return lambda item: item.get("group") in allowed
+
+
 def _business_narrow_v2() -> list[AgentDefinition]:
     """The hybrid six-agent Business roster (BO1-BO5 primary, BO6 dependent)."""
     from app.services.bo.plans import BO_AGENT_SPECS, BO_PRIMARY_AGENT_IDS
@@ -623,12 +628,14 @@ def _business_narrow_v2() -> list[AgentDefinition]:
                 routing=RoutingSpec(
                     agent_id=spec.agent_id,
                     narrative_selector=_text_matches(*spec.all_terms()),
-                    # Agents see deterministic indicators, never raw statement facts.
-                    parameter_selector=_always(),
+                    # Agents see a CURATED set of deterministic indicators (by
+                    # group), never raw statement facts.
+                    parameter_selector=_indicator_groups(spec.indicator_groups),
                 ),
                 # The plan hash makes a routing change move the definition hash.
-                selector_identity=(f"retrieval_plan:{spec.plan_hash()}",
-                                   "parameters:bo_indicators"),
+                selector_identity=(
+                    f"retrieval_plan:{spec.plan_hash()}",
+                    "parameters:bo_indicators:" + ",".join(sorted(spec.indicator_groups))),
             )
         )
     return defs

@@ -104,7 +104,7 @@ class HypothesisRecord(BaseModel):
     direction: Direction
     supporting_evidence_ids: list[str] = Field(default_factory=list)
     contradicting_evidence_ids: list[str] = Field(default_factory=list)
-    evidence_quotes: list[dict[str, str]] = Field(default_factory=list)
+    evidence_quotes: list[dict[str, Any]] = Field(default_factory=list)
     parameter_result_ids: list[str] = Field(default_factory=list)
     quoted_values: list[dict[str, Any]] = Field(default_factory=list)
     disposition: Disposition
@@ -123,6 +123,21 @@ class HypothesisRecord(BaseModel):
     interaction_kind: str | None = None
     # What the deterministic validator changed or noted (never free model text).
     validation_notes: list[str] = Field(default_factory=list)
+    # Kind of support, re-derived from the verified quotes (Layer D):
+    # company_specific_disclosure | deterministic_calculation |
+    # management_statement | generic_risk_disclosure | general_statement |
+    # inference | none.
+    evidence_basis: str = "none"
+    # What the model originally stated, kept for the audit trail.
+    model_stated: dict[str, Any] = Field(default_factory=dict)
+    # Heuristic review flags raised by the inferential and sufficiency rules.
+    review_flags: list[dict[str, Any]] = Field(default_factory=list)
+    # BO6: the causal path between the component hypotheses.
+    transmission_mechanism: str | None = None
+    # Questions handed to the Financial Overview; never BO conclusions.
+    fo_handoffs: list[dict[str, Any]] = Field(default_factory=list)
+    # Audit records of quote-recovery attempts (original, request, outcome).
+    recovery: list[dict[str, Any]] = Field(default_factory=list)
     supersedes_id: str | None = None
     acceptance_state: AcceptanceState = AcceptanceState.ACCEPTED
 
@@ -177,6 +192,8 @@ class CalculationTrace(BaseModel):
     definition_version: str
     calculation_state: str
     caveat: str | None = None
+    # Which specialists receive it (growth, payer, workforce, ...).
+    group: str = "general"
 
 
 class AcceptedBusinessOverview(BaseModel):

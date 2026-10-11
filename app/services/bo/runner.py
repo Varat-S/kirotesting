@@ -60,9 +60,15 @@ from app.services.agents.runtime import AgentRuntime
 from app.services.agents.validation import DeterministicValidator
 from app.services.audit.log import AuditLog
 from app.services.bo import handoff as _handoff  # noqa: F401  (registers the immutability guard)
-from app.services.bo.hypotheses import HypothesisStore, HypothesisValidator
+from app.services.bo.hypotheses import (
+    HypothesisStore,
+    HypothesisValidator,
+    gate_parameters,
+)
 from app.services.bo.indicators import IndicatorSet, build_indicators
+from app.services.bo.sectors import CoverageOutcome, detect_sector
 from app.services.bo.plans import (
+    PARAMETER_VALUE_SETS,
     BO_ACTIVE_AGENT_IDS,
     BO_CHALLENGER_ID,
     BO_NARROW_AGENT_IDS,
@@ -187,8 +193,15 @@ class BusinessOverviewRunner:
         timeout_seconds: float | None = None,
         max_rerun_rounds: int | None = None,
         prompt_versions: dict[str, int] | None = None,
+        sector="auto",
+        coverage_checks=None,
     ) -> None:
         settings = get_settings()
+        # Sector profile: "auto" detects it from the admitted evidence, None
+        # disables it, or pass a SectorProfile. ``coverage_checks`` are extra
+        # case-specific coverage tests supplied with the case.
+        self.sector = sector
+        self.coverage_checks = list(coverage_checks or [])
         self.session = session
         self.backend = backend or bo_offline_backend()
         self.data_root = Path(data_root)
@@ -244,6 +257,24 @@ class BusinessOverviewRunner:
         return result
 
 
+    def run_specialists(self, case_id: str, *, package=None, prepared=None) -> "_BoRun":
+        """Run ONLY the six specialists and their validators (phases 1-3).
+
+        No orchestrator, challenger, score, memo or handoff is produced. The
+        returned run object carries the recorded outcomes for reporting.
+        """
+        from app.services.pipeline.runner import CreditMemoPipeline
+
+        if prepared is None:
+            prepared = CreditMemoPipeline(
+                self.session, data_root=self.data_root, output_root=self.output_root,
+            ).prepare_case(case_id, package=package)
+        run = _BoRun(self, case_id, prepared.evidence_snapshot, prepared.metrics,
+                     prepared.escalations, prepared.rejected_sources)
+        run.execute_specialists()
+        return run
+
+
 class _BoRun:
     """State and phase logic of ONE Business Overview analysis run."""
 
@@ -278,7 +309,27 @@ class _BoRun:
             bootstrap_config(cfg_registry)
         self.scoring_cfg = ScoringConfig.from_registry(cfg_registry)
         self.scorer = ScoringEngine(self.scoring_cfg)
-        self.value_sets = parameter_value_sets(self.scoring_cfg.content)
+        # Permitted categorical values: rubric-scored parameters take theirs
+        # from the scoring config, the rest from the roster data.
+        self.value_sets = {
+            **{k: list(v) for k, v in PARAMETER_VALUE_SETS.items()},
+            # "not_established" is always an available answer.
+            **{k: [*v, "not_established"]
+               for k, v in parameter_value_sets(self.scoring_cfg.content).items()},
+        }
+        self.sector = (detect_sector(evidence) if runner.sector == "auto"
+                       else runner.sector)
+        self.checks = [*(self.sector.checklist if self.sector else ()),
+                       *runner.coverage_checks]
+        self.corpus = sorted(
+            (p for p in evidence.narrative_evidence if p.get("evidence_id")),
+            key=lambda p: (str(p.get("document_id") or ""), p.get("location") or 0))
+        self.located: dict[str, dict[str, list[str]]] = {}
+        self.coverage: list[CoverageOutcome] = []
+        self.parameter_adjustments: dict[str, list[dict]] = {}
+        self.last_parsed: dict[str, dict] = {}
+        self.coverage_requests: dict[str, list[dict]] = {}
+        self.scope = "business_overview_only"
 
         self.promoter = ParameterPromoter(self.session)
         self.hypothesis_store = HypothesisStore(
@@ -330,11 +381,22 @@ class _BoRun:
         self._foundation()
         self._stage("primary_specialists", set(BO_PRIMARY_AGENT_IDS))
         self._follow_up_retrieval()
+        self._coverage_follow_up()
         self._stage("resilience", {BO_RESILIENCE_AGENT_ID})
         self._score_business()
         self._stage("orchestrator", {BO_ORCHESTRATOR_ID})
         self._challenge_phase()
         self._finalize()
+
+    def execute_specialists(self) -> None:
+        self.scope = "business_overview_specialists_only"
+        self._open_run()
+        self._foundation()
+        self._stage("primary_specialists", set(BO_PRIMARY_AGENT_IDS))
+        self._follow_up_retrieval()
+        self._coverage_follow_up()
+        self._stage("resilience", {BO_RESILIENCE_AGENT_ID})
+        self._close_run()
 
     def _open_run(self) -> None:
         common = dict(
@@ -351,7 +413,9 @@ class _BoRun:
             status="created", analysis_mode=ANALYSIS_MODE,
             config_versions=dict(self.evidence.config_versions),
             model_configuration={
-                "scope": "business_overview_only",
+                "scope": self.scope,
+                "sector_profile": self.sector.sector_id if self.sector else None,
+                "coverage_checks": [c.check_id for c in self.checks],
                 "active_agents": list(BO_ACTIVE_AGENT_IDS),
                 "max_concurrency": self.runner.max_concurrency,
                 "max_rerun_rounds": self.runner.max_rerun_rounds,
@@ -363,7 +427,8 @@ class _BoRun:
     def _foundation(self) -> None:
         """Indicators + routed, budgeted evidence packets (deterministic)."""
         self.indicators = build_indicators(
-            self.evidence, self.metrics, analysis_run_id=self.analysis_run_id)
+            self.evidence, self.metrics, analysis_run_id=self.analysis_run_id,
+            sector=self.sector)
         for result in self.indicators.results:
             self.promoter.persist(result, case_id=self.case_id,
                                   snapshot_version=self.snapshot_version)
@@ -378,6 +443,12 @@ class _BoRun:
             self.retrieval[agent_id] = self.runner.retriever.run_plan(
                 BO_SPEC_BY_AGENT[agent_id], routed.narrative_evidence,
                 analysis_run_id=self.analysis_run_id)
+            if self.checks:
+                self.retrieval[agent_id], self.located[agent_id] = (
+                    self.runner.retriever.run_checklist(
+                        BO_SPEC_BY_AGENT[agent_id], self.checks, self.corpus,
+                        self.retrieval[agent_id],
+                        analysis_run_id=self.analysis_run_id))
             self._record_attempts(self.retrieval[agent_id].attempts)
             self._seal_packet(agent_id, routed)
 
@@ -513,7 +584,9 @@ class _BoRun:
             "parameter_value_sets": {
                 p: self.value_sets[p] for p in spec.owned_parameters
                 if p in self.value_sets},
-            "indicators": self.indicators.agent_view(),
+            "indicators": self.indicators.agent_view(groups=spec.indicator_groups),
+            "checklist": [c.as_prompt() for c in self.checks
+                          if spec.code in c.agent_codes],
             "evidence": packet_view(retrieval.passages),
             "retrieval": [
                 {"query_id": a.query_id, "purpose": a.purpose, "origin": a.origin,
@@ -533,6 +606,10 @@ class _BoRun:
             inputs["primary_coverage"] = {
                 a: c for a, c in self._coverage().items() if a in BO_PRIMARY_AGENT_IDS}
             cited = {e for h in primary for e in h.evidence_ids()}
+            # BO6 also sees the indicators its component hypotheses quoted.
+            inputs["indicators"] = self.indicators.agent_view(
+                groups=spec.indicator_groups,
+                include_ids={i for h in primary for i in h.parameter_result_ids})
             evidence_ids |= cited
             # BO6 may cite the evidence its component hypotheses rest on.
             self._seal_packet(agent.agent_id, extra_ids=cited)
@@ -542,6 +619,22 @@ class _BoRun:
             inputs["challenge_feedback"] = self.feedback[agent.agent_id]
         if agent.agent_id in self.followups:
             inputs["follow_up_note"] = self.followups[agent.agent_id]
+        if self.coverage_requests.get(agent.agent_id):
+            inputs["coverage_follow_up"] = {
+                "instruction": (
+                    "Your previous answer is in 'previous_answer'. It left the "
+                    "coverage questions below without a hypothesis that survived "
+                    "validation. Return your COMPLETE answer again: keep your "
+                    "previous hypotheses and parameters unless they were wrong, and "
+                    "for each listed question ADD a hypothesis whose claim states "
+                    "what the cited passages say (with a verbatim quote), then cite "
+                    "its id in checklist_responses - or answer "
+                    "'not_supported_by_evidence'. This is the only follow-up."),
+                "questions": self.coverage_requests[agent.agent_id],
+                "previous_answer": {
+                    k: self.last_parsed.get(agent.agent_id, {}).get(k)
+                    for k in ("parameters", "hypotheses", "checklist_responses")},
+            }
         return self._task(agent, inputs, evidence_ids, BO_NARROW_JSON_SCHEMA, parents)
 
     def _business_parameters(self) -> list[ParameterResult]:
@@ -662,11 +755,29 @@ class _BoRun:
             primary_hypotheses=(
                 {h.hypothesis_id: h for h in self._usable(BO_PRIMARY_AGENT_IDS)}
                 if agent.agent_id == BO_RESILIENCE_AGENT_ID else None),
+            corpus=self.corpus,
         ).validate(parsed, analysis_run_id=self.analysis_run_id, agent_run_id=run_id)
         issues += validation.issues
         if issues:
             self._reject(agent.agent_id, run_id, issues)
             return
+        # An answer to a question that was never asked is ignored and noted; it
+        # cannot count as coverage and is no reason to discard the findings.
+        known_checks = {c.check_id for c in self.checks if spec.code in c.agent_codes}
+        for response in parsed.get("checklist_responses") or []:
+            if isinstance(response, dict) and response.get("check_id") not in known_checks:
+                validation.adjustments.append({
+                    "hypothesis_id": "(checklist)",
+                    "note": f"Ignored an answer to unknown coverage question "
+                            f"{response.get('check_id')!r}."})
+        self.last_parsed[agent.agent_id] = parsed
+        # Parameter values the validated hypotheses do not carry are held back.
+        parsed, parameter_changes = gate_parameters(
+            parsed, validation.records, value_sets=self.value_sets,
+            primary=({h.hypothesis_id: h for h in self._usable(BO_PRIMARY_AGENT_IDS)}
+                     if agent.agent_id == BO_RESILIENCE_AGENT_ID else None))
+        self.parameter_adjustments[agent.agent_id] = parameter_changes
+        self._record_coverage(spec, parsed, validation.records)
         try:
             validated = ValidatedAgentOutput.gate(
                 agent, parsed, outcome, analysis_run_id=self.analysis_run_id,
@@ -715,6 +826,97 @@ class _BoRun:
         outcome_record.issues = []
         outcome_record.adjustments = validation.adjustments
         outcome_record.detail = None
+
+    def _record_coverage(self, spec, parsed, records) -> None:
+        """Did a VALIDATED hypothesis actually answer each coverage question?"""
+        import re
+
+        self.coverage = [c for c in self.coverage if c.agent_id != spec.agent_id]
+        usable = {r.hypothesis_id: r for r in records if r.usable}
+        responses = {r.get("check_id"): r for r in parsed.get("checklist_responses") or []
+                     if isinstance(r, dict)}
+        for check in self.checks:
+            if spec.code not in check.agent_codes:
+                continue
+            response = responses.get(check.check_id, {})
+            cited = [h for h in response.get("hypothesis_ids") or []]
+            outcome = CoverageOutcome(
+                check=check, agent_id=spec.agent_id,
+                passages_located=list(
+                    self.located.get(spec.agent_id, {}).get(check.check_id, [])),
+                response_status=response.get("status", "no_response"),
+                hypothesis_ids=cited, note=response.get("note"))
+            # Addressed only if a hypothesis the agent CITED for this question
+            # survived validation and matches the check's patterns: neither the
+            # agent's say-so nor an unrelated finding counts.
+            for record in [usable[h] for h in cited if h in usable]:
+                text = record.claim + " " + " ".join(
+                    q["quote"] for q in record.evidence_quotes)
+                if check.finding_patterns and all(
+                        re.search(p, text, re.I) for p in check.finding_patterns):
+                    outcome.addressed_by.append(record.hypothesis_id)
+            self.coverage.append(outcome)
+
+    def fo_handoffs(self) -> list[dict[str, Any]]:
+        """Questions for the Financial Overview raised by agents or the validator."""
+        return [
+            {"hypothesis_id": h.hypothesis_id, "agent_id": h.agent_id, **handoff}
+            for a in BO_NARROW_AGENT_IDS for h in self.hypotheses.get(a, [])
+            for handoff in h.fo_handoffs]
+
+    def _close_run(self) -> None:
+        """Finish a specialists-only run (no conclusion, score or handoff)."""
+        runs = self.session.execute(
+            select(AgentRunRow).where(
+                AgentRunRow.analysis_run_id == self.analysis_run_id)
+        ).scalars().all()
+        totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+        seen = False
+        for run in runs:
+            for key in totals:
+                if run.usage and run.usage.get(key) is not None:
+                    totals[key] += int(run.usage[key])
+                    seen = True
+        self.completed_at = datetime.now(timezone.utc)
+        row = self.session.get(RunRow, self.analysis_run_id)
+        narrow = [self.agents[a].status for a in BO_NARROW_AGENT_IDS]
+        row.status = ("completed" if all(s == "validated" for s in narrow)
+                      else "partially_failed")
+        row.completed_at = self.completed_at
+        if seen:
+            row.total_input_tokens = totals["input_tokens"]
+            row.total_output_tokens = totals["output_tokens"]
+            row.total_tokens = totals["total_tokens"]
+        self.session.flush()
+
+    def _coverage_follow_up(self) -> None:
+        """One bounded re-ask for coverage questions left without a validated answer.
+
+        Only where the filing HAS passages on the question, the specialist's
+        output was valid, and it did not already answer "not supported".
+        """
+        if self.runner.retriever.budget.max_followup_rounds < 1:
+            return
+        again = set()
+        for agent_id in BO_PRIMARY_AGENT_IDS:
+            if self.agents[agent_id].status != "validated":
+                continue
+            unanswered = [
+                c for c in self.coverage
+                if c.agent_id == agent_id and not c.addressed_by and c.passages_located
+                and c.response_status != "not_supported_by_evidence"]
+            if unanswered:
+                self.coverage_requests[agent_id] = [
+                    {"check_id": c.check.check_id, "question": c.check.question,
+                     "evidence_ids": c.passages_located,
+                     "your_previous_note": c.note}
+                    for c in unanswered]
+                again.add(agent_id)
+        if again:
+            self.rerun_reason = "coverage_follow_up"
+            self._stage("coverage_follow_up", again)
+            self.rerun_reason = None
+        self.coverage_requests = {}
 
     def _follow_up_retrieval(self) -> None:
         """One bounded pass of agent-requested searches over admitted material."""

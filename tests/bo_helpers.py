@@ -50,7 +50,8 @@ PASSAGES = {
         "Item 1", "We compete with other hospitals, including not-for-profit systems, "
         "and with ambulatory surgery centers. Competitors may have greater market "
         "share in certain markets. Revenue per equivalent admission increased 4.1% "
-        "due to pricing, payer mix and case mix acuity."),
+        "due to pricing, payer mix and case mix acuity. In 2025 we operated the "
+        "largest hospital network by licensed beds in most of our markets."),
     "ev_labor": (
         "Item 1A", "We face a nursing shortage and rising contract labor costs. We "
         "operate a College of Nursing to expand our training pipeline, which we "
@@ -194,11 +195,11 @@ def good_script() -> dict:
     }
     script["bo_customers_contracts"] = {
         "parameters": [
-            param("customer_dependence_assessment", "government_programme_dependent",
+            param("customer_dependence_assessment", "concentrated_payer_categories",
                   "Medicare and Medicaid accounted", ["BO2-H002"]),
             param("contract_termination_risk_assessment", "moderate",
                   "Either party may terminate", ["BO2-H001"]),
-            param("revenue_realisation_assessment", "collection_risk_present",
+            param("revenue_realisation_assessment", "pressured",
                   "Uncompensated care", ["BO2-H003"]),
         ],
         "hypotheses": [
@@ -225,10 +226,12 @@ def good_script() -> dict:
     }
     script["bo_competition_pricing"] = {
         "parameters": [
-            param("competitive_position_assessment", "strong", "We compete with"),
+            param("competitive_position_assessment", "strong", "We compete with",
+                  ["BO3-H004"]),
             param("pricing_power_assessment", "moderate", "Revenue per equivalent",
                   ["BO3-H002"]),
-            param("switching_cost_assessment", "moderate", "We compete with"),
+            param("switching_cost_assessment", "moderate", "We compete with",
+                  ["BO3-H001"]),
             param("competitive_pressure_assessment", "moderate", "We compete with",
                   ["BO3-H001"]),
         ],
@@ -252,16 +255,26 @@ def good_script() -> dict:
             hyp("BO3-H003",
                 "Scale gives the borrower superior negotiated pricing.", "assumption",
                 "positive", "rejected"),
+            hyp("BO3-H004",
+                "The borrower operated the largest hospital network by licensed "
+                "beds in most of its markets.", "fact", "positive", "supported",
+                support=["We compete with"],
+                quotes=[("We compete with",
+                         "In 2025 we operated the largest hospital network by "
+                         "licensed beds in most of our markets")]),
         ],
     }
     script["bo_operations_management"] = {
         "parameters": [
-            param("management_quality_assessment", "adequate", "executive officers"),
-            param("key_person_dependency_assessment", "low", "succession planning"),
-            param("governance_concern_assessment", "none", "board of directors"),
+            param("management_quality_assessment", "adequate", "executive officers",
+                  ["BO4-H004"]),
+            param("key_person_dependency_assessment", "low", "succession planning",
+                  ["BO4-H004"]),
+            param("governance_concern_assessment", "none", "board of directors",
+                  ["BO4-H004"]),
             param("workforce_cost_resilience_assessment", "pressured",
                   "nursing shortage", ["BO4-H001"]),
-            param("capex_strategy_assessment", "expansion_of_existing_facilities",
+            param("capex_strategy_assessment", "growth_oriented",
                   "Capital expenditures were focused", ["BO4-H003"]),
         ],
         "hypotheses": [
@@ -293,13 +306,21 @@ def good_script() -> dict:
                     "parameter_result_id": {"$indicator": "capex_to_revenue"},
                     "value": {"$indicator_value": "capex_to_revenue"},
                     "unit": "ratio", "period": PERIOD, "denominator": "revenue"}]),
+            hyp("BO4-H004",
+                "Long-tenured executive officers are overseen by a board that "
+                "covers governance and succession planning.", "fact", "positive",
+                "supported", support=["executive officers"],
+                quotes=[("executive officers",
+                         "The board of directors oversees governance and succession "
+                         "planning")]),
         ],
     }
     script["bo_regulation_external"] = {
         "parameters": [
             param("regulatory_dependency_assessment", "high",
                   "extensive regulation", ["BO5-H002"]),
-            param("litigation_risk_assessment", "present", "party to litigation"),
+            param("litigation_risk_assessment", "existing_proceedings_not_quantified",
+                  "party to litigation", ["BO5-H004"]),
             param("external_event_exposure_assessment", "concentrated",
                   "Texas and Florida generated", ["BO5-H001"]),
         ],
@@ -323,11 +344,17 @@ def good_script() -> dict:
                 "A broad geographic presence eliminates regional concentration risk.",
                 "inference", "positive", "rejected",
                 contra=["Texas and Florida generated"]),
+            hyp("BO5-H004",
+                "The borrower is party to litigation and government investigations "
+                "that the filing does not quantify.", "fact", "negative", "supported",
+                support=["party to litigation"],
+                quotes=[("party to litigation",
+                         "We are party to litigation and government investigations")]),
         ],
     }
     script["bo_resilience_interactions"] = {
         "parameters": [
-            param("compound_risk_assessment", "labour_and_geographic_concentration",
+            param("compound_risk_assessment", "interaction_plausible_unquantified",
                   "nursing shortage", ["BO6-H001"]),
         ],
         "hypotheses": [{
@@ -342,6 +369,9 @@ def good_script() -> dict:
                                         {"$hypothesis_evidence": "BO5-H001"}],
             "component_hypothesis_ids": ["BO4-H001", "BO5-H001"],
             "interaction_kind": "compound_risk",
+            "transmission_mechanism": "A hurricane or state-policy shock in the two "
+                                      "states that generate most revenue would raise "
+                                      "demand for scarce clinical staff there.",
             "missing_information": ["Staffing levels by state"],
         }],
     }

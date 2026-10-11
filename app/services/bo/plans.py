@@ -40,6 +40,8 @@ class BoAgentSpec:
     plan: tuple[RetrievalQuery, ...]
     # Structured task sections; a broad agent is split rather than multiplied.
     task_sections: tuple[str, ...] = ()
+    # Which groups of deterministic indicators this specialist receives.
+    indicator_groups: tuple[str, ...] = ()
 
     def plan_hash(self) -> str:
         return content_hash(
@@ -73,6 +75,7 @@ BO_AGENT_SPECS: tuple[BoAgentSpec, ...] = (
             _q("bo1.stabiliser_limits", "mitigant_challenge", r"concentrat",
                r"significant portion", r"depend\w* (?:up)?on", r"capital intensive"),
         ),
+        indicator_groups=('growth', 'segment', 'payer', 'capital'),
     ),
     BoAgentSpec(
         "BO2", "bo_customers_contracts", "Customers, Contracts & Revenue Realisation",
@@ -94,6 +97,7 @@ BO_AGENT_SPECS: tuple[BoAgentSpec, ...] = (
             _q("bo2.offsets", "mitigant", r"diversif\w* (?:payer|customer)",
                r"collection (?:efforts|procedures)", r"eligibility", r"supplemental payments?"),
         ),
+        indicator_groups=('payer', 'realisation', 'growth'),
     ),
     BoAgentSpec(
         "BO3", "bo_competition_pricing", "Competition & Pricing Power",
@@ -114,6 +118,7 @@ BO_AGENT_SPECS: tuple[BoAgentSpec, ...] = (
                r"physician-owned", r"tax-exempt|not-for-profit", r"case mix|acuity",
                r"payer mix"),
         ),
+        indicator_groups=('growth', 'payer', 'segment'),
     ),
     BoAgentSpec(
         "BO4", "bo_operations_management", "Operations, Management & Execution",
@@ -143,6 +148,7 @@ BO_AGENT_SPECS: tuple[BoAgentSpec, ...] = (
             "management_and_governance", "workforce_and_cost_structure",
             "procurement_and_suppliers", "capital_deployment_ma_capex",
         ),
+        indicator_groups=('workforce', 'capital', 'margin', 'cash'),
     ),
     BoAgentSpec(
         "BO5", "bo_regulation_external", "Regulation, Litigation & External Risks",
@@ -162,6 +168,7 @@ BO_AGENT_SPECS: tuple[BoAgentSpec, ...] = (
             _q("bo5.protections", "mitigant", r"insurance", r"reserves?",
                r"compliance program", r"self-insur"),
         ),
+        indicator_groups=('payer', 'geography', 'segment'),
     ),
     BoAgentSpec(
         "BO6", "bo_resilience_interactions", "Business Resilience & Risk Interactions",
@@ -174,6 +181,7 @@ BO_AGENT_SPECS: tuple[BoAgentSpec, ...] = (
             _q("bo6.capability_limits", "mitigant_challenge", r"no assurance",
                r"may not be (?:able|sufficient)", r"limited ability", k=2),
         ),
+        indicator_groups=('growth', 'payer', 'workforce', 'realisation', 'geography'),
     ),
 )
 
@@ -190,6 +198,71 @@ BO_ACTIVE_AGENT_IDS = (*BO_NARROW_AGENT_IDS, BO_ORCHESTRATOR_ID, BO_CHALLENGER_I
 # the append-only prompt registry never alternates versions between rosters).
 BO_ORCHESTRATOR_PROMPT = "bo_v2_business_orchestrator"
 BO_CHALLENGER_PROMPT = "bo_v2_business_challenge"
+
+# Permitted categorical values for every BO parameter that is not scored by a
+# rubric (rubric-scored parameters take their values from the scoring config).
+# "not_established" is always available: an agent must be able to say that the
+# evidence does not support a classification instead of forcing one.
+PARAMETER_VALUE_SETS: dict[str, tuple[str, ...]] = {
+    "revenue_recurrence_assessment": (
+        "contractually_committed", "recurring_not_contracted", "transactional",
+        "mixed", "not_established"),
+    "demand_defensiveness_assessment": (
+        "demonstrated_resilient", "resilient_with_caveats", "cyclical",
+        "not_established"),
+    "cyclicality_seasonality_assessment": (
+        "seasonal", "limited_seasonality", "not_seasonal", "cyclical",
+        "not_established"),
+    "customer_dependence_assessment": (
+        "concentrated_counterparties", "concentrated_payer_categories",
+        "diversified", "not_established"),
+    "supplier_dependence_assessment": ("concentrated", "diversified", "not_established"),
+    "contract_termination_risk_assessment": ("high", "moderate", "low", "not_established"),
+    "revenue_realisation_assessment": ("strong", "adequate", "pressured", "not_established"),
+    "barriers_to_entry_assessment": ("high", "moderate", "low", "not_established"),
+    "acquisition_strategy_assessment": (
+        "outcomes_evidenced", "stated_strategy_only", "concerns_evidenced",
+        "not_established"),
+    "integration_risk_assessment": ("high", "moderate", "low", "not_established"),
+    "capex_strategy_assessment": (
+        "growth_oriented", "maintenance_oriented", "mixed", "not_established"),
+    "workforce_cost_resilience_assessment": (
+        "demonstrated", "mitigants_unproven", "pressured", "not_established"),
+    "regulatory_dependency_assessment": ("high", "moderate", "low", "not_established"),
+    "litigation_risk_assessment": (
+        "existing_material_proceedings", "existing_proceedings_not_quantified",
+        "contingent_exposure_only", "not_established"),
+    "material_event_assessment": ("occurred", "none_identified", "not_established"),
+    "external_event_exposure_assessment": ("concentrated", "diversified", "not_established"),
+    "compound_risk_assessment": (
+        "material_interaction_supported", "interaction_plausible_unquantified",
+        "none_supported"),
+    "mitigating_capability_assessment": (
+        "demonstrated", "existing_unproven", "none_identified"),
+}
+# A short free label, not a sentence.
+LABEL_PARAMETERS = {"business_model_classification": 60}
+
+# Values that assert something specific about THIS company. They need at least
+# one linked, validated hypothesis resting on company-specific evidence or a
+# deterministic calculation; management statements and generic risk-factor
+# language are not enough.
+REQUIRES_COMPANY_EVIDENCE: dict[str, frozenset[str]] = {
+    "key_person_dependency_assessment": frozenset({"high"}),
+    "management_quality_assessment": frozenset({"strong", "weak"}),
+    "governance_concern_assessment": frozenset({"material", "severe"}),
+    "switching_cost_assessment": frozenset({"low", "high"}),
+    "pricing_power_assessment": frozenset({"strong"}),
+    "competitive_position_assessment": frozenset({"leading", "strong"}),
+    "acquisition_strategy_assessment": frozenset({"outcomes_evidenced"}),
+    "revenue_recurrence_assessment": frozenset({"contractually_committed"}),
+    "demand_defensiveness_assessment": frozenset({"demonstrated_resilient"}),
+    "customer_dependence_assessment": frozenset({"concentrated_counterparties"}),
+    "workforce_cost_resilience_assessment": frozenset({"demonstrated"}),
+    "mitigating_capability_assessment": frozenset({"demonstrated"}),
+    "litigation_risk_assessment": frozenset({"existing_material_proceedings"}),
+    "material_event_assessment": frozenset({"occurred"}),
+}
 
 # Compatibility map for results recorded under the v1 roster and for sector
 # configurations that name v1 agents.

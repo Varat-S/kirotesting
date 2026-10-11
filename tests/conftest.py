@@ -21,6 +21,21 @@ def no_live_sec_requests(monkeypatch):
     monkeypatch.setattr(UrllibTransport, "get", blocked)
 
 
+@pytest.fixture(autouse=True)
+def no_local_env_file(monkeypatch):
+    """Tests never read a developer's ``.env`` (it may hold real provider keys).
+
+    Settings are built from defaults and explicit arguments only, so a locally
+    configured provider cannot change a test's outcome or leak into its output.
+    """
+    from app.core.config import Settings, get_settings
+
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture()
 def db_session() -> Iterator[Session]:
     """Provide an isolated in-memory SQLite session with all tables created.

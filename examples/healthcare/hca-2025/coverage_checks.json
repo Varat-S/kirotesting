@@ -1,0 +1,13 @@
+{
+ "_comment": "Case-specific coverage tests for the HCA FY2025 demonstration. Each is a question plus retrieval terms; none states an answer. They are supplied at run time and are not part of the generic system.",
+ "coverage_checks": [
+  {
+   "check_id": "case.galen",
+   "agent_codes": ["BO4"],
+   "question": "What does the filing say about Galen: what it is, what role it plays in the business, and whether its effect is measured? If the name appears in more than one context, say which mentions are relevant and which are not. Do not assume anything the passages do not state.",
+   "terms": ["Galen"],
+   "finding_patterns": ["Galen"],
+   "max_passages": 3
+  }
+ ]
+}

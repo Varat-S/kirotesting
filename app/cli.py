@@ -133,6 +133,33 @@ def main(argv=None):
         help="Use the configured live provider (LLM_PROVIDER); incurs model cost",
     )
     bo_run.add_argument("--pdf", action="store_true")
+    bo_spec = commands.add_parser(
+        "run-bo-specialists",
+        help="Run the six BO specialists and validators only; write the demo reports",
+    )
+    bo_spec.add_argument("case_id")
+    bo_spec_source = bo_spec.add_mutually_exclusive_group(required=True)
+    bo_spec_source.add_argument("--package", type=Path)
+    bo_spec_source.add_argument("--bundle", type=Path)
+    bo_spec.add_argument(
+        "--cutoff", type=lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")))
+    bo_spec.add_argument("--entity-id")
+    bo_spec.add_argument("--entity-name")
+    bo_spec_backend = bo_spec.add_mutually_exclusive_group(required=True)
+    bo_spec_backend.add_argument("--responses", type=Path,
+                                 help="Scripted offline responses (JSON)")
+    bo_spec_backend.add_argument("--replay", type=Path,
+                                 help="Replay a previous run's recorded responses")
+    bo_spec_backend.add_argument("--live", action="store_true",
+                                 help="Use the configured live provider (model cost)")
+    bo_spec.add_argument("--coverage", type=Path,
+                         help="Case-specific coverage tests (JSON)")
+    bo_spec.add_argument("--baseline", type=Path,
+                         help="Previous run's specialists_calls.json to benchmark against")
+    bo_spec.add_argument("--price-in", type=float,
+                         help="Model price per million input tokens (optional)")
+    bo_spec.add_argument("--price-out", type=float,
+                         help="Model price per million output tokens (optional)")
     bo_review = commands.add_parser(
         "bo-review",
         help="Record your explicit decision on a pending Business Overview handoff",
@@ -183,6 +210,10 @@ def main(argv=None):
             )
             if args.command == "run-bo-case":
                 print(json.dumps(_run_bo_case(session, database, args), indent=2))
+                session.commit()
+                return
+            if args.command == "run-bo-specialists":
+                print(json.dumps(_run_bo_specialists(session, database, args), indent=2))
                 session.commit()
                 return
             if args.command == "bo-review":
@@ -353,6 +384,75 @@ def main(argv=None):
 
 
 
+def _live_backend():
+    settings = get_settings()
+    if settings.llm_provider == "vertex":
+        from app.services.llm.providers_vertex import VertexProviderBackend
+
+        backend = VertexProviderBackend(settings)
+    else:
+        from app.services.llm.providers import RealProviderBackend
+
+        backend = RealProviderBackend(settings)
+    backend.check_configuration()
+    return backend
+
+
+def _run_bo_specialists(session, database, args):
+    """Six specialists + validators + demonstration reports (no memo, no score)."""
+    from app.services.bo import benchmark
+    from app.services.bo.demo import run_demo
+    from app.services.bo.offline import ScriptedBoBackend
+    from app.services.bo.sectors import load_case_checks
+
+    if args.live:
+        backend = _live_backend()
+    elif args.replay:
+        backend = benchmark.replay_backend(benchmark.load_baseline_calls(args.replay))
+    else:
+        backend = ScriptedBoBackend.from_file(args.responses)
+    if args.bundle:
+        if args.cutoff is None:
+            raise ValueError("--bundle requires --cutoff.")
+        package = sec_source_package(
+            SecFilingBundle.load(args.bundle), cutoff=args.cutoff,
+            entity_id=args.entity_id, legal_name=args.entity_name)
+    else:
+        package = SourcePackage.load(args.package)
+    prices = None
+    if args.price_in is not None and args.price_out is not None:
+        prices = {"input_per_million": args.price_in,
+                  "output_per_million": args.price_out, "currency": "USD"}
+    result = run_demo(
+        session, args.case_id, package=package, backend=backend,
+        data_root=database.parent, output_root=args.output,
+        coverage_checks=load_case_checks(args.coverage) if args.coverage else None,
+        baseline_calls=args.baseline, prices=prices)
+    payload = result["payload"]
+    metrics = payload["metrics"]
+    return {
+        "case_id": args.case_id,
+        "analysis_run_id": payload["meta"]["analysis_run_id"],
+        "scope": payload["meta"]["scope"],
+        "execution_mode": payload["meta"]["execution_mode"],
+        "models": payload["meta"]["models"],
+        "specialists": {a["code"]: a["status"] for a in payload["agents"]},
+        "hypotheses": {"generated": metrics["hypotheses_generated"],
+                       "usable": metrics["hypotheses_usable"],
+                       **metrics["by_admissibility"]},
+        "unsupported_inference_flags": metrics["unsupported_inference_flags"],
+        "bo_fo_boundary_violations": metrics["bo_fo_boundary_violations"],
+        "citations": {"failed": metrics["citation_verification_failures"],
+                      "recovered": metrics["citations_recovered"]},
+        "coverage": metrics["coverage_by_status"],
+        "hypotheses_using_indicators": metrics["hypotheses_using_indicators"],
+        "parameters": {"accepted": metrics["parameters_accepted"],
+                       "held_back": metrics["parameters_held_back"]},
+        "tokens": metrics["tokens"],
+        "outputs": {k: str(v) for k, v in result["paths"].items()},
+    }
+
+
 def _run_bo_case(session, database, args):
     """Run the BO-only path and summarise the recorded outcome."""
     from app.services.bo.runner import BusinessOverviewRunner
@@ -363,16 +463,7 @@ def _run_bo_case(session, database, args):
 
         backend = ScriptedBoBackend.from_file(args.responses)
     elif args.live:
-        settings = get_settings()
-        if settings.llm_provider == "vertex":
-            from app.services.llm.providers_vertex import VertexProviderBackend
-
-            backend = VertexProviderBackend(settings)
-        else:
-            from app.services.llm.providers import RealProviderBackend
-
-            backend = RealProviderBackend(settings)
-        backend.check_configuration()
+        backend = _live_backend()
     if args.bundle:
         if args.cutoff is None:
             raise ValueError("--bundle requires --cutoff.")

@@ -61,6 +61,14 @@ class RetrievalResult:
         return [a for a in self.attempts if a.is_gap]
 
 
+@dataclass(frozen=True)
+class _CoverageQuery:
+    query_id: str
+    terms: tuple[str, ...]
+    max_passages: int
+    purpose: str = "coverage"
+
+
 def instruction_like(text: str) -> bool:
     return bool(_INSTRUCTION_LIKE.search(text or ""))
 
@@ -177,6 +185,34 @@ class BoEvidenceRetriever:
             selected.setdefault(evidence_id, passage)
         result.passages = sorted(selected.values(), key=lambda p: p["evidence_id"])
         return result
+
+    def run_checklist(self, spec: BoAgentSpec, checks, corpus: list[dict[str, Any]],
+                      already: RetrievalResult, *, analysis_run_id: str
+                      ) -> tuple[RetrievalResult, dict[str, list[str]]]:
+        """Guarantee that the passages behind each coverage question reach the agent.
+
+        Searches the whole ADMITTED narrative for each check assigned to this
+        specialist and adds its top passages on top of the plan packet (bounded
+        by checks x passages). Returns the extended result and, per check, the
+        evidence ids located (empty = the filing has nothing on it).
+        """
+        result = RetrievalResult(passages=list(already.passages),
+                                 attempts=list(already.attempts))
+        selected = {p["evidence_id"]: p for p in already.passages}
+        located: dict[str, list[str]] = {}
+        for check in checks:
+            if spec.code not in check.agent_codes:
+                continue
+            query = _CoverageQuery(f"check:{check.check_id}", tuple(check.terms),
+                                   check.max_passages)
+            before = len(result.attempts)
+            self._execute(query, corpus, result, selected, agent_id=spec.agent_id,
+                          analysis_run_id=analysis_run_id, origin="checklist",
+                          round_index=0)
+            located[check.check_id] = [
+                r["evidence_id"] for r in result.attempts[before].results]
+        result.passages = sorted(selected.values(), key=lambda p: _position(p))
+        return result, located
 
     # -- internals ------------------------------------------------------------
 

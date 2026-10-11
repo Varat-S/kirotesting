@@ -190,18 +190,11 @@
   "parameters": [
    {
     "parameter_id": "customer_dependence_assessment",
-    "value": "healthcare_provider_and_payer_exposure",
+    "value": null,
     "value_type": "category",
-    "status": "ok",
-    "evidence_ids": [
-     {
-      "$evidence": "reduce or delay orders"
-     }
-    ],
-    "hypothesis_ids": [
-     "BO2-H001",
-     "BO2-H002"
-    ]
+    "status": "unavailable",
+    "evidence_ids": [],
+    "notes": "Customer concentration is not disclosed in the routed passages."
    },
    {
     "parameter_id": "contract_termination_risk_assessment",
@@ -690,7 +683,7 @@
    },
    {
     "parameter_id": "workforce_cost_resilience_assessment",
-    "value": "inflation_partly_passed_through",
+    "value": "pressured",
     "value_type": "category",
     "status": "ok",
     "evidence_ids": [
@@ -704,7 +697,7 @@
    },
    {
     "parameter_id": "capex_strategy_assessment",
-    "value": "moderate_capital_intensity",
+    "value": "mixed",
     "value_type": "category",
     "status": "ok",
     "evidence_ids": [
@@ -859,7 +852,7 @@
    },
    {
     "parameter_id": "litigation_risk_assessment",
-    "value": "present",
+    "value": "existing_proceedings_not_quantified",
     "value_type": "category",
     "status": "ok",
     "evidence_ids": [
@@ -873,7 +866,7 @@
    },
    {
     "parameter_id": "external_event_exposure_assessment",
-    "value": "manufacturing_concentration",
+    "value": "concentrated",
     "value_type": "category",
     "status": "ok",
     "evidence_ids": [
@@ -983,7 +976,7 @@
   "parameters": [
    {
     "parameter_id": "compound_risk_assessment",
-    "value": "manufacturing_concentration_with_supply_constraints",
+    "value": "interaction_plausible_unquantified",
     "value_type": "category",
     "status": "ok",
     "evidence_ids": [
@@ -1019,6 +1012,7 @@
      "BO5-H001"
     ],
     "interaction_kind": "compound_risk",
+    "transmission_mechanism": "Supplier qualification requirements slow any switch of production, so a disruption at a concentrated site cannot be offset quickly.",
     "missing_information": [
      "Product lines with single-site manufacturing",
      "Qualified alternative suppliers"
@@ -1046,6 +1040,7 @@
      "BO2-H001"
     ],
     "interaction_kind": "mitigating_capability",
+    "transmission_mechanism": "Price increases passed to customers recover part of cost inflation while payer and customer bargaining power limits further increases.",
     "missing_information": [
      "Net price change after pass-through"
     ]
@@ -1313,7 +1308,7 @@
      "category": "risk",
      "section": "BO5",
      "text": "Healthcare reform is an existing exposure whose eventual form and effect the filing says cannot be predicted.",
-     "claim_type": "fact",
+     "claim_type": "inference",
      "hypothesis_ids": [
       "BO5-H003"
      ],
@@ -1322,7 +1317,8 @@
        "$hypothesis_evidence": "BO5-H003"
       }
      ],
-     "materiality": "medium"
+     "materiality": "medium",
+     "uncertainty": "Disclosed as a risk; no outcome has occurred or is forecast."
     }
    ],
    "open_questions": [
@@ -1594,7 +1590,7 @@
      "category": "risk",
      "section": "BO5",
      "text": "Healthcare reform is an existing exposure whose eventual form and effect the filing says cannot be predicted.",
-     "claim_type": "fact",
+     "claim_type": "inference",
      "hypothesis_ids": [
       "BO5-H003"
      ],
@@ -1603,7 +1599,8 @@
        "$hypothesis_evidence": "BO5-H003"
       }
      ],
-     "materiality": "medium"
+     "materiality": "medium",
+     "uncertainty": "Disclosed as a risk; no outcome has occurred or is forecast."
     }
    ],
    "open_questions": [

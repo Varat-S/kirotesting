@@ -40,8 +40,15 @@ from app.schemas.bo import (
     MitigantAssessment,
     MitigantEffectiveness,
 )
+from app.services.bo import inference_rules
 from app.services.bo.indicators import IndicatorSet
-from app.services.bo.plans import BoAgentSpec
+from app.services.bo.plans import (
+    LABEL_PARAMETERS,
+    REQUIRES_COMPANY_EVIDENCE,
+    BoAgentSpec,
+)
+from app.services.bo.reconcile import tokens
+from app.services.bo.recovery import recover_quote
 from app.services.orchestration.benchmark_context import (
     _METRIC_NUMBER,
     _SCORE_KEYS,
@@ -55,10 +62,54 @@ MIN_QUOTE_CHARS = 12
 _BELIEF = re.compile(
     r"\b(?:we|management|the company)\s+(?:\w+\s+)?(?:believes?|expects?|intends?|"
     r"anticipates?|plans?|seeks?|aims?|estimates?|hopes?)\b|"
-    r"\bour (?:strategy|goal|objective|belief)\b|\b(?:is|are) (?:designed|intended) to\b|"
-    r"\bwe are focused on\b|\bshould (?:enable|allow|help)\b",
+    r"\bour (?:strategy|goal|objective|belief|mission|vision)\b|"
+    r"\b(?:is|are) (?:designed|intended) to\b|"
+    r"\bwe (?:are focused on|strive|endeavou?r|are committed to|continue to seek)\b|"
+    r"\bshould (?:enable|allow|help)\b",
     re.I,
 )
+
+# Risk-factor language about what COULD happen, as opposed to what has.
+_HYPOTHETICAL = re.compile(
+    r"\b(?:could|may|might|would)\b|\bif (?:we|any|our|the)\b|\bin the event\b|"
+    r"no assurance|cannot (?:assure|predict|guarantee|be certain)|\bpotential(?:ly)?\b|"
+    r"\bwe (?:are|may be) subject to\b|\buncertain\b",
+    re.I,
+)
+# Language that reports something specific that exists or happened.
+_REALIZED = re.compile(
+    r"\d|\b(?:was|were|has been|have been|had been|represented|accounted for|totaled|"
+    r"increased|decreased|declined|grew|completed|acquired|recorded|derived|"
+    r"received|operated?|owns?|owned|are currently|is currently|currently)\b|"
+    r"for the years? ended|as of (?:December|January|the)",
+    re.I,
+)
+COMPANY_SPECIFIC = ("company_specific_disclosure", "deterministic_calculation")
+# Share of a fact's content words that must also occur in its verified quotes.
+MIN_QUOTE_COVERAGE = 0.15
+
+
+def derive_evidence_basis(*, quotes: list[str], has_calculation: bool,
+                          has_other_support: bool) -> str:
+    """Classify what a hypothesis rests on, from its VERIFIED quotes only.
+
+    A heuristic reading of the quoted wording: it separates reported specifics
+    from belief, from hypothetical risk-factor language and from general
+    statements. It does not judge whether the quote proves the claim.
+    """
+    if has_calculation:
+        return "deterministic_calculation"
+    if not quotes:
+        return "inference" if has_other_support else "none"
+    if all(_BELIEF.search(q) for q in quotes):
+        return "management_statement"
+    if any(_REALIZED.search(q) and not _HYPOTHETICAL.search(q) for q in quotes):
+        return "company_specific_disclosure"
+    if all(_HYPOTHETICAL.search(q) for q in quotes):
+        return "generic_risk_disclosure"
+    if any(_REALIZED.search(q) for q in quotes):
+        return "company_specific_disclosure"
+    return "general_statement"
 
 _TRANSLATE = str.maketrans({
     "‘": "'", "’": "'", "“": '"', "”": '"',
@@ -136,12 +187,17 @@ class HypothesisValidator:
         passages: dict[str, str],
         indicators: IndicatorSet,
         primary_hypotheses: dict[str, HypothesisRecord] | None = None,
+        corpus: list[dict[str, Any]] | None = None,
     ) -> None:
         self._spec = spec
-        self._passages = passages  # admitted evidence_id -> passage text
+        self._passages = dict(passages)  # admitted evidence_id -> passage text
         self._indicators = indicators
         self._known = indicators.known_values()
         self._primary = primary_hypotheses
+        # The admitted filing in document order; enables quote recovery.
+        self._corpus = corpus or []
+        self._corpus_text = {p["evidence_id"]: p.get("text") or ""
+                             for p in self._corpus}
 
     def validate(self, parsed: dict[str, Any], *, analysis_run_id: str,
                  agent_run_id: str) -> HypothesisValidation:
@@ -160,14 +216,6 @@ class HypothesisValidator:
         for hid in sorted({h for h in ids if ids.count(h) > 1}, key=str):
             out.issues.append(f"hypothesis_id {hid!r} is used more than once.")
         dispositions = {h.get("hypothesis_id"): h.get("disposition") for h in items}
-
-        for parameter in parsed.get("parameters") or []:
-            if isinstance(parameter, dict):
-                for hid in parameter.get("hypothesis_ids") or []:
-                    if hid not in dispositions:
-                        out.issues.append(
-                            f"Parameter {parameter.get('parameter_id')!r} cites "
-                            f"unknown hypothesis {hid!r}.")
 
         for item in items:
             record = self._one(item, dispositions, out, analysis_run_id, agent_run_id)
@@ -211,52 +259,89 @@ class HypothesisValidator:
                     f"Hypothesis {hid!r} cites unknown/unadmitted evidence {eid!r}.")
 
         # --- quoted calculations: exact value, unit, period, denominator -----
+        # A defective binding (invented id, different value, wrong unit, period
+        # or denominator) makes THIS hypothesis unusable; it never passes, and it
+        # does not discard the specialist's other findings.
         quoted_numbers: list[float] = []
         parameter_result_ids: list[str] = []
+        binding_defects: list[str] = []
         for entry in item.get("quoted_values") or []:
             if not isinstance(entry, dict):
                 continue
             prid, value = entry.get("parameter_result_id"), entry.get("value")
             trace = self._indicators.trace_for(prid) if prid else None
             if prid not in self._known or trace is None:
-                out.issues.append(
-                    f"Hypothesis {hid!r} quotes {value!r} for {prid!r}, which is "
-                    "not an accepted deterministic result (invented number).")
+                binding_defects.append(
+                    f"quotes {value!r} for {prid!r}, which is not an accepted "
+                    "deterministic result (invented number)")
                 continue
-            if abs(float(value) - float(self._known[prid])) > 1e-9:
-                out.issues.append(
-                    f"Hypothesis {hid!r} quotes {value!r} for {prid!r} but the "
-                    f"calculated value is {self._known[prid]!r} (no LLM arithmetic).")
+            try:
+                same = abs(float(value) - float(self._known[prid])) <= 1e-9
+            except (TypeError, ValueError):
+                same = False
+            if not same:
+                binding_defects.append(
+                    f"quotes {value!r} for {prid!r} but the calculated value is "
+                    f"{self._known[prid]!r} (no LLM arithmetic)")
                 continue
             expected = {
                 "unit": trace.units, "period": trace.period,
                 "denominator": (trace.denominator or {}).get("name"),
             }
-            for key, want in expected.items():
-                got = entry.get(key)
-                if got is not None and str(got) != str(want):
-                    out.issues.append(
-                        f"Hypothesis {hid!r} quotes {prid!r} with {key} {got!r} "
-                        f"but the calculation's {key} is {want!r}.")
+            mismatched = [
+                f"quotes {prid!r} with {key} {entry.get(key)!r} but the "
+                f"calculation's {key} is {want!r}"
+                for key, want in expected.items()
+                if entry.get(key) is not None and str(entry.get(key)) != str(want)]
+            if mismatched:
+                binding_defects.extend(mismatched)
+                continue
             quoted_numbers.append(float(value))
             parameter_result_ids.append(prid)
 
-        # --- verbatim quotes --------------------------------------------------
+        # --- verbatim quotes, with one bounded recovery attempt each ----------
         verified_quotes = []
+        recovery_records = []
         for quote in quotes:
             eid, text = quote.get("evidence_id"), quote.get("quote") or ""
             if eid in self._passages and quote_in_passage(text, self._passages[eid]):
                 verified_quotes.append({"evidence_id": eid, "quote": normalise(text)})
-            elif eid in self._passages:
+                continue
+            if eid not in self._passages:
+                continue  # already a hard issue above
+            attempt = (recover_quote(quote=text, cited_evidence_id=eid,
+                                     corpus=self._corpus) if self._corpus else None)
+            if attempt is not None:
+                attempt["hypothesis_id"] = hid
+                recovery_records.append(attempt)
+            if attempt is not None and attempt["outcome"] in ("layout_gap", "relocated"):
+                new_id = attempt["replacement_evidence_ids"][0]
+                verified_quotes.append({
+                    "evidence_id": new_id, "quote": attempt["replacement_quote"],
+                    "recovered": attempt["outcome"]})
+                for rid in attempt["replacement_evidence_ids"]:
+                    # A recovered passage is admitted filing text.
+                    self._passages.setdefault(rid, self._corpus_text.get(rid, ""))
+                    if rid not in supporting and eid in supporting:
+                        supporting.append(rid)
+                adjust(
+                    "Quote was not verbatim in the cited passage; recovered from "
+                    f"the admitted filing ({attempt['outcome']}): {attempt['detail']}. "
+                    "The source wording replaces the model's quote; the claim is "
+                    "unchanged.")
+            else:
                 adjust(f"A quote attributed to {eid[:12]} was not found verbatim in "
-                       "that passage and was discarded.")
+                       "that passage and was discarded"
+                       + ("; one recovery attempt over the admitted filing found "
+                          "no match." if attempt is not None else "."))
         quote_texts = [q["quote"] for q in verified_quotes]
 
         corrects = item.get("corrects_hypothesis_id")
         if corrects is not None:
             if corrects not in dispositions:
-                out.issues.append(
-                    f"Hypothesis {hid!r} corrects unknown hypothesis {corrects!r}.")
+                adjust(f"corrects_hypothesis_id {corrects} does not exist; the "
+                       "link was dropped.")
+                corrects = None
             elif dispositions[corrects] != Disposition.REJECTED.value:
                 adjust(f"corrects_hypothesis_id {corrects} is not a rejected "
                        "hypothesis; the link was dropped.")
@@ -264,13 +349,24 @@ class HypothesisValidator:
 
         components = list(item.get("component_hypothesis_ids") or [])
         kind = item.get("interaction_kind")
+        mechanism = (item.get("transmission_mechanism") or "").strip() or None
+        component_records: list[HypothesisRecord] = []
         if self._primary is not None:  # BO6
+            invalid_components = []
             for cid in components:
                 primary = self._primary.get(cid)
                 if primary is None or not primary.usable:
-                    out.issues.append(
-                        f"Hypothesis {hid!r} builds on {cid!r}, which is not a "
-                        "validated primary hypothesis.")
+                    invalid_components.append(cid)
+                else:
+                    component_records.append(primary)
+            if invalid_components and disposition in (
+                    Disposition.SUPPORTED, Disposition.QUALIFIED):
+                # A rejected, unverified or non-existent finding cannot be a
+                # premise: the interaction built on it is not usable.
+                adjust("Builds on " + ", ".join(invalid_components) + ", which "
+                       "is not a validated primary hypothesis; marked unverified.")
+                disposition = Disposition.UNVERIFIED
+            components = [c for c in components if c not in invalid_components]
             needed = 2 if kind == "compound_risk" else 1
             if len(set(components)) < needed and disposition in (
                     Disposition.SUPPORTED, Disposition.QUALIFIED):
@@ -282,6 +378,21 @@ class HypothesisValidator:
             components, kind = [], None
 
         live = disposition in (Disposition.SUPPORTED, Disposition.QUALIFIED)
+        binding_flags: list[dict[str, Any]] = []
+        if binding_defects:
+            for defect in binding_defects:
+                adjust("Numeric binding rejected: " + defect + ".")
+            binding_flags.append({
+                "rule_id": "numeric_binding_invalid", "layer": "B_numerical_integrity",
+                "effect": "audit_only", "heuristic": False,
+                "description": "A number was bound to a deterministic result that "
+                               "does not exist or does not match in value, unit, "
+                               "period or denominator.",
+                "correction": "Copy text figures in a verbatim quote; bind only "
+                              "listed indicators with their exact value.",
+                "fo_handoff_variable": None})
+            if live:
+                disposition, live = Disposition.UNVERIFIED, False
 
         # --- attribution: belief language supports a claim, not a fact --------
         if (live and claim_type is ClaimType.FACT and quote_texts
@@ -304,7 +415,15 @@ class HypothesisValidator:
             adjust("An inference with no supporting evidence is unverified.")
             disposition, live = Disposition.UNVERIFIED, False
 
-        loose = unbound_numbers(item.get("claim") or "", quoted_numbers, quote_texts)
+        # BO6 may restate numbers its components already carry.
+        inherited_quotes = [q["quote"] for c in component_records
+                            for q in c.evidence_quotes]
+        inherited_numbers = [float(q["value"]) for c in component_records
+                             for q in c.quoted_values
+                             if isinstance(q.get("value"), (int, float))]
+        loose = unbound_numbers(item.get("claim") or "",
+                                [*quoted_numbers, *inherited_numbers],
+                                [*quote_texts, *inherited_quotes])
         if live and loose:
             adjust(f"Number(s) {', '.join(sorted(set(loose)))} are bound to neither a "
                    "deterministic result nor a verbatim quote; marked unverified.")
@@ -313,6 +432,100 @@ class HypothesisValidator:
         if disposition is Disposition.SUPPORTED and contradicting:
             adjust("Counter-evidence is cited, so the hypothesis is qualified "
                    "rather than supported.")
+            disposition = Disposition.QUALIFIED
+
+        # --- Layer D: what kind of support is this? ---------------------------
+        basis = derive_evidence_basis(
+            quotes=quote_texts, has_calculation=bool(parameter_result_ids),
+            has_other_support=bool(supporting or components))
+        flags: list[dict[str, Any]] = list(binding_flags)
+        if (live and basis == "generic_risk_disclosure"
+                and claim_type is not ClaimType.MANAGEMENT_CLAIM):
+            flags.append({
+                "rule_id": "generic_risk_disclosure_only",
+                "layer": "D_evidence_sufficiency", "effect": "qualify",
+                "description": "Supported only by risk-factor language about what "
+                               "could happen; it may be reported as a disclosed "
+                               "risk, not as an event that has occurred.",
+                "heuristic": True, "fo_handoff_variable": None, "correction": None})
+
+        # A genuine quote that shares almost no wording with the claim does not
+        # show that the filing STATES the claim (a lexical check, not entailment).
+        if (live and claim_type is ClaimType.FACT and quote_texts
+                and not parameter_result_ids):
+            claim_terms = tokens(item.get("claim") or "")
+            quote_terms = tokens(" ".join(quote_texts))
+            if len(claim_terms) >= 3 and (
+                    len(claim_terms & quote_terms) / len(claim_terms) < MIN_QUOTE_COVERAGE):
+                flags.append({
+                    "rule_id": "quote_does_not_cover_claim",
+                    "layer": "D_evidence_sufficiency", "effect": "qualify",
+                    "description": "The quote is verified, but it shares almost no "
+                                   "wording with the claim, so it does not show "
+                                   "that the filing states the claim; treated as "
+                                   "the specialist's inference.",
+                    "heuristic": True, "fo_handoff_variable": None,
+                    "correction": "Quote the sentence that states the claim, or "
+                                  "present the claim as an inference."})
+
+        # --- Layer C: known unsupported inferential steps ---------------------
+        if live:
+            flags += inference_rules.evaluate(
+                claim=item.get("claim") or "", mechanism=mechanism,
+                claim_type=claim_type.value, evidence_basis=basis)
+
+        # --- BO6: an interaction cannot be stronger than what it is built on --
+        if self._primary is not None and live:
+            if not mechanism or len(mechanism) < 20:
+                adjust("An interaction needs a stated transmission mechanism; "
+                       "marked unverified.")
+                disposition, live = Disposition.UNVERIFIED, False
+            weaker = [c.hypothesis_id for c in component_records
+                      if c.admissibility is not Admissibility.ESTABLISHED]
+            if live and disposition is Disposition.SUPPORTED and weaker:
+                adjust("Built on qualified or management-attributed inputs "
+                       f"({', '.join(weaker)}); it cannot be more certain than "
+                       "they are, so it is qualified.")
+                disposition = Disposition.QUALIFIED
+            order = {Materiality.LOW: 0, Materiality.MEDIUM: 1, Materiality.HIGH: 2}
+            if component_records:
+                ceiling = max((c.materiality for c in component_records),
+                              key=lambda m: order[m])
+                if order[materiality] > order[ceiling]:
+                    adjust(f"Materiality {materiality.value} exceeds that of every "
+                           f"component; capped at {ceiling.value}.")
+                    materiality = ceiling
+            attributed = [c.hypothesis_id for c in component_records
+                          if c.admissibility is Admissibility.ATTRIBUTED]
+            if live and attributed:
+                flags.append({
+                    "rule_id": "rests_on_management_claim",
+                    "layer": "D_evidence_sufficiency", "effect": "note",
+                    "description": "A component is a management claim "
+                                   f"({', '.join(attributed)}); the attribution "
+                                   "carries through.",
+                    "heuristic": False, "fo_handoff_variable": None,
+                    "correction": None})
+
+        fo_handoffs = [
+            {"variable": str(h.get("variable")), "question": str(h.get("question")),
+             "origin": "agent"}
+            for h in item.get("fo_handoff") or [] if isinstance(h, dict)]
+        for flag in flags:
+            if flag["rule_id"] == "numeric_binding_invalid":
+                continue  # already explained defect by defect
+            adjust(f"{flag['rule_id']}: {flag['description']}")
+            if flag.get("fo_handoff_variable"):
+                fo_handoffs.append({
+                    "variable": flag["fo_handoff_variable"],
+                    "question": "Quantify the financial effect asserted in the "
+                                "held-back Business Overview claim: "
+                                + (item.get("claim") or ""),
+                    "origin": "validator"})
+        if live and any(f["effect"] == "audit_only" for f in flags):
+            disposition, live = Disposition.UNVERIFIED, False
+        elif live and any(f["effect"] == "qualify" for f in flags) \
+                and disposition is Disposition.SUPPORTED:
             disposition = Disposition.QUALIFIED
 
         mitigant = None
@@ -339,7 +552,7 @@ class HypothesisValidator:
         admissibility = derive_admissibility(claim_type, disposition)
         if admissibility is Admissibility.AUDIT_ONLY and display is DisplayPriority.DISPLAY:
             display = DisplayPriority.ON_DEMAND
-        review = bool(item.get("review_required")) or (
+        review = bool(item.get("review_required")) or bool(flags) or (
             materiality is Materiality.HIGH
             and disposition in (Disposition.QUALIFIED, Disposition.UNVERIFIED))
 
@@ -373,7 +586,95 @@ class HypothesisValidator:
             component_hypothesis_ids=components,
             interaction_kind=kind,
             validation_notes=notes,
+            evidence_basis=basis,
+            model_stated={
+                "claim_type": item.get("claim_type"),
+                "disposition": item.get("disposition"),
+                "evidence_basis": item.get("evidence_basis"),
+                "materiality": item.get("materiality"),
+                "quotes": [{"evidence_id": q.get("evidence_id"),
+                            "quote": q.get("quote")} for q in quotes],
+            },
+            review_flags=flags,
+            transmission_mechanism=mechanism,
+            fo_handoffs=fo_handoffs,
+            recovery=recovery_records,
         )
+
+
+_SUBSTANTIVE_STATUSES = ("ok", "provisional", "requires_review")
+
+
+def gate_parameters(parsed: dict[str, Any], records: list[HypothesisRecord], *,
+                    value_sets: dict[str, Any],
+                    primary: dict[str, HypothesisRecord] | None = None,
+                    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Hold back parameter values the validated hypotheses do not carry.
+
+    Returns a copy of ``parsed`` in which an unsupported or non-permitted
+    parameter is recorded as ``unavailable`` (never silently accepted, never
+    rewritten to a different value), plus the list of adjustments made:
+
+    * the value is not one of the permitted categorical values (or is a
+      sentence where a short label is required);
+    * no linked hypothesis survived validation;
+    * the value asserts something specific about this company but every linked
+      hypothesis rests on management statements, generic risk language or
+      inference.
+    """
+    # BO6 may support a parameter with the validated BO1-BO5 hypotheses it
+    # received, as well as with its own.
+    by_id = {**(primary or {}), **{r.hypothesis_id: r for r in records}}
+    adjusted = dict(parsed)
+    adjusted["parameters"] = []
+    changes: list[dict[str, Any]] = []
+    for item in parsed.get("parameters") or []:
+        if not isinstance(item, dict):
+            continue
+        item = dict(item)
+        pid, value = item.get("parameter_id"), item.get("value")
+        status = item.get("status", "ok")
+        reason = detail = None
+        if status in _SUBSTANTIVE_STATUSES:
+            allowed = value_sets.get(pid)
+            linked = [by_id[h] for h in item.get("hypothesis_ids") or []
+                      if h in by_id and by_id[h].usable]
+            text = "" if value is None else str(value)
+            if text == "not_established":
+                reason = "not_established"
+                detail = ("The agent reported that the evidence does not support "
+                          "a classification.")
+            elif allowed and text not in allowed:
+                reason = "value_not_permitted"
+                detail = f"{text[:80]!r} is not one of {sorted(allowed)}."
+            elif pid in LABEL_PARAMETERS and (
+                    not text or len(text) > LABEL_PARAMETERS[pid]
+                    or len(text.split()) > 6 or text.rstrip().endswith(".")):
+                reason = "label_not_concise"
+                detail = "A short label is required, not a sentence."
+            elif not linked:
+                reason = "no_validated_supporting_hypothesis"
+                detail = ("None of the hypotheses cited for this value survived "
+                          "validation as a usable finding.")
+            elif text in REQUIRES_COMPANY_EVIDENCE.get(pid, ()) and not any(
+                    h.evidence_basis in COMPANY_SPECIFIC
+                    and h.admissibility is Admissibility.ESTABLISHED
+                    for h in linked):
+                reason = "needs_company_specific_evidence"
+                detail = (f"{text!r} asserts something specific about this company, "
+                          "but no linked hypothesis is an established, "
+                          "company-specific finding (they are: " + ", ".join(sorted(
+                              {f"{h.admissibility.value}/{h.evidence_basis}"
+                               for h in linked})) + ").")
+        if reason:
+            changes.append({"parameter_id": pid, "original_value": value,
+                            "original_status": status, "reason": reason,
+                            "detail": detail,
+                            "hypothesis_ids": list(item.get("hypothesis_ids") or [])})
+            item.update(status="unavailable", value=None,
+                        notes=f"Held back by validation ({reason}): {detail}")
+        adjusted["parameters"].append(item)
+    return adjusted, changes
 
 
 class HypothesisStore:
