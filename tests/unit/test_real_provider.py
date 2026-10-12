@@ -132,6 +132,57 @@ def test_provider_errors_are_recorded_without_credentials(db_session, failure):
     assert "fake-test-secret" not in str(vars(row))
 
 
+def test_usage_tokens_are_captured_from_responses_api(db_session):
+    """Task 13 §10: token usage is normalised onto model_config (no secrets)."""
+    prompt = PromptRegistry(db_session).register_catalogue()[0]
+
+    def handle(request):
+        return httpx.Response(200, json={
+            "id": "r", "status": "completed", "model": "m",
+            "output": [{"type": "message", "content": [
+                {"type": "output_text", "text": '{"facts":[],"warnings":[]}'}]}],
+            "usage": {"input_tokens": 123, "output_tokens": 45, "total_tokens": 168},
+        })
+
+    backend = RealProviderBackend(settings(), transport=httpx.MockTransport(handle))
+    raw = backend.generate(LLMRequest("extract", prompt))
+    usage = raw.model_config["usage"]
+    assert usage == {"prompt_tokens": 123, "completion_tokens": 45,
+                     "total_tokens": 168}
+
+
+def test_usage_tokens_normalised_from_chat_completions(db_session):
+    prompt = PromptRegistry(db_session).register_catalogue()[0]
+
+    def handle(request):
+        return httpx.Response(200, json={
+            "model": "local",
+            "choices": [{"finish_reason": "stop",
+                         "message": {"content": '{"facts":[],"warnings":[]}'}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5},  # no total
+        })
+
+    config = Settings(
+        _env_file=None, debug=False, llm_provider="openai_compatible",
+        llm_model="local", llm_base_url="http://127.0.0.1:1234/v1")
+    backend = RealProviderBackend(config, transport=httpx.MockTransport(handle))
+    usage = backend.generate(LLMRequest("extract", prompt)).model_config["usage"]
+    assert usage == {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+
+
+def test_missing_usage_block_reports_none(db_session):
+    prompt = PromptRegistry(db_session).register_catalogue()[0]
+
+    def handle(request):
+        return httpx.Response(200, json={
+            "id": "r", "status": "completed", "model": "m",
+            "output": [{"type": "message", "content": [
+                {"type": "output_text", "text": '{"facts":[],"warnings":[]}'}]}]})
+
+    backend = RealProviderBackend(settings(), transport=httpx.MockTransport(handle))
+    assert backend.generate(LLMRequest("extract", prompt)).model_config["usage"] is None
+
+
 def test_compatible_local_backend_and_input_limits(db_session):
     prompt = PromptRegistry(db_session).register_catalogue()[0]
 

@@ -178,5 +178,40 @@ class RealProviderBackend(LLMBackend):
                 "max_output_tokens": s.llm_max_output_tokens,
                 "provider_response_id": raw.get("id"),
                 "temperature": body.get("temperature"),
+                # Token usage for cost/limit reporting (Task 13 §10). Carries no
+                # credentials or response text -- only integer counts the
+                # provider reports. Absent when the provider omits a usage block.
+                "usage": _usage(raw.get("usage")),
             },
         )
+
+
+def _usage(block) -> dict | None:
+    """Normalise a provider ``usage`` block to a small, safe integer dict.
+
+    Supports both the OpenAI Responses shape (``input_tokens`` /
+    ``output_tokens`` / ``total_tokens``) and the Chat Completions shape
+    (``prompt_tokens`` / ``completion_tokens`` / ``total_tokens``). Returns
+    ``None`` when no usage is reported; never raises on unexpected shapes."""
+    if not isinstance(block, dict):
+        return None
+
+    def _int(*keys):
+        for k in keys:
+            v = block.get(k)
+            if isinstance(v, int):
+                return v
+        return None
+
+    prompt = _int("input_tokens", "prompt_tokens")
+    completion = _int("output_tokens", "completion_tokens")
+    total = _int("total_tokens")
+    if total is None and (prompt is not None or completion is not None):
+        total = (prompt or 0) + (completion or 0)
+    if prompt is None and completion is None and total is None:
+        return None
+    return {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": total,
+    }

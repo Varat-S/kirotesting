@@ -41,6 +41,7 @@ from app.services.analysis.credit_signal_assessment import (
 from app.services.analysis.enquiry_planning import EvidenceEnquiryCoordinator
 from app.services.analysis.evidence_completeness import (
     COMPLETENESS_POLICY_VERSION,
+    DimensionNonApplicability,
     EvidenceCompletenessInputs,
     EvidenceCompletenessRejectedError,
     MaterialEvidenceCompletenessService,
@@ -312,21 +313,77 @@ def test_unassessed_dimension_triggers_coverage_concern(db_session):
 
 
 def test_not_applicable_dimension_not_forced(db_session):
+    """Task 12A: a genuine NOT_APPLICABLE requires an AUTHORITATIVE, approved
+    claim (reason + approver + approval_ref). An approved claim yields
+    NOT_APPLICABLE with no 'not assessed' gap."""
     hyp = _hyp(direction="negative")
     g = _governed(status="supported", premise_corr=[_premise("p", True)],
                   assessments=[EvidenceAssessment(passage_id="s",
                                                   assessment="supports_premise", rationale="r")])
     plan, bundle = _plan_and_bundle()
-    na = {d.value: "No external customers; captive supplier."
-          for d in CreditDimension if d is not CreditDimension.OPERATING_MODEL_COST_RESILIENCE}
+    na = {
+        d.value: DimensionNonApplicability(
+            reason="No external customers; captive supplier.",
+            approved_by="credit.officer",
+            approval_ref="human-review:na-approval-1",
+        )
+        for d in CreditDimension
+        if d is not CreditDimension.OPERATING_MODEL_COST_RESILIENCE
+    }
     a = _assess([hyp], [g], materiality_inputs=_HIGH, plan=plan, bundle=bundle,
                 not_applicable=na)
     na_dims = [d for d in a.dimension_coverage
                if d.applicability.value == "not_applicable"]
     assert len(na_dims) == 5
-    # Not-applicable dimensions produce no 'not assessed' gaps.
+    # Approved not-applicable dimensions produce no 'not assessed' gaps.
     assert not any(gap.category is GapCategory.DIMENSION_NOT_ASSESSED
                    for gap in a.material_gaps)
+
+
+def test_unapproved_na_claim_does_not_clear_the_check(db_session):
+    """Task 12A: a bare caller-supplied non-applicability string is UNVERIFIED.
+    It must NOT silently clear the check: the dimension stays
+    APPLICABILITY_UNCERTAIN with a visible human-review gap."""
+    hyp = _hyp(direction="negative")
+    g = _governed(status="supported", premise_corr=[_premise("p", True)],
+                  assessments=[EvidenceAssessment(passage_id="s",
+                                                  assessment="supports_premise", rationale="r")])
+    plan, bundle = _plan_and_bundle()
+    na = {d.value: "No external customers; captive supplier."  # bare string
+          for d in CreditDimension
+          if d is not CreditDimension.OPERATING_MODEL_COST_RESILIENCE}
+    a = _assess([hyp], [g], materiality_inputs=_HIGH, plan=plan, bundle=bundle,
+                not_applicable=na)
+    # None of the claimed dimensions became NOT_APPLICABLE.
+    assert not any(d.applicability.value == "not_applicable"
+                   for d in a.dimension_coverage)
+    uncertain = [d for d in a.dimension_coverage
+                 if d.applicability.value == "applicability_uncertain"]
+    assert len(uncertain) == 5
+    # Each unverified claim raises a human-review coverage gap.
+    na_gaps = [g for g in a.material_gaps
+               if g.category is GapCategory.DIMENSION_NOT_ASSESSED]
+    assert len(na_gaps) == 5
+    assert all(g.requires_human_review for g in na_gaps)
+
+
+def test_partially_approved_na_claim_is_rejected(db_session):
+    """A claim missing an approver OR an approval_ref is NOT approved."""
+    hyp = _hyp(direction="negative")
+    g = _governed(status="supported", premise_corr=[_premise("p", True)],
+                  assessments=[EvidenceAssessment(passage_id="s",
+                                                  assessment="supports_premise", rationale="r")])
+    plan, bundle = _plan_and_bundle()
+    na = {
+        d.value: DimensionNonApplicability(
+            reason="n/a", approved_by="credit.officer")  # no approval_ref
+        for d in CreditDimension
+        if d is not CreditDimension.OPERATING_MODEL_COST_RESILIENCE
+    }
+    a = _assess([hyp], [g], materiality_inputs=_HIGH, plan=plan, bundle=bundle,
+                not_applicable=na)
+    assert not any(d.applicability.value == "not_applicable"
+                   for d in a.dimension_coverage)
 
 
 def test_high_materiality_unverified_remains_visible(db_session):
@@ -380,6 +437,127 @@ def test_deterministic_for_identical_inputs(db_session):
     a2 = _assess([hyp], [g], materiality_inputs=_HIGH)
     assert a1.model_dump(mode="json") == a2.model_dump(mode="json")
     assert a1.assessment_version == COMPLETENESS_POLICY_VERSION
+
+
+# ===========================================================================
+# TASK 12A — gap-id uniqueness, stability and traceability
+# ===========================================================================
+
+
+def test_two_distinct_premises_same_finding_get_distinct_gap_ids(db_session):
+    """Two distinct uncorroborated material premises in ONE finding must receive
+    DIFFERENT gap IDs (the Task 12 defect: they collided on finding+category)."""
+    hyp = _hyp(direction="negative")
+    g = _governed(status="unverified",
+                  uncorroborated=["premise alpha: dependence exists",
+                                  "premise beta: impact is material"])
+    a = _assess([hyp], [g], materiality_inputs=_HIGH)
+    premise_gaps = [gap for gap in a.material_gaps
+                    if gap.category is GapCategory.UNCORROBORATED_MATERIAL_PREMISE]
+    assert len(premise_gaps) == 2
+    ids = {gap.gap_id for gap in premise_gaps}
+    assert len(ids) == 2  # distinct, not colliding
+    # And each gap still maps back to its own premise text.
+    descs = {gap.description for gap in premise_gaps}
+    assert len(descs) == 2
+
+
+def test_all_gap_ids_unique_across_the_assessment(db_session):
+    """No two gaps anywhere in the assessment share an id (NVIDIA-like shape:
+    two findings, each with two uncorroborated premises + requirements)."""
+    hyp1 = _hyp("h1", direction="negative",
+                dim=CreditDimension.OPERATING_MODEL_COST_RESILIENCE,
+                characteristic="Supply dependence.")
+    hyp2 = _hyp("h2", direction="negative",
+                dim=CreditDimension.COMPETITIVE_DURABILITY,
+                characteristic="Competitive intensity.")
+    g1 = _governed("h1", dim=CreditDimension.OPERATING_MODEL_COST_RESILIENCE,
+                   statement="Supply dependence. affects resilience.",
+                   status="unverified",
+                   uncorroborated=["supply dependence exists",
+                                   "supply impact is material"],
+                   unresolved=["measured supply constraint"])
+    g2 = _governed("h2", dim=CreditDimension.COMPETITIVE_DURABILITY,
+                   statement="Competitive intensity. affects resilience.",
+                   status="unverified",
+                   uncorroborated=["competition exists",
+                                   "margin compression is material"],
+                   unresolved=["measured margin compression"])
+    mi = {"h1": MaterialityInputs(cash_flow_relevant=True, high_magnitude=True),
+          "h2": MaterialityInputs(cash_flow_relevant=True, high_magnitude=True)}
+    a = _assess([hyp1, hyp2], [g1, g2], materiality_inputs=mi)
+    all_ids = [gap.gap_id for gap in a.material_gaps]
+    assert len(all_ids) == len(set(all_ids)), "every gap id is unique"
+
+
+def test_repeated_gap_category_across_findings_does_not_collide(db_session):
+    """The SAME gap category appearing in two different findings yields two
+    distinct ids (keyed on finding identity, not category alone)."""
+    hyp1 = _hyp("h1", direction="negative",
+                dim=CreditDimension.OPERATING_MODEL_COST_RESILIENCE)
+    hyp2 = _hyp("h2", direction="negative",
+                dim=CreditDimension.COMPETITIVE_DURABILITY,
+                characteristic="Competitive intensity.")
+    g1 = _governed("h1", status="unverified", uncorroborated=["same wording"])
+    g2 = _governed("h2", dim=CreditDimension.COMPETITIVE_DURABILITY,
+                   statement="Competitive intensity. affects resilience.",
+                   status="unverified", uncorroborated=["same wording"])
+    mi = {"h1": MaterialityInputs(cash_flow_relevant=True, high_magnitude=True),
+          "h2": MaterialityInputs(cash_flow_relevant=True, high_magnitude=True)}
+    a = _assess([hyp1, hyp2], [g1, g2], materiality_inputs=mi)
+    premise_gaps = [gap for gap in a.material_gaps
+                    if gap.category is GapCategory.UNCORROBORATED_MATERIAL_PREMISE]
+    assert len(premise_gaps) == 2
+    assert len({gap.gap_id for gap in premise_gaps}) == 2
+
+
+def test_gap_ids_are_stable_across_identical_runs(db_session):
+    """Identical analytical inputs reproduce identical gap IDs (deterministic)."""
+    hyp = _hyp(direction="negative")
+    g = _governed(status="unverified",
+                  uncorroborated=["premise alpha", "premise beta"])
+    a1 = _assess([hyp], [g], materiality_inputs=_HIGH)
+    a2 = _assess([hyp], [g], materiality_inputs=_HIGH)
+    ids1 = [gap.gap_id for gap in a1.material_gaps]
+    ids2 = [gap.gap_id for gap in a2.material_gaps]
+    assert ids1 == ids2 and ids1  # same order, same values, non-empty
+
+
+def test_human_review_reference_links_to_correct_individual_gap(db_session):
+    """A finding's completeness assessment references its own gap IDs, and each
+    gap id resolves to exactly one gap (traceable human-review workflow)."""
+    hyp = _hyp(direction="negative")
+    g = _governed(status="unverified",
+                  uncorroborated=["premise alpha", "premise beta"])
+    a = _assess([hyp], [g], materiality_inputs=_HIGH)
+    by_id = {}
+    for gap in a.material_gaps:
+        assert gap.gap_id not in by_id, "no duplicate gap id"
+        by_id[gap.gap_id] = gap
+    fa = a.finding_completeness[0]
+    assert fa.gaps, "finding references its gap ids"
+    for gid in fa.gaps:
+        assert gid in by_id            # every referenced id resolves
+        assert by_id[gid].finding_id == fa.finding_id  # to the correct finding
+
+
+def test_case_version_scopes_gap_ids(db_session):
+    """Gap ids incorporate case/version identity: different versions of the same
+    case produce different ids for the same logical gap (audit separation)."""
+    hyp = _hyp(direction="negative")
+    g = _governed(status="unverified", uncorroborated=["premise alpha"])
+    findings = _findings([hyp], [g], _HIGH)
+    svc = MaterialEvidenceCompletenessService(case_id="C1")
+
+    def run(version):
+        return svc.assess(EvidenceCompletenessInputs(
+            findings=findings, hypotheses=CreditHypothesisSet(hypotheses=[hyp]),
+            governed=[g], case_id="C1", case_version=version,
+        )).assessment
+
+    v1 = {gap.gap_id for gap in run(1).material_gaps}
+    v2 = {gap.gap_id for gap in run(2).material_gaps}
+    assert v1 and v2 and v1.isdisjoint(v2)
 
 
 def test_audit_provenance_preserved(db_session):
@@ -456,8 +634,15 @@ def test_ready_with_escalation_when_review_outstanding(db_session):
                                                   assessment="supports_premise", rationale="r")],
                   human_review=True)
     plan, bundle = _plan_and_bundle()
-    na = {d.value: "n/a" for d in CreditDimension
-          if d is not CreditDimension.OPERATING_MODEL_COST_RESILIENCE}
+    # Approved not-applicable claims for the other five dimensions, so coverage
+    # is complete and the only outstanding item is the human-review flag.
+    na = {
+        d.value: DimensionNonApplicability(
+            reason="n/a", approved_by="credit.officer",
+            approval_ref="human-review:na-approval-2")
+        for d in CreditDimension
+        if d is not CreditDimension.OPERATING_MODEL_COST_RESILIENCE
+    }
     a = _assess([hyp], [g], materiality_inputs=_HIGH, plan=plan, bundle=bundle,
                 not_applicable=na)
     assert a.progression is ProgressionRecommendation.READY_WITH_ESCALATION

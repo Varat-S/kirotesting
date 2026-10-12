@@ -324,3 +324,109 @@ def test_rerun_yields_equivalent_analytical_content(tmp_path):
     finally:
         s1.close(); e1.dispose()
         s2.close(); e2.dispose()
+
+
+# ===========================================================================
+# TASK 12A — dimension applicability + gap-id corrections (NVIDIA demo)
+# ===========================================================================
+
+
+def test_missing_scripted_hypothesis_does_not_make_dimension_not_applicable(tmp_path):
+    """The four dimensions with no scripted hypothesis must NOT be reported as
+    NOT_APPLICABLE merely because the limited demo did not investigate them."""
+    engine, session, scenario, run, model = _scenario_and_run(tmp_path)
+    try:
+        # The demo supplies NO not-applicable claims.
+        assert scenario.not_applicable_dimensions == {}
+        cov = model["F_evidence_completeness"]["dimension_coverage"]
+        # Exactly the two scripted dimensions are assessed (materially incomplete);
+        # the other four are NOT_ASSESSED / APPLICABILITY_UNCERTAIN, never NA.
+        assessed = [d for d in cov if d["coverage_status"] == "materially_incomplete"]
+        unassessed = [d for d in cov if d["coverage_status"] == "not_assessed"]
+        not_applicable = [d for d in cov if d["applicability"] == "not_applicable"]
+        assert len(assessed) == 2
+        assert len(unassessed) == 4
+        assert not_applicable == []  # no unsupported NOT_APPLICABLE classifications
+        assert all(d["applicability"] == "applicability_uncertain"
+                   for d in unassessed)
+        # The optional presentation note is attached to unassessed dimensions.
+        assert all(
+            d["presentation_note"] == "Not assessed in this limited scripted demonstration."
+            for d in unassessed
+        )
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_all_six_dimensions_remain_visible(tmp_path):
+    engine, session, scenario, run, model = _scenario_and_run(tmp_path)
+    try:
+        cov = model["F_evidence_completeness"]["dimension_coverage"]
+        assert len(cov) == 6
+        from app.schemas.llm import CreditDimension
+        assert {d["dimension"] for d in cov} == {d.value for d in CreditDimension}
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_unassessed_dimensions_create_coverage_gaps(tmp_path):
+    engine, session, scenario, run, model = _scenario_and_run(tmp_path)
+    try:
+        gaps = model["F_evidence_completeness"]["material_gaps"]
+        not_assessed_gaps = [g for g in gaps
+                             if g["category"] == "dimension_not_assessed"]
+        # One per unassessed dimension, each requiring human review.
+        assert len(not_assessed_gaps) == 4
+        assert all(g["requires_human_review"] for g in not_assessed_gaps)
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_demo_gap_ids_are_unique_and_stable(tmp_path):
+    """Every material-gap ID in the real demo JSON is UNIQUE (the Task 12 defect
+    was 10 gaps but only 8 unique ids). Dimension-level gap ids -- which do not
+    depend on the non-deterministic LLM run id -- are STABLE across identical
+    re-runs. Finding-level gap ids legitimately vary with the finding signal id
+    (which derives from the per-run testing_run_id), the same run-specific
+    metadata already documented as varying across runs."""
+    out1 = tmp_path / "r1"
+    out2 = tmp_path / "r2"
+    assert demo_main(["--fixture", "nvda-2026", "--output", str(out1)]) == 0
+    assert demo_main(["--fixture", "nvda-2026", "--output", str(out2)]) == 0
+    m1 = json.loads((out1 / "module1_review.json").read_text())
+    m2 = json.loads((out2 / "module1_review.json").read_text())
+    gaps1 = m1["F_evidence_completeness"]["material_gaps"]
+    gaps2 = m2["F_evidence_completeness"]["material_gaps"]
+    ids1 = [g["gap_id"] for g in gaps1]
+    # Unique within the report.
+    assert len(ids1) == len(set(ids1)), "every gap id is unique"
+    assert len([g["gap_id"] for g in gaps2]) == len({g["gap_id"] for g in gaps2})
+
+    def dim_ids(gaps):
+        # Dimension-level gaps carry no finding_id; they are run-independent.
+        return sorted(g["gap_id"] for g in gaps if g["finding_id"] is None)
+
+    assert dim_ids(gaps1), "there are dimension-level (not_assessed) gaps"
+    assert dim_ids(gaps1) == dim_ids(gaps2)  # stable across identical runs
+
+
+def test_demo_still_distinguishes_real_from_scripted(tmp_path):
+    """The correction preserves the real-vs-scripted labelling + BLOCKED outcome."""
+    engine, session, scenario, run, model = _scenario_and_run(tmp_path)
+    try:
+        assert run.disposition is WorkflowDisposition.BLOCKED_PENDING_EVIDENCE
+        rvs = model["real_vs_scripted"]
+        assert rvs["real"] and rvs["scripted"]
+        assert all(h["provenance"] == SCRIPTED_SCENARIO_PROVENANCE
+                   for h in model["B_hypothesis_generation"]["hypotheses"])
+        # Real source section still carries the real primary 10-K hash.
+        primary = next(d for d in model["A_source_information"]["admitted_sources"]
+                       if d["filename"] == "nvda-20260125.htm")
+        assert primary["sha256"] == (
+            "60e23cf5457061831bd20b673ec9efe8676f1f1cc1a12ece6fb7c1c23b876330")
+    finally:
+        session.close()
+        engine.dispose()

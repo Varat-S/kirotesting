@@ -50,10 +50,33 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m app.demo",
         description=(
-            "Run the approved NVIDIA fixture through the complete Business "
-            "Overview Module 1 orchestration (scripted offline responses) and "
-            "export a human-readable analytical review package."
+            "Run the approved NVIDIA fixture through Business Overview Module 1. "
+            "Default --mode offline runs the complete orchestration with scripted "
+            "FakeLLMBackend responses. --mode live runs the FIRST live-model "
+            "evaluation of Stages 1-3 only (hypothesis generation + enquiry "
+            "planning via a real provider; deterministic retrieval) and may incur "
+            "API charges."
         ),
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["offline", "live"],
+        default="offline",
+        help="offline (default; scripted, no network) or live (real LLM, Stages "
+        "1-3 only; requires --acknowledge-costs and a configured provider).",
+    )
+    parser.add_argument(
+        "--acknowledge-costs",
+        action="store_true",
+        help="REQUIRED for --mode live: explicit acknowledgement that live mode "
+        "makes external API calls that may incur charges.",
+    )
+    parser.add_argument(
+        "--max-model-calls",
+        type=int,
+        default=2,
+        help="Live mode only: hard cap on model calls for the run (default 2 = "
+        "hypothesis generation + enquiry planning). Exceeding it fails visibly.",
     )
     parser.add_argument(
         "--fixture",
@@ -74,6 +97,9 @@ def main(argv=None) -> int:
         help="Optional SQLite path for the demo run (default: an ephemeral DB).",
     )
     args = parser.parse_args(argv)
+
+    if args.mode == "live":
+        return _run_live(args)
 
     out_dir: Path = args.output
     try:
@@ -150,6 +176,117 @@ def main(argv=None) -> int:
                 "demonstration of the governance gate."
             )
             # The demo inspects outputs; it never records human approval.
+            session.rollback()
+    finally:
+        engine.dispose()
+    return 0
+
+
+def _run_live(args) -> int:
+    """Run the LIVE Stages-1-3 evaluation (real provider). Explicitly gated.
+
+    Live mode NEVER falls back to FakeLLMBackend: if the provider is not
+    configured, it fails with guidance rather than silently going offline."""
+    from app.core.config import get_settings
+    from app.services.analysis.module1_live import (
+        LIVE_WARNING_BANNER,
+        CallBudgetExceededError,
+        LiveEvaluationConfig,
+        LiveEvaluationError,
+        run_live_evaluation,
+    )
+    from app.services.analysis.module1_live_report import (
+        build_live_report_model,
+        render_html as render_live_html,
+        render_markdown as render_live_markdown,
+    )
+    from app.services.llm.providers import (
+        ProviderNotConfiguredError,
+        RealProviderBackend,
+    )
+
+    # Hard gate: explicit cost acknowledgement is mandatory for live mode.
+    if not args.acknowledge_costs:
+        print(
+            "ERROR: live mode makes external API calls that may incur charges.\n"
+            "Re-run with --acknowledge-costs to confirm you accept this.\n"
+            "A ChatGPT subscription does NOT provide API access or credits; you "
+            "need a provider API key with available credits."
+        )
+        return 2
+
+    settings = get_settings()
+    backend = RealProviderBackend(settings)
+    try:
+        # Validate provider configuration BEFORE any run; never fall back to Fake.
+        backend.check_configuration()
+    except ProviderNotConfiguredError as exc:
+        print(f"ERROR: live provider not configured: {exc}")
+        print("Set LLM_PROVIDER, LLM_MODEL and LLM_API_KEY in your environment "
+              "(see .env.example). Offline mode remains available without a key.")
+        return 2
+
+    out_dir: Path = args.output
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"ERROR: cannot create output directory {out_dir}: {exc}")
+        return 2
+
+    if args.database is not None:
+        args.database.parent.mkdir(parents=True, exist_ok=True)
+        db_url = f"sqlite:///{args.database.resolve().as_posix()}"
+    else:
+        db_url = "sqlite://"
+
+    engine, factory = create_engine_and_session(db_url)
+    init_db(engine)
+    work_root = Path(tempfile.mkdtemp(prefix="module1-live-"))
+    cfg = LiveEvaluationConfig(max_model_calls=args.max_model_calls)
+    print(LIVE_WARNING_BANNER)
+    print()
+    print(f"[live] provider={settings.llm_provider} model={settings.llm_model} "
+          f"max_model_calls={cfg.max_model_calls}")
+    try:
+        with factory() as session:
+            print(f"[1/4] Loading approved fixture {args.fixture!r} and real corpus ...")
+            print("[2/4] Stage 1 (LIVE): autonomous hypothesis generation ...")
+            print("[3/4] Stage 2 (LIVE): autonomous enquiry planning ...")
+            print("[4/4] Stage 3 (deterministic): evidence retrieval ...")
+            try:
+                result = run_live_evaluation(
+                    args.fixture, session, backend=backend,
+                    provider=settings.llm_provider,
+                    data_root=work_root / "data", output_root=work_root / "out",
+                    config=cfg,
+                )
+            except CallBudgetExceededError as exc:
+                print(f"ERROR (budget): {exc}")
+                return 3
+            except LiveEvaluationError as exc:
+                print(f"ERROR (live evaluation): {exc}")
+                return 3
+
+            model = build_live_report_model(result)
+            rjson = out_dir / "module1_live_review.json"
+            rmd = out_dir / "module1_live_review.md"
+            rhtml = out_dir / "module1_live_review.html"
+            rjson.write_text(json.dumps(model, indent=2, sort_keys=True),
+                             encoding="utf-8")
+            rmd.write_text(render_live_markdown(model), encoding="utf-8")
+            rhtml.write_text(render_live_html(model), encoding="utf-8")
+
+            print()
+            print(f"Model calls: {result.model_calls}; token usage: "
+                  f"{result.usage_totals}")
+            print(f"Hypotheses generated: {len(result.hypotheses.hypotheses)}; "
+                  f"enquiries planned: {len(result.enquiry_plan.enquiries)}; "
+                  f"dimensions unassessed: {len(result.unassessed_dimensions)}")
+            print()
+            print("Live review package written to:")
+            print(f"  JSON:     {rjson}")
+            print(f"  Markdown: {rmd}")
+            print(f"  HTML:     {rhtml}")
             session.rollback()
     finally:
         engine.dispose()

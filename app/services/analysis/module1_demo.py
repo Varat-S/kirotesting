@@ -271,18 +271,14 @@ def build_demo_scenario(
         )
         for a in anchors
     }
-    # Dimensions with no scripted hypothesis are explicitly marked not-applicable
-    # with a HONEST reason (this is a limited scripted scenario, not full
-    # coverage). This never fabricates an analytical not-applicable rationale for
-    # a real credit question; it states plainly that the dimension is out of
-    # scope FOR THIS DEMO.
-    covered = {a.dimension for a in anchors}
-    not_applicable = {
-        d.value: "Out of scope for this scripted demo scenario (no scripted "
-        "hypothesis generated for this dimension)."
-        for d in CreditDimension
-        if d.value not in covered
-    }
+    # Task 12A: a dimension NOT investigated by this limited scripted demo is
+    # NOT thereby inapplicable to NVIDIA. We therefore pass NO not-applicable
+    # claims: the four uncovered dimensions flow to Stage 12 as
+    # APPLICABILITY_UNCERTAIN / NOT_ASSESSED with a visible human-review gap
+    # (the completeness service's correct default), never as an unsupported
+    # NOT_APPLICABLE. We do not fabricate hypotheses to fill them, and we do not
+    # assert an unverified non-applicability rationale.
+    not_applicable: dict[str, str] = {}
 
     config = Module1Config(keys=dict(_KEYS))
     for method, key, payload in scripted:

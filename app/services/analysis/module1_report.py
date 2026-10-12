@@ -314,6 +314,11 @@ def _section_completeness(run) -> dict:
                 "coverage_status": d.coverage_status.value,
                 "evaluated_hypotheses": list(d.evaluated_hypotheses),
                 "reason": d.reason,
+                "presentation_note": (
+                    "Not assessed in this limited scripted demonstration."
+                    if d.coverage_status.value == "not_assessed"
+                    else None
+                ),
             }
             for d in c.dimension_coverage
         ],
@@ -721,11 +726,13 @@ def _md_section_f(L, f):
     L.append("")
     L.append("Six-dimension coverage:")
     L.append("")
-    L.append("| Dimension | Applicability | Coverage | Hypotheses |")
-    L.append("| --- | --- | --- | --- |")
+    L.append("| Dimension | Applicability | Coverage | Hypotheses | Note |")
+    L.append("| --- | --- | --- | --- | --- |")
     for d in f["dimension_coverage"]:
+        note = d.get("presentation_note") or ""
         L.append(f"| {d['dimension']} | {d['applicability']} | "
-                 f"{d['coverage_status']} | {', '.join(d['evaluated_hypotheses']) or '—'} |")
+                 f"{d['coverage_status']} | {', '.join(d['evaluated_hypotheses']) or '—'} "
+                 f"| {_md(note)} |")
     L.append("")
     if f["material_gaps"]:
         L.append("Material gaps:")

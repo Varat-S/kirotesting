@@ -386,7 +386,7 @@ class BusinessOverviewModule1Orchestrator:
             findings=run.findings, hypotheses=run.hypotheses,
             governed=run.governed_tests, plan=run.enquiry_plan,
             bundle=run.candidate_evidence, source_package=inputs.source_package,
-            case_id=inputs.case_id,
+            case_id=inputs.case_id, case_version=inputs.case_version,
             not_applicable_dimensions=inputs.not_applicable_dimensions)
         try:
             result = self._complete.assess(complete_inputs)

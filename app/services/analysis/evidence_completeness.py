@@ -69,6 +69,29 @@ class EvidenceCompletenessRejectedError(ValueError):
         self.stage = stage
 
 
+@dataclass(frozen=True)
+class DimensionNonApplicability:
+    """An AUTHORITATIVE claim that a credit dimension does not apply (Task 12A).
+
+    A bare reason string is NOT proof of non-applicability: a caller can assert
+    anything. For a dimension to be treated as genuinely ``NOT_APPLICABLE`` the
+    claim must carry an explicit approver (``approved_by``) AND an
+    ``approval_ref`` naming the authoritative record that established it (e.g. a
+    HumanReview id or a governed policy artifact). A claim that is NOT approved
+    is retained as an UNVERIFIED assertion: the dimension stays
+    ``APPLICABILITY_UNCERTAIN`` with a visible human-review gap, and it never
+    silently clears the Stage 12 completeness check.
+    """
+
+    reason: str
+    approved_by: str | None = None
+    approval_ref: str | None = None
+
+    @property
+    def is_approved(self) -> bool:
+        return bool(self.reason) and bool(self.approved_by) and bool(self.approval_ref)
+
+
 @dataclass
 class EvidenceCompletenessInputs:
     """Everything Stage 12 consumes (all from earlier, governed stages)."""
@@ -81,8 +104,17 @@ class EvidenceCompletenessInputs:
     # Serialised source-package CompletenessAssessment (reused, not rebuilt).
     source_package: object | None = None
     case_id: str | None = None
-    # Dimensions the caller has defensibly marked not-applicable, with reasons.
-    not_applicable_dimensions: dict[str, str] = field(default_factory=dict)
+    case_version: int | None = None
+    # Dimensions a caller claims not-applicable. BACKWARD-COMPATIBLE value forms:
+    #   * ``str``                       -- an UNVERIFIED claim (reason only). It
+    #     does NOT clear the check: the dimension stays APPLICABILITY_UNCERTAIN
+    #     with a human-review gap (Task 12A: no arbitrary rationale is trusted).
+    #   * ``DimensionNonApplicability`` -- genuine NOT_APPLICABLE only when it is
+    #     ``is_approved`` (reason + approved_by + approval_ref); otherwise it is
+    #     also treated as an unverified claim.
+    not_applicable_dimensions: dict[str, "str | DimensionNonApplicability"] = field(
+        default_factory=dict
+    )
 
 
 @dataclass
@@ -284,10 +316,30 @@ class MaterialEvidenceCompletenessService:
         hid = sig.hypothesis_id
         material = finding.materiality.materiality
         gaps: list[MaterialEvidenceGap] = []
+        # Per-(finding, category) occurrence counter so several gaps of the SAME
+        # category within one finding (e.g. two uncorroborated material
+        # premises) get DISTINCT ids even if their discriminators were to clash.
+        seq: dict[str, int] = {}
 
         def add_gap(category: GapCategory, desc, *, blocks=False, review=False,
-                    required=None, available=None):
-            gid = content_hash({"f": finding.signal.signal_id, "c": category.value})
+                    required=None, available=None, discriminator=None):
+            # Task 12A: a gap id must distinguish logically-distinct gaps that
+            # share a finding and category. Key on case/version + finding +
+            # category + a stable discriminator (a premise/requirement id or its
+            # text) + a per-(finding,category) occurrence index, so two distinct
+            # premises never collide while identical inputs stay deterministic.
+            n = seq.get(category.value, 0)
+            seq[category.value] = n + 1
+            gid = content_hash({
+                "case": inputs.case_id,
+                "version": inputs.case_version,
+                "scope": "finding",
+                "finding": finding.signal.signal_id,
+                "hypothesis": hid,
+                "category": category.value,
+                "discriminator": discriminator if discriminator is not None else desc,
+                "ordinal": n,
+            })
             gaps.append(MaterialEvidenceGap(
                 gap_id=gid, finding_id=finding.signal.signal_id, hypothesis_id=hid,
                 dimension=sig.dimension, category=category, description=desc,
@@ -331,17 +383,23 @@ class MaterialEvidenceCompletenessService:
                     review=True, available=list(sig.offsetting_characteristics),
                     required=["measured offset outcome evidence"])
         for premise in finding.uncorroborated_material_premises:
+            # The premise string IS the upstream structured premise identity
+            # (GovernedHypothesisTestResult.uncorroborated_material_premises
+            # carries premise_id when set, else the premise text) -> use it as
+            # the distinguishing discriminator so two distinct premises differ.
             add_gap(GapCategory.UNCORROBORATED_MATERIAL_PREMISE,
                     f"Material premise uncorroborated: {premise}",
-                    blocks=is_material, review=True, required=[premise])
+                    blocks=is_material, review=True, required=[premise],
+                    discriminator=premise)
         for contra in finding.outstanding_contradictions:
             add_gap(GapCategory.UNRESOLVED_CONTRADICTION,
                     f"Unresolved contradictory evidence: {contra}",
-                    blocks=is_material, review=True, available=[contra])
+                    blocks=is_material, review=True, available=[contra],
+                    discriminator=contra)
         for req in finding.unresolved_evidence_requirements:
             add_gap(GapCategory.OUTSTANDING_EVIDENCE_REQUIREMENT,
                     f"Outstanding evidence requirement: {req}",
-                    required=[req])
+                    required=[req], discriminator=req)
         if finding.required_human_review:
             add_gap(GapCategory.HUMAN_REVIEW_OUTSTANDING,
                     "Material human-review requirement outstanding.", review=True)
@@ -397,6 +455,29 @@ class MaterialEvidenceCompletenessService:
 
     # -- six-dimension coverage -----------------------------------------------
 
+    @staticmethod
+    def _na_claim(value) -> DimensionNonApplicability | None:
+        """Coerce a not-applicable map value to a claim (None when absent).
+
+        Accepts the backward-compatible bare ``str`` form (an UNVERIFIED claim,
+        never approved) or a :class:`DimensionNonApplicability` record."""
+        if value is None:
+            return None
+        if isinstance(value, DimensionNonApplicability):
+            return value
+        return DimensionNonApplicability(reason=str(value))
+
+    @staticmethod
+    def _dimension_gap_id(inputs, dim, kind: str) -> str:
+        """Stable, case/version-scoped id for a dimension-level gap."""
+        return content_hash({
+            "case": inputs.case_id,
+            "version": inputs.case_version,
+            "scope": "dimension",
+            "dimension": dim.value,
+            "kind": kind,
+        })
+
     def _assess_dimensions(
         self, inputs: EvidenceCompletenessInputs, governed_by_id
     ) -> tuple[list[DimensionCoverageAssessment], list[MaterialEvidenceGap]]:
@@ -413,17 +494,45 @@ class MaterialEvidenceCompletenessService:
         gaps: list[MaterialEvidenceGap] = []
         for dim in _ALL_DIMENSIONS:
             evaluated = by_dim[dim]
-            na_reason = inputs.not_applicable_dimensions.get(dim.value)
-            if na_reason:
+            claim = self._na_claim(inputs.not_applicable_dimensions.get(dim.value))
+            # Genuine NOT_APPLICABLE requires an AUTHORITATIVE, approved claim.
+            if claim is not None and claim.is_approved:
                 assessments.append(DimensionCoverageAssessment(
                     dimension=dim, applicability=DimensionApplicability.NOT_APPLICABLE,
                     coverage_status=DimensionCoverageStatus.NOT_APPLICABLE,
-                    evaluated_hypotheses=evaluated, reason=na_reason,
+                    evaluated_hypotheses=evaluated,
+                    reason=(f"{claim.reason} (approved by {claim.approved_by}; "
+                            f"ref {claim.approval_ref})"),
+                ))
+                continue
+            # An UNVERIFIED non-applicability claim never clears the check: the
+            # dimension stays APPLICABILITY_UNCERTAIN with a visible review gap.
+            if claim is not None:
+                gid = self._dimension_gap_id(inputs, dim, "unverified_na_claim")
+                gaps.append(MaterialEvidenceGap(
+                    gap_id=gid, dimension=dim,
+                    category=GapCategory.DIMENSION_NOT_ASSESSED,
+                    description=(
+                        f"Dimension {dim.value} was claimed not-applicable "
+                        f"('{claim.reason}') WITHOUT authoritative approval; the "
+                        "claim is unverified and applicability remains uncertain."),
+                    materiality=Materiality.MEDIUM,
+                    recommended_follow_up="Obtain authoritative approval of "
+                    "non-applicability, or investigate the dimension.",
+                    requires_human_review=True, blocks_progression=False,
+                ))
+                assessments.append(DimensionCoverageAssessment(
+                    dimension=dim,
+                    applicability=DimensionApplicability.APPLICABILITY_UNCERTAIN,
+                    coverage_status=DimensionCoverageStatus.NOT_ASSESSED,
+                    evaluated_hypotheses=evaluated, material_gaps=[gid],
+                    reason="Non-applicability claimed but not authoritatively "
+                    "approved; applicability uncertain.",
                 ))
                 continue
             if not evaluated:
                 # No hypothesis is NOT proof nothing is material: flag + review.
-                gid = content_hash({"dim": dim.value, "cat": "not_assessed"})
+                gid = self._dimension_gap_id(inputs, dim, "not_assessed")
                 gaps.append(MaterialEvidenceGap(
                     gap_id=gid, dimension=dim,
                     category=GapCategory.DIMENSION_NOT_ASSESSED,
@@ -448,7 +557,7 @@ class MaterialEvidenceCompletenessService:
             )
             dim_gap_ids: list[str] = []
             if dim in incomplete_dims:
-                gid = content_hash({"dim": dim.value, "cat": "incomplete"})
+                gid = self._dimension_gap_id(inputs, dim, "incomplete")
                 gaps.append(MaterialEvidenceGap(
                     gap_id=gid, dimension=dim,
                     category=GapCategory.DIMENSION_MATERIALLY_INCOMPLETE,
