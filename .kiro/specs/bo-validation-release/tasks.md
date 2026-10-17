@@ -54,5 +54,5 @@ Branch: `feat/bo-validation-release` (from `feat/bo-investigation-integration`
 
 - [x] Z.1 Full regression re-run: 1,249 passed / 128 skipped / 0 failed. +10 contract tests (6 governance, 4 downstream).
 - [x] Z.2 Confirmed no secrets/env/db/large datasets staged (output/ + data/ + .env git-ignored).
-- [ ] Z.3 Push `feat/bo-validation-release`; report branch, SHA, tests, limits, approvals.
+- [x] Z.3 Pushed `feat/bo-validation-release`; PR #2 → `feat/bo-investigation-integration` (NOT main). https://github.com/Varat-S/kirotesting/pull/2
 - [x] Z.4 Outstanding-risk register (R1–R8) + gates needing human/analyst/live evidence (in release report).
