@@ -45,14 +45,14 @@ Branch: `feat/bo-validation-release` (from `feat/bo-investigation-integration`
 
 ## Phase E — Release & integration readiness
 
-- [ ] E.1 Downstream handoff interface + contract tests.
-- [ ] E.2 Security & operational review.
-- [ ] E.3 Merge-preparation package.
-- [ ] E.D Deliverable: `BO_RELEASE_READINESS_REPORT.md`.
+- [x] E.1 Downstream handoff interface verified; `tests/integration/test_bo_downstream_contract.py` (4 tests).
+- [x] E.2 Security & operational review (secrets, prompt-injection, network, paths, logs, provider errors, concurrency, audit immutability).
+- [x] E.3 Merge-preparation package (architecture, matrix, audit, regression, limitations, rollback, reviewer checklist).
+- [x] E.D Deliverable: `BO_RELEASE_READINESS_REPORT.md` (Pass / Pass-with-limitations / Blocked / Not-evaluated).
 
 ## Close-out
 
-- [ ] Z.1 Full regression re-run; contract/security tests added.
-- [ ] Z.2 Confirm no secrets/env/large datasets staged.
+- [x] Z.1 Full regression re-run: 1,249 passed / 128 skipped / 0 failed. +10 contract tests (6 governance, 4 downstream).
+- [x] Z.2 Confirmed no secrets/env/db/large datasets staged (output/ + data/ + .env git-ignored).
 - [ ] Z.3 Push `feat/bo-validation-release`; report branch, SHA, tests, limits, approvals.
-- [ ] Z.4 Outstanding-risk register + gates needing human/analyst/live evidence.
+- [x] Z.4 Outstanding-risk register (R1–R8) + gates needing human/analyst/live evidence (in release report).
