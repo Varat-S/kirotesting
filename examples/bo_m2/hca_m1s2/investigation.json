@@ -197,7 +197,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q1c",
@@ -210,7 +212,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q1o",
@@ -223,7 +227,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q2s",
@@ -236,7 +242,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q2c",
@@ -249,7 +257,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q3s",
@@ -262,7 +272,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q3c",
@@ -275,7 +287,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q4s",
@@ -288,7 +302,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q4c",
@@ -301,7 +317,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q5s",
@@ -314,7 +332,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q5c",
@@ -327,7 +347,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q5o",
@@ -340,7 +362,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q5e",
@@ -353,7 +377,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q6s",
@@ -366,7 +392,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q6c",
@@ -379,7 +407,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q7s",
@@ -392,7 +422,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q7c",
@@ -405,7 +437,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    },
    {
     "enquiry_id": "q7o",
@@ -418,7 +452,9 @@
     "rationale": "Test the hypothesis from this perspective.",
     "evidence_requirement": "A passage that bears on the claim.",
     "priority": 2,
-    "permitted_document_ids": []
+    "permitted_document_ids": [
+     "b3a866cd79fd7febb93dc1a84cd59b2e25e9c1c99e09d2ad6a495ddd5b568856"
+    ]
    }
   ]
  },

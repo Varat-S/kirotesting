@@ -3,9 +3,8 @@
 Branch `feat/bo-investigation-integration`. Architecture: [`BO_ARCHITECTURE_V3_SPEC.md`](BO_ARCHITECTURE_V3_SPEC.md).
 Background: [`BO_INTEGRATION_M0_ASSESSMENT.md`](BO_INTEGRATION_M0_ASSESSMENT.md).
 
-**Status: M1 complete. M2 offline comparison complete on a synthetic case, including
-the approved fixes R1–R4 (§5). The HCA FY2025 arm has not been run because the filing
-is not yet in the workspace. Ready for review; M3 should wait for the HCA arm** (§6).
+**Status: M1 complete. M2 offline comparison complete on the synthetic case and on HCA
+FY2025, including the approved fixes R1–R4 (§5, §5a). Ready for review** (§6).
 
 No paid model call was made. Every model response in this report is scripted.
 
@@ -43,7 +42,8 @@ No paid model call was made. Every model response in this report is scripted.
 | After Daniel import (`422af03`) | 1262 | 0 | 14 |
 | After M1 (`4c9e41a`) | 1294 | 0 | 14 |
 | After M2 (`ceeb3bb`) | 1302 | 0 | 14 |
-| After fixes R1–R4 (this commit) | 1309 | 0 | 14 |
+| After fixes R1–R4 (`c4edbeb`) | 1309 | 0 | 14 |
+| After HCA run (this commit; HCA filing present) | 1311 | 0 | 14 |
 
 Remaining skips: no OCR engine (5), HCA 10-K not acquired (2), no PDF backend,
 `google-genai` not installed, live tests gated (`BO_LIVE_TEST`), and others that
@@ -191,15 +191,70 @@ Reading this honestly:
   `supported` findings (S7 became `qualified`). The intent is for the step 14 challenger
   or a reviewer to resolve it.
 
+## 5a. HCA FY2025 (real 10-K)
+
+Case `HCA_2025_M2`, accession `0001193125-26-044769`; ingestion 180 narrative passages,
+1,547 facts; M1S2 sealed packet 17 passages plus 12 payer-category indicators (2025 and
+2024). Scenarios and both scripts were committed **before** the first run (`389b265`).
+No code changed between that commit and the recorded run.
+
+One correction after registration: the investigation script's enquiries had an empty
+`permitted_document_ids`, which allows searching no document (all 18 searches came back
+unresolved and testing was rejected). It was set to the 10-K's document id. No scenario,
+claim, quote or status was changed.
+
+| Scenario | Kind | Single pass | Investigation |
+|---|---|---|---|
+| H1 private payers 48.9 % of revenue (category) | control | supported, usable | qualified, usable (R3 cap) |
+| H2 predetermined-rate agreements → "lock in volumes" | defect | unverified (Layer C rule) | unverified |
+| H3 approved payer-share indicator → "patients are loyal" (concept copied correctly) | defect | supported, **usable** | unverified (R2: inferential step not declared) |
+| H4 no >10 % payer disclosed → "concentration is low" | defect | unverified | unverified |
+| H5 market position "demonstrably" protects contracts; outcome = ER-volume table | defect | supported, **usable**; mitigant **demonstrated** | unverified; mitigant unproven |
+| H6 contracts "secure" despite disclosed renewal risk | defect | supported, **usable** | unverified |
+| H7 competitors may negotiate exclusivity (premise says "HCA" for "us") | control | qualified, usable | **unverified** |
+
+| Measure | Single pass | Investigation |
+|---|---|---|
+| Defects held back (of 5) | 2 | 5 |
+| Correct findings usable (of 2) | 2 | 1 |
+| Parameters: correct accepted / defective held back | 1 / 0 of 2 | 1 / 2 of 2 |
+| Off-dimension hypothesis | n/a | recorded out of scope |
+| Step 12 gate | n/a | `blocked_pending_evidence`, 16 gaps |
+| Model calls; request / response chars | 1; 53,212 / 6,588 | 4; 272,570 / 28,139 (≈ 5.1× / 4.3×) |
+
+What HCA adds to the synthetic result:
+
+1. **The pattern holds on real text.** The investigation path held back every planted
+   defect; the single-pass path let the same three through (H3, H5, H6) and accepted both
+   defective parameter values.
+2. **R4 is weak on real filings, as anticipated.** The ER-volume table contains figures
+   and "increased", so the lexical check accepted it as outcome evidence for an unrelated
+   mitigant in the single-pass path. The investigation path did not, because it requires
+   a corroborated outcome premise.
+3. **R1 is strict.** A correct finding whose premise paraphrased "us" as "HCA" was not
+   verbatim support and became `unverified` (H7). One of two controls lost.
+4. **R3 fires on everything.** On a 17-passage packet, every contradictory search
+   returned its maximum of 5 passages, so every hypothesis was flagged and nothing could be
+   `supported` (H1 became `qualified`). As implemented, R3 is too blunt to be informative.
+5. **Cost.** About 5× the request volume of the single pass, mostly the passages sent to
+   the testing stage.
+
 ## 6. Recommendation and decisions for review
 
-Proposed order:
+The investigation path's deterministic controls are clearly stronger on these error
+types, on both cases. Two refinements would reduce the recall it loses, and I suggest
+making them before M3:
 
-1. Run the HCA FY2025 M1S2 arm: scenarios and manifest written on real passages first,
-   then both arms, no code changes in between.
-2. If HCA confirms the pattern, approve M3 (roll the investigation path out to the other
-   four specialists and Agent 6, behind the v3 roster).
-3. A small budgeted live run for M1S2 only, to measure what scripts cannot: whether the
+| # | Refinement | Fixes |
+|---|---|---|
+| R1a | Treat the borrower's names and aliases from the entity record (e.g. "HCA", "HCA Healthcare") as equivalent to "we / us / our" in the verbatim check. Still no paraphrase of content words, figures or negations. | H7 |
+| R3a | Require the testing stage to assess every passage returned by a contradictory search (schema rule), and flag only true omissions; a passage the model explicitly weighed is not re-flagged. Supported findings that rest on a passage the model also labelled supporting remain for the step 14 challenger. | R3 firing on every finding |
+
+Then:
+
+1. Approve M3 (investigation path for the other four Module 1 specialists and Agent 6,
+   behind the v3 roster), or ask for further M2 work first.
+2. A small budgeted live run for M1S2 only, to measure what scripts cannot: whether the
    loop makes a real model surface more material issues, and the real token cost.
 
 The original R1–R5 proposal is kept below for reference; R1–R4 are implemented (§5) and
@@ -215,7 +270,7 @@ R5 is still open.
 
 ## 7. Remaining risks and assumptions
 
-* Synthetic case only; seven scenarios; I wrote both arms' scripts. The "equally wrong
+* Two cases (synthetic, HCA), seven scenarios each; I wrote both arms' scripts. The "equally wrong
   model" design limits bias, but it is not an independent evaluation.
 * The investigation arm's governance is Daniel's; its scripted tests passed before
   integration, but its testing, signal and completeness stages have never run live.
@@ -234,4 +289,6 @@ R5 is still open.
 | `422af03` | Selective import of Daniel's services and tests |
 | `4c9e41a` | M1 |
 | `ceeb3bb` | M2 harness, scenarios, first results, report |
-| (this commit) | Fixes R1–R4, re-run, adversarial tests |
+| `c4edbeb` | Fixes R1–R4, re-run, adversarial tests |
+| `389b265` | HCA scenarios and scripts, committed before the first HCA run |
+| (this commit) | HCA results, HCA test, report |
