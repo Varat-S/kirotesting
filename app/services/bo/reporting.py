@@ -700,9 +700,16 @@ class BoReportBuilder:
             business_topic_conclusion_id=run.conclusion_row_id
             if run.conclusion is not None else None,
             conclusion_status=run.conclusion_status,
-            business_risk_score_id=run.score.score_id,
-            business_risk_score_status=run.score.status.value,
-            business_risk_band=run.score.band,
+            # A-3: do not advertise a risk score next to a run that produced no
+            # validated conclusion. The score id/status/band are only meaningful
+            # when there is a conclusion they belong to; otherwise report them as
+            # unavailable so a downstream consumer cannot read a score as endorsed.
+            business_risk_score_id=run.score.score_id
+            if run.conclusion is not None else None,
+            business_risk_score_status=run.score.status.value
+            if run.conclusion is not None else "unavailable",
+            business_risk_band=run.score.band
+            if run.conclusion is not None else None,
             accepted_finding_ids=sorted(
                 {h for _, c in claims for h in c.get("hypothesis_ids") or []
                  if h in by_id}),
