@@ -233,6 +233,9 @@ def _extract_usage(response: Any) -> dict[str, Any]:
         ("prompt_token_count", "input_tokens"),
         ("candidates_token_count", "output_tokens"),
         ("total_token_count", "total_tokens"),
+        # Reasoning ("thinking") tokens are billed as output but are not part of
+        # candidates_token_count; record them so cost is not understated.
+        ("thoughts_token_count", "thinking_tokens"),
     ):
         value = getattr(meta, src, None)
         if value is not None:

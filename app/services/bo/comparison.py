@@ -207,9 +207,11 @@ class ArmResult:
                         for c in self.calls)
         tokens_out = sum(int((c.get("model_config") or {}).get("output_tokens") or 0)
                          for c in self.calls)
+        thinking = sum(int((c.get("model_config") or {}).get("thinking_tokens") or 0)
+                       for c in self.calls)
         return {"model_calls": len(self.calls), "request_chars": sent,
                 "response_chars": received, "input_tokens": tokens_in,
-                "output_tokens": tokens_out}
+                "output_tokens": tokens_out, "thinking_tokens": thinking}
 
 
 def _client(session: Session, backend) -> tuple[LLMClient, PromptRegistry]:

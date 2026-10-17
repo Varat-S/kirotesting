@@ -7,8 +7,8 @@ Background: [`BO_INTEGRATION_M0_ASSESSMENT.md`](BO_INTEGRATION_M0_ASSESSMENT.md)
 FY2025 (§4–§5a), and live runs on HCA with `gemini-3.1-flash-lite` (§5b). Ready for
 review** (§6).
 
-Sections 4–5a use scripted model responses. Section 5b reports real, paid model calls
-(about $0.43 in total).
+Sections 4–5a use scripted model responses. Sections 5b–5c report real, paid model calls
+(about $2.50 in total, see §5c).
 
 ## 1. What was implemented
 
@@ -303,7 +303,72 @@ Caveats: one model, one case, three runs per configuration, no reviewer-verified
 key (the HCA review manifest is still an unverified template). These are observations,
 not a measured quality difference.
 
+## 5c. Breadth increment (option B) — live
+
+Approved 17 Oct. Changes (`33bc1c2`, `42fef15`):
+
+* **Seeded generation:** the generation call receives the specialist's brief (remit and
+  boundaries) and an agenda: its "Assess:" topics plus its coverage questions.
+* **Deterministic plan completion:** after the one re-plan, a rejected model plan is
+  completed mechanically (search intent reset to the canonical intent of its
+  requirement kind; omitted mandatory perspectives filled with the labelled template
+  enquiries) and must still pass the planner's full gate.
+* **Optional testing model:** `m2_live --testing-model` runs only the hypothesis-testing
+  call on another model (output cap raised to 32k for reasoning models; thinking tokens
+  now recorded and priced).
+
+| Configuration (3 live runs each, HCA M1S2) | Hypotheses | Usable | Cost / run | Time / run |
+|---|---|---|---|---|
+| Single pass (flash-lite) | 3, 4, 2 | 3, 3, 2 | $0.007 | 6 s |
+| Investigation, unseeded, flash-lite (§5b) | 2, 2, 2 | 1, 1, 1 | $0.024 | 28 s |
+| Investigation, seeded, flash-lite | 4, 3, 1 | 0, 0, 0 | $0.025 | 24 s |
+| Investigation, seeded, **testing on gemini-3.1-pro-preview** | 4, 4, 4 | 1, 2, 1 | $0.36 | 145 s |
+
+What changed:
+
+1. **Seeding widened the analysis.** The seeded runs raised what the earlier runs missed:
+   rates fixed without volume guarantees, payer consolidation and bargaining power,
+   contract renewal pressure from competitors' exclusivity, and narrow / tiered networks.
+2. **With flash-lite doing the testing, none of it survived.** The model paraphrases its
+   premises and labels interpretations ("high concentration") as facts. The deterministic
+   corroboration accepts only verbatim restatement or a correctly linked metric, so
+   correct reasoning ends `unverified`.
+3. **With a stronger testing model, the material negatives survived as `qualified`
+   findings:** network exclusion risk (narrow / tiered networks), payer consolidation and
+   bargaining power, competitor exclusivity threatening renewals. Claimed strengths
+   ("payer diversification mitigates…") were held back as undemonstrated, as intended.
+4. **Still lost in every configuration:** the true reported fact "agreements fix rates but
+   do not guarantee volumes", because the model paraphrases it and lists open evidence
+   requirements. No parameter value was accepted in the seeded configurations.
+5. **Cost.** The stronger testing model costs about 15× the flash-lite investigation and
+   50× the single pass per specialist, mostly reasoning tokens; about $0.36 per
+   specialist run. A full Module 1 run (five specialists) would be roughly $2.
+
+Spend on live runs: about $2.50 in total (flash-lite runs ≈ $0.60; Pro testing runs
+≈ $1.09 recorded plus an earlier batch of three truncated Pro runs whose reasoning tokens
+were not yet recorded, estimated at under $1).
+
 ## 6. Recommendation and decisions for review
+
+**Current recommendation (after §5c).** The remaining blocker is semantic, not
+structural: the deterministic checks cannot recognise a correct paraphrase. The options:
+
+* **R5. A separate entailment judge** for narrative premises: a second, small model call
+  that answers only "does this passage state this premise?" for each premise, recorded as
+  a judged (not deterministic) corroboration. Daniel's grounding evaluator already has a
+  slot for it. It must be tested with positive, negative and adversarial cases (genuine
+  quote / wrong inference, dropped negation, changed figure) before it is trusted.
+* **Accept the current behaviour** and treat `unverified` material negatives as open
+  questions for the reviewer (they are already shown On Demand with the open-question
+  flag).
+* **Stronger model for testing** (works; ≈ $0.36 per specialist run).
+
+I recommend **R5 with flash-lite as the judge, evaluated offline first on the existing
+scenario sets plus new adversarial cases**, then live; and keeping the Pro testing tier
+as a configuration option rather than the default.
+
+### Earlier recommendation (after §5b), kept for the record
+
 
 After the live runs: the investigation path's deterministic controls are stronger and
 its output more consistent, but with this model it covers less ground, costs about 3.4×
@@ -365,4 +430,6 @@ R5 is still open.
 | `846b800` | HCA results, HCA test, report |
 | `44270ad` | R1a / R3a |
 | `771ed3d`, `2cf0e2f`, `19ec617` | Live harness and transcripts; fixes found by live runs |
-| (this commit) | Live results in this report |
+| `7fa9544`, `353af39` | Live results in this report |
+| `33bc1c2`, `42fef15` | Breadth increment: seeded generation, testing tier, plan completion |
+| (this commit) | Thinking-token cost tracking; §5c |

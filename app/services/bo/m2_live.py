@@ -29,8 +29,10 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-PRICE_IN_PER_M = 0.25   # USD, Gemini 3.1 Flash-Lite on Vertex (third-party trackers)
-PRICE_OUT_PER_M = 1.50
+# USD per million tokens (input, output incl. thinking), Vertex list prices as
+# reported by third-party trackers; unknown models are priced at the highest.
+PRICES = {"gemini-3.1-flash-lite": (0.25, 1.50),
+          "gemini-3.1-pro-preview": (2.00, 12.00)}
 _PDF_FIELD_LIMIT = 1200
 
 
@@ -44,8 +46,11 @@ def _stage(call: dict[str, Any], arm: str) -> str:
         name, "parameter classification" if name.endswith("__parameters") else name)
 
 
-def _cost(tokens_in: int, tokens_out: int) -> float:
-    return tokens_in / 1e6 * PRICE_IN_PER_M + tokens_out / 1e6 * PRICE_OUT_PER_M
+def _call_cost(call: dict[str, Any]) -> float:
+    mc = call.get("model_config") or {}
+    p_in, p_out = PRICES.get(call.get("model_id") or "", max(PRICES.values()))
+    out = int(mc.get("output_tokens") or 0) + int(mc.get("thinking_tokens") or 0)
+    return int(mc.get("input_tokens") or 0) / 1e6 * p_in + out / 1e6 * p_out
 
 
 def describe_arm(arm) -> dict[str, Any]:
@@ -69,7 +74,7 @@ def describe_arm(arm) -> dict[str, Any]:
         "parameters": {p.parameter_id: {"status": p.status.value, "value": p.value}
                        for p in (v.parameters if v else [])},
         "usage": usage,
-        "cost_usd": round(_cost(usage["input_tokens"], usage["output_tokens"]), 5),
+        "cost_usd": round(sum(_call_cost(c) for c in arm.calls), 5),
         "findings": [
             {"id": r.hypothesis_id, "claim": r.claim, "claim_type": r.claim_type.value,
              "direction": r.direction.value, "disposition": r.disposition.value,
@@ -283,8 +288,11 @@ def run_live(runs: int, out: Path, *, case_dir: Path, case_id: str,
         from app.core.config import get_settings
         from app.services.llm.providers_vertex import VertexProviderBackend
 
+        # Reasoning models spend output tokens on thinking before the JSON; the
+        # default cap truncated their answers, so this run raises it.
         backend = VertexProviderBackend(get_settings().model_copy(
-            update={"vertex_model_orchestrator": testing_model}))
+            update={"vertex_model_orchestrator": testing_model,
+                    "llm_max_output_tokens": 32768}))
         backend.check_configuration()
         testing_tier = "orchestrator"
     out.mkdir(parents=True, exist_ok=True)
