@@ -1,0 +1,217 @@
+{
+  "dataset_id": "bo-m3-multiborrower-heldout-1",
+  "evaluation_kind": "deterministic contract plus scripted expected judgments",
+  "actual_llm_semantic_accuracy": "not_measured",
+  "case_count": 18,
+  "false_support": {
+    "numerator": 0,
+    "denominator": 11
+  },
+  "correct_support_retention": {
+    "numerator": 7,
+    "denominator": 7
+  },
+  "contradiction_detection": {
+    "numerator": 4,
+    "denominator": 4
+  },
+  "unsupported_inference_rejection": {
+    "numerator": 5,
+    "denominator": 5
+  },
+  "incorrect_numeric_rejection": {
+    "numerator": 3,
+    "denominator": 3
+  },
+  "uncertain_frequency": {
+    "numerator": 0,
+    "denominator": 18
+  },
+  "deterministic_fail_closed": {
+    "numerator": 6,
+    "denominator": 6
+  },
+  "errors": [],
+  "cases": [
+    {
+      "id": "E01",
+      "category": "reported_fact",
+      "expected": "supported",
+      "actual": "supported",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": false,
+      "reasoning": "Faithful restatement of entity, period, denominator and value."
+    },
+    {
+      "id": "E02",
+      "category": "faithful_paraphrase",
+      "expected": "supported",
+      "actual": "supported",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": false,
+      "reasoning": "Faithful paraphrase without adding an outcome."
+    },
+    {
+      "id": "E03",
+      "category": "reversed_negation",
+      "expected": "contradicted",
+      "actual": "contradicted",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": true,
+      "reasoning": "Deterministic check failed: negation: Claim reverses the source meaning."
+    },
+    {
+      "id": "E04",
+      "category": "changed_numeric_value",
+      "expected": "contradicted",
+      "actual": "contradicted",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": true,
+      "reasoning": "Deterministic check failed: numeric: 58.9% does not equal 48.9%."
+    },
+    {
+      "id": "E05",
+      "category": "wrong_fiscal_period",
+      "expected": "insufficient",
+      "actual": "insufficient",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": true,
+      "reasoning": "Deterministic check failed: period: Claim period 2024 does not match evidence period 2025."
+    },
+    {
+      "id": "E06",
+      "category": "intention_or_action_as_outcome",
+      "expected": "insufficient",
+      "actual": "insufficient",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": false,
+      "reasoning": "Investment is disclosed; a realized reduction in denials is not."
+    },
+    {
+      "id": "E07",
+      "category": "reported_fact",
+      "expected": "supported",
+      "actual": "supported",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": false,
+      "reasoning": "Exact value and denominator are preserved."
+    },
+    {
+      "id": "E08",
+      "category": "incorrect_denominator",
+      "expected": "insufficient",
+      "actual": "insufficient",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": true,
+      "reasoning": "Deterministic check failed: denominator: Revenue miles are not total revenue."
+    },
+    {
+      "id": "E09",
+      "category": "intention_as_achieved_outcome",
+      "expected": "contradicted",
+      "actual": "contradicted",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": true,
+      "reasoning": "Deterministic check failed: numeric_period: FY2025 actual was $8.2bn; $10bn is prospective."
+    },
+    {
+      "id": "E10",
+      "category": "unwarranted_causal_interpretation",
+      "expected": "insufficient",
+      "actual": "insufficient",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": false,
+      "reasoning": "The source names multiple factors and does not quantify sole causation."
+    },
+    {
+      "id": "E11",
+      "category": "faithful_paraphrase",
+      "expected": "supported",
+      "actual": "supported",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": false,
+      "reasoning": "Faithful paraphrase of a dated workforce fact."
+    },
+    {
+      "id": "E12",
+      "category": "outside_specialist_remit",
+      "expected": "insufficient",
+      "actual": "insufficient",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": false,
+      "reasoning": "The cost disclosure does not establish customer switching costs."
+    },
+    {
+      "id": "E13",
+      "category": "demonstrated_mitigation_action",
+      "expected": "supported",
+      "actual": "supported",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": false,
+      "reasoning": "Both the concentration and the concrete mitigation action are directly disclosed; no outcome is claimed."
+    },
+    {
+      "id": "E14",
+      "category": "unproven_mitigant",
+      "expected": "contradicted",
+      "actual": "contradicted",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": false,
+      "reasoning": "Expansion is an initiative; the source says concentration currently remains."
+    },
+    {
+      "id": "E15",
+      "category": "reported_fact",
+      "expected": "supported",
+      "actual": "supported",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": false,
+      "reasoning": "Entity, period, values and denominator are preserved."
+    },
+    {
+      "id": "E16",
+      "category": "wrong_entity",
+      "expected": "insufficient",
+      "actual": "insufficient",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": true,
+      "reasoning": "Deterministic check failed: entity: Claim entity HCA does not match NVIDIA."
+    },
+    {
+      "id": "E17",
+      "category": "correctly_qualified_material_risk",
+      "expected": "supported",
+      "actual": "supported",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": false,
+      "reasoning": "Claim preserves the conditional risk framing."
+    },
+    {
+      "id": "E18",
+      "category": "unsupported_positive_credit_conclusion",
+      "expected": "insufficient",
+      "actual": "insufficient",
+      "correct": true,
+      "malformed": false,
+      "deterministic_hard_failure": false,
+      "reasoning": "The passage describes downside risk, not a positive outcome."
+    }
+  ]
+}

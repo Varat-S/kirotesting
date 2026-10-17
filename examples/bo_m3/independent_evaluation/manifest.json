@@ -1,0 +1,15 @@
+{
+  "dataset_id": "bo-m3-multiborrower-heldout-1",
+  "frozen_at": "2026-10-17T00:00:00+08:00",
+  "label_status": "developer_authored_awaiting_external_review",
+  "independence": "Newly constructed multi-borrower held-out material. It has not been independently validated and must not be described as independent ground truth.",
+  "rule": "Expected labels are frozen in this manifest. Do not tune implementation rules on these cases and then report them as held out.",
+  "sources": [
+    {"borrower": "HCA Healthcare, Inc.", "period": "FY2025", "document": "HCA 2025 Form 10-K", "path": "examples/healthcare/hca-2025/filing/0001193125-26-044769/hca-20251231.htm", "sha256": "2043cd0346a1ca36748348b6bef4bdf02385ee772eb241794fcffc98c8c6ba8c", "primary_disclosure": true},
+    {"borrower": "Delta Air Lines, Inc.", "period": "FY2025", "document": "Delta 2025 Form 10-K", "path": "examples/delta-2025/DeltaAirlines_10k_2025.pdf", "sha256": "eb7e9ac28316159150b5ac29c97b51a4480b15aaa7c4464d29e1bcf37844a1d9", "primary_disclosure": true},
+    {"borrower": "NVIDIA Corporation", "period": "FY2026", "document": "NVIDIA 2026 Form 10-K", "path": "examples/sec/nvda-2026/nvda-20260125.htm", "sha256": "60e23cf5457061831bd20b673ec9efe8676f1f1cc1a12ece6fb7c1c23b876330", "primary_disclosure": true}
+  ],
+  "review": {"reviewer": null, "reviewed_at": null, "status": "awaiting_external_review", "adjudication_file": null},
+  "case_file": "cases.json",
+  "instructions": "Run DEBUG=false <python> -m app.services.bo.m3_semantic_eval examples/bo_m3/independent_evaluation/cases.json"
+}
