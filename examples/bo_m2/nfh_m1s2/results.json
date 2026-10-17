@@ -1,0 +1,446 @@
+{
+ "arms": {
+  "investigation": {
+   "arm": "investigation",
+   "controls_as_expected": 0,
+   "controls_total": 2,
+   "controls_usable": 0,
+   "defects_as_expected": 4,
+   "defects_held_back": 4,
+   "defects_total": 5,
+   "failure": null,
+   "issues": [],
+   "parameter_changes": [
+    {
+     "detail": "None of the hypotheses cited for this value survived validation as a usable finding.",
+     "hypothesis_ids": [
+      "M1S2-H001"
+     ],
+     "original_status": "ok",
+     "original_value": "concentrated_payer_categories",
+     "parameter_id": "customer_dependence_assessment",
+     "reason": "no_validated_supporting_hypothesis"
+    },
+    {
+     "detail": "None of the hypotheses cited for this value survived validation as a usable finding.",
+     "hypothesis_ids": [
+      "M1S2-H006"
+     ],
+     "original_status": "ok",
+     "original_value": "low",
+     "parameter_id": "contract_termination_risk_assessment",
+     "reason": "no_validated_supporting_hypothesis"
+    },
+    {
+     "detail": "'high' asserts something specific about this company, but no linked hypothesis is an established, company-specific finding (they are: qualified_narrative/deterministic_calculation).",
+     "hypothesis_ids": [
+      "M1S2-H003"
+     ],
+     "original_status": "ok",
+     "original_value": "high",
+     "parameter_id": "switching_cost_assessment",
+     "reason": "needs_company_specific_evidence"
+    }
+   ],
+   "parameters": {
+    "contract_termination_risk_assessment": {
+     "status": "unavailable",
+     "value": null
+    },
+    "customer_dependence_assessment": {
+     "status": "unavailable",
+     "value": null
+    },
+    "switching_cost_assessment": {
+     "status": "unavailable",
+     "value": null
+    }
+   },
+   "scenarios": [
+    {
+     "admissibility": "audit_only",
+     "as_expected": false,
+     "contradicting_evidence": 0,
+     "contradictory_enquiry_hits": 0,
+     "disposition": "unverified",
+     "hypothesis_id": "M1S2-H001",
+     "investigation": {
+      "adapter_notes": [],
+      "downgrade_reasons": [
+       "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Medicare and Medicaid accounted for 45% of revenues']"
+      ],
+      "effective_status": "unverified",
+      "independently_corroborated": false,
+      "proposed_status": "supported"
+     },
+     "kind": "control",
+     "missing_information": 0,
+     "mitigant_effectiveness": null,
+     "present": true,
+     "presentation": "on_demand",
+     "review_flags": [],
+     "scenario": "S1_control_payer_category_share",
+     "usable": false
+    },
+    {
+     "admissibility": "audit_only",
+     "as_expected": true,
+     "contradicting_evidence": 0,
+     "contradictory_enquiry_hits": 2,
+     "disposition": "unverified",
+     "hypothesis_id": "M1S2-H002",
+     "investigation": {
+      "adapter_notes": [],
+      "downgrade_reasons": [
+       "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Contracts are multi-year agreements that set negotiated rates', 'The agreements commit payers to patient volumes']"
+      ],
+      "effective_status": "unverified",
+      "independently_corroborated": false,
+      "proposed_status": "supported"
+     },
+     "kind": "defect",
+     "missing_information": 0,
+     "mitigant_effectiveness": null,
+     "present": true,
+     "presentation": "on_demand",
+     "review_flags": [],
+     "scenario": "S2_genuine_quote_wrong_inference",
+     "usable": false
+    },
+    {
+     "admissibility": "qualified_narrative",
+     "as_expected": false,
+     "contradicting_evidence": 0,
+     "contradictory_enquiry_hits": 2,
+     "disposition": "supported",
+     "hypothesis_id": "M1S2-H003",
+     "investigation": {
+      "adapter_notes": [],
+      "downgrade_reasons": [],
+      "effective_status": "supported",
+      "independently_corroborated": true,
+      "proposed_status": "supported"
+     },
+     "kind": "defect",
+     "missing_information": 0,
+     "mitigant_effectiveness": null,
+     "present": true,
+     "presentation": "display",
+     "review_flags": [],
+     "scenario": "S3_correct_number_irrelevant_claim",
+     "usable": true
+    },
+    {
+     "admissibility": "audit_only",
+     "as_expected": true,
+     "contradicting_evidence": 0,
+     "contradictory_enquiry_hits": 3,
+     "disposition": "unverified",
+     "hypothesis_id": "M1S2-H004",
+     "investigation": {
+      "adapter_notes": [],
+      "downgrade_reasons": [
+       "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['No individual payer exceeds 10% of revenues']"
+      ],
+      "effective_status": "unverified",
+      "independently_corroborated": false,
+      "proposed_status": "supported"
+     },
+     "kind": "defect",
+     "missing_information": 0,
+     "mitigant_effectiveness": null,
+     "present": true,
+     "presentation": "on_demand",
+     "review_flags": [],
+     "scenario": "S4_absence_as_safety",
+     "usable": false
+    },
+    {
+     "admissibility": "audit_only",
+     "as_expected": true,
+     "contradicting_evidence": 0,
+     "contradictory_enquiry_hits": 1,
+     "disposition": "unverified",
+     "hypothesis_id": "M1S2-H005",
+     "investigation": {
+      "adapter_notes": [],
+      "downgrade_reasons": [
+       "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Multi-year agreements exist', 'Multi-year agreements have reduced contract terminations']"
+      ],
+      "effective_status": "unverified",
+      "independently_corroborated": false,
+      "proposed_status": "supported"
+     },
+     "kind": "defect",
+     "missing_information": 0,
+     "mitigant_effectiveness": "unproven",
+     "present": true,
+     "presentation": "on_demand",
+     "review_flags": [],
+     "scenario": "S5_mitigant_without_outcome",
+     "usable": false
+    },
+    {
+     "admissibility": "audit_only",
+     "as_expected": true,
+     "contradicting_evidence": 0,
+     "contradictory_enquiry_hits": 3,
+     "disposition": "unverified",
+     "hypothesis_id": "M1S2-H006",
+     "investigation": {
+      "adapter_notes": [],
+      "downgrade_reasons": [
+       "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Payers are unlikely to terminate their contracts']"
+      ],
+      "effective_status": "unverified",
+      "independently_corroborated": false,
+      "proposed_status": "supported"
+     },
+     "kind": "defect",
+     "missing_information": 0,
+     "mitigant_effectiveness": null,
+     "present": true,
+     "presentation": "on_demand",
+     "review_flags": [],
+     "scenario": "S6_ignored_contradiction",
+     "usable": false
+    },
+    {
+     "admissibility": "audit_only",
+     "as_expected": false,
+     "contradicting_evidence": 0,
+     "contradictory_enquiry_hits": 2,
+     "disposition": "unverified",
+     "hypothesis_id": "M1S2-H007",
+     "investigation": {
+      "adapter_notes": [],
+      "downgrade_reasons": [
+       "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Agreements do not guarantee minimum volumes and are terminable on notice']"
+      ],
+      "effective_status": "unverified",
+      "independently_corroborated": false,
+      "proposed_status": "supported"
+     },
+     "kind": "control",
+     "missing_information": 0,
+     "mitigant_effectiveness": null,
+     "present": true,
+     "presentation": "on_demand",
+     "review_flags": [],
+     "scenario": "S7_control_terminable_no_volume_commitment",
+     "usable": false
+    }
+   ],
+   "usage": {
+    "model_calls": 4,
+    "request_chars": 46863,
+    "response_chars": 23520
+   },
+   "valid": true
+  },
+  "single_pass": {
+   "arm": "single_pass",
+   "controls_as_expected": 2,
+   "controls_total": 2,
+   "controls_usable": 2,
+   "defects_as_expected": 2,
+   "defects_held_back": 2,
+   "defects_total": 5,
+   "failure": null,
+   "issues": [],
+   "parameter_changes": [],
+   "parameters": {
+    "contract_termination_risk_assessment": {
+     "status": "ok",
+     "value": "low"
+    },
+    "customer_dependence_assessment": {
+     "status": "ok",
+     "value": "concentrated_payer_categories"
+    },
+    "switching_cost_assessment": {
+     "status": "ok",
+     "value": "high"
+    }
+   },
+   "scenarios": [
+    {
+     "admissibility": "established",
+     "as_expected": true,
+     "contradicting_evidence": 0,
+     "disposition": "supported",
+     "hypothesis_id": "M1S2-H001",
+     "kind": "control",
+     "missing_information": 0,
+     "mitigant_effectiveness": null,
+     "present": true,
+     "presentation": "display",
+     "review_flags": [],
+     "scenario": "S1_control_payer_category_share",
+     "usable": true
+    },
+    {
+     "admissibility": "audit_only",
+     "as_expected": true,
+     "contradicting_evidence": 0,
+     "disposition": "unverified",
+     "hypothesis_id": "M1S2-H002",
+     "kind": "defect",
+     "missing_information": 0,
+     "mitigant_effectiveness": null,
+     "present": true,
+     "presentation": "on_demand",
+     "review_flags": [
+      "rate_agreement_to_volume_guarantee"
+     ],
+     "scenario": "S2_genuine_quote_wrong_inference",
+     "usable": false
+    },
+    {
+     "admissibility": "established",
+     "as_expected": false,
+     "contradicting_evidence": 0,
+     "disposition": "supported",
+     "hypothesis_id": "M1S2-H003",
+     "kind": "defect",
+     "missing_information": 0,
+     "mitigant_effectiveness": null,
+     "present": true,
+     "presentation": "display",
+     "review_flags": [],
+     "scenario": "S3_correct_number_irrelevant_claim",
+     "usable": true
+    },
+    {
+     "admissibility": "audit_only",
+     "as_expected": true,
+     "contradicting_evidence": 0,
+     "disposition": "unverified",
+     "hypothesis_id": "M1S2-H004",
+     "kind": "defect",
+     "missing_information": 0,
+     "mitigant_effectiveness": null,
+     "present": true,
+     "presentation": "on_demand",
+     "review_flags": [],
+     "scenario": "S4_absence_as_safety",
+     "usable": false
+    },
+    {
+     "admissibility": "qualified_narrative",
+     "as_expected": false,
+     "contradicting_evidence": 0,
+     "disposition": "supported",
+     "hypothesis_id": "M1S2-H005",
+     "kind": "defect",
+     "missing_information": 0,
+     "mitigant_effectiveness": "demonstrated",
+     "present": true,
+     "presentation": "display",
+     "review_flags": [],
+     "scenario": "S5_mitigant_without_outcome",
+     "usable": true
+    },
+    {
+     "admissibility": "qualified_narrative",
+     "as_expected": false,
+     "contradicting_evidence": 0,
+     "disposition": "supported",
+     "hypothesis_id": "M1S2-H006",
+     "kind": "defect",
+     "missing_information": 0,
+     "mitigant_effectiveness": null,
+     "present": true,
+     "presentation": "display",
+     "review_flags": [],
+     "scenario": "S6_ignored_contradiction",
+     "usable": true
+    },
+    {
+     "admissibility": "qualified_narrative",
+     "as_expected": true,
+     "contradicting_evidence": 0,
+     "disposition": "qualified",
+     "hypothesis_id": "M1S2-H007",
+     "kind": "control",
+     "missing_information": 0,
+     "mitigant_effectiveness": null,
+     "present": true,
+     "presentation": "display",
+     "review_flags": [
+      "generic_risk_disclosure_only"
+     ],
+     "scenario": "S7_control_terminable_no_volume_commitment",
+     "usable": true
+    }
+   ],
+   "usage": {
+    "model_calls": 1,
+    "request_chars": 10489,
+    "response_chars": 4981
+   },
+   "valid": true
+  }
+ },
+ "case_id": "NFH_BO",
+ "comparison_version": "m2-comparison-1",
+ "identical_inputs_fingerprint": "6c7a6b63dd348e5e61eec19b29db8fe29bdc4ebac003f31815874cc0d055e004",
+ "investigation": {
+  "material_gaps": 16,
+  "out_of_scope": [
+   {
+    "dimension": "operating_model_cost_resilience",
+    "hypothesis_id": "h8",
+    "statement": "A nursing shortage and rising contract labour costs pressure operating margins."
+   }
+  ],
+  "progression": "blocked_pending_evidence",
+  "stages": [
+   {
+    "detail": "7 in scope, 1 out of scope",
+    "stage": "6_generation",
+    "state": "completed"
+   },
+   {
+    "detail": "18 enquiries",
+    "stage": "7_planning",
+    "state": "completed"
+   },
+   {
+    "detail": "18 executed, 1 unresolved",
+    "stage": "7_retrieval",
+    "state": "completed"
+   },
+   {
+    "detail": "7 governed",
+    "stage": "8_testing",
+    "state": "completed"
+   },
+   {
+    "detail": "7 findings, 0 candidates",
+    "stage": "9_11_signals",
+    "state": "completed"
+   },
+   {
+    "detail": "progression=blocked_pending_evidence; 16 gap(s)",
+    "stage": "12_completeness",
+    "state": "completed"
+   },
+   {
+    "detail": "3 proposed",
+    "stage": "parameters",
+    "state": "completed"
+   }
+  ]
+ },
+ "model": "scripted (FakeLLMBackend); no provider was called",
+ "packet_evidence_ids": [
+  "ev_admit",
+  "ev_compete",
+  "ev_geo",
+  "ev_labor",
+  "ev_payer",
+  "ev_reg"
+ ],
+ "specialist": "M1S2"
+}

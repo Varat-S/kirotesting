@@ -1,0 +1,54 @@
+{
+ "_comment": "M2 controlled comparison, synthetic case NFH_BO (tests/bo_helpers.py), specialist M1S2 Customer Stickiness & Concentration. Written BEFORE the comparison was run; not tuned to its output. 'acceptable' lists the dispositions that count as the desired outcome. Model responses in both arms are scripted to be EQUALLY WRONG: the same claims, the same quotes, the same asserted statuses. The comparison therefore measures what each pipeline's deterministic controls catch, not model reasoning.",
+ "case": "NFH_BO (synthetic, fictional)",
+ "specialist": "M1S2",
+ "scenarios": {
+  "S1_control_payer_category_share": {
+   "kind": "control",
+   "description": "Correct reported fact: government programmes are 45% of revenue, i.e. concentration by payer category.",
+   "hypothesis_id": {"single_pass": "M1S2-H001", "investigation": "M1S2-H001"},
+   "acceptable": ["supported", "qualified"]
+  },
+  "S2_genuine_quote_wrong_inference": {
+   "kind": "defect",
+   "description": "Genuine quote (multi-year agreements set negotiated rates) used to claim guaranteed volumes; the same passage says volumes are not guaranteed.",
+   "hypothesis_id": {"single_pass": "M1S2-H002", "investigation": "M1S2-H002"},
+   "acceptable": ["rejected", "unverified"]
+  },
+  "S3_correct_number_irrelevant_claim": {
+   "kind": "defect",
+   "description": "Correct, deterministically bound number (Texas 30% of revenue) attached to an unrelated claim (patient relationships are sticky); also conflates geographic exposure (owned by M2) with stickiness.",
+   "hypothesis_id": {"single_pass": "M1S2-H003", "investigation": "M1S2-H003"},
+   "acceptable": ["rejected", "unverified"]
+  },
+  "S4_absence_as_safety": {
+   "kind": "defect",
+   "description": "Non-disclosure of an individual payer above 10% treated as evidence of low concentration.",
+   "hypothesis_id": {"single_pass": "M1S2-H004", "investigation": "M1S2-H004"},
+   "acceptable": ["rejected", "unverified"]
+  },
+  "S5_mitigant_without_outcome": {
+   "kind": "defect",
+   "description": "Multi-year agreements claimed to demonstrably mitigate termination risk; no outcome evidence, and the passage says either party may terminate on notice.",
+   "hypothesis_id": {"single_pass": "M1S2-H005", "investigation": "M1S2-H005"},
+   "acceptable": ["rejected", "unverified"]
+  },
+  "S6_ignored_contradiction": {
+   "kind": "defect",
+   "description": "Termination risk claimed low while the packet states either party may terminate on notice; the model cites only the supportive sentence.",
+   "hypothesis_id": {"single_pass": "M1S2-H006", "investigation": "M1S2-H006"},
+   "acceptable": ["rejected", "unverified"]
+  },
+  "S7_control_terminable_no_volume_commitment": {
+   "kind": "control",
+   "description": "Correct reported fact: agreements do not guarantee minimum volumes and can be terminated on notice.",
+   "hypothesis_id": {"single_pass": "M1S2-H007", "investigation": "M1S2-H007"},
+   "acceptable": ["supported", "qualified"]
+  }
+ },
+ "parameters": {
+  "customer_dependence_assessment": {"proposed": "concentrated_payer_categories", "rests_on": "S1", "desired": "accepted"},
+  "contract_termination_risk_assessment": {"proposed": "low", "rests_on": "S6", "desired": "held_back"},
+  "switching_cost_assessment": {"proposed": "high", "rests_on": "S3", "desired": "held_back"}
+ }
+}

@@ -173,6 +173,9 @@ class InvestigationResult:
     id_map: dict[str, str] = field(default_factory=dict)  # original -> BO id
     out_of_scope: list[dict[str, Any]] = field(default_factory=list)
     model_calls: int = 0
+    # Approved indicators this specialist could ground against, by id; used to
+    # carry a premise's metric link into the BO record as a quoted value.
+    metric_traces: dict[str, dict[str, Any]] = field(default_factory=dict)
     adapter_notes: dict[str, list[str]] = field(default_factory=dict)
 
     @property
@@ -291,8 +294,14 @@ def to_bo_items(result: InvestigationResult, spec: BoAgentSpec) -> list[dict[str
                   for a in g.evidence_assessments
                   if a.quoted_excerpt and a.assessment in (
                       *_SUPPORTING, EvidenceAssessmentKind.CONTRADICTS_PREMISE)]
+        # Effectiveness needs a CORROBORATED outcome premise; a passage the model
+        # labelled "measured outcome" is not enough on its own.
+        outcome_corroborated = any(
+            pc.is_outcome_premise and pc.corroborated
+            for pc in (g.premise_corroboration or []))
         outcomes = [a.passage_id for a in g.evidence_assessments
-                    if a.assessment is EvidenceAssessmentKind.MEASURED_OUTCOME]
+                    if a.assessment is EvidenceAssessmentKind.MEASURED_OUTCOME
+                    ] if outcome_corroborated else []
         initiatives = [a.passage_id for a in g.evidence_assessments
                        if a.assessment is EvidenceAssessmentKind.DESCRIBES_INITIATIVE
                        and a.quoted_excerpt]
@@ -304,6 +313,16 @@ def to_bo_items(result: InvestigationResult, spec: BoAgentSpec) -> list[dict[str
                 "effectiveness": "demonstrated" if outcomes else "unproven",
                 "outcome_evidence_ids": outcomes,
             }
+        # A premise corroborated through an approved metric keeps that link: the
+        # number, its unit, period and denominator travel as a bound value.
+        quoted_values = []
+        corroborated = {pc.premise_id for pc in (g.premise_corroboration or [])
+                        if "deterministic_grounding" in pc.corroboration_basis}
+        for idx, premise in enumerate(g.mechanism_premises):
+            pid = premise.premise_id or f"{g.hypothesis_id}:premise:{idx}"
+            trace = result.metric_traces.get(premise.grounding_metric_id or "")
+            if trace and pid in corroborated:
+                quoted_values.append(dict(trace))
         missing = list(dict.fromkeys([
             *h.missing_information, *g.unresolved_evidence_requirements,
             *(finding.impact.missing_information if finding else [])]))
@@ -324,6 +343,7 @@ def to_bo_items(result: InvestigationResult, spec: BoAgentSpec) -> list[dict[str
             "supporting_evidence_ids": list(dict.fromkeys(supporting)),
             "contradicting_evidence_ids": list(dict.fromkeys(contradicting)),
             "evidence_quotes": quotes,
+            "quoted_values": quoted_values,
             "missing_information": missing,
             "mitigant": mitigant,
             "review_required": bool(
@@ -361,6 +381,12 @@ class SpecialistInvestigation:
         corpus = corpus_from_packet(packet_passages)
         grounding = grounding_from_indicators(indicators, spec.indicator_groups)
         metric_ids = frozenset(i.evidence_id for i in grounding)
+        result.metric_traces = {
+            t.parameter_result_id: {
+                "parameter_result_id": t.parameter_result_id, "value": t.value,
+                "unit": t.units, "period": t.period,
+                "denominator": (t.denominator or {}).get("name")}
+            for t in indicators.traces if t.parameter_result_id in metric_ids}
 
         def stage(name, state, detail=""):
             result.stages.append(StageRecord(name, state, detail))

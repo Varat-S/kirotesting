@@ -1,0 +1,836 @@
+{
+ "_comment": "Scripted investigation responses for M1S2 (equally wrong model: same claims, quotes and asserted 'supported' status as single_pass.json). h8 is deliberately out of scope (Operating Model). Keys are the stage keys passed to the services.",
+ "generate": {
+  "hypotheses": [
+   {
+    "hypothesis_id": "h1",
+    "dimension": "customer_stickiness_concentration",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "Medicare and Medicaid accounted for 45% of revenues, a concentration by payer category rather than by individual insurer.",
+    "credit_direction": "negative",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "Medicare and Medicaid accounted for 45%"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "reported_fact",
+    "verification_status": "unverified",
+    "severity": "high"
+   },
+   {
+    "hypothesis_id": "h2",
+    "dimension": "customer_stickiness_concentration",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "Multi-year managed care agreements give contracted revenue visibility and guarantee patient volumes.",
+    "credit_direction": "positive",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "multi-year agreements that set negotiated rates"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "inference",
+    "verification_status": "unverified",
+    "severity": "high"
+   },
+   {
+    "hypothesis_id": "h3",
+    "dimension": "customer_stickiness_concentration",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "Patient relationships are sticky: Texas facilities generated 30% of consolidated revenues.",
+    "credit_direction": "positive",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "Texas and Florida generated"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "inference",
+    "verification_status": "unverified",
+    "severity": "high"
+   },
+   {
+    "hypothesis_id": "h4",
+    "dimension": "customer_stickiness_concentration",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "Customer concentration is low because no individual payer is disclosed as exceeding 10% of revenues.",
+    "credit_direction": "positive",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "Medicare and Medicaid accounted for 45%"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "inference",
+    "verification_status": "unverified",
+    "severity": "high"
+   },
+   {
+    "hypothesis_id": "h5",
+    "dimension": "customer_stickiness_concentration",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "Multi-year agreements mitigate contract termination risk, and this mitigation is demonstrated.",
+    "credit_direction": "positive",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [
+     "Multi-year managed care agreements"
+    ],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "multi-year agreements that set negotiated rates"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "inference",
+    "verification_status": "unverified",
+    "severity": "high"
+   },
+   {
+    "hypothesis_id": "h6",
+    "dimension": "customer_stickiness_concentration",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "Payers are unlikely to terminate their contracts, so contract termination risk is low.",
+    "credit_direction": "positive",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "multi-year agreements that set negotiated rates"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "inference",
+    "verification_status": "unverified",
+    "severity": "high"
+   },
+   {
+    "hypothesis_id": "h7",
+    "dimension": "customer_stickiness_concentration",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "Managed care agreements do not guarantee minimum patient volumes and either party may terminate an agreement on notice.",
+    "credit_direction": "negative",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "do not guarantee minimum volumes"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "reported_fact",
+    "verification_status": "unverified",
+    "severity": "high"
+   },
+   {
+    "hypothesis_id": "h8",
+    "dimension": "operating_model_cost_resilience",
+    "business_characteristic": "Labour",
+    "statement": "A nursing shortage and rising contract labour costs pressure operating margins.",
+    "credit_direction": "negative",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "nursing shortage"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "inference",
+    "verification_status": "unverified",
+    "severity": "high"
+   }
+  ]
+ },
+ "plan": {
+  "planner_mode": "llm",
+  "incomplete_coverage": [],
+  "enquiries": [
+   {
+    "enquiry_id": "q1s",
+    "hypothesis_id": "h1",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "supporting",
+    "search_intent": "supporting_evidence",
+    "investigative_question": "supporting evidence for h1",
+    "search_query": "Medicare Medicaid accounted revenues",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q1c",
+    "hypothesis_id": "h1",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "contradictory",
+    "search_intent": "contradictory_evidence",
+    "investigative_question": "contradictory evidence for h1",
+    "search_query": "diversified payers individual insurer",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q1o",
+    "hypothesis_id": "h1",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "offsetting",
+    "search_intent": "offsetting_capability",
+    "investigative_question": "offsetting evidence for h1",
+    "search_query": "managed care contracts negotiated rates",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q2s",
+    "hypothesis_id": "h2",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "supporting",
+    "search_intent": "supporting_evidence",
+    "investigative_question": "supporting evidence for h2",
+    "search_query": "multi-year agreements negotiated rates",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q2c",
+    "hypothesis_id": "h2",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "contradictory",
+    "search_intent": "contradictory_evidence",
+    "investigative_question": "contradictory evidence for h2",
+    "search_query": "not guarantee minimum volumes patients",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q3s",
+    "hypothesis_id": "h3",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "supporting",
+    "search_intent": "supporting_evidence",
+    "investigative_question": "supporting evidence for h3",
+    "search_query": "Texas Florida consolidated revenues facilities",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q3c",
+    "hypothesis_id": "h3",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "contradictory",
+    "search_intent": "contradictory_evidence",
+    "investigative_question": "contradictory evidence for h3",
+    "search_query": "patients terminate agreement competitors",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q4s",
+    "hypothesis_id": "h4",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "supporting",
+    "search_intent": "supporting_evidence",
+    "investigative_question": "supporting evidence for h4",
+    "search_query": "Medicare Medicaid revenues payer",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q4c",
+    "hypothesis_id": "h4",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "contradictory",
+    "search_intent": "contradictory_evidence",
+    "investigative_question": "contradictory evidence for h4",
+    "search_query": "significant portion revenues government programs",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q5s",
+    "hypothesis_id": "h5",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "supporting",
+    "search_intent": "supporting_evidence",
+    "investigative_question": "supporting evidence for h5",
+    "search_query": "multi-year agreements negotiated rates",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q5c",
+    "hypothesis_id": "h5",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "contradictory",
+    "search_intent": "contradictory_evidence",
+    "investigative_question": "contradictory evidence for h5",
+    "search_query": "terminate agreement notice",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q5o",
+    "hypothesis_id": "h5",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "offsetting",
+    "search_intent": "offsetting_capability",
+    "investigative_question": "offsetting evidence for h5",
+    "search_query": "multi-year agreements managed care contracts",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q5e",
+    "hypothesis_id": "h5",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "effectiveness",
+    "search_intent": "general_investigation",
+    "investigative_question": "effectiveness evidence for h5",
+    "search_query": "agreements renewed terminations reduced",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q6s",
+    "hypothesis_id": "h6",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "supporting",
+    "search_intent": "supporting_evidence",
+    "investigative_question": "supporting evidence for h6",
+    "search_query": "multi-year agreements managed care contracts",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q6c",
+    "hypothesis_id": "h6",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "contradictory",
+    "search_intent": "contradictory_evidence",
+    "investigative_question": "contradictory evidence for h6",
+    "search_query": "either party may terminate agreement notice",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q7s",
+    "hypothesis_id": "h7",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "supporting",
+    "search_intent": "supporting_evidence",
+    "investigative_question": "supporting evidence for h7",
+    "search_query": "not guarantee minimum volumes terminate notice",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q7c",
+    "hypothesis_id": "h7",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "contradictory",
+    "search_intent": "contradictory_evidence",
+    "investigative_question": "contradictory evidence for h7",
+    "search_query": "multi-year agreements guarantee volumes",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   },
+   {
+    "enquiry_id": "q7o",
+    "hypothesis_id": "h7",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "offsetting",
+    "search_intent": "offsetting_capability",
+    "investigative_question": "offsetting evidence for h7",
+    "search_query": "multi-year agreements negotiated rates",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": [
+     "doc_10k"
+    ]
+   }
+  ]
+ },
+ "test": {
+  "results": [
+   {
+    "hypothesis_id": "h1",
+    "dimension": "customer_stickiness_concentration",
+    "hypothesis_statement": "Medicare and Medicaid accounted for 45% of revenues, a concentration by payer category rather than by individual insurer.",
+    "evidence_assessments": [
+     {
+      "passage_id": {
+       "$evidence": "Medicare and Medicaid accounted for 45%"
+      },
+      "assessment": "supports_premise",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "Medicare and Medicaid accounted for 45% of our revenues."
+     }
+    ],
+    "relevant_factual_claims": [],
+    "proposed_mechanism": "As stated in the hypothesis.",
+    "mechanism_premises": [
+     {
+      "premise_id": "h1p1",
+      "premise": "Medicare and Medicaid accounted for 45% of revenues",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "Medicare and Medicaid accounted for 45%"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": "Medicare and Medicaid accounted for 45% of our revenues.",
+      "is_outcome_premise": false,
+      "material": true
+     }
+    ],
+    "alternative_explanations": [],
+    "offsetting_capabilities": [],
+    "offset_effectiveness_evidence": [],
+    "proposed_status": "supported",
+    "justification": "The cited passage supports the hypothesis.",
+    "unresolved_evidence_requirements": [],
+    "interpretation_confidence": 0.85
+   },
+   {
+    "hypothesis_id": "h2",
+    "dimension": "customer_stickiness_concentration",
+    "hypothesis_statement": "Multi-year managed care agreements give contracted revenue visibility and guarantee patient volumes.",
+    "evidence_assessments": [
+     {
+      "passage_id": {
+       "$evidence": "multi-year agreements that set negotiated rates"
+      },
+      "assessment": "supports_premise",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "Our managed care contracts are generally multi-year agreements that set negotiated rates"
+     }
+    ],
+    "relevant_factual_claims": [],
+    "proposed_mechanism": "As stated in the hypothesis.",
+    "mechanism_premises": [
+     {
+      "premise_id": "h2p1",
+      "premise": "Contracts are multi-year agreements that set negotiated rates",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "multi-year agreements that set negotiated rates"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": "Our managed care contracts are generally multi-year agreements that set negotiated rates",
+      "is_outcome_premise": false,
+      "material": true
+     },
+     {
+      "premise_id": "h2p2",
+      "premise": "The agreements commit payers to patient volumes",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "multi-year agreements that set negotiated rates"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": null,
+      "is_outcome_premise": false,
+      "material": true
+     }
+    ],
+    "alternative_explanations": [],
+    "offsetting_capabilities": [],
+    "offset_effectiveness_evidence": [],
+    "proposed_status": "supported",
+    "justification": "The cited passage supports the hypothesis.",
+    "unresolved_evidence_requirements": [],
+    "interpretation_confidence": 0.85
+   },
+   {
+    "hypothesis_id": "h3",
+    "dimension": "customer_stickiness_concentration",
+    "hypothesis_statement": "Patient relationships are sticky: Texas facilities generated 30% of consolidated revenues.",
+    "evidence_assessments": [
+     {
+      "passage_id": {
+       "$evidence": "Texas and Florida generated"
+      },
+      "assessment": "supports_premise",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "Our facilities in the states of Texas and Florida generated approximately 52% of our consolidated revenues."
+     }
+    ],
+    "relevant_factual_claims": [],
+    "proposed_mechanism": "As stated in the hypothesis.",
+    "mechanism_premises": [
+     {
+      "premise_id": "h3p1",
+      "premise": "Texas facilities generated 30% of consolidated revenues",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "Texas and Florida generated"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": "Texas generated 30% of consolidated revenues",
+      "is_outcome_premise": false,
+      "material": true,
+      "grounding_metric_id": {
+       "$indicator": "revenue_share.statement_geographical.texas"
+      }
+     }
+    ],
+    "alternative_explanations": [],
+    "offsetting_capabilities": [],
+    "offset_effectiveness_evidence": [],
+    "proposed_status": "supported",
+    "justification": "The cited passage supports the hypothesis.",
+    "unresolved_evidence_requirements": [],
+    "interpretation_confidence": 0.85
+   },
+   {
+    "hypothesis_id": "h4",
+    "dimension": "customer_stickiness_concentration",
+    "hypothesis_statement": "Customer concentration is low because no individual payer is disclosed as exceeding 10% of revenues.",
+    "evidence_assessments": [
+     {
+      "passage_id": {
+       "$evidence": "Medicare and Medicaid accounted for 45%"
+      },
+      "assessment": "supports_premise",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "Medicare and Medicaid accounted for 45% of our revenues."
+     }
+    ],
+    "relevant_factual_claims": [],
+    "proposed_mechanism": "As stated in the hypothesis.",
+    "mechanism_premises": [
+     {
+      "premise_id": "h4p1",
+      "premise": "No individual payer exceeds 10% of revenues",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "Medicare and Medicaid accounted for 45%"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": "Medicare and Medicaid accounted for 45% of our revenues.",
+      "is_outcome_premise": false,
+      "material": true
+     }
+    ],
+    "alternative_explanations": [],
+    "offsetting_capabilities": [],
+    "offset_effectiveness_evidence": [],
+    "proposed_status": "supported",
+    "justification": "The cited passage supports the hypothesis.",
+    "unresolved_evidence_requirements": [],
+    "interpretation_confidence": 0.85
+   },
+   {
+    "hypothesis_id": "h5",
+    "dimension": "customer_stickiness_concentration",
+    "hypothesis_statement": "Multi-year agreements mitigate contract termination risk, and this mitigation is demonstrated.",
+    "evidence_assessments": [
+     {
+      "passage_id": {
+       "$evidence": "multi-year agreements that set negotiated rates"
+      },
+      "assessment": "describes_initiative",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "Our managed care contracts are generally multi-year agreements that set negotiated rates"
+     },
+     {
+      "passage_id": {
+       "$evidence": "multi-year agreements that set negotiated rates"
+      },
+      "assessment": "measured_outcome",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "Our managed care contracts are generally multi-year agreements that set negotiated rates"
+     }
+    ],
+    "relevant_factual_claims": [],
+    "proposed_mechanism": "As stated in the hypothesis.",
+    "mechanism_premises": [
+     {
+      "premise_id": "h5p1",
+      "premise": "Multi-year agreements exist",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "multi-year agreements that set negotiated rates"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": "Our managed care contracts are generally multi-year agreements that set negotiated rates",
+      "is_outcome_premise": false,
+      "material": true
+     },
+     {
+      "premise_id": "h5p2",
+      "premise": "Multi-year agreements have reduced contract terminations",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "multi-year agreements that set negotiated rates"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": null,
+      "is_outcome_premise": true,
+      "material": true
+     }
+    ],
+    "alternative_explanations": [],
+    "offsetting_capabilities": [
+     "Multi-year managed care agreements"
+    ],
+    "offset_effectiveness_evidence": [
+     {
+      "$evidence": "multi-year agreements that set negotiated rates"
+     }
+    ],
+    "proposed_status": "supported",
+    "justification": "The cited passage supports the hypothesis.",
+    "unresolved_evidence_requirements": [],
+    "interpretation_confidence": 0.85
+   },
+   {
+    "hypothesis_id": "h6",
+    "dimension": "customer_stickiness_concentration",
+    "hypothesis_statement": "Payers are unlikely to terminate their contracts, so contract termination risk is low.",
+    "evidence_assessments": [
+     {
+      "passage_id": {
+       "$evidence": "multi-year agreements that set negotiated rates"
+      },
+      "assessment": "supports_premise",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "Our managed care contracts are generally multi-year agreements that set negotiated rates"
+     }
+    ],
+    "relevant_factual_claims": [],
+    "proposed_mechanism": "As stated in the hypothesis.",
+    "mechanism_premises": [
+     {
+      "premise_id": "h6p1",
+      "premise": "Payers are unlikely to terminate their contracts",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "multi-year agreements that set negotiated rates"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": "Our managed care contracts are generally multi-year agreements that set negotiated rates",
+      "is_outcome_premise": false,
+      "material": true
+     }
+    ],
+    "alternative_explanations": [],
+    "offsetting_capabilities": [],
+    "offset_effectiveness_evidence": [],
+    "proposed_status": "supported",
+    "justification": "The cited passage supports the hypothesis.",
+    "unresolved_evidence_requirements": [],
+    "interpretation_confidence": 0.85
+   },
+   {
+    "hypothesis_id": "h7",
+    "dimension": "customer_stickiness_concentration",
+    "hypothesis_statement": "Managed care agreements do not guarantee minimum patient volumes and either party may terminate an agreement on notice.",
+    "evidence_assessments": [
+     {
+      "passage_id": {
+       "$evidence": "do not guarantee minimum volumes"
+      },
+      "assessment": "supports_premise",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "the contracts do not guarantee minimum volumes of patients. Either party may terminate an agreement on notice."
+     }
+    ],
+    "relevant_factual_claims": [],
+    "proposed_mechanism": "As stated in the hypothesis.",
+    "mechanism_premises": [
+     {
+      "premise_id": "h7p1",
+      "premise": "Agreements do not guarantee minimum volumes and are terminable on notice",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "do not guarantee minimum volumes"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": "the contracts do not guarantee minimum volumes of patients. Either party may terminate an agreement on notice.",
+      "is_outcome_premise": false,
+      "material": true
+     }
+    ],
+    "alternative_explanations": [],
+    "offsetting_capabilities": [],
+    "offset_effectiveness_evidence": [],
+    "proposed_status": "supported",
+    "justification": "The cited passage supports the hypothesis.",
+    "unresolved_evidence_requirements": [],
+    "interpretation_confidence": 0.85
+   }
+  ]
+ },
+ "parameters": {
+  "parameters": [
+   {
+    "parameter_id": "customer_dependence_assessment",
+    "value": "concentrated_payer_categories",
+    "value_type": "category",
+    "status": "ok",
+    "hypothesis_ids": [
+     "M1S2-H001"
+    ],
+    "evidence_ids": [
+     {
+      "$evidence": "Medicare and Medicaid accounted for 45%"
+     }
+    ]
+   },
+   {
+    "parameter_id": "contract_termination_risk_assessment",
+    "value": "low",
+    "value_type": "category",
+    "status": "ok",
+    "hypothesis_ids": [
+     "M1S2-H006"
+    ],
+    "evidence_ids": [
+     {
+      "$evidence": "multi-year agreements that set negotiated rates"
+     }
+    ]
+   },
+   {
+    "parameter_id": "switching_cost_assessment",
+    "value": "high",
+    "value_type": "category",
+    "status": "ok",
+    "hypothesis_ids": [
+     "M1S2-H003"
+    ],
+    "evidence_ids": [
+     {
+      "$evidence": "Texas and Florida generated"
+     }
+    ]
+   }
+  ]
+ }
+}
