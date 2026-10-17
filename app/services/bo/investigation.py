@@ -431,6 +431,8 @@ class SpecialistInvestigation:
             keys: dict[str, str] | None = None,
             entity_aliases: tuple[str, ...] = (),
             specialist_brief: str = "", agenda: list[str] | None = None,
+            preselected_hypotheses: CreditHypothesisSet | None = None,
+            preselected_id_map: dict[str, str] | None = None,
             ) -> InvestigationResult:
         keys = keys or {}
         spec = self.spec
@@ -462,27 +464,33 @@ class SpecialistInvestigation:
             result.stages.append(StageRecord(name, state, detail))
 
         # Step 6 -- hypothesis generation, scoped to this specialist's dimension.
-        try:
-            generated = self._gen.generate(
-                HypothesisGenerationInputs(
-                    evidence_ids=sorted(p.passage_id for p in corpus.passages),
-                    calculation_refs=sorted(metric_ids),
-                    metrics=[{"metric_id": i.evidence_id, "label": i.concept,
-                              "value": i.value, "unit": i.unit, "period": i.period}
-                             for i in grounding],
-                    snippets=[{"evidence_id": p.passage_id, "text": p.text}
-                              for p in corpus.passages],
-                    dimension_scope=[spec.dimension],
-                    specialist_brief=specialist_brief, agenda=list(agenda or [])),
-                case_version=case_version, key=keys.get("generate"))
-            result.model_calls += 1
-        except HypothesisGenerationRejectedError as exc:
-            result.model_calls += 1
-            stage("6_generation", "rejected", f"{exc.stage}: {exc}")
-            return result
+        if preselected_hypotheses is not None:
+            generated_hypotheses = preselected_hypotheses
+            stage("6_generation", "completed",
+                  "broad candidates supplied by validated single-pass stage")
+        else:
+            try:
+                generated = self._gen.generate(
+                    HypothesisGenerationInputs(
+                        evidence_ids=sorted(p.passage_id for p in corpus.passages),
+                        calculation_refs=sorted(metric_ids),
+                        metrics=[{"metric_id": i.evidence_id, "label": i.concept,
+                                  "value": i.value, "unit": i.unit, "period": i.period}
+                                 for i in grounding],
+                        snippets=[{"evidence_id": p.passage_id, "text": p.text}
+                                  for p in corpus.passages],
+                        dimension_scope=[spec.dimension],
+                        specialist_brief=specialist_brief, agenda=list(agenda or [])),
+                    case_version=case_version, key=keys.get("generate"))
+                result.model_calls += 1
+                generated_hypotheses = generated.hypotheses
+            except HypothesisGenerationRejectedError as exc:
+                result.model_calls += 1
+                stage("6_generation", "rejected", f"{exc.stage}: {exc}")
+                return result
         in_scope = []
         result.out_of_scope = []
-        for h in generated.hypotheses.hypotheses:
+        for h in generated_hypotheses.hypotheses:
             ownership = screen_ownership(spec.code, h.statement)
             if h.dimension.value == spec.dimension and ownership.in_scope:
                 in_scope.append(h)
@@ -497,10 +505,14 @@ class SpecialistInvestigation:
                 "ownership_policy_version": ownership.policy_version,
             })
         result.hypotheses = CreditHypothesisSet(hypotheses=in_scope)
-        result.id_map = {h.hypothesis_id: f"{spec.code}-H{i:03d}"
-                         for i, h in enumerate(in_scope, start=1)}
-        stage("6_generation", "completed",
-              f"{len(in_scope)} in scope, {len(result.out_of_scope)} out of scope")
+        result.id_map = ({h.hypothesis_id: preselected_id_map[h.hypothesis_id]
+                          for h in in_scope if h.hypothesis_id in (preselected_id_map or {})}
+                         if preselected_hypotheses is not None else
+                         {h.hypothesis_id: f"{spec.code}-H{i:03d}"
+                          for i, h in enumerate(in_scope, start=1)})
+        if preselected_hypotheses is None:
+            stage("6_generation", "completed",
+                  f"{len(in_scope)} in scope, {len(result.out_of_scope)} out of scope")
         if not in_scope:
             stage("7_planning", "skipped", "no in-scope hypotheses")
             return self._gate(result, case_version)

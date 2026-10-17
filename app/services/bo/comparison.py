@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -37,10 +37,17 @@ from app.core.config_registry import ConfigRegistry
 from app.core.hashing import content_hash
 from app.prompts.bo_prompts import BO_NARROW_JSON_SCHEMA, bo_v3_prompt_catalogue
 from app.prompts.registry import PromptRegistry
+from app.schemas.bo import Admissibility, Disposition
 from app.services.agents.registry import default_registry
 from app.services.agents.router import EvidenceRouter, RouterInputs
 from app.services.audit.log import AuditLog
 from app.services.bo.hypotheses import HypothesisStore
+from app.services.bo.hybrid import (
+    HybridCandidate,
+    HybridInput,
+    InvestigationMode,
+    execute_investigation_mode,
+)
 from app.services.bo.indicators import IndicatorSet, build_indicators
 from app.services.bo.investigation import (
     InvestigationResult,
@@ -60,6 +67,7 @@ from app.services.bo.validation_audit import (
 )
 from app.services.llm.client import FakeLLMBackend, LLMClient
 from app.services.scoring.engine import ScoringConfig
+from app.schemas.llm import CreditHypothesis, CreditHypothesisSet
 
 COMPARISON_VERSION = "m2-comparison-1"
 DATA_NOTICE = (
@@ -96,12 +104,12 @@ class PreparedSpecialist:
 
 def prepare_specialist(session: Session, *, case_id: str, evidence, metrics,
                        spec: BoAgentSpec, coverage_checks=(), sector="auto",
-                       budget=None) -> PreparedSpecialist:
+                       budget=None, run_identity: str = "comparison") -> PreparedSpecialist:
     """Indicators, routing, retrieval plan, checklist and the sealed packet."""
     registry = default_registry("v3")
     agent = registry.get(spec.agent_id)
     analysis_run_id = "ar_m2_" + content_hash(
-        [case_id, evidence.snapshot_version, spec.agent_id])[:12]
+        [case_id, evidence.snapshot_version, spec.agent_id, run_identity])[:12]
     profile = detect_sector(evidence) if sector == "auto" else sector
     indicators = build_indicators(evidence, metrics, analysis_run_id=analysis_run_id,
                                   sector=profile)
@@ -197,6 +205,7 @@ class ArmResult:
     calls: list[dict[str, Any]] = field(default_factory=list)
     investigation: InvestigationResult | None = None
     failure: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def usage(self) -> dict[str, int]:
         sent = sum(len(c.get("instructions") or "")
@@ -276,11 +285,17 @@ STAGE_KEYS = ("generate", "plan", "test", "parameters")
 def run_investigation(session: Session, prep: PreparedSpecialist,
                       responses: dict[str, Any] | None = None, *,
                       backend=None, testing_tier: str | None = None,
-                      seeded: bool = True, judge: bool | None = None) -> ArmResult:
+                      seeded: bool = True, judge: bool | None = None,
+                      preselected_hypotheses: CreditHypothesisSet | None = None,
+                      preselected_id_map: dict[str, str] | None = None,
+                      arm_name: str = "investigation") -> ArmResult:
     """Scripted (``responses`` by stage key) or live (``backend``) investigation."""
     if backend is None:
         inner = FakeLLMBackend()
         for stage, response in responses.items():
+            if stage.startswith("_") or stage == "generate":
+                if preselected_hypotheses is not None:
+                    continue
             inner.register("analyze", resolve_anchors(response, prep), key=stage)
         backend = inner
     responses = responses or {k: None for k in STAGE_KEYS}
@@ -296,14 +311,16 @@ def run_investigation(session: Session, prep: PreparedSpecialist,
                 packet_passages=prep.passages, indicators=prep.indicators,
                 value_sets=prep.value_sets, case_version=prep.snapshot_version,
                 keys={s: s for s in responses}, entity_aliases=prep.entity_aliases,
-                specialist_brief=brief, agenda=agenda)
+                specialist_brief=brief, agenda=agenda,
+                preselected_hypotheses=preselected_hypotheses,
+                preselected_id_map=preselected_id_map)
     except Exception as exc:  # provider failure is a failed arm, never a pass
-        return ArmResult("investigation", None, None, backend.calls,
+        return ArmResult(arm_name, None, None, backend.calls,
                          failure=f"provider error: {type(exc).__name__}: {exc}")
-    run_id = f"{prep.analysis_run_id}:investigation"
+    run_id = f"{prep.analysis_run_id}:{arm_name}"
     failed = investigation.failed_stage
     if failed is not None:
-        return ArmResult("investigation", None, None, backend.calls, investigation,
+        return ArmResult(arm_name, None, None, backend.calls, investigation,
                          failure=f"{failed.stage} {failed.state}: {failed.detail}")
     parsed = investigation.bo_response(prep.spec)
     validation = validate_specialist_output(
@@ -315,7 +332,118 @@ def run_investigation(session: Session, prep: PreparedSpecialist,
     validation.records = [
         r.model_copy(update={"investigation": investigation.trace_for(r.hypothesis_id)})
         for r in validation.records]
-    return ArmResult("investigation", validation, parsed, backend.calls, investigation)
+    return ArmResult(arm_name, validation, parsed, backend.calls, investigation)
+
+
+def _hybrid_inputs(arm: ArmResult, prep: PreparedSpecialist) -> tuple[
+        list[HybridInput], CreditHypothesisSet, dict[str, str]]:
+    """Convert validated broad records to unverified investigation candidates."""
+    records = list(arm.validation.records if arm.validation else [])
+    inputs, hypotheses, id_map = [], [], {}
+    for index, record in enumerate(records, start=1):
+        internal_id = f"h{index}"
+        id_map[internal_id] = record.hypothesis_id
+        classification = {
+            "fact": "reported_fact", "calculated_fact": "calculated_fact",
+            "management_claim": "management_claim", "inference": "inference",
+        }.get(record.claim_type.value, "inference")
+        calc_refs = [q.get("parameter_result_id") for q in record.quoted_values
+                     if q.get("parameter_result_id")]
+        if classification == "calculated_fact" and not calc_refs:
+            classification = "inference"
+        if classification == "reported_fact" and not record.supporting_evidence_ids:
+            classification = "inference"
+        hypothesis = CreditHypothesis.model_validate({
+            "hypothesis_id": internal_id,
+            "dimension": prep.spec.dimension,
+            "business_characteristic": prep.spec.title,
+            "statement": record.claim,
+            "credit_direction": (record.direction.value
+                                 if record.direction.value != "mixed" else "neutral"),
+            "economic_reasoning": record.credit_mechanism or "Requires investigation.",
+            "potential_credit_impact": record.credit_mechanism or "Credit relevance.",
+            "offsetting_characteristics": ([record.mitigant.capability]
+                                            if record.mitigant else []),
+            "supporting_evidence_ids": record.supporting_evidence_ids,
+            "contradictory_evidence_ids": record.contradicting_evidence_ids,
+            "missing_information": record.missing_information,
+            "calculation_refs": calc_refs,
+            "classification": classification,
+            "verification_status": "unverified",
+            "severity": record.materiality.value,
+            "human_review_required": record.review_required,
+        })
+        candidate = HybridCandidate(
+            hypothesis_id=record.hypothesis_id, claim=record.claim,
+            dimension=prep.spec.dimension or "", direction=record.direction.value,
+            materiality=record.materiality.value, claim_type=record.claim_type.value,
+            supporting_evidence_ids=tuple(record.supporting_evidence_ids),
+            contradicting_evidence_ids=tuple(record.contradicting_evidence_ids),
+            confidence=record.confidence.value,
+            demonstrated_mitigant=bool(
+                record.mitigant and record.mitigant.effectiveness.value == "demonstrated"),
+            provenance_ambiguous=(record.evidence_basis == "none" or not record.usable),
+            deterministic_valid=record.disposition.value != "rejected")
+        inputs.append(HybridInput(candidate, record))
+        hypotheses.append(hypothesis)
+    return inputs, CreditHypothesisSet(hypotheses=hypotheses), id_map
+
+
+def run_hybrid(session: Session, prep: PreparedSpecialist, *, broad_response: dict,
+               investigation_responses: dict) -> ArmResult:
+    """Broad single pass followed by selective investigation and one merged result."""
+    broad = run_single_pass(session, prep, broad_response)
+    if broad.validation is None or not broad.validation.valid:
+        broad.arm = "hybrid_selective"
+        broad.failure = broad.failure or "broad candidate validation failed"
+        return broad
+    inputs, hypotheses, id_map = _hybrid_inputs(broad, prep)
+    selected_ids: set[str] = set()
+    holder: dict[str, ArmResult] = {}
+
+    def investigate(selected: list[HybridInput]):
+        selected_ids.update(item.candidate.hypothesis_id for item in selected)
+        internal = [h for h in hypotheses.hypotheses
+                    if id_map[h.hypothesis_id] in selected_ids]
+        deep = run_investigation(
+            session, prep, investigation_responses,
+            preselected_hypotheses=CreditHypothesisSet(hypotheses=internal),
+            preselected_id_map=id_map, arm_name="hybrid_selective")
+        holder["deep"] = deep
+        return list(deep.validation.records if deep.validation else [])
+
+    executed = execute_investigation_mode(
+        InvestigationMode.HYBRID, inputs, investigate,
+        output_id=lambda record: record.hypothesis_id)
+    deep = holder.get("deep")
+    if deep is None:
+        validation = replace(broad.validation, records=list(executed.outputs))
+        return ArmResult("hybrid_selective", validation, broad.parsed, broad.calls,
+                         metadata={"lineage": executed.lineage})
+    if deep.failure:
+        # Selected broad claims remain reviewable but lose all authoritative use.
+        incomplete = []
+        for item in inputs:
+            record = item.payload
+            if item.candidate.hypothesis_id in selected_ids:
+                record = record.model_copy(update={
+                    "disposition": Disposition.UNVERIFIED,
+                    "admissibility": Admissibility.AUDIT_ONLY,
+                    "review_required": True,
+                    "missing_information": [*record.missing_information,
+                                            f"Selective investigation failed: {deep.failure}"],
+                    "investigation": {"status": "incomplete", "failure": deep.failure},
+                })
+            incomplete.append(record)
+        validation = replace(broad.validation, valid=False, records=incomplete,
+                             issues=[*broad.validation.issues, deep.failure])
+        return ArmResult("hybrid_selective", validation, broad.parsed,
+                         [*broad.calls, *deep.calls], deep.investigation, deep.failure,
+                         {"lineage": executed.lineage, "complete": False})
+    validation = replace(deep.validation, records=list(executed.outputs))
+    return ArmResult("hybrid_selective", validation, deep.parsed,
+                     [*broad.calls, *deep.calls], deep.investigation, None,
+                     {"lineage": executed.lineage, "complete": True})
 
 
 def persist_arm(session: Session, prep: PreparedSpecialist, arm: ArmResult) -> None:

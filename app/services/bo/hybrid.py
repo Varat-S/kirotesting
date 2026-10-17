@@ -102,6 +102,10 @@ def select_for_investigation(
         material = candidate.materiality in _MATERIAL
         if material and candidate.direction == "negative":
             reasons.append("material_adverse_risk")
+        if material and candidate.direction == "positive":
+            # Positive material conclusions can suppress perceived risk and are
+            # therefore scrutinised even when they are labelled as plain facts.
+            reasons.append("material_positive_credit_claim")
         if candidate.direction == "positive" and candidate.demonstrated_mitigant:
             reasons.append("claimed_demonstrated_mitigant")
         if candidate.claim_type in {"inference", "assumption"}:
