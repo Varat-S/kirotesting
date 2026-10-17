@@ -349,3 +349,72 @@ def test_generation_receives_the_specialist_brief_and_agenda(db_session):
     assert any(item.startswith("retention and switching costs") for item in generation["agenda"])
     assert by_prompt["hypothesis_testing"]["model_tier"] == "orchestrator"
     assert by_prompt["hypothesis_generation"]["model_tier"] is None
+
+
+# -- R5: premise entailment judge (scripted verdicts; guard is deterministic) ---
+
+Q_TERM = ("the contracts do not guarantee minimum volumes of patients. Either party "
+          "may terminate an agreement on notice.")
+Q_MULTI = ("Our managed care contracts are generally multi-year agreements that set "
+           "negotiated rates")
+PAYER = {"$evidence": "do not guarantee minimum volumes"}
+
+
+def _verdict(key, sentence, verdict="states", passage=PAYER):
+    return {"key": key, "verdict": verdict, "passage_id": passage,
+            "supporting_sentence": sentence}
+
+
+def test_r5_judge_corroborates_a_paraphrased_factual_premise(db_session):
+    def mutate(stages, prep):
+        _result(stages, "h7")["mechanism_premises"][0]["premise"] = (
+            "Payers are not obliged to send a minimum number of patients and either "
+            "side can end the agreement with notice")
+        stages["judge"] = {"verdicts": [_verdict("h7#0", Q_TERM)]}
+    s7 = _variant(db_session, mutate)["M1S2-H007"]
+    [j] = [j for j in s7.investigation["judgements"] if j["premise_index"] == 0]
+    assert j["accepted"], j["reason"]
+    assert s7.investigation["effective_status"] == "supported" and s7.usable
+
+
+@pytest.mark.parametrize("premise, sentence, reason", [
+    ("Agreements guarantee patients a minimum volume", Q_TERM.split(".")[0] + ".",
+     "negation differs"),
+    ("Payers are not obliged to send at least 50 patients", Q_TERM.split(".")[0] + ".",
+     "figures"),
+    ("Payers are not obliged to send a minimum number of patients",
+     "the contracts never promise patients", "not verbatim"),
+])
+def test_r5_guard_rejects_judge_evidence_that_does_not_carry_the_premise(
+        db_session, premise, sentence, reason):
+    def mutate(stages, prep):
+        _result(stages, "h7")["mechanism_premises"][0]["premise"] = premise
+        stages["judge"] = {"verdicts": [_verdict("h7#0", sentence)]}
+    s7 = _variant(db_session, mutate)["M1S2-H007"]
+    [j] = [j for j in s7.investigation["judgements"] if j["premise_index"] == 0]
+    assert not j["accepted"] and reason in j["reason"]
+    assert s7.investigation["effective_status"] == "unverified"
+
+
+def test_r5_outcome_premises_are_never_sent_to_the_judge(db_session):
+    def mutate(stages, prep):
+        stages["judge"] = {"verdicts": [_verdict("h5#1", Q_MULTI,
+                                                 passage={"$evidence": "multi-year"})]}
+    s5 = _variant(db_session, mutate)["M1S2-H005"]
+    assert all(j["premise_index"] != 1 for j in s5.investigation["judgements"])
+    assert not s5.usable
+
+
+def test_r5_a_wrong_judge_verdict_cannot_make_an_inference_supported(db_session):
+    """Residual risk, documented: the guard cannot detect a wrong reading backed by
+    a real sentence. The inference is then capped at partially_supported; here the
+    baseline Layer C rule (rates are not volumes) still holds it back."""
+    def mutate(stages, prep):
+        stages["judge"] = {"verdicts": [_verdict("h2#1", Q_MULTI,
+                                                 passage={"$evidence": "multi-year"})]}
+    s2 = _variant(db_session, mutate)["M1S2-H002"]
+    assert [j["accepted"] for j in s2.investigation["judgements"]
+            if j["premise_index"] == 1] == [True]
+    assert s2.investigation["effective_status"] == "partially_supported"
+    assert "rate_agreement_to_volume_guarantee" in [f["rule_id"] for f in s2.review_flags]
+    assert not s2.usable

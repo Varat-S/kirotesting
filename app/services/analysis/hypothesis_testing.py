@@ -65,6 +65,7 @@ from app.services.analysis.grounding import (
     EvidenceIndex,
     EvidenceItem,
     GroundingEvaluator,
+    judged_support_guard,
     verbatim_fact_support,
 )
 from app.services.audit.log import ActorType, AuditLog
@@ -236,6 +237,9 @@ class HypothesisTestingResult:
     # Quotes that were not verbatim and were repaired or dropped (only when a
     # ``quote_repair`` callable is configured); one audit record each.
     quote_repairs: list[dict] = field(default_factory=list)
+    # Entailment-judge verdicts per premise with the deterministic guard result
+    # (only when a ``premise_judge`` is configured).
+    judgements: list[dict] = field(default_factory=list)
 
 
 class HypothesisTestingService:
@@ -251,8 +255,14 @@ class HypothesisTestingService:
         reviewer_authority=None,
         quote_repair=None,
         model_tier: str | None = None,
+        premise_judge=None,
     ) -> None:
         self._client = client
+        # Optional semantic entailment judge (fix R5): ``items -> verdicts``,
+        # one batched call. Its verdicts corroborate a premise only after the
+        # deterministic guard; never an outcome premise; recorded as
+        # "judged_entailment", separate from deterministic grounding.
+        self._premise_judge = premise_judge
         # Optional model tier for the testing call (e.g. a stronger model for
         # the stage that judges evidence); None keeps the default tier.
         self._model_tier = model_tier
@@ -350,6 +360,10 @@ class HypothesisTestingService:
         # dropped fail-closed.
         verified_adjudications = self._verify_adjudications(inputs.adjudications)
 
+        judgements = (self._judge_premises(response, passages, inputs)
+                      if self._premise_judge is not None else [])
+        self._judged = {(j["hypothesis_id"], j["premise_index"]): j
+                        for j in judgements if j["accepted"]}
         governed = [
             self._govern(result, hyp_by_id[result.hypothesis_id], inputs,
                          coverage_by_hyp.get(result.hypothesis_id, []), passages,
@@ -357,7 +371,44 @@ class HypothesisTestingService:
             for result in response.results
         ]
         return HypothesisTestingResult(governed=governed, run=run,
-                                       quote_repairs=quote_repairs)
+                                       quote_repairs=quote_repairs,
+                                       judgements=judgements)
+
+    def _judge_premises(self, response, passages, inputs) -> list[dict]:
+        """One batched judge call over every non-outcome premise with sources."""
+        items = []
+        for result in response.results:
+            for idx, premise in enumerate(result.mechanism_premises):
+                cited = [pid for pid in premise.supporting_passage_ids if pid in passages]
+                if premise.is_outcome_premise or not cited:
+                    continue
+                items.append({"key": f"{result.hypothesis_id}#{idx}",
+                              "hypothesis_id": result.hypothesis_id,
+                              "premise_index": idx, "premise": premise.premise,
+                              "passages": [{"passage_id": pid, "text": passages[pid]}
+                                           for pid in cited]})
+        if not items:
+            return []
+        verdicts = {v.get("key"): v for v in (self._premise_judge(items) or [])
+                    if isinstance(v, dict)}
+        out = []
+        for item in items:
+            v = verdicts.get(item["key"]) or {}
+            pid, quote = v.get("passage_id"), v.get("supporting_sentence")
+            if v.get("verdict") != "states":
+                accepted, reason = False, f"judge verdict {v.get('verdict')!r}"
+            elif pid not in {p["passage_id"] for p in item["passages"]}:
+                accepted, reason = False, "judge cited a passage the premise does not cite"
+            else:
+                accepted, reason = judged_support_guard(
+                    item["premise"], quote, passages[pid],
+                    aliases=inputs.entity_aliases)
+            out.append({"hypothesis_id": item["hypothesis_id"],
+                        "premise_index": item["premise_index"],
+                        "premise": item["premise"], "verdict": v.get("verdict"),
+                        "passage_id": pid, "supporting_sentence": quote,
+                        "accepted": accepted, "reason": reason})
+        return out
 
     def _repair_quotes(self, response, passages):
         """Repair layout-gap quotes in place; drop (and record) unrecoverable ones."""
@@ -631,6 +682,9 @@ class HypothesisTestingService:
                                                   aliases=inputs.entity_aliases)
                             for pid in premise.supporting_passage_ids if pid in passages)):
                 basis.append("verbatim_reported_fact")
+            if (not basis and not premise.is_outcome_premise
+                    and (result.hypothesis_id, idx) in getattr(self, "_judged", {})):
+                basis.append("judged_entailment")
             adj = self._verified_adjudication_for(
                 verified_adjudications, result.hypothesis_id, premise.premise_id
             )
@@ -908,15 +962,25 @@ class HypothesisTestingService:
         # Correct facts do not establish an unstated inference.
         adjudicated = any("human_adjudication" in pc.corroboration_basis
                           for pc in premise_corroboration)
-        if (hypothesis.classification in (ClaimClassification.INFERENCE,
-                                          ClaimClassification.ASSUMPTION)
-                and all_material_corroborated and not adjudicated
+        judged = any("judged_entailment" in pc.corroboration_basis
+                     for pc in premise_corroboration)
+        inference = hypothesis.classification in (ClaimClassification.INFERENCE,
+                                                  ClaimClassification.ASSUMPTION)
+        if (inference and all_material_corroborated and not adjudicated and not judged
                 and effective in (_SUPPORTING.SUPPORTED,
                                   _SUPPORTING.PARTIALLY_SUPPORTED)):
             effective = _SUPPORTING.UNVERIFIED
             reasons.append(
                 "inference rests only on corroborated factual premises; the "
                 "inferential step is not declared as a premise -> UNVERIFIED")
+        # Fix R5: judged corroboration (a model's reading of the text) can carry
+        # an inference to partially_supported at most; 'supported' for an
+        # inference needs a human adjudication.
+        if (inference and judged and not adjudicated
+                and effective is _SUPPORTING.SUPPORTED):
+            effective = _SUPPORTING.PARTIALLY_SUPPORTED
+            reasons.append("inference corroborated by judged entailment only; "
+                           "capped at PARTIALLY_SUPPORTED (no human adjudication)")
 
         # An outcome/causal premise the model labelled established, but which no
         # independent channel corroborated, is a consequential model assertion.

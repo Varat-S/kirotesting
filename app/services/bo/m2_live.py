@@ -42,7 +42,8 @@ def _stage(call: dict[str, Any], arm: str) -> str:
         return f"single pass ({name})"
     return {"hypothesis_generation": "step 6 - hypothesis generation",
             "evidence_enquiry_planning": "step 7 - enquiry planning",
-            "hypothesis_testing": "step 8 - hypothesis testing"}.get(
+            "hypothesis_testing": "step 8 - hypothesis testing",
+            "bo_v3_premise_entailment": "step 8 - premise entailment judge"}.get(
         name, "parameter classification" if name.endswith("__parameters") else name)
 
 
@@ -267,7 +268,7 @@ def render_pdf(run: dict[str, Any], arms: list, path: Path) -> bool:
 
 def run_live(runs: int, out: Path, *, case_dir: Path, case_id: str,
              specialist: str = "M1S2", testing_model: str | None = None,
-             seeded: bool = True) -> dict[str, Any]:
+             seeded: bool = True, judge: bool = False) -> dict[str, Any]:
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 
@@ -317,14 +318,15 @@ def run_live(runs: int, out: Path, *, case_dir: Path, case_id: str,
         for name, fn, extra in (
                 ("single_pass", run_single_pass, {}),
                 ("investigation", run_investigation,
-                 {"testing_tier": testing_tier, "seeded": seeded})):
+                 {"testing_tier": testing_tier, "seeded": seeded, "judge": judge})):
             started = time.monotonic()
             arms.append(fn(session, prep, backend=backend, **extra))
             timings[name] = round(time.monotonic() - started, 1)
         run = {"run": n, "case": case_id, "specialist": specialist,
                "model": getattr(backend, "model_for_tier", lambda t: "?")("narrow")
                + (f"; testing step: {testing_model}" if testing_model else "")
-               + ("; generation seeded with brief and agenda" if seeded else ""),
+               + ("; generation seeded with brief and agenda" if seeded else "")
+               + ("; premise entailment judge on" if judge else ""),
                "fingerprint": prep.fingerprint(),
                "arms": {a.arm: {**describe_arm(a), "seconds": timings[a.arm]}
                         for a in arms}}
@@ -356,13 +358,16 @@ def main(argv=None) -> None:
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--testing-model", default=None,
                         help="model id for the hypothesis-testing call only")
+    parser.add_argument("--judge", action="store_true",
+                        help="use the premise entailment judge (one extra call)")
     parser.add_argument("--unseeded", action="store_true",
                         help="generation without the specialist brief and agenda")
     parser.add_argument("--out", type=Path, default=Path("output/m2_live"))
     args = parser.parse_args(argv)
     summary = run_live(args.runs, args.out, case_dir=args.case_dir,
                        case_id=args.case_id, specialist=args.specialist,
-                       testing_model=args.testing_model, seeded=not args.unseeded)
+                       testing_model=args.testing_model, seeded=not args.unseeded,
+                       judge=args.judge)
     print(f"total cost about ${summary['total_cost_usd']:.4f}; outputs in {args.out}")
 
 

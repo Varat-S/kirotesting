@@ -328,3 +328,24 @@ def verbatim_fact_support(statement: str, quote: str | None, passage_text: str,
     s_words, s_nums, s_neg = _content(_drop_aliases(statement, aliases))
     q_words, q_nums, q_neg = _content(quote)
     return bool(s_words) and s_words <= q_words and s_nums <= q_nums and s_neg == q_neg
+
+
+def judged_support_guard(premise: str, quote: str | None, passage_text: str,
+                         *, aliases=()) -> tuple[bool, str]:
+    """Deterministic checks on an entailment judge's evidence (fix R5).
+
+    The judge may accept a paraphrase, but its supporting sentence must be
+    verbatim in the passage, and every figure and every negation of the premise
+    must appear in that sentence. Returns ``(accepted, reason)``.
+    """
+    if not quote or len(_norm(quote)) < _MIN_VERBATIM_CHARS:
+        return False, "no supporting sentence"
+    if _norm(quote) not in _norm(passage_text):
+        return False, "supporting sentence not verbatim in the passage"
+    _, p_nums, p_neg = _content(_drop_aliases(premise, aliases))
+    _, q_nums, q_neg = _content(quote)
+    if not p_nums <= q_nums:
+        return False, f"figures {sorted(p_nums - q_nums)} not in the supporting sentence"
+    if p_neg != q_neg:
+        return False, "negation differs between premise and supporting sentence"
+    return True, "accepted"

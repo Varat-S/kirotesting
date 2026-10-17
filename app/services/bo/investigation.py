@@ -201,6 +201,7 @@ class InvestigationResult:
     metric_traces: dict[str, dict[str, Any]] = field(default_factory=dict)
     adapter_notes: dict[str, list[str]] = field(default_factory=dict)
     quote_repairs: list[dict[str, Any]] = field(default_factory=list)
+    judgements: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def completed(self) -> bool:
@@ -249,6 +250,8 @@ class InvestigationResult:
             "adapter_notes": list(self.adapter_notes.get(bo_id, [])),
             "quote_repairs": [q for q in self.quote_repairs
                               if q["hypothesis_id"] == original],
+            "judgements": [j for j in self.judgements
+                           if j["hypothesis_id"] == original],
         }
         if governed is not None:
             trace.update({
@@ -407,8 +410,9 @@ class SpecialistInvestigation:
 
     def __init__(self, spec: BoAgentSpec, *, client, audit=None, case_id=None,
                  review_lookup=None, budget: EnquiryBudget | None = None,
-                 testing_tier: str | None = None) -> None:
+                 testing_tier: str | None = None, judge: bool = False) -> None:
         self._testing_tier = testing_tier
+        self._use_judge = judge
         if spec.dimension is None:
             raise ValueError(f"{spec.code} has no dimension; use a v3 roster spec.")
         self.spec = spec
@@ -440,7 +444,8 @@ class SpecialistInvestigation:
             self._client, audit=audit, case_id=case_id, review_lookup=review_lookup,
             quote_repair=lambda quote, pid: recover_quote(
                 quote=quote, cited_evidence_id=pid, corpus=packet_passages),
-            model_tier=self._testing_tier)
+            model_tier=self._testing_tier,
+            premise_judge=self._judge(case_version, keys) if self._use_judge else None)
         grounding = grounding_from_indicators(
             indicators, spec.indicator_groups,
             entity=entity_aliases[0] if entity_aliases else None)
@@ -567,6 +572,9 @@ class SpecialistInvestigation:
             return result
         result.governed = list(tested.governed)
         result.quote_repairs = list(tested.quote_repairs)
+        result.judgements = list(tested.judgements)
+        if self._use_judge and any(j for j in tested.judgements):
+            result.model_calls += 1
         stage("8_testing", "completed", f"{len(result.governed)} governed")
 
         # Steps 9-11 -- signals, impact, deterministic materiality rubric.
@@ -588,6 +596,22 @@ class SpecialistInvestigation:
         if result.failed_stage:
             return result
         return self._classify_parameters(result, value_sets, case_version, keys)
+
+    def _judge(self, case_version: int, keys: dict[str, str]):
+        """The premise-entailment judge: one batched model call (fix R5)."""
+        from app.prompts.bo_prompts import BO_PREMISE_JUDGE_PROMPT
+
+        def judge(items: list[dict]) -> list[dict]:
+            run = self._client.analyze(
+                {"items": [{"key": i["key"], "premise": i["premise"],
+                            "passages": i["passages"]} for i in items]},
+                evidence_ids=sorted({p["passage_id"] for i in items for p in i["passages"]}),
+                case_id=self._case_id, case_version=case_version,
+                prompt_name=BO_PREMISE_JUDGE_PROMPT, key=keys.get("judge"))
+            if not run.is_valid or run.parsed is None:
+                return []  # no verdicts: nothing is corroborated by judgement
+            return list(run.parsed.get("verdicts") or [])
+        return judge
 
     def _gate(self, result: InvestigationResult, case_version: int) -> InvestigationResult:
         """Step 12: deterministic evidence-completeness gate for this dimension."""

@@ -231,7 +231,7 @@ def test_v3_prompts_are_specialist_blocks_plus_unchanged_shared_rules():
     v2_names = {e["name"] for e in bo_prompt_catalogue()}
     for entry in bo_v3_prompt_catalogue():
         assert entry["name"] not in v2_names  # v2 prompt versions never alternate
-        if not entry["name"].endswith("__parameters"):
+        if entry["name"] in V3_SPEC_BY_AGENT:  # specialist prompts
             assert entry["template"].endswith(SHARED_RULES)
     for code in ("M1S1", "M1S2", "M1S3", "M1S4", "M1S5", "M1A6"):
         assert code not in SHARED_RULES

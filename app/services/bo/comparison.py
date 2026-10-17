@@ -276,7 +276,7 @@ STAGE_KEYS = ("generate", "plan", "test", "parameters")
 def run_investigation(session: Session, prep: PreparedSpecialist,
                       responses: dict[str, Any] | None = None, *,
                       backend=None, testing_tier: str | None = None,
-                      seeded: bool = True) -> ArmResult:
+                      seeded: bool = True, judge: bool | None = None) -> ArmResult:
     """Scripted (``responses`` by stage key) or live (``backend``) investigation."""
     if backend is None:
         inner = FakeLLMBackend()
@@ -290,7 +290,9 @@ def run_investigation(session: Session, prep: PreparedSpecialist,
         brief, agenda = specialist_agenda(prep.spec, prep.checks) if seeded else ("", [])
         investigation = SpecialistInvestigation(
             prep.spec, client=client, audit=AuditLog(session), case_id=prep.case_id,
-            review_lookup=session, testing_tier=testing_tier).run(
+            review_lookup=session, testing_tier=testing_tier,
+            # Scripted runs use the judge only when the script supplies verdicts.
+            judge=("judge" in responses) if judge is None else judge).run(
                 packet_passages=prep.passages, indicators=prep.indicators,
                 value_sets=prep.value_sets, case_version=prep.snapshot_version,
                 keys={s: s for s in responses}, entity_aliases=prep.entity_aliases,

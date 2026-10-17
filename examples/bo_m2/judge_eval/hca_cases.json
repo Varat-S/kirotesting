@@ -1,0 +1,132 @@
+{
+ "_comment": "Pre-registered evaluation of the premise entailment judge on real HCA FY2025 passages. 'expected' was written before any judge run: 'states' means the passage alone establishes the premise as written; 'not_states' covers does_not_state, partially_states and contradicts. Committed before the first run.",
+ "case": "HCA_2025_M2",
+ "cases": [
+  {
+   "id": "J01",
+   "passage_anchor": "accounted for 48.9%, 49.5% and 49.0%",
+   "premise": "Private third-party payers accounted for 48.9% of revenues in 2025.",
+   "expected": "states",
+   "kind": "restated figure"
+  },
+  {
+   "id": "J02",
+   "passage_anchor": "accounted for 48.9%, 49.5% and 49.0%",
+   "premise": "Private third-party payers accounted for 51% of revenues in 2025.",
+   "expected": "not_states",
+   "kind": "wrong figure"
+  },
+  {
+   "id": "J03",
+   "passage_anchor": "accounted for 48.9%, 49.5% and 49.0%",
+   "premise": "The private payer share of revenue has risen every year since 2023.",
+   "expected": "not_states",
+   "kind": "trend contradicted (49.0, 49.5, 48.9)"
+  },
+  {
+   "id": "J04",
+   "passage_anchor": "accounted for 48.9%, 49.5% and 49.0%",
+   "premise": "Private insurers typically pay providers higher rates than Medicare and Medicaid.",
+   "expected": "states",
+   "kind": "paraphrase"
+  },
+  {
+   "id": "J05",
+   "passage_anchor": "accounted for 48.9%, 49.5% and 49.0%",
+   "premise": "A fall in the number of privately insured patients could reduce revenues.",
+   "expected": "states",
+   "kind": "risk stated as risk"
+  },
+  {
+   "id": "J06",
+   "passage_anchor": "accounted for 48.9%, 49.5% and 49.0%",
+   "premise": "The number of privately insured patients fell in 2025.",
+   "expected": "not_states",
+   "kind": "risk presented as event"
+  },
+  {
+   "id": "J07",
+   "passage_anchor": "combined revenues represented 51%",
+   "premise": "Florida and Texas facilities generated 51% of consolidated revenues in 2025.",
+   "expected": "states",
+   "kind": "figure across a layout gap"
+  },
+  {
+   "id": "J08",
+   "passage_anchor": "combined revenues represented 51%",
+   "premise": "102 of the company's 190 hospitals are located in Florida and Texas.",
+   "expected": "states",
+   "kind": "restated counts"
+  },
+  {
+   "id": "J09",
+   "passage_anchor": "combined revenues represented 51%",
+   "premise": "Most of the company's hospitals are outside Florida and Texas.",
+   "expected": "not_states",
+   "kind": "contradicted (102 of 190)"
+  },
+  {
+   "id": "J10",
+   "passage_anchor": "combined revenues represented 51%",
+   "premise": "Hurricanes reduced patient volumes in 2025.",
+   "expected": "not_states",
+   "kind": "risk presented as event"
+  },
+  {
+   "id": "J11",
+   "passage_anchor": "predetermined rates per diagnosis",
+   "premise": "Commercial and managed care agreements generally pay predetermined rates per diagnosis, per diem rates or discounted fee-for-service rates.",
+   "expected": "states",
+   "kind": "near-verbatim"
+  },
+  {
+   "id": "J12",
+   "passage_anchor": "predetermined rates per diagnosis",
+   "premise": "Managed care agreements guarantee a minimum volume of patients.",
+   "expected": "not_states",
+   "kind": "rates presented as volumes"
+  },
+  {
+   "id": "J13",
+   "passage_anchor": "restrict the ability of managed care plans to contract with us",
+   "premise": "Some competitors may negotiate exclusivity provisions with managed care plans.",
+   "expected": "states",
+   "kind": "risk stated as risk"
+  },
+  {
+   "id": "J14",
+   "passage_anchor": "restrict the ability of managed care plans to contract with us",
+   "premise": "Competitors have obtained exclusivity provisions that excluded the company from managed care plans.",
+   "expected": "not_states",
+   "kind": "possibility presented as event"
+  },
+  {
+   "id": "J15",
+   "passage_anchor": "restrict the ability of managed care plans to contract with us",
+   "premise": "Greater price transparency may weaken the company's ability to negotiate favourable payer contracts.",
+   "expected": "states",
+   "kind": "paraphrase"
+  },
+  {
+   "id": "J16",
+   "passage_anchor": "restrict the ability of managed care plans to contract with us",
+   "premise": "The company's ability to retain payer contracts is unaffected by other providers.",
+   "expected": "not_states",
+   "kind": "contradicted"
+  },
+  {
+   "id": "J17",
+   "passage_anchor": "We have invested significant resources to refine",
+   "premise": "The company has invested significant resources to improve its billing systems.",
+   "expected": "states",
+   "kind": "management statement of an action"
+  },
+  {
+   "id": "J18",
+   "passage_anchor": "We have invested significant resources to refine",
+   "premise": "The company's billing system investments reduced claim denials.",
+   "expected": "not_states",
+   "kind": "existence presented as outcome"
+  }
+ ]
+}
