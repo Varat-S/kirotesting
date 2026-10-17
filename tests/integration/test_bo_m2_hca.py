@@ -56,8 +56,10 @@ def test_hca_investigation(report):
     arm, o = report["arms"]["investigation"], _o(report, "investigation")
     assert arm["defects_held_back"] == 5
     assert o["H1"]["disposition"] == "qualified"  # R3 cap
-    # Fix R1 is strict: a paraphrase ("HCA" for "us") is not verbatim support.
-    assert o["H7"]["disposition"] == "unverified"
+    # Fix R1a: the borrower's own name is equivalent to the filing's "us".
+    assert o["H7"]["investigation"]["effective_status"] == "supported"
+    assert o["H7"]["disposition"] == "qualified" and o["H7"]["usable"]  # R3 cap
+    assert arm["controls_usable"] == 2
     assert o["H5"]["mitigant_effectiveness"] == "unproven"
     assert any("inferential step is not declared" in r
                for r in o["H3"]["investigation"]["downgrade_reasons"])

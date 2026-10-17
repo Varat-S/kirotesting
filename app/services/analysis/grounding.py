@@ -281,7 +281,8 @@ class GroundingEvaluator:
 
 _VERBATIM_STOP = frozenset(
     "a an and are as at be by for from has have in is it its of on or that the "
-    "their this to was were which with our we".split())
+    "their this to was were which with our we us ours they them these those such "
+    "who whose".split())
 _NEGATIONS = frozenset({"not", "no", "never", "nor", "without"})
 _MIN_VERBATIM_CHARS = 20
 
@@ -299,7 +300,17 @@ def _content(text: str) -> tuple[set[str], set[str], set[str]]:
     return stems, numbers, {w for w in words if w in _NEGATIONS}
 
 
-def verbatim_fact_support(statement: str, quote: str | None, passage_text: str) -> bool:
+def _drop_aliases(text: str, aliases) -> str:
+    """Remove the borrower's own names: a filing calls itself "we / us / our"."""
+    for alias in sorted((a for a in aliases or () if a and len(a) >= 2),
+                        key=len, reverse=True):
+        text = re.sub(rf"(?<![A-Za-z]){re.escape(alias)}(?:['\u2019]s)?(?![A-Za-z])",
+                      " ", text, flags=re.I)
+    return text
+
+
+def verbatim_fact_support(statement: str, quote: str | None, passage_text: str,
+                          *, aliases=()) -> bool:
     """True when ``quote`` is verbatim in the passage AND covers ``statement``.
 
     Establishes SOURCE AUTHENTICITY of a restated fact, nothing more: every
@@ -312,6 +323,8 @@ def verbatim_fact_support(statement: str, quote: str | None, passage_text: str) 
         return False
     if _norm(quote) not in _norm(passage_text):
         return False
-    s_words, s_nums, s_neg = _content(statement)
+    # Fix R1a: the borrower's names are equivalent to the filing's "we/us/our"
+    # (both are dropped); every other content word, figure and negation counts.
+    s_words, s_nums, s_neg = _content(_drop_aliases(statement, aliases))
     q_words, q_nums, q_neg = _content(quote)
     return bool(s_words) and s_words <= q_words and s_nums <= q_nums and s_neg == q_neg

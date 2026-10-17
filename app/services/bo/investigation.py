@@ -285,13 +285,12 @@ def to_bo_items(result: InvestigationResult, spec: BoAgentSpec) -> list[dict[str
                 or not g.independently_corroborated):
             disposition = Disposition.QUALIFIED
             notes.append("supported_without_deterministic_corroboration")
-        # Fix R3: passages a contradictory-evidence search returned for this
-        # hypothesis that the testing model never weighed as contradicting,
-        # irrelevant or contextual. Their relevance is unknown, so the finding
-        # cannot stand as supported and a reviewer must look at them.
-        weighed = {a.passage_id for a in g.evidence_assessments if a.assessment in (
-            EvidenceAssessmentKind.CONTRADICTS_PREMISE, EvidenceAssessmentKind.IRRELEVANT,
-            EvidenceAssessmentKind.CONTEXTUAL)}
+        # Fix R3/R3a: passages a contradictory-evidence search returned for this
+        # hypothesis that the testing model did not assess at all (it is told to
+        # assess every one). An omission leaves their relevance unknown, so the
+        # finding cannot stand as supported and a reviewer must look at them. A
+        # passage the model explicitly weighed is left to the step 14 challenger.
+        weighed = {a.passage_id for a in g.evidence_assessments}
         contested = sorted({
             rp.passage.passage_id
             for ex in (result.bundle.by_hypothesis.get(h.hypothesis_id, [])
@@ -393,7 +392,8 @@ class SpecialistInvestigation:
 
     def run(self, *, packet_passages: list[dict[str, Any]], indicators: IndicatorSet,
             value_sets: dict[str, list[str]], case_version: int,
-            keys: dict[str, str] | None = None) -> InvestigationResult:
+            keys: dict[str, str] | None = None,
+            entity_aliases: tuple[str, ...] = ()) -> InvestigationResult:
         keys = keys or {}
         spec = self.spec
         result = InvestigationResult(spec_code=spec.code)
@@ -472,7 +472,8 @@ class SpecialistInvestigation:
             tested = self._test.test(
                 HypothesisTestingInputs(
                     hypotheses=result.hypotheses, bundle=result.bundle,
-                    plan=result.plan, grounding_items=grounding, budget=self._budget),
+                    plan=result.plan, grounding_items=grounding, budget=self._budget,
+                    entity_aliases=tuple(entity_aliases)),
                 case_version=case_version, key=keys.get("test"))
             result.model_calls += 1
         except HypothesisTestingRejectedError as exc:

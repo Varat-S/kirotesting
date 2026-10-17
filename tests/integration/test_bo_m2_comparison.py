@@ -117,8 +117,9 @@ def test_measured_investigation_outcomes(comparison):
 
 
 def _variant(db_session, mutate):
-    db_session.add(Case(case_id=h.CASE, status="open"))
-    db_session.flush()
+    if db_session.get(Case, h.CASE) is None:
+        db_session.add(Case(case_id=h.CASE, status="open"))
+        db_session.flush()
     prep = prepare_specialist(db_session, case_id=h.CASE, evidence=h.evidence_snapshot(),
                               metrics=h.metrics(), spec=V3_SPEC_BY_CODE["M1S2"])
     stages = {k: v for k, v in json.loads(
@@ -187,3 +188,57 @@ def test_verbatim_fact_support(statement, quote, passage, expected):
     from app.services.analysis.grounding import verbatim_fact_support
 
     assert verbatim_fact_support(statement, quote, passage) is expected
+
+
+def test_r3a_contradictory_passages_the_model_assessed_are_not_flagged(db_session):
+    """S7 again, but the model assesses every contradictory-search passage."""
+    first = _variant(db_session, lambda stages, prep: None)["M1S2-H007"]
+    hits = {pid for e in first.investigation["enquiries"]
+            if e["requirement_kind"] == "contradictory" for pid in e["passage_ids"]}
+    assert "unassessed_contradictory_candidates" in first.investigation["adapter_notes"]
+
+    def mutate(stages, prep):
+        h7 = _result(stages, "h7")
+        cited = {pid for pid in hits if any(
+            a.get("quoted_excerpt") and a["quoted_excerpt"].lower()[:30]
+            in prep.passage_text[pid].lower() for a in h7["evidence_assessments"])}
+        h7["evidence_assessments"] += [
+            {"passage_id": pid, "assessment": "irrelevant",
+             "rationale": "Does not bear on volume guarantees or termination."}
+            for pid in sorted(hits - cited)]
+    s7 = _variant(db_session, mutate)["M1S2-H007"]
+    assert "unassessed_contradictory_candidates" not in s7.investigation["adapter_notes"]
+    # Governed status is supported; the remaining qualification is the baseline
+    # Layer D rule ("may terminate" is risk-factor language), not R3.
+    assert s7.investigation["effective_status"] == "supported"
+    assert [f["rule_id"] for f in s7.review_flags] == ["generic_risk_disclosure_only"]
+    assert s7.usable
+
+
+@pytest.mark.parametrize("statement, aliases, expected", [
+    ("Some competitors may restrict the ability of managed care plans to contract with HCA",
+     ("HCA Healthcare, Inc.", "HCA Healthcare", "HCA"), True),
+    ("Some competitors may restrict the ability of managed care plans to contract with HCA",
+     (), False),
+    ("Some competitors may restrict the ability of managed care plans to contract with Tenet",
+     ("HCA",), False),  # another company's name is a content word
+    ("Some competitors may not restrict the ability of managed care plans to contract with HCA",
+     ("HCA",), False),  # negation still checked
+])
+def test_r1a_borrower_names_are_equivalent_to_we_us_our(statement, aliases, expected):
+    from app.services.analysis.grounding import verbatim_fact_support
+
+    quote = ("some of our competitors may negotiate exclusivity provisions with managed "
+             "care plans or otherwise restrict the ability of managed care plans to "
+             "contract with us.")
+    assert verbatim_fact_support(statement, quote, quote, aliases=aliases) is expected
+
+
+def test_borrower_aliases_come_from_the_entity_record():
+    from app.services.bo.comparison import borrower_aliases
+
+    class _E:
+        entities = [{"legal_name": "HCA Healthcare, Inc.", "tickers": ["HCA"],
+                     "borrower_flag": True},
+                    {"legal_name": "Other Co", "borrower_flag": False}]
+    assert borrower_aliases(_E()) == ("HCA Healthcare, Inc.", "HCA Healthcare", "HCA")

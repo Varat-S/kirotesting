@@ -26,6 +26,7 @@ the validators.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -78,6 +79,7 @@ class PreparedSpecialist:
     value_sets: dict[str, list[str]]
     checks: list
     snapshot_version: int
+    entity_aliases: tuple[str, ...] = ()
 
     def fingerprint(self) -> str:
         return content_hash({
@@ -133,7 +135,27 @@ def prepare_specialist(session: Session, *, case_id: str, evidence, metrics,
                       for p in evidence.narrative_evidence if p.get("evidence_id")},
         corpus=corpus, indicators=indicators, value_sets=value_sets,
         checks=[c for c in checks if spec.code in c.agent_codes],
-        snapshot_version=evidence.snapshot_version)
+        snapshot_version=evidence.snapshot_version,
+        entity_aliases=borrower_aliases(evidence))
+
+
+_CORPORATE_SUFFIX = re.compile(
+    r",?\s+(?:inc|incorporated|corp|corporation|co|company|ltd|limited|plc|llc|lp|"
+    r"holdings|group)\.?$", re.I)
+
+
+def borrower_aliases(evidence) -> tuple[str, ...]:
+    """The borrower's names from the entity record: legal and short name,
+    tickers and declared aliases (deterministic; nothing inferred beyond
+    stripping a corporate suffix)."""
+    names: list[str] = []
+    for entity in evidence.entities or []:
+        if not entity.get("borrower_flag"):
+            continue
+        legal = entity.get("legal_name") or ""
+        names += [legal, _CORPORATE_SUFFIX.sub("", legal).strip(),
+                  *(entity.get("tickers") or []), *(entity.get("aliases") or [])]
+    return tuple(dict.fromkeys(n for n in names if n))
 
 
 # -- anchors ------------------------------------------------------------------
@@ -242,7 +264,7 @@ def run_investigation(session: Session, prep: PreparedSpecialist,
         review_lookup=session).run(
             packet_passages=prep.passages, indicators=prep.indicators,
             value_sets=prep.value_sets, case_version=prep.snapshot_version,
-            keys={s: s for s in responses})
+            keys={s: s for s in responses}, entity_aliases=prep.entity_aliases)
     run_id = f"{prep.analysis_run_id}:investigation"
     failed = investigation.failed_stage
     if failed is not None:

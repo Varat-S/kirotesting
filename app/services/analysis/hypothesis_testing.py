@@ -167,6 +167,9 @@ class HypothesisTestingInputs:
     # NOT appear here. Absent a matching record, only deterministic premise-level
     # grounding can corroborate.
     adjudications: tuple[AdjudicationRecord, ...] = ()
+    # The borrower's names (legal name, short name, ticker, aliases) from the
+    # entity record; used only by the verbatim reported-fact check (fix R1a).
+    entity_aliases: tuple[str, ...] = ()
 
     def grounding_item_ids(self) -> set[str]:
         return {item.evidence_id for item in self.grounding_items}
@@ -567,7 +570,8 @@ class HypothesisTestingService:
                     and hypothesis.classification is ClaimClassification.REPORTED_FACT
                     and not premise.is_outcome_premise
                     and any(verbatim_fact_support(premise.premise, premise.grounding_claim,
-                                                  passages[pid])
+                                                  passages[pid],
+                                                  aliases=inputs.entity_aliases)
                             for pid in premise.supporting_passage_ids if pid in passages)):
                 basis.append("verbatim_reported_fact")
             adj = self._verified_adjudication_for(

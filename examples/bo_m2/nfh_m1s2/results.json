@@ -159,9 +159,7 @@
      "disposition": "unverified",
      "hypothesis_id": "M1S2-H005",
      "investigation": {
-      "adapter_notes": [
-       "unassessed_contradictory_candidates"
-      ],
+      "adapter_notes": [],
       "downgrade_reasons": [
        "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Multi-year agreements exist', 'Multi-year agreements have reduced contract terminations']"
       ],
@@ -170,7 +168,7 @@
       "proposed_status": "supported"
      },
      "kind": "defect",
-     "missing_information": 1,
+     "missing_information": 0,
      "mitigant_effectiveness": "unproven",
      "present": true,
      "presentation": "on_demand",
@@ -235,7 +233,7 @@
    ],
    "usage": {
     "model_calls": 4,
-    "request_chars": 46862,
+    "request_chars": 47064,
     "response_chars": 23520
    },
    "valid": true
@@ -388,7 +386,7 @@
  },
  "case_id": "NFH_BO",
  "comparison_version": "m2-comparison-1",
- "identical_inputs_fingerprint": "0a4022624696abf293c33ffcd488e086f78be6c48d4adb4023b7441b5bc16f30",
+ "identical_inputs_fingerprint": "cfce7a3c108cbf8cc34393d3277b496ac4dd6a222d60f2be4f4ab9d93a0b413e",
  "investigation": {
   "material_gaps": 17,
   "out_of_scope": [

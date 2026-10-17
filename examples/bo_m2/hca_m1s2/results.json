@@ -2,9 +2,9 @@
  "arms": {
   "investigation": {
    "arm": "investigation",
-   "controls_as_expected": 1,
+   "controls_as_expected": 2,
    "controls_total": 2,
-   "controls_usable": 1,
+   "controls_usable": 2,
    "defects_as_expected": 5,
    "defects_held_back": 5,
    "defects_total": 5,
@@ -208,36 +208,36 @@
      "usable": false
     },
     {
-     "admissibility": "audit_only",
-     "as_expected": false,
+     "admissibility": "qualified_narrative",
+     "as_expected": true,
      "contradicting_evidence": 0,
      "contradictory_enquiry_hits": 5,
-     "disposition": "unverified",
+     "disposition": "qualified",
      "hypothesis_id": "M1S2-H007",
      "investigation": {
       "adapter_notes": [
        "unassessed_contradictory_candidates"
       ],
-      "downgrade_reasons": [
-       "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Some competitors may negotiate exclusivity provisions with managed care plans that restrict their ability to contract with HCA']"
-      ],
-      "effective_status": "unverified",
-      "independently_corroborated": false,
+      "downgrade_reasons": [],
+      "effective_status": "supported",
+      "independently_corroborated": true,
       "proposed_status": "supported"
      },
      "kind": "control",
      "missing_information": 1,
      "mitigant_effectiveness": null,
      "present": true,
-     "presentation": "on_demand",
-     "review_flags": [],
+     "presentation": "display",
+     "review_flags": [
+      "generic_risk_disclosure_only"
+     ],
      "scenario": "H7_control_competitor_exclusivity",
-     "usable": false
+     "usable": true
     }
    ],
    "usage": {
     "model_calls": 4,
-    "request_chars": 272570,
+    "request_chars": 272771,
     "response_chars": 28139
    },
    "valid": true
@@ -388,7 +388,7 @@
  },
  "case_id": "HCA_2025_M2",
  "comparison_version": "m2-comparison-1",
- "identical_inputs_fingerprint": "84e7ea49aca35cc033c5901a96cb7065aecc360b76cdeaa9715e042296c584df",
+ "identical_inputs_fingerprint": "cdb6967101547e198776990061804913dd0c83232a635030124c2b296bad6ed8",
  "investigation": {
   "material_gaps": 16,
   "out_of_scope": [
