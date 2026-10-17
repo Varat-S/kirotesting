@@ -11,11 +11,11 @@ Business Overview (BO) has four internal modules. Financial Overview (FO) is out
 
 | Module | Agents | Validators | State in this cycle |
 |---|---|---|---|
-| M1 Business Model & Operating Profile | five primary specialists + Agent 6 (integrator) | Validators 1–5; Agent 6 governance | Implemented (v3 roster) |
-| M2 Industry | one agent | Validator 6 | Ownership contract declared; **not executed** |
-| M3 Corporate Structure & Management | one agent | Validator 7 | Ownership contract declared; **not executed** |
-| M4 Strategy & Capital Allocation / Financial Stewardship | one agent | Validator 8 | Ownership contract declared; **not executed** |
-| Cross-module synthesis | one agent over M1–M4 conclusions | synthesis governance | M5 |
+| M1 Business Model & Operating Profile | five primary specialists + Agent 6 (integrator) | Validators 1–5; Agent 6 governance | Executable |
+| M2 Industry | one agent | Validator 6 | Executable |
+| M3 Corporate Structure & Management | one agent | Validator 7 | Executable |
+| M4 Strategy & Capital Allocation / Financial Stewardship | one agent | Validator 8 | Executable |
+| Cross-module synthesis | Business Orchestrator over governed M1–M4 conclusions | synthesis governance | Executable |
 
 The eight primary agents (M1 ×5, M2, M3, M4) each have a **logically separate validator
 and audit record**. Validation code may be shared; every validation record names its
@@ -66,10 +66,9 @@ Review notes carried with the roster:
 * Ownership is exclusive; evidence is not. Several agents may receive the same admitted
   passage.
 
-**M2–M4 until implemented:** their agent definitions exist so ownership is declared and
-unique, but they are never executed. Their parameters are reported with status
-`not_assessed`. No neutral value, no artificial finding, and their absence is never
-reported as completed analysis.
+M2–M4 use the shared sealed-packet, retrieval, validation, persistence and completeness
+services. An empty or failed module remains `incomplete`; no neutral value or artificial
+finding is substituted.
 
 ## 4. Statuses
 
@@ -119,7 +118,7 @@ silently re-weighted over the remaining inputs. The authoritative step 15 score 
 computed after challenge and reconciliation (M4); any score produced earlier is labelled
 preliminary.
 
-## 7. Investigation path (M2 onwards)
+## 7. Investigation path
 
 Per primary agent, under the existing `BusinessOverviewRunner` boundary:
 
