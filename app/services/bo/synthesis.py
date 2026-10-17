@@ -278,7 +278,9 @@ def conclusion_prechecks(parsed: dict[str, Any],
 
 def validate_challenger_output(parsed: dict[str, Any], *, claim_ids: set[str],
                                admitted_evidence_ids: set[str],
-                               known_parameter_ids: set[str]) -> list[str]:
+                               known_parameter_ids: set[str],
+                               allowed_agent_ids: set[str] | None = None,
+                               owned_parameter_ids: set[str] | None = None) -> list[str]:
     import jsonschema
 
     try:
@@ -289,7 +291,10 @@ def validate_challenger_output(parsed: dict[str, Any], *, claim_ids: set[str],
         f"official_score_assignment: {path!r}; a challenger never sets a score."
         for path in score_key_paths(parsed)
     ]
-    owned = {p for spec in BO_AGENT_SPECS for p in spec.owned_parameters}
+    allowed = set(BO_ACTIVE_AGENT_IDS if allowed_agent_ids is None
+                  else allowed_agent_ids)
+    owned = ({p for spec in BO_AGENT_SPECS for p in spec.owned_parameters}
+             if owned_parameter_ids is None else set(owned_parameter_ids))
     for item in parsed.get("challenges") or []:
         cid = item.get("challenge_id")
         target = item.get("target")
@@ -300,12 +305,12 @@ def validate_challenger_output(parsed: dict[str, Any], *, claim_ids: set[str],
                 issues.append(
                     f"evidence_exists: challenge {cid!r} cites unadmitted {eid!r}.")
         for agent_id in item.get("affected_agent_ids") or []:
-            if agent_id not in BO_ACTIVE_AGENT_IDS:
+            if agent_id not in allowed:
                 issues.append(
                     f"out_of_scope_agent: challenge {cid!r} names {agent_id!r}, "
                     "which is not a Business Overview agent.")
         for scope in item.get("requested_rerun_scope") or []:
-            if scope not in BO_ACTIVE_AGENT_IDS and scope not in owned \
+            if scope not in allowed and scope not in owned \
                     and scope not in known_parameter_ids:
                 issues.append(
                     f"out_of_scope_rerun: challenge {cid!r} requests {scope!r}.")

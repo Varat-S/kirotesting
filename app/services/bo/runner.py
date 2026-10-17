@@ -49,9 +49,16 @@ from app.prompts.bo_prompts import (
     BO_NARROW_JSON_SCHEMA,
     BO_ORCHESTRATOR_JSON_SCHEMA,
     bo_prompt_catalogue,
+    bo_v3_prompt_catalogue,
 )
 from app.prompts.registry import PromptRegistry
-from app.schemas.agentic import AgentTask, AgenticAnalysisRun, ParameterResult, Topic
+from app.schemas.agentic import (
+    AgentTask,
+    AgenticAnalysisRun,
+    ParameterResult,
+    ScoreStatus,
+    Topic,
+)
 from app.schemas.bo import Disposition, HypothesisRecord
 from app.services.agents.executor import DagExecutor, PreparedTask
 from app.services.agents.registry import default_registry
@@ -131,7 +138,7 @@ DATA_NOTICE = (
 ANALYSIS_MODE = "agentic_bo_only"
 
 
-def bo_offline_backend() -> FakeLLMBackend:
+def bo_offline_backend(narrow_ids=BO_NARROW_AGENT_IDS) -> FakeLLMBackend:
     """A fake backend that asserts nothing: every BO agent returns empty lists.
 
     Lets the BO path execute end to end offline WITHOUT inventing analysis. The
@@ -139,7 +146,7 @@ def bo_offline_backend() -> FakeLLMBackend:
     honest outcome of a run in which no model said anything.
     """
     backend = FakeLLMBackend()
-    for agent_id in BO_NARROW_AGENT_IDS:
+    for agent_id in narrow_ids:
         backend.register(agent_id, {"parameters": [], "hypotheses": []})
     backend.register("orchestrate", {"overall_assessment": {
         "claim_id": "bo_overall", "category": "assessment", "section": "executive",
@@ -196,6 +203,8 @@ class BusinessOverviewRunner:
         prompt_versions: dict[str, int] | None = None,
         sector="auto",
         coverage_checks=None,
+        bo_roster: str = "v2",
+        investigation_mode: InvestigationMode = InvestigationMode.SINGLE_PASS,
     ) -> None:
         settings = get_settings()
         # Sector profile: "auto" detects it from the admitted evidence, None
@@ -204,7 +213,21 @@ class BusinessOverviewRunner:
         self.sector = sector
         self.coverage_checks = list(coverage_checks or [])
         self.session = session
-        self.backend = backend or bo_offline_backend()
+        if bo_roster not in {"v2", "v3"}:
+            raise ValueError("bo_roster must be 'v2' or 'v3'.")
+        self.bo_roster = bo_roster
+        self.investigation_mode = investigation_mode
+        if investigation_mode is not InvestigationMode.SINGLE_PASS:
+            raise ValueError(
+                "Complete BO currently supports single_pass; experimental modes "
+                "remain available through run_m1s2_mode().")
+        if backend is None:
+            narrow = BO_NARROW_AGENT_IDS
+            if bo_roster == "v3":
+                from app.services.bo.roster_v3 import V3_SPECS
+                narrow = tuple(spec.agent_id for spec in V3_SPECS)
+            backend = bo_offline_backend(narrow)
+        self.backend = backend
         self.data_root = Path(data_root)
         self.output_root = Path(output_root)
         self.retriever = BoEvidenceRetriever(budget)
@@ -303,7 +326,38 @@ class _BoRun:
         self.rejected_sources = rejected_sources
         self.snapshot_version = evidence.snapshot_version
         self.analysis_run_id = f"ar_{uuid.uuid4().hex[:16]}"
-        self.registry = default_registry("v2")
+        self.roster_version = runner.bo_roster
+        if self.roster_version == "v3":
+            from app.services.bo.roster_v3 import (
+                V3_AGENT_6_ID,
+                V3_M1_PRIMARY_IDS,
+                V3_PRIMARY_AGENT_IDS,
+                V3_SPECS,
+                V3_SPEC_BY_AGENT,
+                v3_coverage_checks,
+            )
+            self.spec_by_agent = V3_SPEC_BY_AGENT
+            self.narrow_agent_ids = tuple(spec.agent_id for spec in V3_SPECS)
+            self.primary_agent_ids = V3_PRIMARY_AGENT_IDS
+            self.m1_primary_ids = V3_M1_PRIMARY_IDS
+            self.resilience_agent_id = V3_AGENT_6_ID
+            self.active_agent_ids = (*self.narrow_agent_ids,
+                                     BO_ORCHESTRATOR_ID, BO_CHALLENGER_ID)
+            self.sections = tuple((spec.agent_id, spec.code, spec.title)
+                                  for spec in V3_SPECS)
+            check_mapper = v3_coverage_checks
+            prompt_entries = [*bo_prompt_catalogue(), *bo_v3_prompt_catalogue()]
+        else:
+            self.spec_by_agent = BO_SPEC_BY_AGENT
+            self.narrow_agent_ids = BO_NARROW_AGENT_IDS
+            self.primary_agent_ids = BO_PRIMARY_AGENT_IDS
+            self.m1_primary_ids = BO_PRIMARY_AGENT_IDS
+            self.resilience_agent_id = BO_RESILIENCE_AGENT_ID
+            self.active_agent_ids = BO_ACTIVE_AGENT_IDS
+            self.sections = BO_SECTIONS
+            check_mapper = list
+            prompt_entries = bo_prompt_catalogue()
+        self.registry = default_registry(self.roster_version)
 
         prompts = PromptRegistry(self.session)
         prompts.register_catalogue()
@@ -312,7 +366,7 @@ class _BoRun:
                 entry["name"], template=entry["template"],
                 response_schema=entry["response_schema"], role=entry.get("role"),
                 label=entry.get("label"))
-            for entry in bo_prompt_catalogue()
+            for entry in prompt_entries
         }
         self.client = LLMClient(runner.backend, prompts=prompts, session=self.session,
                                 prompt_versions=runner.prompt_versions)
@@ -333,8 +387,8 @@ class _BoRun:
         }
         self.sector = (detect_sector(evidence) if runner.sector == "auto"
                        else runner.sector)
-        self.checks = [*(self.sector.checklist if self.sector else ()),
-                       *runner.coverage_checks]
+        self.checks = check_mapper([*(self.sector.checklist if self.sector else ()),
+                                    *runner.coverage_checks])
         self.corpus = sorted(
             (p for p in evidence.narrative_evidence if p.get("evidence_id")),
             key=lambda p: (str(p.get("document_id") or ""), p.get("location") or 0))
@@ -365,7 +419,7 @@ class _BoRun:
         self.routed: dict[str, list[dict]] = {}
         self.retrieval: dict[str, RetrievalResult] = {}
         self.packets: dict[str, Any] = {}
-        self.agents = {a: AgentOutcome(a) for a in BO_ACTIVE_AGENT_IDS}
+        self.agents = {a: AgentOutcome(a) for a in self.active_agent_ids}
         self.promoted: dict[str, list[ParameterResult]] = {}
         self.hypotheses: dict[str, list[HypothesisRecord]] = {}
         self.retrieval_requests: dict[str, list[dict]] = {}
@@ -385,6 +439,7 @@ class _BoRun:
         self.round_index = 0
         self.rerun_reason: str | None = None
         self.conclusion_status = "unavailable"
+        self.module_conclusions: dict[str, dict[str, Any]] = {}
         self.started_at = datetime.now(timezone.utc)
         self.completed_at: datetime | None = None
 
@@ -393,23 +448,29 @@ class _BoRun:
     def execute(self) -> None:
         self._open_run()
         self._foundation()
-        self._stage("primary_specialists", set(BO_PRIMARY_AGENT_IDS))
+        self._stage("primary_specialists", set(self.primary_agent_ids))
         self._follow_up_retrieval()
         self._coverage_follow_up()
-        self._stage("resilience", {BO_RESILIENCE_AGENT_ID})
-        self._score_business()
+        self._stage("resilience", {self.resilience_agent_id})
+        if self.roster_version == "v3":
+            self._build_module_conclusions()
+        self._score_business(authoritative=False)
         self._stage("orchestrator", {BO_ORCHESTRATOR_ID})
         self._challenge_phase()
+        if self.roster_version == "v3":
+            self._score_business(authoritative=True)
+            self._link_final_score()
         self._finalize()
 
     def execute_specialists(self) -> None:
         self.scope = "business_overview_specialists_only"
         self._open_run()
         self._foundation()
-        self._stage("primary_specialists", set(BO_PRIMARY_AGENT_IDS))
+        self._stage("primary_specialists", set(self.primary_agent_ids))
         self._follow_up_retrieval()
         self._coverage_follow_up()
-        self._stage("resilience", {BO_RESILIENCE_AGENT_ID})
+        self._stage("resilience", {self.resilience_agent_id})
+        self._build_module_conclusions()
         self._close_run()
 
     def _open_run(self) -> None:
@@ -430,7 +491,9 @@ class _BoRun:
                 "scope": self.scope,
                 "sector_profile": self.sector.sector_id if self.sector else None,
                 "coverage_checks": [c.check_id for c in self.checks],
-                "active_agents": list(BO_ACTIVE_AGENT_IDS),
+                "active_agents": list(self.active_agent_ids),
+                "bo_roster": self.roster_version,
+                "investigation_mode": self.runner.investigation_mode.value,
                 "max_concurrency": self.runner.max_concurrency,
                 "max_rerun_rounds": self.runner.max_rerun_rounds,
                 "retrieval_budget": vars(self.runner.retriever.budget),
@@ -450,17 +513,17 @@ class _BoRun:
             self.evidence, analysis_run_id=self.analysis_run_id,
             parameters=self.indicators.agent_view())
         router = EvidenceRouter()
-        for agent_id in BO_NARROW_AGENT_IDS:
+        for agent_id in self.narrow_agent_ids:
             agent = self.registry.get(agent_id)
             routed = router.build_packet(agent.routing, router_inputs)
             self.routed[agent_id] = routed.narrative_evidence
             self.retrieval[agent_id] = self.runner.retriever.run_plan(
-                BO_SPEC_BY_AGENT[agent_id], routed.narrative_evidence,
+                self.spec_by_agent[agent_id], routed.narrative_evidence,
                 analysis_run_id=self.analysis_run_id)
             if self.checks:
                 self.retrieval[agent_id], self.located[agent_id] = (
                     self.runner.retriever.run_checklist(
-                        BO_SPEC_BY_AGENT[agent_id], self.checks, self.corpus,
+                        self.spec_by_agent[agent_id], self.checks, self.corpus,
                         self.retrieval[agent_id],
                         analysis_run_id=self.analysis_run_id))
             self._record_attempts(self.retrieval[agent_id].attempts)
@@ -564,7 +627,7 @@ class _BoRun:
         )
 
     def _build(self, agent, context):
-        if agent.agent_id in BO_SPEC_BY_AGENT:
+        if agent.agent_id in self.spec_by_agent:
             return self._build_narrow(agent)
         if agent.agent_id == BO_ORCHESTRATOR_ID:
             return self._build_orchestrator(agent)
@@ -572,22 +635,23 @@ class _BoRun:
             return self._build_challenger(agent)
         return None  # never reached: ``only`` is always a subset of BO agents
 
-    def _usable(self, agent_ids=BO_NARROW_AGENT_IDS) -> list[HypothesisRecord]:
-        return [h for a in agent_ids for h in self.hypotheses.get(a, []) if h.usable]
+    def _usable(self, agent_ids=None) -> list[HypothesisRecord]:
+        selected = self.narrow_agent_ids if agent_ids is None else agent_ids
+        return [h for a in selected for h in self.hypotheses.get(a, []) if h.usable]
 
     def _audit_only(self) -> list[HypothesisRecord]:
-        return [h for a in BO_NARROW_AGENT_IDS
+        return [h for a in self.narrow_agent_ids
                 for h in self.hypotheses.get(a, []) if not h.usable]
 
     def _coverage(self) -> dict[str, dict[str, Any]]:
         return {
-            a: {"code": BO_SPEC_BY_AGENT[a].code, "status": self.agents[a].status,
+            a: {"code": self.spec_by_agent[a].code, "status": self.agents[a].status,
                 "detail": self.agents[a].detail}
-            for a in BO_NARROW_AGENT_IDS
+            for a in self.narrow_agent_ids
         }
 
     def _build_narrow(self, agent):
-        spec = BO_SPEC_BY_AGENT[agent.agent_id]
+        spec = self.spec_by_agent[agent.agent_id]
         retrieval = self.retrieval[agent.agent_id]
         inputs: dict[str, Any] = {
             "data_notice": DATA_NOTICE,
@@ -610,15 +674,25 @@ class _BoRun:
         }
         evidence_ids = set(retrieval.evidence_ids)
         parents: list[str] = []
-        if agent.agent_id == BO_RESILIENCE_AGENT_ID:
-            primary = self._usable(BO_PRIMARY_AGENT_IDS)
-            if not primary:
+        if agent.agent_id == self.resilience_agent_id:
+            primary = self._usable(self.m1_primary_ids)
+            unresolved = [
+                c.check.check_id for c in self.coverage
+                if c.agent_id in self.m1_primary_ids
+                and not (c.addressed_by
+                         or c.response_status == "not_supported_by_evidence")
+            ]
+            failed = [a for a in self.m1_primary_ids
+                      if self.agents[a].status != "validated"]
+            if not primary or (self.roster_version == "v3" and (failed or unresolved)):
                 self.agents[agent.agent_id].detail = (
-                    "No validated primary hypotheses to analyse.")
+                    "Module 1 completeness gate blocked Agent 6: "
+                    f"failed specialists={failed}; unresolved checks={unresolved}; "
+                    f"usable findings={len(primary)}.")
                 return None
             inputs["primary_hypotheses"] = [hypothesis_view(h) for h in primary]
             inputs["primary_coverage"] = {
-                a: c for a, c in self._coverage().items() if a in BO_PRIMARY_AGENT_IDS}
+                a: c for a, c in self._coverage().items() if a in self.m1_primary_ids}
             cited = {e for h in primary for e in h.evidence_ids()}
             # BO6 also sees the indicators its component hypotheses quoted.
             inputs["indicators"] = self.indicators.agent_view(
@@ -627,7 +701,7 @@ class _BoRun:
             evidence_ids |= cited
             # BO6 may cite the evidence its component hypotheses rest on.
             self._seal_packet(agent.agent_id, extra_ids=cited)
-            parents = [self.agents[a].run_ids[-1] for a in BO_PRIMARY_AGENT_IDS
+            parents = [self.agents[a].run_ids[-1] for a in self.m1_primary_ids
                        if self.agents[a].run_ids]
         if self.feedback.get(agent.agent_id):
             inputs["challenge_feedback"] = self.feedback[agent.agent_id]
@@ -652,21 +726,64 @@ class _BoRun:
         return self._task(agent, inputs, evidence_ids, BO_NARROW_JSON_SCHEMA, parents)
 
     def _business_parameters(self) -> list[ParameterResult]:
-        return [p for a in BO_NARROW_AGENT_IDS for p in self.promoted.get(a, [])]
+        return [p for a in self.narrow_agent_ids for p in self.promoted.get(a, [])]
+
+    def _build_module_conclusions(self) -> dict[str, dict[str, Any]]:
+        """Deterministic governed views consumed by cross-module synthesis."""
+        modules = {
+            "M1": (*self.m1_primary_ids, self.resilience_agent_id),
+            "M2": tuple(a for a in self.narrow_agent_ids
+                        if self.spec_by_agent[a].module == "M2"),
+            "M3": tuple(a for a in self.narrow_agent_ids
+                        if self.spec_by_agent[a].module == "M3"),
+            "M4": tuple(a for a in self.narrow_agent_ids
+                        if self.spec_by_agent[a].module == "M4"),
+        }
+        out = {}
+        for module, agent_ids in modules.items():
+            findings = [h for a in agent_ids for h in self.hypotheses.get(a, [])]
+            unresolved_checks = [
+                c.check.check_id for c in self.coverage
+                if c.agent_id in agent_ids
+                and not (c.addressed_by
+                         or c.response_status == "not_supported_by_evidence")
+            ]
+            failed = [a for a in agent_ids if self.agents[a].status != "validated"]
+            usable = [h for h in findings if h.usable]
+            no_governed_output = not findings
+            out[module] = {
+                "module": module,
+                "status": "complete" if (not failed and not unresolved_checks
+                                           and not no_governed_output)
+                          else "incomplete",
+                "agent_ids": list(agent_ids),
+                "failed_or_missing_agents": failed,
+                "unresolved_coverage_checks": unresolved_checks,
+                "findings": [hypothesis_view(h) for h in usable],
+                "audit_only_hypothesis_ids": [h.hypothesis_id for h in findings
+                                               if not h.usable],
+                "missing_information": sorted({m for h in findings
+                                                for m in h.missing_information}
+                                               | ({"No governed findings were produced."}
+                                                  if no_governed_output else set())),
+            }
+        self.module_conclusions = out
+        return out
 
     def _build_orchestrator(self, agent):
+        modules = self._build_module_conclusions()
         usable = self._usable()
-        resilience = self._usable((BO_RESILIENCE_AGENT_ID,))
+        resilience = self._usable((self.resilience_agent_id,))
         limitations = [
             {"field": f"agent:{a}", "state": c["status"], "detail": c["detail"]}
             for a, c in self._coverage().items() if c["status"] != "validated"]
         limitations += [
             {"field": f"retrieval:{g.query_id}", "state": "no_results",
              "detail": f"No admitted passage matched ({g.purpose})."}
-            for a in BO_NARROW_AGENT_IDS for g in self.retrieval[a].gaps]
+            for a in self.narrow_agent_ids for g in self.retrieval[a].gaps]
         extras = {
             "data_notice": DATA_NOTICE,
-            "sections": [{"code": code, "title": title} for _, code, title in BO_SECTIONS],
+            "sections": [{"code": code, "title": title} for _, code, title in self.sections],
             "hypotheses": [hypothesis_view(h) for h in usable],
             "audit_only_hypotheses": [
                 {"hypothesis_id": h.hypothesis_id, "claim": h.claim,
@@ -680,6 +797,12 @@ class _BoRun:
             "coverage": self._coverage(),
             "score_explanation": score_explanation(self.score, self.rubric_notes),
         }
+        if self.roster_version == "v3":
+            extras.update(
+                module_conclusions=modules,
+                cross_module_instruction=(
+                    "Test interactions across M1-M4. Preserve contradictions and "
+                    "missing modules; never treat incomplete as neutral risk."))
         if self.feedback.get(agent.agent_id):
             extras["challenge_feedback"] = self.feedback[agent.agent_id]
         orchestrator_input = build_business_orchestrator_input(
@@ -690,7 +813,7 @@ class _BoRun:
             extras=extras,
         )
         evidence_ids = {e for h in usable for e in h.evidence_ids()}
-        parents = [self.agents[a].run_ids[-1] for a in BO_NARROW_AGENT_IDS
+        parents = [self.agents[a].run_ids[-1] for a in self.narrow_agent_ids
                    if self.agents[a].run_ids]
         return self._task(agent, orchestrator_input.as_prompt_inputs(), evidence_ids,
                           BO_ORCHESTRATOR_JSON_SCHEMA, parents)
@@ -736,7 +859,7 @@ class _BoRun:
     def _on_result(self, agent, parsed, context) -> None:
         run_id = context.run_ids[agent.agent_id]
         self.agents[agent.agent_id].run_ids.append(run_id)
-        if agent.agent_id in BO_SPEC_BY_AGENT:
+        if agent.agent_id in self.spec_by_agent:
             self._on_narrow(agent, parsed, run_id)
         elif agent.agent_id == BO_ORCHESTRATOR_ID:
             self._on_orchestrator(agent, parsed, run_id)
@@ -755,7 +878,7 @@ class _BoRun:
             self.session.flush()
 
     def _on_narrow(self, agent, parsed, run_id) -> None:
-        spec = BO_SPEC_BY_AGENT[agent.agent_id]
+        spec = self.spec_by_agent[agent.agent_id]
         packet = self.packets[agent.agent_id]
         outcome = DeterministicValidator.for_agent(
             packet, agent, known_parameters=self.indicators.known_values(),
@@ -767,8 +890,8 @@ class _BoRun:
             passages={e: t for e, t in self.passage_text.items() if e in allowed},
             indicators=self.indicators,
             primary_hypotheses=(
-                {h.hypothesis_id: h for h in self._usable(BO_PRIMARY_AGENT_IDS)}
-                if agent.agent_id == BO_RESILIENCE_AGENT_ID else None),
+                {h.hypothesis_id: h for h in self._usable(self.m1_primary_ids)}
+                if agent.agent_id == self.resilience_agent_id else None),
             corpus=self.corpus,
         ).validate(parsed, analysis_run_id=self.analysis_run_id, agent_run_id=run_id)
         issues += validation.issues
@@ -788,8 +911,8 @@ class _BoRun:
         # Parameter values the validated hypotheses do not carry are held back.
         parsed, parameter_changes = gate_parameters(
             parsed, validation.records, value_sets=self.value_sets,
-            primary=({h.hypothesis_id: h for h in self._usable(BO_PRIMARY_AGENT_IDS)}
-                     if agent.agent_id == BO_RESILIENCE_AGENT_ID else None))
+            primary=({h.hypothesis_id: h for h in self._usable(self.m1_primary_ids)}
+                     if agent.agent_id == self.resilience_agent_id else None))
         self.parameter_adjustments[agent.agent_id] = parameter_changes
         self._record_coverage(spec, parsed, validation.records)
         try:
@@ -875,7 +998,7 @@ class _BoRun:
         """Questions for the Financial Overview raised by agents or the validator."""
         return [
             {"hypothesis_id": h.hypothesis_id, "agent_id": h.agent_id, **handoff}
-            for a in BO_NARROW_AGENT_IDS for h in self.hypotheses.get(a, [])
+            for a in self.narrow_agent_ids for h in self.hypotheses.get(a, [])
             for handoff in h.fo_handoffs]
 
     def _close_run(self) -> None:
@@ -893,7 +1016,7 @@ class _BoRun:
                     seen = True
         self.completed_at = datetime.now(timezone.utc)
         row = self.session.get(RunRow, self.analysis_run_id)
-        narrow = [self.agents[a].status for a in BO_NARROW_AGENT_IDS]
+        narrow = [self.agents[a].status for a in self.narrow_agent_ids]
         row.status = ("completed" if all(s == "validated" for s in narrow)
                       else "partially_failed")
         row.completed_at = self.completed_at
@@ -912,7 +1035,7 @@ class _BoRun:
         if self.runner.retriever.budget.max_followup_rounds < 1:
             return
         again = set()
-        for agent_id in BO_PRIMARY_AGENT_IDS:
+        for agent_id in self.primary_agent_ids:
             if self.agents[agent_id].status != "validated":
                 continue
             unanswered = [
@@ -938,13 +1061,13 @@ class _BoRun:
         if budget.max_followup_rounds < 1:
             return
         again = set()
-        for agent_id in BO_PRIMARY_AGENT_IDS:
+        for agent_id in self.primary_agent_ids:
             requests = self.retrieval_requests.get(agent_id) or []
             if not requests or self.agents[agent_id].status != "validated":
                 continue
             before = set(self.retrieval[agent_id].evidence_ids)
             updated = self.runner.retriever.follow_up(
-                BO_SPEC_BY_AGENT[agent_id], requests,
+                self.spec_by_agent[agent_id], requests,
                 # Any ADMITTED passage may answer a specific request; nothing
                 # outside the canonical snapshot is ever searched.
                 list(self.evidence.narrative_evidence),
@@ -964,7 +1087,7 @@ class _BoRun:
             self._stage("follow_up_retrieval", again)
             self.rerun_reason = None
 
-    def _score_business(self) -> None:
+    def _score_business(self, *, authoritative: bool = False) -> None:
         """Rubric signals + deterministic BusinessRiskScore (existing engines)."""
         prior = self.score
         if prior is not None:
@@ -978,6 +1101,19 @@ class _BoRun:
                                   snapshot_version=self.snapshot_version)
         score = self.scorer.score_business(
             self.rubric_results, analysis_run_id=self.analysis_run_id)
+        illustrative = (self.roster_version == "v3"
+                        and str(self.scoring_cfg.content.get("label", "")).startswith(
+                            "ILLUSTRATIVE"))
+        if illustrative and score.status is ScoreStatus.FINAL:
+            score = score.model_copy(update={"status": ScoreStatus.PROVISIONAL})
+        if self.roster_version == "v3":
+            score = score.model_copy(update={"detail": {
+                **score.detail,
+                "stage": "authoritative_post_challenge" if authoritative
+                         else "preliminary_pre_challenge",
+                "policy_status": "illustrative_not_bank_policy" if illustrative
+                                 else "approved_policy",
+            }})
         if prior is not None:
             score = score.model_copy(update={"supersedes_id": prior.score_id})
         self.session.add(_score_row(score, self.case_id, self.snapshot_version))
@@ -988,9 +1124,19 @@ class _BoRun:
                     if h.disposition is Disposition.REJECTED]
         self.reconciliation = reconcile(usable, rejected)
 
+    def _link_final_score(self) -> None:
+        """Point the accepted structured conclusion at the post-challenge score."""
+        if self.conclusion is None or self.conclusion_row_id is None or self.score is None:
+            return
+        self.conclusion = self.conclusion.model_copy(
+            update={"score_reference": self.score.score_id})
+        row = self.session.get(TopicConclusionRow, self.conclusion_row_id)
+        row.payload = self.conclusion.model_dump(mode="json")
+        self.session.flush()
+
     def _on_orchestrator(self, agent, parsed, run_id) -> None:
         by_id = {h.hypothesis_id: h for h in self._usable()}
-        all_by_id = {h.hypothesis_id: h for a in BO_NARROW_AGENT_IDS
+        all_by_id = {h.hypothesis_id: h for a in self.narrow_agent_ids
                      for h in self.hypotheses.get(a, [])}
         accepted_ids = {
             *(r.parameter_result_id for r in self.indicators.results),
@@ -1038,7 +1184,10 @@ class _BoRun:
         admitted |= {e for h in self._audit_only() for e in h.evidence_ids()}
         issues = validate_challenger_output(
             parsed, claim_ids=claim_ids, admitted_evidence_ids=admitted,
-            known_parameter_ids=set(self.indicators.known_values()))
+            known_parameter_ids=set(self.indicators.known_values()),
+            allowed_agent_ids=set(self.active_agent_ids),
+            owned_parameter_ids={p for spec in self.spec_by_agent.values()
+                                 for p in spec.owned_parameters})
         entry: dict[str, Any] = {
             "round": self.round_index, "agent_run_id": run_id,
             "conclusion_id": self.conclusion_row_id,
@@ -1099,15 +1248,15 @@ class _BoRun:
     def _remediate(self, challenge: dict) -> None:
         decision = challenge["decision"]
         scope = set(decision["rerun_scope"])
-        bo_scope = scope & set(BO_ACTIVE_AGENT_IDS)
+        bo_scope = scope & set(self.active_agent_ids)
         if decision["deterministic_only"] and not bo_scope:
             # A defect in a deterministic input cannot be fixed by re-asking a
             # model; the synthesis is repeated against the same calculations and
             # the finding stays open for a reviewer.
             bo_scope = {BO_ORCHESTRATOR_ID, BO_CHALLENGER_ID}
         bo_scope |= {BO_ORCHESTRATOR_ID, BO_CHALLENGER_ID}
-        narrow = sorted(bo_scope & set(BO_NARROW_AGENT_IDS))
-        primary = set(narrow) & set(BO_PRIMARY_AGENT_IDS)
+        narrow = sorted(bo_scope & set(self.narrow_agent_ids))
+        primary = set(narrow) & set(self.primary_agent_ids)
         findings = [f for f in challenge["findings"]
                     if f["severity"] in ("high", "material")]
         by_claim = {c.get("claim_id"): c.get("text")
@@ -1122,7 +1271,7 @@ class _BoRun:
                 if agent_id in (BO_ORCHESTRATOR_ID, BO_CHALLENGER_ID)
                 or agent_id in f["affected_agent_ids"]
                 or agent_id in f["requested_rerun_scope"]
-                or agent_id == BO_RESILIENCE_AGENT_ID
+                or agent_id == self.resilience_agent_id
             ]
 
         # Descendant invalidation, append-only: everything in scope is
@@ -1131,7 +1280,7 @@ class _BoRun:
         superseded = {"parameters": [], "hypotheses": [], "scores": [],
                       "conclusions": []}
         for agent_id in narrow:
-            spec = BO_SPEC_BY_AGENT[agent_id]
+            spec = self.spec_by_agent[agent_id]
             superseded["parameters"] += self.rerun.supersede_parameters(
                 set(spec.owned_parameters))
             superseded["hypotheses"] += sorted(self.hypothesis_store.supersede_agent(
@@ -1147,7 +1296,7 @@ class _BoRun:
             "executed_scope": sorted(bo_scope),
             # Non-BO descendants (mitigants, structuring, credit orchestrator)
             # are invalidated by the DAG but are not part of a BO-only run.
-            "deferred_descendants": sorted(scope - set(BO_ACTIVE_AGENT_IDS)),
+            "deferred_descendants": sorted(scope - set(self.active_agent_ids)),
             "superseded": superseded,
         }
 
@@ -1156,9 +1305,9 @@ class _BoRun:
             sorted({f["issue_type"] for f in findings}))
         if primary:
             self._stage("rerun_primary_specialists", primary, force=True)
-        if BO_RESILIENCE_AGENT_ID in narrow:
-            self._stage("rerun_resilience", {BO_RESILIENCE_AGENT_ID}, force=True)
-        self._score_business()
+        if self.resilience_agent_id in narrow:
+            self._stage("rerun_resilience", {self.resilience_agent_id}, force=True)
+        self._score_business(authoritative=False)
         superseded["scores"] = [self.score.supersedes_id] if self.score.supersedes_id else []
         self.conclusion, self.orchestrator_output = None, None
         self._stage("rerun_orchestrator", {BO_ORCHESTRATOR_ID}, force=True)
@@ -1192,6 +1341,10 @@ class _BoRun:
             self.conclusion_status = "human_review_required"
         else:
             self.conclusion_status = last["outcome"]
+        if (self.roster_version == "v3"
+                and any(module["status"] != "complete"
+                        for module in self.module_conclusions.values())):
+            self.conclusion_status = "human_review_required"
 
         if self.conclusion is not None:
             status = ("escalated" if self.conclusion_status == "human_review_required"

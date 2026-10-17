@@ -239,7 +239,7 @@ class BoReportBuilder:
     # -- memo -----------------------------------------------------------------
 
     def _memo(self, run, mode, sources) -> dict[str, Any]:
-        by_id = {h.hypothesis_id: h for a in BO_NARROW_AGENT_IDS
+        by_id = {h.hypothesis_id: h for a in run.narrow_agent_ids
                  for h in run.hypotheses.get(a, [])}
         traces = {t.parameter_result_id: t for t in run.indicators.traces}
         cited: list[str] = []
@@ -292,7 +292,7 @@ class BoReportBuilder:
         weaknesses = [c for name, c, _ in claims if name == "weaknesses"]
 
         sections = []
-        for agent_id, code, title in BO_SECTIONS:
+        for agent_id, code, title in run.sections:
             body = [c for name, c, section in claims
                     if section == code and name in ("key_drivers", "material_risks")]
             # Headline strengths/weaknesses of this section are shown once, in
@@ -326,14 +326,14 @@ class BoReportBuilder:
             for f in (last or {}).get("findings", [])
             if f["severity"] in ("medium", "high", "material")]
         limitations = [
-            f"{BO_SPEC_BY_AGENT[a].code} {BO_SPEC_BY_AGENT[a].title}: "
+            f"{run.spec_by_agent[a].code} {run.spec_by_agent[a].title}: "
             f"specialist {o.status}."
             for a, o in run.agents.items()
-            if a in BO_SPEC_BY_AGENT and o.status != "validated"]
+            if a in run.spec_by_agent and o.status != "validated"]
         limitations += [
             f"No admitted passage matched the {g.purpose} search "
-            f"'{g.query_id}' ({BO_SPEC_BY_AGENT[a].code})."
-            for a in BO_NARROW_AGENT_IDS for g in run.retrieval[a].gaps]
+            f"'{g.query_id}' ({run.spec_by_agent[a].code})."
+            for a in run.narrow_agent_ids for g in run.retrieval[a].gaps]
         used = {h for _, c, _ in claims for h in c["hypothesis_ids"]}
         missing = sorted({m for hid in used for m in by_id[hid].missing_information})
         uncertainties = list(dict.fromkeys(
@@ -363,8 +363,21 @@ class BoReportBuilder:
                 "follow_up": list(parsed.get("follow_up") or []),
             },
             "sections": sections,
+            "module_conclusions": run.module_conclusions,
+            "cross_module_risk_interactions": [
+                c for name, c, _ in claims
+                if name in ("material_risks", "key_drivers")
+                and len(c.get("hypothesis_ids") or []) > 1],
             "strengths_vulnerabilities": {"strengths": strengths,
                                           "weaknesses": weaknesses},
+            "presentation": {
+                "display": [h.hypothesis_id for h in by_id.values()
+                            if h.display_priority.value == "display"],
+                "on_demand": [h.hypothesis_id for h in by_id.values()
+                              if h.display_priority.value == "on_demand"],
+                "suppressed_count": sum(
+                    h.display_priority.value == "suppress" for h in by_id.values()),
+            },
             "outstanding": {
                 "open_questions": list(parsed.get("open_questions") or []),
                 "unresolved_contradictions":
@@ -390,9 +403,9 @@ class BoReportBuilder:
             runs_by_agent.setdefault(row.agent_id, []).append(row)
 
         agents = []
-        for agent_id in BO_ACTIVE_AGENT_IDS:
+        for agent_id in run.active_agent_ids:
             definition = run.registry.get(agent_id)
-            spec = BO_SPEC_BY_AGENT.get(agent_id)
+            spec = run.spec_by_agent.get(agent_id)
             rows = runs_by_agent.get(agent_id, [])
             outcome = run.agents[agent_id]
             agents.append({
@@ -461,7 +474,7 @@ class BoReportBuilder:
         statistics = {
             "overall": tally(current),
             "by_agent": {a: tally([h for h in current if h["agent_id"] == a])
-                         for a in BO_NARROW_AGENT_IDS},
+                         for a in run.narrow_agent_ids},
         }
         parameters = [
             {"parameter_result_id": p.parameter_result_id,
@@ -567,10 +580,10 @@ class BoReportBuilder:
                 "version": run.registry.version,
                 "hash": run.registry.registry_hash(),
                 "total_registered_jobs": len(run.registry),
-                "active_agent_ids": list(BO_ACTIVE_AGENT_IDS),
+                "active_agent_ids": list(run.active_agent_ids),
                 "inactive_registered_agent_ids": sorted(
                     d.agent_id for d in run.registry.all()
-                    if d.agent_id not in BO_ACTIVE_AGENT_IDS),
+                    if d.agent_id not in run.active_agent_ids),
                 "v1_to_v2_agent_map": BO_V1_TO_V2_AGENT,
             },
             "prompts": {
@@ -614,9 +627,10 @@ class BoReportBuilder:
                     (run.orchestrator_output or {}).get("merged_duplicates") or [],
             },
             "resilience_analysis": (
-                [h for h in current if h["agent_id"] == BO_RESILIENCE_AGENT_ID]
-                if run.agents[BO_RESILIENCE_AGENT_ID].status == "validated"
-                else run.agents[BO_RESILIENCE_AGENT_ID].status),
+                [h for h in current if h["agent_id"] == run.resilience_agent_id]
+                if run.agents[run.resilience_agent_id].status == "validated"
+                else run.agents[run.resilience_agent_id].status),
+            "module_conclusions": run.module_conclusions,
             "orchestrator": {
                 "history": run.orchestrator_history or "not_executed",
                 "claims": provenance,
@@ -642,7 +656,7 @@ class BoReportBuilder:
     # -- handoff --------------------------------------------------------------
 
     def _handoff(self, run, mode) -> dict[str, Any]:
-        by_id = {h.hypothesis_id: h for a in BO_NARROW_AGENT_IDS
+        by_id = {h.hypothesis_id: h for a in run.narrow_agent_ids
                  for h in run.hypotheses.get(a, [])}
         parsed = run.orchestrator_output or {}
         claims = iter_claims(parsed)
@@ -706,6 +720,22 @@ class BoReportBuilder:
                 if h.mitigant.effectiveness.value != "demonstrated"],
             unresolved_challenges=unresolved,
             open_questions=list(parsed.get("open_questions") or []),
+            module_conclusions=run.module_conclusions,
+            compound_business_risks=[
+                brief(c) for name, c in claims
+                if name in ("material_risks", "key_drivers")
+                and len(c.get("hypothesis_ids") or []) > 1],
+            score_limitations=list(run.rubric_notes),
+            evidence_limitations=sorted({
+                m for h in by_id.values() for m in h.missing_information}),
+            escalations=unresolved,
+            canonical_references={
+                "analysis_run_id": run.analysis_run_id,
+                "evidence_snapshot_version": run.snapshot_version,
+                "topic_conclusion_id": run.conclusion_row_id,
+                "score_id": run.score.score_id,
+                "audit_stage": f"bo_audit:{run.analysis_run_id}",
+            },
             execution_mode=mode,
             agent_registry_version=run.registry.version,
             agent_registry_hash=run.registry.registry_hash(),

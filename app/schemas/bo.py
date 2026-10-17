@@ -211,7 +211,7 @@ class AcceptedBusinessOverview(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     handoff_id: str
-    schema_version: str = "bo-handoff-1.0"
+    schema_version: str = "bo-handoff-1.1"
     analysis_run_id: str
     case_id: str
     evidence_snapshot_version: int
@@ -228,6 +228,12 @@ class AcceptedBusinessOverview(BaseModel):
     unproven_mitigants: list[dict[str, Any]] = Field(default_factory=list)
     unresolved_challenges: list[dict[str, Any]] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
+    module_conclusions: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    compound_business_risks: list[dict[str, Any]] = Field(default_factory=list)
+    score_limitations: list[str] = Field(default_factory=list)
+    evidence_limitations: list[str] = Field(default_factory=list)
+    escalations: list[dict[str, Any]] = Field(default_factory=list)
+    canonical_references: dict[str, Any] = Field(default_factory=dict)
     human_review_status: str = "pending"  # pending | accepted | rejected
     reviewer: str | None = None
     reviewed_at: datetime | None = None
