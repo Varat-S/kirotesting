@@ -1,0 +1,27 @@
+{
+  "inventory_version": "bo-m3-inventory-1",
+  "created": "2026-10-17",
+  "provenance_note": "All examples are developer-created or derived from previously inspected HCA/NFH fixtures. None is independent external validation data. K cases were execution-held-out after guard revision, but belong to the same developer and HCA source family.",
+  "sets": [
+    {"path": "examples/bo_m2/hca_m1s2", "role": "development", "provenance": "Developer-authored scripted M2 comparison; repeatedly inspected and used to change heuristics."},
+    {"path": "examples/bo_m2/nfh_m1s2", "role": "development", "provenance": "Developer-authored synthetic breadth case; inspected during M2."},
+    {"path": "examples/bo_m2/judge_eval/hca_cases.json", "role": "development", "provenance": "J01-J18 pre-registered before judge execution, then used to revise the deterministic guard."},
+    {"path": "examples/bo_m2/judge_eval/hca_cases_heldout.json", "role": "held_out_with_caveat", "provenance": "K01-K12 written after guard revision and before execution; same developer, borrower, filing and task family, so not independent validation."},
+    {"path": "examples/bo_m3/offline_comparison.json", "role": "development", "provenance": "Synthetic controlled cases created for architecture plumbing and metric regression."}
+  ],
+  "coverage": [
+    {"category": "supported_literal_fact", "examples": ["J01", "J07", "K01"]},
+    {"category": "supported_factual_paraphrase", "examples": ["J04", "J15", "K05", "K12"]},
+    {"category": "unsupported_inferential_leap", "examples": ["J12", "J18", "S2", "S3"]},
+    {"category": "negation_change", "examples": ["S7-negation-adversary", "K04"]},
+    {"category": "numeric_or_denominator_mismatch", "examples": ["J02", "K02", "S3"]},
+    {"category": "wrong_entity_or_accounting_period", "examples": ["M3-C06"]},
+    {"category": "intention_as_realized_outcome", "examples": ["J18", "K06", "K11"]},
+    {"category": "genuine_company_specific_mitigant", "examples": ["M3-C08"]},
+    {"category": "undemonstrated_mitigation", "examples": ["S5", "M3-C09"]},
+    {"category": "contradictory_disclosure", "examples": ["J03", "J09", "J16", "M3-C10"]},
+    {"category": "off_dimension_finding", "examples": ["h8", "M3-C11"]},
+    {"category": "material_adverse_omission", "examples": ["HCA-contract-renewal-live-gap", "M3-C12"]}
+  ],
+  "separate_axes": ["evidence_authenticity", "factual_corroboration", "semantic_entailment", "verification_status", "credit_interpretation"]
+}
