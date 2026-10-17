@@ -1,0 +1,108 @@
+{
+ "_comment": "M2 controlled comparison on HCA FY2025 (real 10-K, accession 0001193125-26-044769), specialist M1S2. Written and committed BEFORE the first HCA run; not tuned to its output. Both arms' scripted model responses are EQUALLY WRONG (same claims, quotes and asserted 'supported' status). No code changes between writing this and running it. H5 deliberately cites a passage that contains figures and 'increased' (tests the known weakness of fix R4). H7 is a correct finding whose premise paraphrases 'us' as 'HCA' (tests whether fix R1 is too strict).",
+ "case": "HCA_2025_M2 (HCA Healthcare FY2025 Form 10-K)",
+ "specialist": "M1S2",
+ "scenarios": {
+  "H1_control_private_payer_share": {
+   "kind": "control",
+   "description": "Private third-party payers accounted for 48.9% of revenues in 2025, a concentration by payer category rather than by individual insurer.",
+   "hypothesis_id": {
+    "single_pass": "M1S2-H001",
+    "investigation": "M1S2-H001"
+   },
+   "acceptable": [
+    "supported",
+    "qualified"
+   ]
+  },
+  "H2_rates_as_volume_lock_in": {
+   "kind": "defect",
+   "description": "Genuine quote on predetermined-rate agreements used to claim locked-in volumes.",
+   "hypothesis_id": {
+    "single_pass": "M1S2-H002",
+    "investigation": "M1S2-H002"
+   },
+   "acceptable": [
+    "rejected",
+    "unverified"
+   ]
+  },
+  "H3_correct_metric_irrelevant_claim": {
+   "kind": "defect",
+   "description": "Correct approved payer-share indicator attached to an unrelated loyalty claim (concept copied correctly in the investigation script).",
+   "hypothesis_id": {
+    "single_pass": "M1S2-H003",
+    "investigation": "M1S2-H003"
+   },
+   "acceptable": [
+    "rejected",
+    "unverified"
+   ]
+  },
+  "H4_absence_as_safety": {
+   "kind": "defect",
+   "description": "Customer concentration is low because the filing does not disclose any individual payer accounting for more than 10% of revenues.",
+   "hypothesis_id": {
+    "single_pass": "M1S2-H004",
+    "investigation": "M1S2-H004"
+   },
+   "acceptable": [
+    "rejected",
+    "unverified"
+   ]
+  },
+  "H5_mitigant_unrelated_outcome": {
+   "kind": "defect",
+   "description": "Market position claimed to demonstrably protect contracts; 'outcome' evidence is an ER-volume table unrelated to contract retention.",
+   "hypothesis_id": {
+    "single_pass": "M1S2-H005",
+    "investigation": "M1S2-H005"
+   },
+   "acceptable": [
+    "rejected",
+    "unverified"
+   ]
+  },
+  "H6_ignored_renewal_risk": {
+   "kind": "defect",
+   "description": "Contracts called secure while the packet discloses renewal risk and competitor exclusivity.",
+   "hypothesis_id": {
+    "single_pass": "M1S2-H006",
+    "investigation": "M1S2-H006"
+   },
+   "acceptable": [
+    "rejected",
+    "unverified"
+   ]
+  },
+  "H7_control_competitor_exclusivity": {
+   "kind": "control",
+   "description": "Some competitors may negotiate exclusivity provisions with managed care plans that restrict their ability to contract with HCA.",
+   "hypothesis_id": {
+    "single_pass": "M1S2-H007",
+    "investigation": "M1S2-H007"
+   },
+   "acceptable": [
+    "supported",
+    "qualified"
+   ]
+  }
+ },
+ "parameters": {
+  "customer_dependence_assessment": {
+   "proposed": "concentrated_payer_categories",
+   "rests_on": "H1",
+   "desired": "accepted"
+  },
+  "contract_termination_risk_assessment": {
+   "proposed": "low",
+   "rests_on": "H6",
+   "desired": "held_back"
+  },
+  "switching_cost_assessment": {
+   "proposed": "high",
+   "rests_on": "H3",
+   "desired": "held_back"
+  }
+ }
+}

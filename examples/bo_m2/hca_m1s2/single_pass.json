@@ -1,0 +1,240 @@
+{
+ "_comment": "Scripted single-pass M1S2 response for HCA (equally wrong model).",
+ "hypotheses": [
+  {
+   "hypothesis_id": "M1S2-H001",
+   "claim": "Private third-party payers accounted for 48.9% of revenues in 2025, a concentration by payer category rather than by individual insurer.",
+   "claim_type": "fact",
+   "direction": "negative",
+   "disposition": "supported",
+   "confidence": "high",
+   "materiality": "high",
+   "credit_mechanism": "Effect on revenue stability.",
+   "supporting_evidence_ids": [
+    {
+     "$evidence": "accounted for 48.9%, 49.5% and 49.0%"
+    }
+   ],
+   "evidence_quotes": [
+    {
+     "evidence_id": {
+      "$evidence": "accounted for 48.9%, 49.5% and 49.0%"
+     },
+     "quote": "Revenues derived from private third-party payers (domestic only) accounted for 48.9%, 49.5% and 49.0% of our revenues for 2025, 2024 and 2023, respectively."
+    }
+   ],
+   "display_priority": "display"
+  },
+  {
+   "hypothesis_id": "M1S2-H002",
+   "claim": "Commercial and managed care agreements on predetermined rates lock in patient volumes and give contracted revenue visibility.",
+   "claim_type": "inference",
+   "direction": "positive",
+   "disposition": "supported",
+   "confidence": "high",
+   "materiality": "high",
+   "credit_mechanism": "Effect on revenue stability.",
+   "supporting_evidence_ids": [
+    {
+     "$evidence": "predetermined rates per diagnosis"
+    }
+   ],
+   "evidence_quotes": [
+    {
+     "evidence_id": {
+      "$evidence": "predetermined rates per diagnosis"
+     },
+     "quote": "Agreements with commercial insurance carriers, managed care and preferred provider organizations generally provide for payments based upon predetermined rates per diagnosis, per diem rates or discounted fee-for-service rates."
+    }
+   ],
+   "display_priority": "display"
+  },
+  {
+   "hypothesis_id": "M1S2-H003",
+   "claim": "Patients are loyal to HCA: managed care and other insurers account for 48.9% of consolidated revenue.",
+   "claim_type": "fact",
+   "direction": "positive",
+   "disposition": "supported",
+   "confidence": "high",
+   "materiality": "medium",
+   "credit_mechanism": "Effect on revenue stability.",
+   "supporting_evidence_ids": [
+    {
+     "$evidence": "accounted for 48.9%, 49.5% and 49.0%"
+    }
+   ],
+   "evidence_quotes": [
+    {
+     "evidence_id": {
+      "$evidence": "accounted for 48.9%, 49.5% and 49.0%"
+     },
+     "quote": "Revenues derived from private third-party payers (domestic only) accounted for 48.9%, 49.5% and 49.0% of our revenues for 2025, 2024 and 2023, respectively."
+    }
+   ],
+   "display_priority": "display",
+   "quoted_values": [
+    {
+     "parameter_result_id": {
+      "$indicator": "revenue_share.payer.managed_care_and_other_insurers"
+     },
+     "value": {
+      "$indicator_value": "revenue_share.payer.managed_care_and_other_insurers"
+     },
+     "unit": "ratio",
+     "period": "2025-12-31",
+     "denominator": "consolidated_revenue"
+    }
+   ]
+  },
+  {
+   "hypothesis_id": "M1S2-H004",
+   "claim": "Customer concentration is low because the filing does not disclose any individual payer accounting for more than 10% of revenues.",
+   "claim_type": "inference",
+   "direction": "positive",
+   "disposition": "supported",
+   "confidence": "high",
+   "materiality": "high",
+   "credit_mechanism": "Effect on revenue stability.",
+   "supporting_evidence_ids": [
+    {
+     "$evidence": "We receive payments for patient services from the federal government"
+    }
+   ],
+   "evidence_quotes": [
+    {
+     "evidence_id": {
+      "$evidence": "We receive payments for patient services from the federal government"
+     },
+     "quote": "We receive payments for patient services from the federal government under the Medicare program, state governments under their respective Medicaid or similar programs, managed care plans"
+    }
+   ],
+   "display_priority": "display"
+  },
+  {
+   "hypothesis_id": "M1S2-H005",
+   "claim": "HCA's market position demonstrably protects its payer contracts from termination.",
+   "claim_type": "inference",
+   "direction": "positive",
+   "disposition": "supported",
+   "confidence": "high",
+   "materiality": "high",
+   "credit_mechanism": "Effect on revenue stability.",
+   "supporting_evidence_ids": [
+    {
+     "$evidence": "Our future success will depend, in part, on our ability to retain and renew"
+    }
+   ],
+   "evidence_quotes": [
+    {
+     "evidence_id": {
+      "$evidence": "Our future success will depend, in part, on our ability to retain and renew"
+     },
+     "quote": "hospitals compete for service contracts with group purchasers of health care services on the basis of price, market reputation, geographic location, quality and range of services, quality of the medical staff and convenience."
+    }
+   ],
+   "display_priority": "display",
+   "mitigant": {
+    "capability": "Market position and scale",
+    "existence": "verified",
+    "effectiveness": "demonstrated",
+    "outcome_evidence_ids": [
+     {
+      "$evidence": "Same facility emergency room visits increased 1.8%"
+     }
+    ]
+   }
+  },
+  {
+   "hypothesis_id": "M1S2-H006",
+   "claim": "HCA's payer contracts are secure, so contract termination and renewal risk is low.",
+   "claim_type": "inference",
+   "direction": "positive",
+   "disposition": "supported",
+   "confidence": "high",
+   "materiality": "high",
+   "credit_mechanism": "Effect on revenue stability.",
+   "supporting_evidence_ids": [
+    {
+     "$evidence": "predetermined rates per diagnosis"
+    }
+   ],
+   "evidence_quotes": [
+    {
+     "evidence_id": {
+      "$evidence": "predetermined rates per diagnosis"
+     },
+     "quote": "Agreements with commercial insurance carriers, managed care and preferred provider organizations generally provide for payments based upon predetermined rates per diagnosis, per diem rates or discounted fee-for-service rates."
+    }
+   ],
+   "display_priority": "display"
+  },
+  {
+   "hypothesis_id": "M1S2-H007",
+   "claim": "Some competitors may negotiate exclusivity provisions with managed care plans that restrict their ability to contract with HCA.",
+   "claim_type": "fact",
+   "direction": "negative",
+   "disposition": "supported",
+   "confidence": "high",
+   "materiality": "high",
+   "credit_mechanism": "Effect on revenue stability.",
+   "supporting_evidence_ids": [
+    {
+     "$evidence": "restrict the ability of managed care plans to contract with us"
+    }
+   ],
+   "evidence_quotes": [
+    {
+     "evidence_id": {
+      "$evidence": "restrict the ability of managed care plans to contract with us"
+     },
+     "quote": "some of our competitors may negotiate exclusivity provisions with managed care plans or otherwise restrict the ability of managed care plans to contract with us."
+    }
+   ],
+   "display_priority": "display"
+  }
+ ],
+ "parameters": [
+  {
+   "parameter_id": "customer_dependence_assessment",
+   "value": "concentrated_payer_categories",
+   "value_type": "category",
+   "status": "ok",
+   "hypothesis_ids": [
+    "M1S2-H001"
+   ],
+   "evidence_ids": [
+    {
+     "$evidence": "accounted for 48.9%, 49.5% and 49.0%"
+    }
+   ]
+  },
+  {
+   "parameter_id": "contract_termination_risk_assessment",
+   "value": "low",
+   "value_type": "category",
+   "status": "ok",
+   "hypothesis_ids": [
+    "M1S2-H006"
+   ],
+   "evidence_ids": [
+    {
+     "$evidence": "predetermined rates per diagnosis"
+    }
+   ]
+  },
+  {
+   "parameter_id": "switching_cost_assessment",
+   "value": "high",
+   "value_type": "category",
+   "status": "ok",
+   "hypothesis_ids": [
+    "M1S2-H003"
+   ],
+   "evidence_ids": [
+    {
+     "$evidence": "accounted for 48.9%, 49.5% and 49.0%"
+    }
+   ]
+  }
+ ]
+}

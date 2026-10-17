@@ -1,0 +1,801 @@
+{
+ "_comment": "Scripted investigation responses for HCA M1S2 (equally wrong model). h8 is deliberately out of scope (Operating Model).",
+ "generate": {
+  "hypotheses": [
+   {
+    "hypothesis_id": "h1",
+    "dimension": "customer_stickiness_concentration",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "Private third-party payers accounted for 48.9% of revenues in 2025, a concentration by payer category rather than by individual insurer.",
+    "credit_direction": "negative",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "accounted for 48.9%, 49.5% and 49.0%"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "reported_fact",
+    "verification_status": "unverified",
+    "severity": "high"
+   },
+   {
+    "hypothesis_id": "h2",
+    "dimension": "customer_stickiness_concentration",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "Commercial and managed care agreements on predetermined rates lock in patient volumes and give contracted revenue visibility.",
+    "credit_direction": "positive",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "predetermined rates per diagnosis"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "inference",
+    "verification_status": "unverified",
+    "severity": "high"
+   },
+   {
+    "hypothesis_id": "h3",
+    "dimension": "customer_stickiness_concentration",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "Patients are loyal to HCA: managed care and other insurers account for 48.9% of consolidated revenue.",
+    "credit_direction": "positive",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "accounted for 48.9%, 49.5% and 49.0%"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "inference",
+    "verification_status": "unverified",
+    "severity": "high"
+   },
+   {
+    "hypothesis_id": "h4",
+    "dimension": "customer_stickiness_concentration",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "Customer concentration is low because the filing does not disclose any individual payer accounting for more than 10% of revenues.",
+    "credit_direction": "positive",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "We receive payments for patient services from the federal government"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "inference",
+    "verification_status": "unverified",
+    "severity": "high"
+   },
+   {
+    "hypothesis_id": "h5",
+    "dimension": "customer_stickiness_concentration",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "HCA's market position demonstrably protects its payer contracts from termination.",
+    "credit_direction": "positive",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [
+     "Market position and scale"
+    ],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "Our future success will depend, in part, on our ability to retain and renew"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "inference",
+    "verification_status": "unverified",
+    "severity": "high"
+   },
+   {
+    "hypothesis_id": "h6",
+    "dimension": "customer_stickiness_concentration",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "HCA's payer contracts are secure, so contract termination and renewal risk is low.",
+    "credit_direction": "positive",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "predetermined rates per diagnosis"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "inference",
+    "verification_status": "unverified",
+    "severity": "high"
+   },
+   {
+    "hypothesis_id": "h7",
+    "dimension": "customer_stickiness_concentration",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "Some competitors may negotiate exclusivity provisions with managed care plans that restrict their ability to contract with HCA.",
+    "credit_direction": "negative",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "restrict the ability of managed care plans to contract with us"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "reported_fact",
+    "verification_status": "unverified",
+    "severity": "high"
+   },
+   {
+    "hypothesis_id": "h8",
+    "dimension": "operating_model_cost_resilience",
+    "business_characteristic": "Payer and contract structure",
+    "statement": "Labour costs could rise faster than historical levels and pressure margins.",
+    "credit_direction": "negative",
+    "economic_reasoning": "Effect on the stability of patient revenue.",
+    "potential_credit_impact": "Revenue stability and cash-flow resilience.",
+    "offsetting_characteristics": [],
+    "supporting_evidence_ids": [
+     {
+      "$evidence": "our labor costs could increase at rates in excess of historical levels"
+     }
+    ],
+    "contradictory_evidence_ids": [],
+    "additional_evidence_required": [],
+    "missing_information": [],
+    "calculation_refs": [],
+    "classification": "inference",
+    "verification_status": "unverified",
+    "severity": "high"
+   }
+  ]
+ },
+ "plan": {
+  "planner_mode": "llm",
+  "incomplete_coverage": [],
+  "enquiries": [
+   {
+    "enquiry_id": "q1s",
+    "hypothesis_id": "h1",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "supporting",
+    "search_intent": "supporting_evidence",
+    "investigative_question": "supporting evidence for h1",
+    "search_query": "private third-party payers revenues 2025",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q1c",
+    "hypothesis_id": "h1",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "contradictory",
+    "search_intent": "contradictory_evidence",
+    "investigative_question": "contradictory evidence for h1",
+    "search_query": "individual payer concentration largest payer",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q1o",
+    "hypothesis_id": "h1",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "offsetting",
+    "search_intent": "offsetting_capability",
+    "investigative_question": "offsetting evidence for h1",
+    "search_query": "Medicare Medicaid managed care payer mix",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q2s",
+    "hypothesis_id": "h2",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "supporting",
+    "search_intent": "supporting_evidence",
+    "investigative_question": "supporting evidence for h2",
+    "search_query": "predetermined rates managed care agreements",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q2c",
+    "hypothesis_id": "h2",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "contradictory",
+    "search_intent": "contradictory_evidence",
+    "investigative_question": "contradictory evidence for h2",
+    "search_query": "volume patients private insurance decline",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q3s",
+    "hypothesis_id": "h3",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "supporting",
+    "search_intent": "supporting_evidence",
+    "investigative_question": "supporting evidence for h3",
+    "search_query": "managed care insurers share revenues",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q3c",
+    "hypothesis_id": "h3",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "contradictory",
+    "search_intent": "contradictory_evidence",
+    "investigative_question": "contradictory evidence for h3",
+    "search_query": "patients shift narrow networks providers",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q4s",
+    "hypothesis_id": "h4",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "supporting",
+    "search_intent": "supporting_evidence",
+    "investigative_question": "supporting evidence for h4",
+    "search_query": "payments Medicare Medicaid managed care plans",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q4c",
+    "hypothesis_id": "h4",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "contradictory",
+    "search_intent": "contradictory_evidence",
+    "investigative_question": "contradictory evidence for h4",
+    "search_query": "concentration payers significant portion revenues",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q5s",
+    "hypothesis_id": "h5",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "supporting",
+    "search_intent": "supporting_evidence",
+    "investigative_question": "supporting evidence for h5",
+    "search_query": "compete service contracts market reputation",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q5c",
+    "hypothesis_id": "h5",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "contradictory",
+    "search_intent": "contradictory_evidence",
+    "investigative_question": "contradictory evidence for h5",
+    "search_query": "retain renew contracts third-party payers",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q5o",
+    "hypothesis_id": "h5",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "offsetting",
+    "search_intent": "offsetting_capability",
+    "investigative_question": "offsetting evidence for h5",
+    "search_query": "market position scale",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q5e",
+    "hypothesis_id": "h5",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "effectiveness",
+    "search_intent": "general_investigation",
+    "investigative_question": "effectiveness evidence for h5",
+    "search_query": "contracts renewed retention increased",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q6s",
+    "hypothesis_id": "h6",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "supporting",
+    "search_intent": "supporting_evidence",
+    "investigative_question": "supporting evidence for h6",
+    "search_query": "managed care contractual terms renewals",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q6c",
+    "hypothesis_id": "h6",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "contradictory",
+    "search_intent": "contradictory_evidence",
+    "investigative_question": "contradictory evidence for h6",
+    "search_query": "retain renew contracts exclusivity competitors",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q7s",
+    "hypothesis_id": "h7",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "supporting",
+    "search_intent": "supporting_evidence",
+    "investigative_question": "supporting evidence for h7",
+    "search_query": "competitors exclusivity provisions managed care plans",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q7c",
+    "hypothesis_id": "h7",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "contradictory",
+    "search_intent": "contradictory_evidence",
+    "investigative_question": "contradictory evidence for h7",
+    "search_query": "contract with managed care plans favorable terms",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   },
+   {
+    "enquiry_id": "q7o",
+    "hypothesis_id": "h7",
+    "dimension": "customer_stickiness_concentration",
+    "requirement_kind": "offsetting",
+    "search_intent": "offsetting_capability",
+    "investigative_question": "offsetting evidence for h7",
+    "search_query": "market position reputation contracts",
+    "rationale": "Test the hypothesis from this perspective.",
+    "evidence_requirement": "A passage that bears on the claim.",
+    "priority": 2,
+    "permitted_document_ids": []
+   }
+  ]
+ },
+ "test": {
+  "results": [
+   {
+    "hypothesis_id": "h1",
+    "dimension": "customer_stickiness_concentration",
+    "hypothesis_statement": "Private third-party payers accounted for 48.9% of revenues in 2025, a concentration by payer category rather than by individual insurer.",
+    "evidence_assessments": [
+     {
+      "passage_id": {
+       "$evidence": "accounted for 48.9%, 49.5% and 49.0%"
+      },
+      "assessment": "supports_premise",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "Revenues derived from private third-party payers (domestic only) accounted for 48.9%, 49.5% and 49.0% of our revenues for 2025, 2024 and 2023, respectively."
+     }
+    ],
+    "relevant_factual_claims": [],
+    "proposed_mechanism": "As stated in the hypothesis.",
+    "mechanism_premises": [
+     {
+      "premise_id": "h1p1",
+      "premise": "Revenues derived from private third-party payers (domestic only) accounted for 48.9% of our revenues for 2025",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "accounted for 48.9%, 49.5% and 49.0%"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": "Revenues derived from private third-party payers (domestic only) accounted for 48.9%, 49.5% and 49.0% of our revenues for 2025, 2024 and 2023, respectively.",
+      "is_outcome_premise": false,
+      "material": true
+     }
+    ],
+    "alternative_explanations": [],
+    "offsetting_capabilities": [],
+    "offset_effectiveness_evidence": [],
+    "proposed_status": "supported",
+    "justification": "The cited passage supports the hypothesis.",
+    "unresolved_evidence_requirements": [],
+    "interpretation_confidence": 0.85
+   },
+   {
+    "hypothesis_id": "h2",
+    "dimension": "customer_stickiness_concentration",
+    "hypothesis_statement": "Commercial and managed care agreements on predetermined rates lock in patient volumes and give contracted revenue visibility.",
+    "evidence_assessments": [
+     {
+      "passage_id": {
+       "$evidence": "predetermined rates per diagnosis"
+      },
+      "assessment": "supports_premise",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "Agreements with commercial insurance carriers, managed care and preferred provider organizations generally provide for payments based upon predetermined rates per diagnosis, per diem rates or discounted fee-for-service rates."
+     }
+    ],
+    "relevant_factual_claims": [],
+    "proposed_mechanism": "As stated in the hypothesis.",
+    "mechanism_premises": [
+     {
+      "premise_id": "h2p1",
+      "premise": "Agreements provide for payments based upon predetermined rates",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "predetermined rates per diagnosis"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": "Agreements with commercial insurance carriers, managed care and preferred provider organizations generally provide for payments based upon predetermined rates per diagnosis, per diem rates or discounted fee-for-service rates.",
+      "is_outcome_premise": false,
+      "material": true
+     },
+     {
+      "premise_id": "h2p2",
+      "premise": "Predetermined-rate agreements commit payers to patient volumes",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "predetermined rates per diagnosis"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": null,
+      "is_outcome_premise": false,
+      "material": true
+     }
+    ],
+    "alternative_explanations": [],
+    "offsetting_capabilities": [],
+    "offset_effectiveness_evidence": [],
+    "proposed_status": "supported",
+    "justification": "The cited passage supports the hypothesis.",
+    "unresolved_evidence_requirements": [],
+    "interpretation_confidence": 0.85
+   },
+   {
+    "hypothesis_id": "h3",
+    "dimension": "customer_stickiness_concentration",
+    "hypothesis_statement": "Patients are loyal to HCA: managed care and other insurers account for 48.9% of consolidated revenue.",
+    "evidence_assessments": [
+     {
+      "passage_id": {
+       "$evidence": "accounted for 48.9%, 49.5% and 49.0%"
+      },
+      "assessment": "supports_premise",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "Revenues derived from private third-party payers (domestic only) accounted for 48.9%, 49.5% and 49.0% of our revenues for 2025, 2024 and 2023, respectively."
+     }
+    ],
+    "relevant_factual_claims": [],
+    "proposed_mechanism": "As stated in the hypothesis.",
+    "mechanism_premises": [
+     {
+      "premise_id": "h3p1",
+      "premise": "Managed care and other insurers account for 48.9% of consolidated revenue",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "accounted for 48.9%, 49.5% and 49.0%"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": "Managed care and other insurers account for 48.9% of consolidated revenue",
+      "is_outcome_premise": false,
+      "material": true,
+      "grounding_metric_id": {
+       "$indicator": "revenue_share.payer.managed_care_and_other_insurers"
+      },
+      "claimed_concept": "Share of consolidated revenue: managed_care_and_other_insurers (payer category)"
+     }
+    ],
+    "alternative_explanations": [],
+    "offsetting_capabilities": [],
+    "offset_effectiveness_evidence": [],
+    "proposed_status": "supported",
+    "justification": "The cited passage supports the hypothesis.",
+    "unresolved_evidence_requirements": [],
+    "interpretation_confidence": 0.85
+   },
+   {
+    "hypothesis_id": "h4",
+    "dimension": "customer_stickiness_concentration",
+    "hypothesis_statement": "Customer concentration is low because the filing does not disclose any individual payer accounting for more than 10% of revenues.",
+    "evidence_assessments": [
+     {
+      "passage_id": {
+       "$evidence": "We receive payments for patient services from the federal government"
+      },
+      "assessment": "supports_premise",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "We receive payments for patient services from the federal government under the Medicare program, state governments under their respective Medicaid or similar programs, managed care plans"
+     }
+    ],
+    "relevant_factual_claims": [],
+    "proposed_mechanism": "As stated in the hypothesis.",
+    "mechanism_premises": [
+     {
+      "premise_id": "h4p1",
+      "premise": "No individual payer accounts for more than 10% of revenues",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "We receive payments for patient services from the federal government"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": "We receive payments for patient services from the federal government under the Medicare program, state governments under their respective Medicaid or similar programs, managed care plans",
+      "is_outcome_premise": false,
+      "material": true
+     }
+    ],
+    "alternative_explanations": [],
+    "offsetting_capabilities": [],
+    "offset_effectiveness_evidence": [],
+    "proposed_status": "supported",
+    "justification": "The cited passage supports the hypothesis.",
+    "unresolved_evidence_requirements": [],
+    "interpretation_confidence": 0.85
+   },
+   {
+    "hypothesis_id": "h5",
+    "dimension": "customer_stickiness_concentration",
+    "hypothesis_statement": "HCA's market position demonstrably protects its payer contracts from termination.",
+    "evidence_assessments": [
+     {
+      "passage_id": {
+       "$evidence": "Our future success will depend, in part, on our ability to retain and renew"
+      },
+      "assessment": "describes_initiative",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "hospitals compete for service contracts with group purchasers of health care services on the basis of price, market reputation, geographic location, quality and range of services, quality of the medical staff and convenience."
+     },
+     {
+      "passage_id": {
+       "$evidence": "Same facility emergency room visits increased 1.8%"
+      },
+      "assessment": "measured_outcome",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "Same facility emergency room visits increased 1.8% during 2025 compared to 2024"
+     }
+    ],
+    "relevant_factual_claims": [],
+    "proposed_mechanism": "As stated in the hypothesis.",
+    "mechanism_premises": [
+     {
+      "premise_id": "h5p1",
+      "premise": "Hospitals compete for service contracts on the basis of market reputation and range of services",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "Our future success will depend, in part, on our ability to retain and renew"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": "hospitals compete for service contracts with group purchasers of health care services on the basis of price, market reputation, geographic location, quality and range of services, quality of the medical staff and convenience.",
+      "is_outcome_premise": false,
+      "material": true
+     },
+     {
+      "premise_id": "h5p2",
+      "premise": "Market position has kept payer contracts from being terminated",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "Same facility emergency room visits increased 1.8%"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": null,
+      "is_outcome_premise": true,
+      "material": true
+     }
+    ],
+    "alternative_explanations": [],
+    "offsetting_capabilities": [
+     "Market position and scale"
+    ],
+    "offset_effectiveness_evidence": [
+     {
+      "$evidence": "Same facility emergency room visits increased 1.8%"
+     }
+    ],
+    "proposed_status": "supported",
+    "justification": "The cited passage supports the hypothesis.",
+    "unresolved_evidence_requirements": [],
+    "interpretation_confidence": 0.85
+   },
+   {
+    "hypothesis_id": "h6",
+    "dimension": "customer_stickiness_concentration",
+    "hypothesis_statement": "HCA's payer contracts are secure, so contract termination and renewal risk is low.",
+    "evidence_assessments": [
+     {
+      "passage_id": {
+       "$evidence": "predetermined rates per diagnosis"
+      },
+      "assessment": "supports_premise",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "Agreements with commercial insurance carriers, managed care and preferred provider organizations generally provide for payments based upon predetermined rates per diagnosis, per diem rates or discounted fee-for-service rates."
+     }
+    ],
+    "relevant_factual_claims": [],
+    "proposed_mechanism": "As stated in the hypothesis.",
+    "mechanism_premises": [
+     {
+      "premise_id": "h6p1",
+      "premise": "Payer contracts are secure and will be renewed",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "predetermined rates per diagnosis"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": "Agreements with commercial insurance carriers, managed care and preferred provider organizations generally provide for payments based upon predetermined rates per diagnosis, per diem rates or discounted fee-for-service rates.",
+      "is_outcome_premise": false,
+      "material": true
+     }
+    ],
+    "alternative_explanations": [],
+    "offsetting_capabilities": [],
+    "offset_effectiveness_evidence": [],
+    "proposed_status": "supported",
+    "justification": "The cited passage supports the hypothesis.",
+    "unresolved_evidence_requirements": [],
+    "interpretation_confidence": 0.85
+   },
+   {
+    "hypothesis_id": "h7",
+    "dimension": "customer_stickiness_concentration",
+    "hypothesis_statement": "Some competitors may negotiate exclusivity provisions with managed care plans that restrict their ability to contract with HCA.",
+    "evidence_assessments": [
+     {
+      "passage_id": {
+       "$evidence": "restrict the ability of managed care plans to contract with us"
+      },
+      "assessment": "supports_premise",
+      "rationale": "Model assessment.",
+      "quoted_excerpt": "some of our competitors may negotiate exclusivity provisions with managed care plans or otherwise restrict the ability of managed care plans to contract with us."
+     }
+    ],
+    "relevant_factual_claims": [],
+    "proposed_mechanism": "As stated in the hypothesis.",
+    "mechanism_premises": [
+     {
+      "premise_id": "h7p1",
+      "premise": "Some competitors may negotiate exclusivity provisions with managed care plans that restrict their ability to contract with HCA",
+      "status": "verified",
+      "supporting_passage_ids": [
+       {
+        "$evidence": "restrict the ability of managed care plans to contract with us"
+       }
+      ],
+      "contradictory_passage_ids": [],
+      "grounding_claim": "some of our competitors may negotiate exclusivity provisions with managed care plans or otherwise restrict the ability of managed care plans to contract with us.",
+      "is_outcome_premise": false,
+      "material": true
+     }
+    ],
+    "alternative_explanations": [],
+    "offsetting_capabilities": [],
+    "offset_effectiveness_evidence": [],
+    "proposed_status": "supported",
+    "justification": "The cited passage supports the hypothesis.",
+    "unresolved_evidence_requirements": [],
+    "interpretation_confidence": 0.85
+   }
+  ]
+ },
+ "parameters": {
+  "parameters": [
+   {
+    "parameter_id": "customer_dependence_assessment",
+    "value": "concentrated_payer_categories",
+    "value_type": "category",
+    "status": "ok",
+    "hypothesis_ids": [
+     "M1S2-H001"
+    ],
+    "evidence_ids": [
+     {
+      "$evidence": "accounted for 48.9%, 49.5% and 49.0%"
+     }
+    ]
+   },
+   {
+    "parameter_id": "contract_termination_risk_assessment",
+    "value": "low",
+    "value_type": "category",
+    "status": "ok",
+    "hypothesis_ids": [
+     "M1S2-H006"
+    ],
+    "evidence_ids": [
+     {
+      "$evidence": "predetermined rates per diagnosis"
+     }
+    ]
+   },
+   {
+    "parameter_id": "switching_cost_assessment",
+    "value": "high",
+    "value_type": "category",
+    "status": "ok",
+    "hypothesis_ids": [
+     "M1S2-H003"
+    ],
+    "evidence_ids": [
+     {
+      "$evidence": "accounted for 48.9%, 49.5% and 49.0%"
+     }
+    ]
+   }
+  ]
+ }
+}
