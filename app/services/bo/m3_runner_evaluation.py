@@ -14,7 +14,7 @@ M3_RUNNER_EVALUATION_VERSION = "bo-m3-runner-evaluation-1"
 def evaluate_runner_results(
     results: Iterable[SingleSpecialistResult], manifest: dict[str, Any]
 ) -> dict[str, Any]:
-    """Compare modes against the pre-registered HCA scenario manifest."""
+    """Compare modes against a pre-registered scenario manifest."""
     arms = {}
     packet_hashes = set()
     evidence_sets = set()
