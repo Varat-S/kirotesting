@@ -42,7 +42,11 @@ from app.services.agents.router import EvidenceRouter, RouterInputs
 from app.services.audit.log import AuditLog
 from app.services.bo.hypotheses import HypothesisStore
 from app.services.bo.indicators import IndicatorSet, build_indicators
-from app.services.bo.investigation import InvestigationResult, SpecialistInvestigation
+from app.services.bo.investigation import (
+    InvestigationResult,
+    SpecialistInvestigation,
+    specialist_agenda,
+)
 from app.services.bo.plans import PARAMETER_VALUE_SETS, BoAgentSpec
 from app.services.bo.retrieval import BoEvidenceRetriever, packet_view
 from app.services.bo.roster_v3 import v3_coverage_checks
@@ -269,7 +273,8 @@ STAGE_KEYS = ("generate", "plan", "test", "parameters")
 
 def run_investigation(session: Session, prep: PreparedSpecialist,
                       responses: dict[str, Any] | None = None, *,
-                      backend=None) -> ArmResult:
+                      backend=None, testing_tier: str | None = None,
+                      seeded: bool = True) -> ArmResult:
     """Scripted (``responses`` by stage key) or live (``backend``) investigation."""
     if backend is None:
         inner = FakeLLMBackend()
@@ -280,12 +285,14 @@ def run_investigation(session: Session, prep: PreparedSpecialist,
     backend = RecordingBackend(backend)
     client, prompts = _client(session, backend)
     try:
+        brief, agenda = specialist_agenda(prep.spec, prep.checks) if seeded else ("", [])
         investigation = SpecialistInvestigation(
             prep.spec, client=client, audit=AuditLog(session), case_id=prep.case_id,
-            review_lookup=session).run(
+            review_lookup=session, testing_tier=testing_tier).run(
                 packet_passages=prep.passages, indicators=prep.indicators,
                 value_sets=prep.value_sets, case_version=prep.snapshot_version,
-                keys={s: s for s in responses}, entity_aliases=prep.entity_aliases)
+                keys={s: s for s in responses}, entity_aliases=prep.entity_aliases,
+                specialist_brief=brief, agenda=agenda)
     except Exception as exc:  # provider failure is a failed arm, never a pass
         return ArmResult("investigation", None, None, backend.calls,
                          failure=f"provider error: {type(exc).__name__}: {exc}")

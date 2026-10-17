@@ -241,8 +241,9 @@ class LLMClient:
         case_version: int | None = None,
         prompt_name: str = "business_analysis",
         key: str | None = None,
+        model_tier: str | None = None,
     ) -> ModelRunResult:
-        """Run the generative credit-analysis prompt."""
+        """Run the generative credit-analysis prompt (optionally on a model tier)."""
         return self._run(
             "analyze",
             prompt_name,
@@ -251,6 +252,7 @@ class LLMClient:
             case_id=case_id,
             case_version=case_version,
             key=key,
+            model_tier=model_tier,
         )
 
     def challenge(
@@ -286,6 +288,7 @@ class LLMClient:
         case_id: str | None,
         case_version: int | None,
         key: str | None,
+        model_tier: str | None = None,
     ) -> ModelRunResult:
         request = self.build_request(
             method,
@@ -295,6 +298,7 @@ class LLMClient:
             case_id=case_id,
             case_version=case_version,
             key=key,
+            model_tier=model_tier,
         )
         prompt = request.prompt
         raw, parsed, outcome, detail = self._generate_and_validate(request)

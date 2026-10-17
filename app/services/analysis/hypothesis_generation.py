@@ -106,6 +106,11 @@ class HypothesisGenerationInputs:
     # BO roster v3: a specialist investigates only its own dimension(s). Empty
     # means module-wide (the original behaviour); the payload is then unchanged.
     dimension_scope: list[str] = field(default_factory=list)
+    # Optional specialist remit/boundaries and an investigation agenda (topics
+    # and coverage questions) so generation covers the remit, not just the most
+    # obvious risk. Forwarded only when set.
+    specialist_brief: str = ""
+    agenda: list[str] = field(default_factory=list)
 
     def to_payload(self) -> dict[str, Any]:
         """The exact context forwarded to the model (allow-lists included)."""
@@ -121,6 +126,10 @@ class HypothesisGenerationInputs:
         }
         if self.dimension_scope:
             payload["dimension_scope"] = list(self.dimension_scope)
+        if self.specialist_brief:
+            payload["specialist_brief"] = self.specialist_brief
+        if self.agenda:
+            payload["agenda"] = list(self.agenda)
         return payload
 
     def evidence_allow_list(self) -> set[str]:

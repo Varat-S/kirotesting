@@ -307,3 +307,20 @@ def test_parameter_evidence_is_derived_from_cited_hypotheses(db_session):
              "value_type": "category", "status": "ok", "hypothesis_ids": ["M1S2-H999"]})
     records = _variant(db_session, mutate)
     assert len(records) == 7  # not rejected as a whole
+
+
+def test_generation_receives_the_specialist_brief_and_agenda(db_session):
+    if db_session.get(Case, h.CASE) is None:
+        db_session.add(Case(case_id=h.CASE, status="open"))
+        db_session.flush()
+    prep = prepare_specialist(db_session, case_id=h.CASE, evidence=h.evidence_snapshot(),
+                              metrics=h.metrics(), spec=V3_SPEC_BY_CODE["M1S2"])
+    stages = {k: v for k, v in json.loads(
+        (Path(SCRIPTS) / "investigation.json").read_text()).items() if not k.startswith("_")}
+    arm = run_investigation(db_session, prep, stages, testing_tier="orchestrator")
+    by_prompt = {c["prompt_name"]: c for c in arm.calls}
+    generation = by_prompt["hypothesis_generation"]["inputs"]
+    assert "Customer Stickiness" in generation["specialist_brief"]
+    assert any(item.startswith("retention and switching costs") for item in generation["agenda"])
+    assert by_prompt["hypothesis_testing"]["model_tier"] == "orchestrator"
+    assert by_prompt["hypothesis_generation"]["model_tier"] is None

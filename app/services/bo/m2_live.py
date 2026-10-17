@@ -261,7 +261,8 @@ def render_pdf(run: dict[str, Any], arms: list, path: Path) -> bool:
 
 
 def run_live(runs: int, out: Path, *, case_dir: Path, case_id: str,
-             specialist: str = "M1S2") -> dict[str, Any]:
+             specialist: str = "M1S2", testing_model: str | None = None,
+             seeded: bool = True) -> dict[str, Any]:
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 
@@ -275,6 +276,17 @@ def run_live(runs: int, out: Path, *, case_dir: Path, case_id: str,
     from app.services.pipeline.runner import CreditMemoPipeline
 
     backend = _live_backend()
+    testing_tier = None
+    if testing_model:
+        # Run-time override only: the testing call uses the "orchestrator" tier
+        # mapped to ``testing_model``; .env is not changed.
+        from app.core.config import get_settings
+        from app.services.llm.providers_vertex import VertexProviderBackend
+
+        backend = VertexProviderBackend(get_settings().model_copy(
+            update={"vertex_model_orchestrator": testing_model}))
+        backend.check_configuration()
+        testing_tier = "orchestrator"
     out.mkdir(parents=True, exist_ok=True)
     summary: dict[str, Any] = {"runs": []}
     for n in range(1, runs + 1):
@@ -294,13 +306,17 @@ def run_live(runs: int, out: Path, *, case_dir: Path, case_id: str,
             metrics=prepared.metrics, spec=V3_SPEC_BY_CODE[specialist],
             coverage_checks=load_case_checks(checks) if checks.exists() else ())
         arms, timings = [], {}
-        for name, fn in (("single_pass", run_single_pass),
-                         ("investigation", run_investigation)):
+        for name, fn, extra in (
+                ("single_pass", run_single_pass, {}),
+                ("investigation", run_investigation,
+                 {"testing_tier": testing_tier, "seeded": seeded})):
             started = time.monotonic()
-            arms.append(fn(session, prep, backend=backend))
+            arms.append(fn(session, prep, backend=backend, **extra))
             timings[name] = round(time.monotonic() - started, 1)
         run = {"run": n, "case": case_id, "specialist": specialist,
-               "model": getattr(backend, "model_for_tier", lambda t: "?")("narrow"),
+               "model": getattr(backend, "model_for_tier", lambda t: "?")("narrow")
+               + (f"; testing step: {testing_model}" if testing_model else "")
+               + ("; generation seeded with brief and agenda" if seeded else ""),
                "fingerprint": prep.fingerprint(),
                "arms": {a.arm: {**describe_arm(a), "seconds": timings[a.arm]}
                         for a in arms}}
@@ -330,10 +346,15 @@ def main(argv=None) -> None:
     parser.add_argument("--case-id", required=True)
     parser.add_argument("--specialist", default="M1S2")
     parser.add_argument("--runs", type=int, default=3)
+    parser.add_argument("--testing-model", default=None,
+                        help="model id for the hypothesis-testing call only")
+    parser.add_argument("--unseeded", action="store_true",
+                        help="generation without the specialist brief and agenda")
     parser.add_argument("--out", type=Path, default=Path("output/m2_live"))
     args = parser.parse_args(argv)
     summary = run_live(args.runs, args.out, case_dir=args.case_dir,
-                       case_id=args.case_id, specialist=args.specialist)
+                       case_id=args.case_id, specialist=args.specialist,
+                       testing_model=args.testing_model, seeded=not args.unseeded)
     print(f"total cost about ${summary['total_cost_usd']:.4f}; outputs in {args.out}")
 
 

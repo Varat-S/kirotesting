@@ -143,6 +143,26 @@ def grounding_from_indicators(indicators: IndicatorSet, groups: tuple[str, ...],
     return items
 
 
+def specialist_agenda(spec: BoAgentSpec, checks=()) -> tuple[str, list[str]]:
+    """The specialist's brief and an investigation agenda for generation.
+
+    Agenda = the topics listed after "Assess:" in the specialist's brief, plus
+    the coverage questions assigned to it. Deterministic; nothing invented.
+    """
+    from app.prompts.bo_prompts import _AGENT_BRIEFS
+
+    brief = _AGENT_BRIEFS.get(spec.code, "")
+    topics: list[str] = []
+    for line in brief.splitlines():
+        if line.startswith("Assess:"):
+            topics = [t.strip(" .") for t in line[len("Assess:"):].split(";") if t.strip(" .")]
+            break
+    agenda = [f"{t}: favourable and adverse evidence, and company-specific mitigants"
+              for t in topics]
+    agenda += [c.question for c in checks or ()]
+    return brief, agenda
+
+
 def _confidence(score: float | None) -> str:
     if score is None:
         return "medium"
@@ -386,7 +406,9 @@ class SpecialistInvestigation:
     """Run steps 6-12 (+ parameter classification) for one BO specialist."""
 
     def __init__(self, spec: BoAgentSpec, *, client, audit=None, case_id=None,
-                 review_lookup=None, budget: EnquiryBudget | None = None) -> None:
+                 review_lookup=None, budget: EnquiryBudget | None = None,
+                 testing_tier: str | None = None) -> None:
+        self._testing_tier = testing_tier
         if spec.dimension is None:
             raise ValueError(f"{spec.code} has no dimension; use a v3 roster spec.")
         self.spec = spec
@@ -402,7 +424,9 @@ class SpecialistInvestigation:
     def run(self, *, packet_passages: list[dict[str, Any]], indicators: IndicatorSet,
             value_sets: dict[str, list[str]], case_version: int,
             keys: dict[str, str] | None = None,
-            entity_aliases: tuple[str, ...] = ()) -> InvestigationResult:
+            entity_aliases: tuple[str, ...] = (),
+            specialist_brief: str = "", agenda: list[str] | None = None,
+            ) -> InvestigationResult:
         keys = keys or {}
         spec = self.spec
         result = InvestigationResult(spec_code=spec.code)
@@ -415,7 +439,8 @@ class SpecialistInvestigation:
         self._test = HypothesisTestingService(
             self._client, audit=audit, case_id=case_id, review_lookup=review_lookup,
             quote_repair=lambda quote, pid: recover_quote(
-                quote=quote, cited_evidence_id=pid, corpus=packet_passages))
+                quote=quote, cited_evidence_id=pid, corpus=packet_passages),
+            model_tier=self._testing_tier)
         grounding = grounding_from_indicators(
             indicators, spec.indicator_groups,
             entity=entity_aliases[0] if entity_aliases else None)
@@ -441,7 +466,8 @@ class SpecialistInvestigation:
                              for i in grounding],
                     snippets=[{"evidence_id": p.passage_id, "text": p.text}
                               for p in corpus.passages],
-                    dimension_scope=[spec.dimension]),
+                    dimension_scope=[spec.dimension],
+                    specialist_brief=specialist_brief, agenda=list(agenda or [])),
                 case_version=case_version, key=keys.get("generate"))
             result.model_calls += 1
         except HypothesisGenerationRejectedError as exc:

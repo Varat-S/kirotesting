@@ -250,8 +250,12 @@ class HypothesisTestingService:
         review_lookup=None,
         reviewer_authority=None,
         quote_repair=None,
+        model_tier: str | None = None,
     ) -> None:
         self._client = client
+        # Optional model tier for the testing call (e.g. a stronger model for
+        # the stage that judges evidence); None keeps the default tier.
+        self._model_tier = model_tier
         # Optional ``(quote, passage_id) -> record`` recovery hook. When set, a
         # quoted_excerpt that is not verbatim gets ONE bounded repair attempt
         # (layout gaps inside the cited passage only); if that fails the excerpt
@@ -299,6 +303,7 @@ class HypothesisTestingService:
             case_version=case_version,
             prompt_name=HYPOTHESIS_TESTING_PROMPT_NAME,
             key=key,
+            model_tier=self._model_tier,
         )
         if not run.is_valid or run.parsed is None:
             raise HypothesisTestingRejectedError(
