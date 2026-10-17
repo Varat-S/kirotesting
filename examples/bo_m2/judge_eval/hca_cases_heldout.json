@@ -1,0 +1,90 @@
+{
+ "_comment": "HELD-OUT pre-registered evaluation of the premise entailment judge + guard, written after the guard was revised on hca_cases.json and before any run on this set. 'expected' as in hca_cases.json.",
+ "case": "HCA_2025_M2",
+ "cases": [
+  {
+   "id": "K01",
+   "passage_anchor": "Same facility emergency room visits increased 1.8%",
+   "premise": "Same facility emergency room visits increased 1.8% in 2025 compared with 2024.",
+   "expected": "states",
+   "kind": "restated figure"
+  },
+  {
+   "id": "K02",
+   "passage_anchor": "Same facility emergency room visits increased 1.8%",
+   "premise": "Same facility emergency room visits grew faster in 2025 than in 2024.",
+   "expected": "not_states",
+   "kind": "comparison contradicted (1.8% vs 4.9%)"
+  },
+  {
+   "id": "K03",
+   "passage_anchor": "Same facility uninsured emergency room visits declined 0.6%",
+   "premise": "Same facility uninsured admissions increased 1.2% in 2025 compared with 2024.",
+   "expected": "states",
+   "kind": "restated figure"
+  },
+  {
+   "id": "K04",
+   "passage_anchor": "Same facility uninsured emergency room visits declined 0.6%",
+   "premise": "Same facility uninsured emergency room visits increased in 2025.",
+   "expected": "not_states",
+   "kind": "direction contradicted (declined 0.6%)"
+  },
+  {
+   "id": "K05",
+   "passage_anchor": "Our future success will depend, in part",
+   "premise": "The company's future success depends partly on retaining and renewing its contracts with third-party payers.",
+   "expected": "states",
+   "kind": "paraphrase"
+  },
+  {
+   "id": "K06",
+   "passage_anchor": "Our future success will depend, in part",
+   "premise": "The company renewed all of its third-party payer contracts on favourable terms.",
+   "expected": "not_states",
+   "kind": "dependence presented as outcome"
+  },
+  {
+   "id": "K07",
+   "passage_anchor": "compete for service contracts with group purchasers",
+   "premise": "Hospitals compete for contracts with group purchasers on price, reputation, location and quality of services.",
+   "expected": "states",
+   "kind": "paraphrase"
+  },
+  {
+   "id": "K08",
+   "passage_anchor": "implicit price concessions (based primarily on historical collection experience)",
+   "premise": "Implicit price concessions are estimated mainly from historical collection experience.",
+   "expected": "states",
+   "kind": "paraphrase"
+  },
+  {
+   "id": "K09",
+   "passage_anchor": "implicit price concessions (based primarily on historical collection experience)",
+   "premise": "Implicit price concessions declined in 2025.",
+   "expected": "not_states",
+   "kind": "not stated"
+  },
+  {
+   "id": "K10",
+   "passage_anchor": "our labor costs could increase at rates in excess",
+   "premise": "Labor costs could increase faster than historical levels.",
+   "expected": "states",
+   "kind": "risk stated as risk"
+  },
+  {
+   "id": "K11",
+   "passage_anchor": "our labor costs could increase at rates in excess",
+   "premise": "Labor costs increased faster than historical levels in 2025.",
+   "expected": "not_states",
+   "kind": "risk presented as event"
+  },
+  {
+   "id": "K12",
+   "passage_anchor": "Reimbursement rates for inpatient and outpatient services vary significantly",
+   "premise": "Reimbursement rates vary by type of payer, type of service and facility location.",
+   "expected": "states",
+   "kind": "paraphrase"
+  }
+ ]
+}

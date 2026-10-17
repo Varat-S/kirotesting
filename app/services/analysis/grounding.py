@@ -331,7 +331,7 @@ def verbatim_fact_support(statement: str, quote: str | None, passage_text: str,
 
 
 def judged_support_guard(premise: str, quote: str | None, passage_text: str,
-                         *, aliases=()) -> tuple[bool, str]:
+                         *, aliases=(), repair=None) -> tuple[bool, str]:
     """Deterministic checks on an entailment judge's evidence (fix R5).
 
     The judge may accept a paraphrase, but its supporting sentence must be
@@ -341,9 +341,19 @@ def judged_support_guard(premise: str, quote: str | None, passage_text: str,
     if not quote or len(_norm(quote)) < _MIN_VERBATIM_CHARS:
         return False, "no supporting sentence"
     if _norm(quote) not in _norm(passage_text):
-        return False, "supporting sentence not verbatim in the passage"
+        # One layout-gap repair (e.g. a page number inside the sentence), if a
+        # repair hook is supplied; the repaired text must be in the passage.
+        repaired = repair(quote) if repair is not None else None
+        if not repaired or _norm(repaired) not in _norm(passage_text):
+            return False, "supporting sentence not verbatim in the passage"
+        quote = repaired
     _, p_nums, p_neg = _content(_drop_aliases(premise, aliases))
     _, q_nums, q_neg = _content(quote)
+    if q_nums and not p_nums:
+        # A premise with no figures read off a sentence with figures is a
+        # judgement about those figures ("most", "high", "majority"): that is a
+        # calculation, which belongs to deterministic code, not to the judge.
+        return False, "premise judges figures it does not state (calculation, not a reading)"
     if not p_nums <= q_nums:
         return False, f"figures {sorted(p_nums - q_nums)} not in the supporting sentence"
     if p_neg != q_neg:

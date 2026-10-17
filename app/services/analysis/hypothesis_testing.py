@@ -400,9 +400,15 @@ class HypothesisTestingService:
             elif pid not in {p["passage_id"] for p in item["passages"]}:
                 accepted, reason = False, "judge cited a passage the premise does not cite"
             else:
+                repair = None
+                if self._quote_repair is not None:
+                    def repair(q, _pid=pid):
+                        rec = self._quote_repair(q, _pid) or {}
+                        return (rec.get("replacement_quote")
+                                if rec.get("outcome") == "layout_gap" else None)
                 accepted, reason = judged_support_guard(
                     item["premise"], quote, passages[pid],
-                    aliases=inputs.entity_aliases)
+                    aliases=inputs.entity_aliases, repair=repair)
             out.append({"hypothesis_id": item["hypothesis_id"],
                         "premise_index": item["premise_index"],
                         "premise": item["premise"], "verdict": v.get("verdict"),
