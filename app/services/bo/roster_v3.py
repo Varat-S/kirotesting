@@ -3,9 +3,8 @@
 Pure data (no I/O, no LLM). Specification: ``BO_ARCHITECTURE_V3_SPEC.md``.
 
 * Module 1 has five primary specialists (M1S1-M1S5) and Agent 6 (M1A6).
-* Modules 2-4 are declared as ownership contracts only (``executable=False``):
-  their agents own parameters so ownership stays unique, but they are never run
-  and their parameters are reported ``not_assessed``.
+* Modules 2-4 are executable primary modules with the same sealed-evidence,
+  validation and audit boundary used by the Module 1 specialists.
 * Parameter ids are those of v2. Every ownership move is listed in
   ``BO_V2_TO_V3_PARAMETER_OWNER``; v1/v2 remain buildable, so records written
   under earlier rosters keep their meaning.
@@ -130,7 +129,18 @@ M1_AGENT_6 = BoAgentSpec(
 M2_INDUSTRY = BoAgentSpec(
     "M2", "m2_industry", "Industry Information",
     ("regulatory_dependency_assessment", "external_event_exposure_assessment"),
-    (), module="M2", dimension="industry", executable=False, validator_id="validator_6",
+    (
+        _q("m2.structure", "support", r"industry", r"market structure",
+           r"fragmented", r"consolidat", r"competitors?"),
+        _q("m2.cyclicality", "contradict", r"cyclical", r"recession",
+           r"economic conditions", r"seasonal", r"demand volatility"),
+        _reuse("m2", "bo5.regulation"),
+        _reuse("m2", "bo5.external"),
+        _reuse("m2", "bo5.forecast_vs_existing"),
+        _q("m2.trends", "support", r"industry trends?", r"regulatory changes?",
+           r"market growth", r"technological change", r"sustainable cash"),
+    ), module="M2", dimension="industry", validator_id="validator_6",
+    indicator_groups=("growth", "payer", "geography", "segment"),
 )
 
 M3_CORPORATE_MANAGEMENT = BoAgentSpec(
@@ -138,16 +148,38 @@ M3_CORPORATE_MANAGEMENT = BoAgentSpec(
     ("management_quality_assessment", "key_person_dependency_assessment",
      "governance_concern_assessment", "litigation_risk_assessment",
      "material_event_assessment"),
-    (), module="M3", dimension="corporate_structure_management", executable=False,
-    validator_id="validator_7",
+    (
+        _reuse("m3", "bo4.management"),
+        _reuse("m3", "bo5.litigation"),
+        _q("m3.structure", "support", r"subsidiar", r"corporate structure",
+           r"operating entities", r"joint venture", r"ownership"),
+        _q("m3.management_limits", "contradict", r"succession", r"key person",
+           r"material weakness", r"internal control", r"misconduct"),
+        _reuse("m3", "bo5.forecast_vs_existing"),
+    ), module="M3", dimension="corporate_structure_management",
+    validator_id="validator_7", indicator_groups=("segment",),
+    task_sections=("management_quality", "key_person_dependency", "governance",
+                   "corporate_structure", "litigation_and_material_events"),
 )
 
 M4_STRATEGY_CAPITAL = BoAgentSpec(
     "M4", "m4_strategy_capital", "Strategy & Capital Allocation / Financial Stewardship",
     ("acquisition_strategy_assessment", "integration_risk_assessment",
      "capex_strategy_assessment"),
-    (), module="M4", dimension="strategy_capital_allocation", executable=False,
-    validator_id="validator_8",
+    (
+        _reuse("m4", "bo4.capital_deployment"),
+        _q("m4.strategy", "support", r"strategy", r"strategic priorities?",
+           r"capital allocation", r"investment program"),
+        _q("m4.integration", "contradict", r"integration", r"acquisition risks?",
+           r"synerg", r"impairment", r"failed to achieve"),
+        _q("m4.outcomes", "mitigant", r"returns? on", r"realized synergies?",
+           r"completed integration", r"cost savings?", r"on budget"),
+        _q("m4.intention_limits", "mitigant_challenge", r"intend", r"plan to",
+           r"expect to", r"may acquire", r"no assurance"),
+    ), module="M4", dimension="strategy_capital_allocation",
+    validator_id="validator_8", indicator_groups=("capital", "cash", "margin"),
+    task_sections=("acquisition_strategy", "integration_risk", "capex_strategy",
+                   "financial_stewardship_and_execution"),
 )
 
 V3_SPECS: tuple[BoAgentSpec, ...] = (
@@ -162,7 +194,8 @@ V3_AGENT_6_ID = M1_AGENT_6.agent_id
 V3_EXECUTABLE_IDS = tuple(s.agent_id for s in V3_SPECS if s.executable)
 V3_NOT_EXECUTED_IDS = tuple(s.agent_id for s in V3_SPECS if not s.executable)
 # The eight primary analytical agents, each with its own validator.
-V3_PRIMARY_AGENT_IDS = (*V3_M1_PRIMARY_IDS, *V3_NOT_EXECUTED_IDS)
+V3_MODULE_AGENT_IDS = tuple(s.agent_id for s in V3_SPECS if s.module in {"M2", "M3", "M4"})
+V3_PRIMARY_AGENT_IDS = (*V3_M1_PRIMARY_IDS, *V3_MODULE_AGENT_IDS)
 
 # parameter_id -> (v2 owner, v3 owner). Every v2 Business parameter appears once.
 BO_V2_TO_V3_PARAMETER_OWNER: dict[str, tuple[str, str]] = {

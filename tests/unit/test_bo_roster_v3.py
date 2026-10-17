@@ -153,27 +153,23 @@ def test_case_coverage_checks_follow_the_code_map():
     assert galen.agent_codes == ("M1S4",)
 
 
-# -- modules 2-4: declared, not executed, not assessed -------------------------
+# -- modules 2-4: executable with exclusive ownership --------------------------
 
 
-def test_not_executed_modules_have_no_prompt_and_are_never_scheduled():
+def test_modules_2_to_4_are_executable_and_prompted():
     registry = default_registry("v3")
     names = {e["name"] for e in bo_v3_prompt_catalogue()}
-    for agent_id in V3_NOT_EXECUTED_IDS:
+    assert V3_NOT_EXECUTED_IDS == ()
+    for agent_id in ("m2_industry", "m3_corporate_management", "m4_strategy_capital"):
         definition = registry.get(agent_id)
-        assert definition.task_type == "not_executed"
-        assert definition.prompt_name is None and definition.routing is None
-        assert agent_id not in names
+        assert definition.task_type == agent_id
+        assert definition.prompt_name == agent_id and definition.routing is not None
+        assert agent_id in names
 
 
-def test_not_assessed_parameters_carry_no_value_and_no_signal():
+def test_no_v3_parameter_is_preemptively_not_assessed():
     results = not_assessed_parameter_results("ar_test")
-    owned = {p for a in V3_NOT_EXECUTED_IDS for p in V3_SPEC_BY_AGENT[a].owned_parameters}
-    assert {r.parameter_id for r in results} == owned
-    for r in results:
-        assert r.status is ParameterStatus.NOT_ASSESSED
-        assert r.value is None and r.risk_signal is None and r.materiality is None
-        assert r.missing_information and r.agent_run_id is None
+    assert results == []
 
 
 def test_a_not_assessed_result_cannot_carry_a_value_or_a_run():

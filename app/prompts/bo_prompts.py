@@ -26,7 +26,10 @@ DIRECTIONS = ["positive", "negative", "mixed", "neutral"]
 DISPOSITIONS = ["supported", "qualified", "rejected", "unverified"]
 CONFIDENCES = ["high", "medium", "medium_low", "low"]
 DISPLAY = ["display", "on_demand", "suppress"]
-MEMO_SECTIONS = ["executive", *[spec.code for spec in BO_AGENT_SPECS]]
+MEMO_SECTIONS = [
+    "executive", *[spec.code for spec in BO_AGENT_SPECS],
+    "M1S1", "M1S2", "M1S3", "M1S4", "M1S5", "M1A6", "M2", "M3", "M4",
+]
 
 EVIDENCE_BASES = [
     "company_specific_disclosure", "deterministic_calculation",
@@ -539,6 +542,33 @@ _AGENT_BRIEFS.update({
         "hypotheses of the five Module 1 specialists in 'primary_hypotheses'.\n"
         + _AGENT_BRIEFS["BO6"].split("\n", 1)[1]
     ),
+    "M2": (
+        "You are the Industry Information specialist (Business Overview Module 2).\n"
+        "Assess industry structure and concentration, cyclicality, regulatory "
+        "dependencies, external-event exposure, dated industry trends, and threats "
+        "to sustainable cash generation that are relevant to this company. "
+        "Distinguish industry evidence from company evidence: one company's results "
+        "do not establish an industry trend. Preserve dates and qualify any evidence "
+        "that is company-authored or generic. Geographic exposure belongs here; do "
+        "not turn it into a customer-stickiness conclusion."
+    ),
+    "M3": (
+        "You are the Corporate Structure & Senior Management specialist (Business "
+        "Overview Module 3).\nAssess management quality, key-person dependency, "
+        "governance concerns, corporate and operating-entity structure, litigation, "
+        "and material company-specific events. Generic governance policies do not "
+        "prove effective governance or management quality. Distinguish current "
+        "proceedings, contingent exposures, and hypothetical risks. Record missing "
+        "management, ownership, succession, and governance evidence explicitly."
+    ),
+    "M4": (
+        "You are the Strategy & Capital Allocation specialist (Business Overview "
+        "Module 4).\nAssess acquisition strategy, demonstrated integration outcomes, "
+        "capex strategy, financial stewardship, and execution risk. Separate stated "
+        "intentions from measured economic outcomes. You may use validated financial "
+        "indicators as evidence, but leverage, liquidity and debt-service conclusions "
+        "belong to Financial Overview and must be raised only as fo_handoff questions."
+    ),
 })
 
 _PARAMETER_TEMPLATE = (
@@ -692,10 +722,7 @@ BO_PREMISE_JUDGE_SCHEMA: dict[str, Any] = {
 
 
 def bo_v3_prompt_catalogue() -> list[dict]:
-    """Roster v3 prompts: executed Module 1 specialists + parameter classifiers.
-
-    Not-executed module agents (M2-M4) have no prompt by design.
-    """
+    """Roster v3 prompts for all executable BO analytical agents."""
     from app.services.bo.investigation import PARAMETER_PROMPT_SUFFIX
     from app.services.bo.roster_v3 import V3_SPECS
 

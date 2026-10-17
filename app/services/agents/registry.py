@@ -651,7 +651,7 @@ def _business_narrow_v2() -> list[AgentDefinition]:
 
 
 def _business_narrow_v3() -> list[AgentDefinition]:
-    """The four-module Business roster (Module 1 runs; Modules 2-4 declared)."""
+    """The executable four-module Business roster."""
     from app.services.bo.roster_v3 import V3_M1_PRIMARY_IDS, V3_SPECS
 
     defs = []
