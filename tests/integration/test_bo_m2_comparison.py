@@ -257,7 +257,7 @@ def test_one_replan_recovers_a_plan_that_omitted_mandatory_perspectives(db_sessi
     assert len(records) == 7  # the investigation completed after one re-plan
 
 
-def test_a_second_omission_still_fails_the_stage(db_session):
+def test_a_second_omission_is_completed_deterministically_and_labelled(db_session):
     if db_session.get(Case, h.CASE) is None:
         db_session.add(Case(case_id=h.CASE, status="open"))
         db_session.flush()
@@ -267,9 +267,34 @@ def test_a_second_omission_still_fails_the_stage(db_session):
         (Path(SCRIPTS) / "investigation.json").read_text()).items() if not k.startswith("_")}
     stages["plan"] = stages["plan_retry"] = _incomplete(stages["plan"])
     arm = run_investigation(db_session, prep, stages)
+    assert arm.failure is None
+    assert arm.investigation.model_calls == 5  # generate, plan, re-plan, test, parameters
+    assert arm.investigation.plan.planner_mode == "llm_with_deterministic_completion"
+    states = {s.stage: s.state for s in arm.investigation.stages}
+    assert states["7_planning_completion"] == "completed"
+    assert states["7_planning_retry"] == "superseded"
+
+
+def test_wrong_search_intent_is_canonicalised_without_an_extra_call(db_session):
+    def mutate(stages, prep):
+        stages["plan"]["enquiries"][0]["search_intent"] = "general_investigation"
+    records = _variant(db_session, mutate)
+    assert len(records) == 7
+
+
+def test_an_unfixable_plan_still_fails_the_stage(db_session):
+    if db_session.get(Case, h.CASE) is None:
+        db_session.add(Case(case_id=h.CASE, status="open"))
+        db_session.flush()
+    prep = prepare_specialist(db_session, case_id=h.CASE, evidence=h.evidence_snapshot(),
+                              metrics=h.metrics(), spec=V3_SPEC_BY_CODE["M1S2"])
+    stages = {k: v for k, v in json.loads(
+        (Path(SCRIPTS) / "investigation.json").read_text()).items() if not k.startswith("_")}
+    for e in stages["plan"]["enquiries"]:
+        e["permitted_document_ids"] = ["doc_not_admitted"]
+    arm = run_investigation(db_session, prep, stages)
     assert arm.validation is None
-    assert arm.failure.startswith("7_planning_retry rejected")
-    assert arm.investigation.model_calls == 3  # generate, plan, one re-plan
+    assert arm.failure.startswith("7_planning_completion rejected")
 
 
 def test_a_non_verbatim_quote_is_dropped_not_fatal(db_session):

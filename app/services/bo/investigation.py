@@ -205,7 +205,7 @@ class InvestigationResult:
     @property
     def completed(self) -> bool:
         return bool(self.stages) and all(
-            s.state in ("completed", "completed_after_retry", "skipped")
+            s.state in ("completed", "completed_after_retry", "skipped", "superseded")
             for s in self.stages)
 
     @property
@@ -492,35 +492,53 @@ class SpecialistInvestigation:
         # Step 7 -- enquiry planning (model) + retrieval over the packet only.
         planning = EnquiryPlanningInputs(hypotheses=result.hypotheses,
                                          permitted_document_ids=list(corpus.document_ids))
+        planned, last = None, None
         try:
             planned = self._plan.plan(planning, case_version=case_version,
                                       key=keys.get("plan"))
             result.model_calls += 1
         except EvidenceEnquiryPlanningRejectedError as exc:
             result.model_calls += 1
-            if exc.stage != "coverage":
-                stage("7_planning", "rejected", f"{exc.stage}: {exc}")
+            last = exc
+            stage("7_planning", "rejected", f"{exc.stage}: {exc}")
+            if exc.stage == "coverage":
+                # One bounded follow-up (as the single-pass path has): the
+                # planner is told exactly which mandatory perspectives it omitted.
+                planning.context = {"coverage_feedback": (
+                    "Your previous plan was rejected because it omitted mandatory "
+                    f"investigative perspectives: {exc}. Return the COMPLETE plan "
+                    "again, with supporting and contradictory enquiries for every "
+                    "hypothesis, an offsetting enquiry for every material negative "
+                    "hypothesis and an effectiveness enquiry wherever an offset is "
+                    "named.")}
+                try:
+                    planned = self._plan.plan(planning, case_version=case_version,
+                                              key=keys.get("plan_retry", keys.get("plan")))
+                    result.model_calls += 1
+                    result.stages[-1] = StageRecord(
+                        "7_planning", "completed_after_retry", result.stages[-1].detail)
+                except EvidenceEnquiryPlanningRejectedError as retry_exc:
+                    result.model_calls += 1
+                    last = retry_exc
+                    stage("7_planning_retry", "rejected", f"{retry_exc.stage}: {retry_exc}")
+        if planned is None:
+            # Deterministic completion of the last model plan: canonical intents
+            # and template enquiries for omitted perspectives; the full gate is
+            # re-applied. If that fails too, the investigation fails visibly.
+            if last is None or last.stage not in ("coverage", "service_governance") \
+                    or getattr(last.run, "parsed", None) is None:
                 return result
-            # One bounded follow-up (as the single-pass path has): the planner is
-            # told exactly which mandatory perspectives it omitted. The coverage
-            # rule itself is unchanged; a second omission fails the stage.
-            stage("7_planning", "rejected", f"coverage; one re-plan: {exc}")
-            planning.context = {"coverage_feedback": (
-                "Your previous plan was rejected because it omitted mandatory "
-                f"investigative perspectives: {exc}. Return the COMPLETE plan again, "
-                "with supporting and contradictory enquiries for every hypothesis, "
-                "an offsetting enquiry for every material negative hypothesis and an "
-                "effectiveness enquiry wherever an offset is named.")}
             try:
-                planned = self._plan.plan(planning, case_version=case_version,
-                                          key=keys.get("plan_retry", keys.get("plan")))
-                result.model_calls += 1
-            except EvidenceEnquiryPlanningRejectedError as retry_exc:
-                result.model_calls += 1
-                stage("7_planning_retry", "rejected", f"{retry_exc.stage}: {retry_exc}")
+                planned = self._plan.complete_plan(last.run.parsed, planning)
+            except EvidenceEnquiryPlanningRejectedError as exc:
+                stage("7_planning_completion", "rejected", f"{exc.stage}: {exc}")
                 return result
-            result.stages[-1] = StageRecord(
-                "7_planning", "completed_after_retry", result.stages[-1].detail)
+            for i, rec in enumerate(result.stages):
+                if rec.stage.startswith("7_planning") and rec.state == "rejected":
+                    result.stages[i] = StageRecord(rec.stage, "superseded", rec.detail)
+            stage("7_planning_completion", "completed",
+                  "model plan completed deterministically "
+                  "(canonical intents / template enquiries for omitted perspectives)")
         result.plan = planned.plan
         stage("7_planning", "completed", f"{len(planned.plan.enquiries)} enquiries")
         try:

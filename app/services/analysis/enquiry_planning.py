@@ -372,6 +372,57 @@ class EvidenceEnquiryPlanningService:
             )
         return violations
 
+    # -- deterministic completion of a model plan (BO roster v3) ----------------
+
+    def complete_plan(
+        self, parsed: dict, inputs: EnquiryPlanningInputs
+    ) -> EnquiryPlanningResult:
+        """Repair a rejected model plan mechanically, then re-apply the full gate.
+
+        Two repairs only, both deterministic: (1) ``search_intent`` is reset to
+        the canonical intent of its ``requirement_kind`` (the kind is the
+        authoritative field); (2) each mandatory perspective the model omitted
+        is filled with the deterministic template enquiry for it, labelled as
+        such. The result must pass service governance and coverage, otherwise
+        :class:`EvidenceEnquiryPlanningRejectedError` is raised as before.
+        """
+        raw = dict(parsed or {})
+        enquiries = []
+        for item in raw.get("enquiries") or []:
+            if not isinstance(item, dict):
+                continue
+            item = dict(item)
+            try:
+                kind = EvidenceRequirementKind(item.get("requirement_kind"))
+            except ValueError:
+                continue
+            item["search_intent"] = _CANONICAL_INTENT[kind].value
+            enquiries.append(item)
+        try:
+            plan = EvidenceEnquiryPlan.model_validate({**raw, "enquiries": enquiries})
+        except ValidationError as exc:
+            raise EvidenceEnquiryPlanningRejectedError(
+                f"Model plan could not be completed: {exc}",
+                stage="completion_pydantic") from exc
+        missing = {(g.hypothesis_id, g.missing_perspective)
+                   for g in evaluate_coverage(plan, inputs.hypotheses, self._budget)}
+        if missing:
+            template = self.plan_deterministic(inputs).plan
+            added = [e for e in template.enquiries
+                     if (e.hypothesis_id, e.requirement_kind.value) in missing]
+            plan = plan.model_copy(update={"enquiries": [*plan.enquiries, *added]})
+        plan = plan.model_copy(update={"planner_mode": "llm_with_deterministic_completion"})
+        violations = self._service_violations(plan, inputs)
+        gaps = [g for g in evaluate_coverage(plan, inputs.hypotheses, self._budget)
+                if g.budget_permitted]
+        if violations or gaps:
+            raise EvidenceEnquiryPlanningRejectedError(
+                "Completed plan still fails the gate: "
+                + "; ".join([*violations, *(f"{g.hypothesis_id} missing "
+                                             f"{g.missing_perspective}" for g in gaps)]),
+                stage="completion")
+        return EnquiryPlanningResult(plan=plan, run=None)
+
     # -- deterministic reduced-capability fallback ----------------------------
 
     def plan_deterministic(
