@@ -29,19 +29,19 @@ Branch: `feat/bo-validation-release` (from `feat/bo-investigation-integration`
 
 - [ ] B.1 Evaluation cases (HCA FY2025; cross-sector; contradictory/incomplete).
 - [ ] B.2 Analyst-reviewed answer-key schema (developer-authored, awaiting review).
-- [ ] B.3 Evaluation metrics & rubric.
-- [ ] B.D Deliverable: `BO_ANALYTICAL_EVALUATION_SPEC.md`.
+- [x] B.3 Evaluation metrics & rubric.
+- [x] B.D Deliverable: `BO_ANALYTICAL_EVALUATION_SPEC.md` (answer-key schema v1.1, fact-type taxonomy, metrics, sampling, reviewer instructions, provenance).
 
 ## Phase C — Prepare live end-to-end BO execution (NO paid calls)
 
-- [ ] C.1 Preflight (filing availability, hashes, routing, config, schemas, budget inputs).
-- [ ] C.2 Capped cost-authorization proposal.
-- [ ] C.3 Controlled live configurations (single-pass default; experimental caveated).
-- [ ] C.D Deliverable: `BO_LIVE_EVALUATION_PLAN.md` (stop before paid calls).
+- [x] C.1 Preflight COMPLETE (offline): HCA 10-K present (sha256 2043cd03…), all 8 primaries route, 9 packets, config/schema/limit checks done.
+- [x] C.2 Capped cost-authorization proposal ($5.00 hard cap, Config A × 3; grounded in real M2 paid anchors).
+- [x] C.3 Controlled live configurations (single-pass A primary; B/C experimental, caveated).
+- [x] C.D Deliverable: `BO_LIVE_EVALUATION_PLAN.md`. STOPPED before paid calls.
 
 ## Phase D — Quality & efficiency evaluation
 
-- [ ] D.D Deliverable: `BO_LIVE_VALIDATION_REPORT.md` — status: **planned / not executed** (no live evidence yet).
+- [x] D.D Deliverable: `BO_LIVE_VALIDATION_REPORT.md` — status: **PLANNED / NOT EXECUTED** (no live evidence; no paid call made or authorized).
 
 ## Phase E — Release & integration readiness
 
