@@ -23,12 +23,15 @@ from tests.integration import test_bo_v3_complete as v3
 # read. If any is removed/renamed, this list must change deliberately.
 REQUIRED_HANDOFF_FIELDS = {
     "handoff_id", "schema_version", "analysis_run_id", "case_id",
+    "borrower_name", "borrower_entity_id", "as_of_date",
+    "evidence_cutoff_timestamp",
     "evidence_snapshot_version", "business_topic_conclusion_id", "conclusion_status",
     "business_risk_score_id", "business_risk_score_status", "business_risk_band",
     "accepted_finding_ids", "material_risk_ids", "business_strengths",
     "operational_vulnerabilities", "validated_mitigants", "unproven_mitigants",
     "unresolved_challenges", "open_questions", "module_conclusions",
-    "compound_business_risks", "score_limitations", "evidence_limitations",
+    "compound_business_risks", "fo_handoffs", "score_limitations",
+    "evidence_limitations",
     "escalations", "canonical_references", "human_review_status",
     "execution_mode", "agent_registry_version", "agent_registry_hash",
     "prompt_hashes", "scoring_config_version", "scoring_config_hash",
@@ -43,6 +46,10 @@ def test_handoff_exposes_the_full_downstream_contract(db_session, tmp_path):
     assert not missing, f"handoff is missing downstream contract fields: {missing}"
     # Versioned, so a consumer can gate on the schema version.
     assert handoff["schema_version"].startswith("bo-handoff-")
+    assert handoff["borrower_name"] == "Northfield Health Systems"
+    assert handoff["borrower_entity_id"] == "NFH"
+    assert handoff["as_of_date"] == "2025-12-31"
+    assert handoff["evidence_cutoff_timestamp"].startswith("2026-03-01")
     # Canonical references point back to the run's immutable artifacts.
     refs = handoff["canonical_references"]
     assert refs["analysis_run_id"] == result.analysis_run_id

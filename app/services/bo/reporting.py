@@ -692,10 +692,24 @@ class BoReportBuilder:
                     "effectiveness": h.mitigant.effectiveness.value,
                     "evidence_ids": h.evidence_ids()}
 
+        borrower = next(
+            (entity for entity in run.evidence.entities
+             if entity.get("borrower_flag")), {})
+        compound_hypothesis_ids = {
+            hypothesis.hypothesis_id for hypothesis in by_id.values()
+            if len(hypothesis.component_hypothesis_ids) > 1
+        }
         handoff = AcceptedBusinessOverview(
             handoff_id=f"bo_{uuid.uuid4().hex[:16]}",
             analysis_run_id=run.analysis_run_id,
             case_id=run.case_id,
+            borrower_name=borrower.get("legal_name"),
+            borrower_entity_id=borrower.get("entity_id"),
+            as_of_date=(run.evidence.as_of_date.isoformat()
+                        if run.evidence.as_of_date else None),
+            evidence_cutoff_timestamp=(
+                run.evidence.evidence_cutoff_timestamp.isoformat()
+                if run.evidence.evidence_cutoff_timestamp else None),
             evidence_snapshot_version=run.snapshot_version,
             business_topic_conclusion_id=run.conclusion_row_id
             if run.conclusion is not None else None,
@@ -731,7 +745,13 @@ class BoReportBuilder:
             compound_business_risks=[
                 brief(c) for name, c in claims
                 if name in ("material_risks", "key_drivers")
-                and len(c.get("hypothesis_ids") or []) > 1],
+                and (len(c.get("hypothesis_ids") or []) > 1
+                     or bool(set(c.get("hypothesis_ids") or [])
+                             & compound_hypothesis_ids))],
+            fo_handoffs=[
+                {**handoff, "hypothesis_id": hypothesis.hypothesis_id}
+                for hypothesis in by_id.values()
+                for handoff in hypothesis.fo_handoffs],
             score_limitations=list(run.rubric_notes),
             evidence_limitations=sorted({
                 m for h in by_id.values() for m in h.missing_information}),

@@ -47,6 +47,7 @@ ALLOWED_ORCHESTRATOR_EXTRAS = frozenset({
     "data_notice", "sections", "hypotheses", "audit_only_hypotheses",
     "duplicate_groups", "contradictions", "resilience_findings", "indicators",
     "coverage", "score_explanation", "challenge_feedback",
+    "validation_feedback",
     "module_conclusions", "cross_module_instruction",
 })
 

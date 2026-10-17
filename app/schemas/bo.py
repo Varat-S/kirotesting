@@ -211,9 +211,13 @@ class AcceptedBusinessOverview(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     handoff_id: str
-    schema_version: str = "bo-handoff-1.1"
+    schema_version: str = "bo-handoff-1.2"
     analysis_run_id: str
     case_id: str
+    borrower_name: str | None = None
+    borrower_entity_id: str | None = None
+    as_of_date: str | None = None
+    evidence_cutoff_timestamp: str | None = None
     evidence_snapshot_version: int
     business_topic_conclusion_id: str | None
     conclusion_status: str  # accepted | accepted_with_qualification | human_review_required | unavailable
@@ -230,6 +234,7 @@ class AcceptedBusinessOverview(BaseModel):
     open_questions: list[str] = Field(default_factory=list)
     module_conclusions: dict[str, dict[str, Any]] = Field(default_factory=dict)
     compound_business_risks: list[dict[str, Any]] = Field(default_factory=list)
+    fo_handoffs: list[dict[str, Any]] = Field(default_factory=list)
     score_limitations: list[str] = Field(default_factory=list)
     evidence_limitations: list[str] = Field(default_factory=list)
     escalations: list[dict[str, Any]] = Field(default_factory=list)
