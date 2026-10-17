@@ -15,6 +15,7 @@ Key invariants enforced here:
 from __future__ import annotations
 
 from datetime import date, datetime
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -152,3 +153,144 @@ class CanonicalFact(BaseModel):
     def is_missing(self) -> bool:
         """True when the fact is explicitly missing (distinct from a zero value)."""
         return self.status is FactStatus.MISSING
+
+
+# ---------------------------------------------------------------------------
+# Evidence retrieval (Business Overview Module 1, Stage 5 infrastructure).
+#
+# These models support SEARCHING the full narrative contents of ingested
+# documents -- distinct from the pre-extracted financial facts above. A
+# retrieved passage is SOURCE EVIDENCE, never a verified fact: retrieval
+# relevance is NOT credibility, and a match does not prove a hypothesis. All
+# additions are additive and reuse ``SourceRef`` / ``ExtractionMethod``.
+# ---------------------------------------------------------------------------
+
+
+class EvidenceSearchIntent(str, Enum):
+    """Why a passage search is being run (recorded on every request/result).
+
+    Intent is metadata that a later agent uses to interpret results; it does NOT
+    change ranking determinism and never asserts that a match satisfies the
+    intent (e.g. an OFFSETTING_CAPABILITY search returning a passage does not
+    prove an offset exists or is effective).
+    """
+
+    SUPPORTING_EVIDENCE = "supporting_evidence"
+    CONTRADICTORY_EVIDENCE = "contradictory_evidence"
+    OFFSETTING_CAPABILITY = "offsetting_capability"
+    GENERAL_INVESTIGATION = "general_investigation"
+
+
+class EvidenceSearchOutcome(str, Enum):
+    """Explicit, distinct outcomes of a single-query search (Req: no silent gaps).
+
+    * ``matches_found``        -- >=1 passage scored above zero and is returned.
+    * ``no_match_found``       -- the corpus was searchable but nothing matched
+      (NOT proof that a capability/fact is absent).
+    * ``source_unsearchable``  -- a permitted document exists but yielded no
+      searchable passages (e.g. image-only / unreadable pages).
+    * ``source_not_available`` -- a requested document is not in the corpus /
+      not permitted (never fabricated to look available).
+    """
+
+    MATCHES_FOUND = "matches_found"
+    NO_MATCH_FOUND = "no_match_found"
+    SOURCE_UNSEARCHABLE = "source_unsearchable"
+    SOURCE_NOT_AVAILABLE = "source_not_available"
+
+
+class EvidencePassage(BaseModel):
+    """A searchable slice of a document's narrative text, with provenance.
+
+    The passage text is stored VERBATIM (never rewritten). PDF page numbering is
+    kept separate from any printed/report page label; printed page numbers are
+    only populated when actually present in the source and are never invented.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    passage_id: str
+    document_id: str
+    document_hash: str | None = None
+    # PDF page is OPTIONAL: an HTML / inline-XBRL filing has no PDF page and must
+    # NOT have one fabricated (Task 11). ``section`` / ``source_location`` carry
+    # the HTML-native location instead (e.g. "Item 1A", an element id).
+    pdf_page: int | None = None
+    printed_page_label: str | None = None
+    section: str | None = None
+    source_location: str | None = None
+    text: str
+    char_offset: int | None = None
+    extraction_method: ExtractionMethod | None = None
+    document_metadata: dict = Field(default_factory=dict)
+
+    def source_ref(self) -> SourceRef:
+        """A provenance reference into the originating document (page if any)."""
+        return SourceRef(
+            document_id=self.document_id,
+            page=self.pdf_page,
+            row_label=self.section,
+        )
+
+
+class EvidenceCorpus(BaseModel):
+    """A reproducible, page-addressable set of passages across documents.
+
+    Also records, per document, which pages were unreadable and whether the
+    document produced any searchable passage, so search can report
+    ``source_unsearchable`` deterministically rather than silently returning
+    nothing.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    passages: list[EvidencePassage] = Field(default_factory=list)
+    document_ids: list[str] = Field(default_factory=list)
+    document_hashes: dict[str, str] = Field(default_factory=dict)
+    unreadable_pages: dict[str, list[int]] = Field(default_factory=dict)
+
+    def passages_for(self, document_id: str) -> list[EvidencePassage]:
+        return [p for p in self.passages if p.document_id == document_id]
+
+
+class EvidenceSearchRequest(BaseModel):
+    """An explicit, reproducible evidence-search request.
+
+    ``queries`` are free text (one or many). ``permitted_document_ids`` is the
+    authoritative access scope: nothing outside it is ever searched. ``intent``
+    and ``metadata_filters`` are recorded; the latter restricts results to
+    passages whose ``document_metadata`` matches all supplied key/values.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    queries: list[str] = Field(min_length=1)
+    permitted_document_ids: list[str] = Field(min_length=1)
+    intent: EvidenceSearchIntent = EvidenceSearchIntent.GENERAL_INVESTIGATION
+    max_results: int = Field(default=5, ge=1)
+    metadata_filters: dict = Field(default_factory=dict)
+
+
+class RankedPassage(BaseModel):
+    """One ranked hit: the passage, its score and its deterministic rank."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rank: int
+    score: float
+    passage: EvidencePassage
+
+
+class EvidenceSearchResult(BaseModel):
+    """The outcome of ONE query within a request (reproducible + traceable)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query_id: str
+    query: str
+    intent: EvidenceSearchIntent
+    outcome: EvidenceSearchOutcome
+    ranked_passages: list[RankedPassage] = Field(default_factory=list)
+    searched_document_ids: list[str] = Field(default_factory=list)
+    unavailable_document_ids: list[str] = Field(default_factory=list)
+    retrieval_version: str

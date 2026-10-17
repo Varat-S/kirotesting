@@ -58,6 +58,17 @@ class EvidenceItem:
     text: str | None = None
     supports: EntailmentState | None = None
     unit: str | None = None
+    # Trusted metadata for an approved metric/fact (from the deterministic
+    # engine / canonical evidence). Used by consumers that must validate a claim
+    # concerns the SAME concept/entity/period/scale/currency/basis before a
+    # number match can count as grounding (Task 6C). ``None`` means "unknown";
+    # a consumer requiring the attribute must then fail closed.
+    concept: str | None = None
+    entity: str | None = None
+    period: str | None = None
+    scale: str | None = None
+    currency: str | None = None
+    accounting_basis: str | None = None
 
 
 class EvidenceIndex:
