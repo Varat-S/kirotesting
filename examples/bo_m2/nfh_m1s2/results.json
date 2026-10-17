@@ -392,7 +392,7 @@
  },
  "case_id": "NFH_BO",
  "comparison_version": "m2-comparison-1",
- "identical_inputs_fingerprint": "ff6000f788a8d1070739c13396fb0096195a560fd062f4b1097a7fb559daba78",
+ "identical_inputs_fingerprint": "2499ae5592e5eba0f6f8701289a93861a65ee918d64582b03f6e43c2c6cdc000",
  "investigation": {
   "material_gaps": 16,
   "out_of_scope": [
