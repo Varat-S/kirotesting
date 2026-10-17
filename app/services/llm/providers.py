@@ -8,6 +8,7 @@ import httpx
 from app.core.config import Settings, get_settings
 from app.core.hashing import canonical_json, content_hash
 from app.services.llm.client import LLMBackend, LLMRawResult, LLMRequest
+from app.services.llm.sampling import sampling_temperature
 
 
 class ProviderNotConfiguredError(RuntimeError):
@@ -73,10 +74,18 @@ class RealProviderBackend(LLMBackend):
                 "LLM_BASE_URL requires HTTPS, except for a local model."
             )
 
+    def cache_identity(self, model_tier: str | None = None):
+        requested, effective = sampling_temperature(self._settings, None, self.model_id)
+        return self.model_id, {"provider": self._settings.llm_provider,
+                              "requested_temperature": requested,
+                              "effective_temperature": effective,
+                              "max_output_tokens": self._settings.llm_max_output_tokens}
+
     def generate(self, request: LLMRequest) -> LLMRawResult:
         self.check_configuration()
         s = self._settings
         inputs = canonical_json(request.inputs)
+        requested_temperature, effective_temperature = sampling_temperature(s, request.temperature, self.model_id)
         if len(inputs.encode("utf-8")) > s.llm_max_input_bytes:
             raise ProviderCallError(
                 "Prepared input exceeds LLM_MAX_INPUT_BYTES; no evidence was silently truncated."
@@ -114,9 +123,10 @@ class RealProviderBackend(LLMBackend):
                     "type": "json_schema",
                     "json_schema": {k: v for k, v in fmt.items() if k != "type"},
                 },
-                "temperature": request.temperature,
                 "max_tokens": s.llm_max_output_tokens,
             }
+        if effective_temperature is not None:
+            body["temperature"] = effective_temperature
         headers = {"Content-Type": "application/json"}
         if s.llm_api_key:
             headers["Authorization"] = "Bearer " + s.llm_api_key.get_secret_value()
@@ -178,5 +188,7 @@ class RealProviderBackend(LLMBackend):
                 "max_output_tokens": s.llm_max_output_tokens,
                 "provider_response_id": raw.get("id"),
                 "temperature": body.get("temperature"),
+                "requested_temperature": requested_temperature,
+                "effective_temperature": effective_temperature,
             },
         )

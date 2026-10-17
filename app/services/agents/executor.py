@@ -137,6 +137,12 @@ class DagExecutor:
             return None
         backend = getattr(self._runtime._client, "_backend", None)  # noqa: SLF001
         model_id = getattr(backend, "model_id", getattr(backend, "MODEL_ID", "unknown"))
+        model_config = {"temperature": 0.0}
+        if backend is not None and hasattr(backend, "cache_identity"):
+            try:
+                model_id, model_config = backend.cache_identity(pt.task.model_tier.value)
+            except (ValueError, RuntimeError):
+                return None  # Invalid provider configuration is reported by runtime.
         return CacheIdentity(
             case_id=pt.task.case_id,
             evidence_snapshot_version=pt.task.snapshot_version,
@@ -145,7 +151,7 @@ class DagExecutor:
             prompt_hash=prompt.content_hash,
             response_schema_hash=pt.response_schema_hash,
             model_id=model_id,
-            model_config={"temperature": 0.0},
+            model_config=model_config,
             router_version=pt.router_version,
             packet_hash=pt.resolved_packet_hash(),
         )

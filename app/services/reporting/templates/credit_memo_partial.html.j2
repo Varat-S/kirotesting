@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Partial credit memo | {{ a.borrower.legal_name }}</title>
+<style>
+@page { size: A4; margin: 18mm 17mm 19mm;
+ @top-left { content: "CREDIT MEMO / PROTOTYPE"; font: 8pt sans-serif; color: #52647a; }
+ @bottom-left { content: "{{ a.disclosure }}"; font: 6.5pt sans-serif; color: #9b3b16; }
+ @bottom-right { content: counter(page); font: 8pt sans-serif; color: #52647a; }
+}
+body { font: 9pt/1.28 Arial, sans-serif; color: #223148; }
+h1 { font-size: 25pt; line-height: 1.1; color: #123650; margin: 0 0 5mm; }
+h2 { font-size: 11pt; color: #123650; margin: 3.5mm 0 1.5mm; }
+h3 { font-size: 10pt; margin: 3mm 0 1mm; }
+p { margin: 2mm 0; } ul { padding-left: 5mm; margin: 2mm 0; } li { margin-bottom: 2mm; }
+.page + .page { break-before: page; }
+.notice { background: #fff3dc; border-left: 3pt solid #cc7e16; padding: 3mm; font-size: 9pt; margin-bottom: 5mm; }
+.meta { background: #edf3f7; padding: 4mm; margin: 3mm 0; }
+.small { font-size: 8pt; } .muted { color: #52647a; } .tag { font-size: 8pt; color: #9b3b16; }
+table { border-collapse: collapse; width: 100%; font-size: 8.5pt; margin: 3mm 0; }
+th { background: #123650; color: white; text-align: left; }
+th, td { padding: 1.6mm; border-bottom: .5pt solid #cdd8e0; vertical-align: top; }
+tr { break-inside: avoid; } article { break-inside: avoid; margin-bottom: 2mm; }
+code { font: 7pt/1.3 Consolas, monospace; overflow-wrap: anywhere; }
+.references { font-size: 6.5pt; table-layout: fixed; } .references td { padding: .6mm 1mm; }
+.references code { font-size: 6pt; }
+.references th:first-child { width: 5%; } .references th:nth-child(2) { width: 63%; }
+</style></head><body data-content-hash="{{ a.content_hash }}">
+{% macro notice() %}<div class="notice">{{ a.disclosure }}</div>{% endmacro %}
+{% macro evidence(ids) %}{% for id in ids %}{{ labels[id] }}{% if not loop.last %}, {% endif %}{% else %}unavailable{% endfor %}{% endmacro %}
+<section class="page">
+{{ notice() }}<h1>Executive overview</h1>
+<div class="meta"><strong>{{ a.borrower.legal_name }}</strong><br>
+As of {{ a.borrower.as_of_date }} · Case {{ a.borrower.case_id }}<br>
+Assessment status: <strong>{{ a.status }}</strong> · Human review: <strong>{{ a.governance.human_review_status }}</strong><br>
+Provisional BO risk band: <strong>{{ a.governance.provisional_business_risk_band }}</strong> ({{ a.governance.business_risk_score_status }})</div>
+<h2>Business strengths</h2>{% for f in a.business_assessment.business_strengths %}<article><strong>{{ f.title }}</strong><p>{{ f.text }}</p><span class="tag">{{ f.qualification }} · {{ evidence(f.evidence_ids) }}</span></article>{% endfor %}
+<h2>Material vulnerabilities</h2>{% for f in a.business_assessment.material_business_vulnerabilities %}<article><strong>{{ f.title }}</strong><p>{{ f.text }}</p><span class="tag">{{ f.qualification }} · {{ evidence(f.evidence_ids) }}</span></article>{% endfor %}
+<h2>Assessment limitations</h2><p>{{ a.financial_overview.notice }}</p><p>{{ a.downstream_dependencies.sections.final_credit_synthesis.reason }}</p>
+<p class="small">BO conclusion: {{ a.governance.conclusion_status }}. The BO band measures the business domain only. No obligor rating, facility rating or credit approval has been produced.</p>
+</section>
+<section class="page">{{ notice() }}<h1>Business Overview</h1>
+<p class="small">Real BO analytical findings from {{ a.source_bo_run_id }}. Selected findings below retain their original language, disposition and evidence links. All normalized findings, including those not selected, remain in the assessment JSON.</p>
+{% for key, title in [('business_model_and_revenue_drivers','Revenue, business model and pricing'),('industry_and_competitive_risks','Competitive and regulatory context'),('management_and_operational_findings','Operations and management'),('strategy_and_capital_allocation_findings','Strategy and capital allocation')] %}
+<h2>{{ title }}</h2>
+{% for f in a.business_assessment[key] if f.accepted_for_handoff %}<article><p>{{ f.claim }}</p><span class="small muted">{{ f.provenance.source_hypothesis_id }} · {{ f.disposition }} / {{ f.admissibility }} · {{ evidence(f.supporting_evidence_ids) }}</span></article>{% else %}<p class="small">No selected findings in this module; normalized source findings remain in JSON.</p>{% endfor %}
+{% endfor %}
+<h2>Material compound risks</h2>{% for f in a.business_assessment.compound_risks %}<article><strong>{{ f.title }}</strong><p>{{ f.text }}</p><span class="small">{{ f.component_hypothesis_ids | join(', ') }} · {{ f.qualification }} · {{ evidence(f.evidence_ids) }}</span></article>{% endfor %}
+<p class="small">Evidence aliases resolve to full source evidence IDs on the audit page. Qualifications are preserved; selection does not imply human approval.</p>
+</section>
+<section class="page">{{ notice() }}<h1>Financial Overview</h1>
+<p><strong>{{ a.financial_overview.notice }}</strong></p>
+<table><thead><tr><th>Financial input (USD million)</th>{% for p in a.financial_overview.periods %}<th>FY{{ p.fiscal_year }}</th>{% endfor %}</tr></thead><tbody>
+{% for key in ['revenue','operating_income','operating_expenses','ebitda','total_debt','unrestricted_cash','undrawn_revolver','cfo','capex','interest_expense'] %}<tr><td>{{ key | replace('_',' ') }}</td>{% for p in a.financial_overview.periods %}<td>{{ '{:,.0f}'.format(p.facts[key].value) }}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table>
+<h2>Ratios and calculations</h2><table><thead><tr><th>Metric / formula</th>{% for p in a.financial_overview.periods %}<th>FY{{ p.fiscal_year }}</th>{% endfor %}</tr></thead><tbody>
+{% for c in a.financial_calculations if c.period == 'FY' ~ a.financial_overview.periods[-1].fiscal_year %}<tr><td>{{ c.metric_id | replace('_',' ') }}<br><span class="small muted">{{ c.formula }}</span></td>{% for p in a.financial_overview.periods %}<td>{% for v in a.financial_calculations if v.metric_id == c.metric_id and v.period == 'FY' ~ p.fiscal_year %}{% if v.value is not none %}{{ '{:,.3f}'.format(v.value) }} {{ v.units }}{% else %}{{ v.state }}{% endif %}{% else %}unavailable{% endfor %}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table>
+{% for f in a.financial_overview.findings %}<p class="small"><strong>{{ f.kind }}:</strong> {{ f.text }} <span class="tag">[{{ f.provenance }}]</span></p>{% endfor %}
+<p class="small">Every input, calculation and financial finding has {{ a.financial_overview.provenance }} provenance. Ratio units are fractions (0.15 = 15%); x denotes multiples.</p>
+</section>
+<section class="page">{{ notice() }}<h1>Structural Overview</h1>
+<p class="small">Deterministic scaffold; documentary legal and facility analysis remains outstanding.</p>
+<table><thead><tr><th>Structure / status</th><th>Available context and limitations</th></tr></thead><tbody>{% for r in a.structural_relationships %}<tr><td>{{ r.topic }}<br><span class="tag">{{ r.status }}</span></td><td>{{ r.description }}<br><span class="small muted">{{ r.provenance }}</span></td></tr>{% endfor %}</tbody></table>
+<h2>Integrated BO / FO observations</h2>{% for f in a.cross_domain_findings %}<article><p>{{ f.text }}</p><p class="tag">Simulation-dependent · {{ f.certainty }}</p><p class="small">{{ f.limitations }}</p><p class="small">BO: {{ f.bo_hypothesis_ids | join(', ') }} · {{ evidence(f.evidence_ids) }}<br>FO: {{ f.financial_metric_refs | join(', ') }}</p></article>{% else %}<p>No supported compound BO link available for integration.</p>{% endfor %}
+<h2>Financial assumptions</h2><ul class="small">{% for s in a.financial_overview.assumptions %}<li>{{ s }}</li>{% endfor %}</ul>
+</section>
+<section class="page">{{ notice() }}<h1>Risks and next steps</h1>
+<h2>Mitigants and validation status</h2><ul class="small">{% for f in a.business_assessment.mitigants %}<li>{{ f.capability }}: existence {{ f.existence }}; effectiveness {{ f.effectiveness }}; {{ f.qualification }}. {{ evidence(f.evidence_ids) }}</li>{% else %}<li>No mitigants supplied.</li>{% endfor %}</ul>
+<h2>Unresolved challenges</h2>{% for c in a.governance.unresolved_challenges %}<p class="small"><strong>{{ c.severity }} / {{ c.target }}:</strong> {{ c.reason }}<br>{{ c.challenge_id }}</p>{% endfor %}
+<h2>Open questions</h2><ul class="small">{% for q in a.governance.open_questions %}<li>{{ q }}</li>{% endfor %}</ul>
+<h2>Missing financial information</h2><ul class="small">{% for q in a.financial_overview.missing_information %}<li>{{ q }}</li>{% endfor %}</ul>
+<h2>Dependencies before completion</h2>{% for key, items in a.missing_dependencies | dictsort %}<p class="small"><strong>{{ key | replace('_',' ') }}:</strong> {{ items | join('; ') }}</p>{% endfor %}
+<h2>Human review</h2><p class="small">Status: {{ a.governance.human_review_status }}. {{ a.downstream_dependencies.sections.human_approval.reason }}</p>
+</section>
+<section class="page">{{ notice() }}<h1>Sources and audit trail</h1>
+<p class="small">BO handoff: {{ a.source_handoff_id }} · BO run: {{ a.source_bo_run_id }}<br>
+Source contract: {{ a.audit_metadata.source_schema_version }} · execution: {{ a.audit_metadata.source_execution_mode }}<br>
+FO run: {{ a.financial_overview.source_run_id }} · contract: {{ a.financial_overview.schema_version }} · synthetic_fixture</p>
+<table class="references"><thead><tr><th>Alias</th><th>Admitted BO evidence ID</th><th>Source hypothesis IDs</th></tr></thead><tbody>{% for ref in a.evidence_references %}<tr><td>{{ labels[ref.evidence_id] }}</td><td><code>{{ ref.evidence_id }}</code></td><td>{{ ref.source_hypothesis_ids | join(', ') }}</td></tr>{% endfor %}</tbody></table>
+<p class="small">BO analytical findings reference admitted evidence IDs; the underlying evidence snapshot remains the authority for source documents and locations. {% if a.financial_overview.provenance == "synthetic_fixture" %}Synthetic FO inputs have fixture references only and are never admitted SEC evidence.{% else %}FO evidence references must be resolved and admitted by the upstream source-validation workflow.{% endif %}</p>
+<h2>Completion states</h2><p class="small">{% for key, s in a.downstream_dependencies.sections | dictsort %}{{ key }}: {{ s.status }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+<p class="small">Assessment {{ a.assessment_id }} · {{ a.schema_version }} · {{ a.audit_metadata.transformation_version }}</p>
+<p class="small">Assessment SHA-256<br><code>{{ a.content_hash }}</code><br>BO handoff SHA-256<br><code>{{ a.audit_metadata.source_handoff_content_hash }}</code><br>FO packet SHA-256<br><code>{{ a.source_fo_content_hash }}</code></p>
+</section></body></html>
