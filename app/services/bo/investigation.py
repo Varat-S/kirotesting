@@ -74,6 +74,7 @@ from app.services.analysis.hypothesis_testing import (
     HypothesisTestingService,
 )
 from app.services.bo.indicators import IndicatorSet
+from app.services.bo.ownership import screen_ownership
 from app.services.bo.plans import BoAgentSpec
 
 INVESTIGATION_VERSION = "bo-investigation-1"
@@ -479,12 +480,22 @@ class SpecialistInvestigation:
             result.model_calls += 1
             stage("6_generation", "rejected", f"{exc.stage}: {exc}")
             return result
-        in_scope = [h for h in generated.hypotheses.hypotheses
-                    if h.dimension.value == spec.dimension]
-        result.out_of_scope = [
-            {"hypothesis_id": h.hypothesis_id, "dimension": h.dimension.value,
-             "statement": h.statement}
-            for h in generated.hypotheses.hypotheses if h.dimension.value != spec.dimension]
+        in_scope = []
+        result.out_of_scope = []
+        for h in generated.hypotheses.hypotheses:
+            ownership = screen_ownership(spec.code, h.statement)
+            if h.dimension.value == spec.dimension and ownership.in_scope:
+                in_scope.append(h)
+                continue
+            result.out_of_scope.append({
+                "hypothesis_id": h.hypothesis_id,
+                "dimension": h.dimension.value,
+                "statement": h.statement,
+                "reason": ("dimension_label_out_of_scope"
+                           if h.dimension.value != spec.dimension else ownership.reason),
+                "suggested_destination": ownership.suggested_destination,
+                "ownership_policy_version": ownership.policy_version,
+            })
         result.hypotheses = CreditHypothesisSet(hypotheses=in_scope)
         result.id_map = {h.hypothesis_id: f"{spec.code}-H{i:03d}"
                          for i, h in enumerate(in_scope, start=1)}

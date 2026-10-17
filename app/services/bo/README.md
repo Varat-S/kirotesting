@@ -193,3 +193,23 @@ VERTEX_MODEL_CHALLENGE=gemini-3.1-flash-lite
 6. One sector profile (healthcare provider). Retrieval is keyword-based.
 7. `examples/healthcare/hca-2025/review_manifest.json` is an unverified template.
 8. The full agentic runner (FO/SO/credit) still uses the v1 BO roster.
+
+## M3 readiness services (offline)
+
+The readiness cycle adds three versioned services without changing the default
+runner mode:
+
+* `semantic_entailment.py` is a fail-closed contract for an optional structured
+  entailment judge. It receives only approved cited evidence. Failed numeric,
+  entity, period, denominator or source checks stop evaluation before the judge.
+* `hybrid.py` defines `single_pass`, `full_investigation` and
+  `hybrid_selective` execution modes. The hybrid policy selects material adverse
+  risks, asserted mitigants, inferential mechanisms, conflicts, weak provenance,
+  coverage gaps and low-confidence material claims. Failed validation is a
+  reason to investigate, not a reason to skip a claim.
+* `ownership.py` screens the claim text against clear v3 remit boundaries.
+  Out-of-scope claims remain in the investigation trace with the policy version,
+  reason and suggested destination. The service never silently forwards them.
+
+The three-mode executor is not yet wired into `BusinessOverviewRunner`; see
+`BO_M3_READINESS_REPORT.md` for the gate decision and integration plan.
