@@ -125,8 +125,8 @@ def corpus_from_packet(passages: list[dict[str, Any]]) -> EvidenceCorpus:
     return EvidenceCorpus(passages=out, document_ids=sorted(set(docs)))
 
 
-def grounding_from_indicators(indicators: IndicatorSet,
-                              groups: tuple[str, ...]) -> list[EvidenceItem]:
+def grounding_from_indicators(indicators: IndicatorSet, groups: tuple[str, ...],
+                              entity: str | None = None) -> list[EvidenceItem]:
     """Approved deterministic indicators as grounding items (no new numbers)."""
     items = []
     for t in indicators.traces:
@@ -136,7 +136,10 @@ def grounding_from_indicators(indicators: IndicatorSet,
             continue
         items.append(EvidenceItem(
             evidence_id=t.parameter_result_id, value=float(t.value), unit=t.units,
-            concept=t.label, period=t.period, text=t.label))
+            concept=t.label, period=t.period, text=t.label,
+            # Trusted metadata a premise may claim: the borrower's consolidated
+            # figures (entity) and the indicator's unit (scale).
+            entity=entity, scale=t.units))
     return items
 
 
@@ -413,7 +416,9 @@ class SpecialistInvestigation:
             self._client, audit=audit, case_id=case_id, review_lookup=review_lookup,
             quote_repair=lambda quote, pid: recover_quote(
                 quote=quote, cited_evidence_id=pid, corpus=packet_passages))
-        grounding = grounding_from_indicators(indicators, spec.indicator_groups)
+        grounding = grounding_from_indicators(
+            indicators, spec.indicator_groups,
+            entity=entity_aliases[0] if entity_aliases else None)
         metric_ids = frozenset(i.evidence_id for i in grounding)
         result.metric_traces = {
             t.parameter_result_id: {

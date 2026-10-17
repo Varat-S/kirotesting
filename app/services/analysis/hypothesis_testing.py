@@ -41,6 +41,7 @@ from app.schemas.llm import (
     AnalyticalClaim,
     ClaimClassification,
     ClaimKind,
+    CreditDirection,
     CreditHypothesis,
     CreditHypothesisSet,
     EvidenceAssessmentKind,
@@ -220,7 +221,8 @@ class HypothesisTestingInputs:
             # corroborate anything.
             "approved_metrics": [
                 {"metric_id": i.evidence_id, "concept": i.concept, "value": i.value,
-                 "unit": i.unit, "period": i.period}
+                 "unit": i.unit, "period": i.period, "entity": i.entity,
+                 "scale": i.scale}
                 for i in self.grounding_items],
         }
 
@@ -612,11 +614,12 @@ class HypothesisTestingService:
             notes: list[str] = list(link_notes)
             if grounding is not None and grounding.is_grounded:
                 basis.append("deterministic_grounding")
-            # Fix R1: a REPORTED FACT premise restated from a verified verbatim
-            # quote is corroborated by the source itself. Never for an outcome
-            # premise or for a hypothesis classified as anything but a fact.
+            # Fix R1 (widened after the live runs): a FACTUAL premise restated
+            # from a verified verbatim quote is corroborated by the source
+            # itself, whatever the hypothesis' classification. Never an outcome
+            # premise. An inference still cannot rise above partially_supported
+            # on such premises (R2 and the material-premise rule below).
             if (hypothesis is not None
-                    and hypothesis.classification is ClaimClassification.REPORTED_FACT
                     and not premise.is_outcome_premise
                     and any(verbatim_fact_support(premise.premise, premise.grounding_claim,
                                                   passages[pid],
@@ -878,6 +881,22 @@ class HypothesisTestingService:
             effective = _SUPPORTING.UNVERIFIED
             reasons.append(
                 "reported fact only partly corroborated by its sources -> UNVERIFIED")
+
+        # Asymmetric conservatism: a credit STRENGTH must be demonstrated. A
+        # positive hypothesis whose material outcome premise is uncorroborated
+        # (existence shown, effect not) is unverified; a risk may stand as a
+        # qualified possibility.
+        uncorroborated_outcome = any(
+            pc.is_outcome_premise and pc.material and not pc.corroborated
+            for pc in premise_corroboration)
+        if (hypothesis.credit_direction is CreditDirection.POSITIVE
+                and uncorroborated_outcome
+                and effective in (_SUPPORTING.SUPPORTED,
+                                  _SUPPORTING.PARTIALLY_SUPPORTED)):
+            effective = _SUPPORTING.UNVERIFIED
+            reasons.append(
+                "positive hypothesis: its outcome premise is not corroborated, so "
+                "the strength is not demonstrated -> UNVERIFIED")
 
         # Fix R2: an inference whose material premises are ALL corroborated facts
         # (and none adjudicated) never states its inferential step as a premise.

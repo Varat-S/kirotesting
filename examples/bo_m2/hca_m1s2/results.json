@@ -84,9 +84,9 @@
        "unassessed_contradictory_candidates"
       ],
       "downgrade_reasons": [
-       "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Agreements provide for payments based upon predetermined rates', 'Predetermined-rate agreements commit payers to patient volumes']"
+       "proposed SUPPORTED downgraded to partially_supported: material premise(s) lack independent corroboration: ['Predetermined-rate agreements commit payers to patient volumes']"
       ],
-      "effective_status": "unverified",
+      "effective_status": "partially_supported",
       "independently_corroborated": false,
       "proposed_status": "supported"
      },
@@ -95,7 +95,9 @@
      "mitigant_effectiveness": null,
      "present": true,
      "presentation": "on_demand",
-     "review_flags": [],
+     "review_flags": [
+      "rate_agreement_to_volume_guarantee"
+     ],
      "scenario": "H2_rates_as_volume_lock_in",
      "usable": false
     },
@@ -165,7 +167,8 @@
        "unassessed_contradictory_candidates"
       ],
       "downgrade_reasons": [
-       "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Hospitals compete for service contracts on the basis of market reputation and range of services', 'Market position has kept payer contracts from being terminated']"
+       "proposed SUPPORTED downgraded to partially_supported: material premise(s) lack independent corroboration: ['Market position has kept payer contracts from being terminated']",
+       "positive hypothesis: its outcome premise is not corroborated, so the strength is not demonstrated -> UNVERIFIED"
       ],
       "effective_status": "unverified",
       "independently_corroborated": false,
@@ -236,8 +239,10 @@
     }
    ],
    "usage": {
+    "input_tokens": 0,
     "model_calls": 4,
-    "request_chars": 272771,
+    "output_tokens": 0,
+    "request_chars": 276797,
     "response_chars": 28139
    },
    "valid": true
@@ -379,7 +384,9 @@
     }
    ],
    "usage": {
+    "input_tokens": 0,
     "model_calls": 1,
+    "output_tokens": 0,
     "request_chars": 53212,
     "response_chars": 6588
    },
@@ -388,9 +395,9 @@
  },
  "case_id": "HCA_2025_M2",
  "comparison_version": "m2-comparison-1",
- "identical_inputs_fingerprint": "cdb6967101547e198776990061804913dd0c83232a635030124c2b296bad6ed8",
+ "identical_inputs_fingerprint": "53cb8940d32f73ac3b2a27e899b61857451bbeceade7547f8465fd95793ae365",
  "investigation": {
-  "material_gaps": 16,
+  "material_gaps": 14,
   "out_of_scope": [
    {
     "dimension": "operating_model_cost_resilience",
@@ -426,7 +433,7 @@
     "state": "completed"
    },
    {
-    "detail": "progression=blocked_pending_evidence; 16 gap(s)",
+    "detail": "progression=blocked_pending_evidence; 14 gap(s)",
     "stage": "12_completeness",
     "state": "completed"
    },

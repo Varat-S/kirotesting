@@ -82,9 +82,9 @@
        "unassessed_contradictory_candidates"
       ],
       "downgrade_reasons": [
-       "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Contracts are multi-year agreements that set negotiated rates', 'The agreements commit payers to patient volumes']"
+       "proposed SUPPORTED downgraded to partially_supported: material premise(s) lack independent corroboration: ['The agreements commit payers to patient volumes']"
       ],
-      "effective_status": "unverified",
+      "effective_status": "partially_supported",
       "independently_corroborated": false,
       "proposed_status": "supported"
      },
@@ -93,7 +93,9 @@
      "mitigant_effectiveness": null,
      "present": true,
      "presentation": "on_demand",
-     "review_flags": [],
+     "review_flags": [
+      "rate_agreement_to_volume_guarantee"
+     ],
      "scenario": "S2_genuine_quote_wrong_inference",
      "usable": false
     },
@@ -232,8 +234,10 @@
     }
    ],
    "usage": {
+    "input_tokens": 0,
     "model_calls": 4,
-    "request_chars": 47064,
+    "output_tokens": 0,
+    "request_chars": 49007,
     "response_chars": 23520
    },
    "valid": true
@@ -377,7 +381,9 @@
     }
    ],
    "usage": {
+    "input_tokens": 0,
     "model_calls": 1,
+    "output_tokens": 0,
     "request_chars": 10489,
     "response_chars": 4981
    },
@@ -386,9 +392,9 @@
  },
  "case_id": "NFH_BO",
  "comparison_version": "m2-comparison-1",
- "identical_inputs_fingerprint": "cfce7a3c108cbf8cc34393d3277b496ac4dd6a222d60f2be4f4ab9d93a0b413e",
+ "identical_inputs_fingerprint": "ff6000f788a8d1070739c13396fb0096195a560fd062f4b1097a7fb559daba78",
  "investigation": {
-  "material_gaps": 17,
+  "material_gaps": 16,
   "out_of_scope": [
    {
     "dimension": "operating_model_cost_resilience",
@@ -424,7 +430,7 @@
     "state": "completed"
    },
    {
-    "detail": "progression=blocked_pending_evidence; 17 gap(s)",
+    "detail": "progression=blocked_pending_evidence; 16 gap(s)",
     "stage": "12_completeness",
     "state": "completed"
    },
