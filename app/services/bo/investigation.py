@@ -585,8 +585,25 @@ class SpecialistInvestigation:
         if not run.is_valid or run.parsed is None:
             result.stages.append(StageRecord("parameters", "rejected", "json_schema"))
             return result
-        result.parameters = [p for p in run.parsed.get("parameters") or []
-                             if isinstance(p, dict)]
+        # Evidence for a parameter is DERIVED from the governed hypotheses it
+        # cites (the model never chooses evidence ids here). A value that cites
+        # no known hypothesis cannot carry evidence and is recorded unavailable;
+        # gate_parameters then decides whether the cited findings carry it.
+        evidence_of = {i["hypothesis_id"]: [*i["supporting_evidence_ids"],
+                                            *i["contradicting_evidence_ids"]]
+                       for i in items}
+        result.parameters = []
+        for p in run.parsed.get("parameters") or []:
+            if not isinstance(p, dict):
+                continue
+            p = dict(p)
+            cited = [h for h in p.get("hypothesis_ids") or [] if h in evidence_of]
+            p["hypothesis_ids"] = cited
+            p["evidence_ids"] = sorted({e for h in cited for e in evidence_of[h]})
+            if not p["evidence_ids"] and p.get("status") in ("ok", "provisional"):
+                p.update(status="unavailable", value=None,
+                         notes="No governed hypothesis with evidence was cited.")
+            result.parameters.append(p)
         result.stages.append(StageRecord(
             "parameters", "completed", f"{len(result.parameters)} proposed"))
         return result

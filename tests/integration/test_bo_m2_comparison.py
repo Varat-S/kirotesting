@@ -295,3 +295,15 @@ def test_an_invented_passage_id_still_rejects_the_testing_stage(db_session):
     _result(stages, "h1")["evidence_assessments"][0]["passage_id"] = "ev_invented"
     arm = run_investigation(db_session, prep, stages)
     assert arm.failure.startswith("8_testing rejected: service_governance")
+
+
+def test_parameter_evidence_is_derived_from_cited_hypotheses(db_session):
+    """Live models return parameter values without evidence ids (seen on HCA)."""
+    def mutate(stages, prep):
+        for p in stages["parameters"]["parameters"]:
+            p.pop("evidence_ids", None)
+        stages["parameters"]["parameters"].append(
+            {"parameter_id": "switching_cost_assessment", "value": "low",
+             "value_type": "category", "status": "ok", "hypothesis_ids": ["M1S2-H999"]})
+    records = _variant(db_session, mutate)
+    assert len(records) == 7  # not rejected as a whole
