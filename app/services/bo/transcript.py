@@ -38,6 +38,7 @@ class RecordingBackend(LLMBackend):
     def generate(self, request: LLMRequest) -> LLMRawResult:
         entry: dict[str, Any] = {
             "task_type": request.method, "prompt_id": request.prompt.prompt_id,
+            "prompt_name": request.prompt.name, "prompt_version": request.prompt.version,
             "prompt_hash": request.prompt.content_hash,
             "instructions": request.prompt.template, "inputs": request.inputs,
             "model_tier": request.model_tier,

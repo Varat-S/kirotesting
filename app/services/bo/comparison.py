@@ -199,8 +199,13 @@ class ArmResult:
                    + len(json.dumps(c.get("inputs"), sort_keys=True, default=str))
                    for c in self.calls)
         received = sum(len(c.get("raw_response") or "") for c in self.calls)
+        tokens_in = sum(int((c.get("model_config") or {}).get("input_tokens") or 0)
+                        for c in self.calls)
+        tokens_out = sum(int((c.get("model_config") or {}).get("output_tokens") or 0)
+                         for c in self.calls)
         return {"model_calls": len(self.calls), "request_chars": sent,
-                "response_chars": received}
+                "response_chars": received, "input_tokens": tokens_in,
+                "output_tokens": tokens_out}
 
 
 def _client(session: Session, backend) -> tuple[LLMClient, PromptRegistry]:
@@ -230,16 +235,23 @@ def _single_pass_inputs(prep: PreparedSpecialist) -> dict[str, Any]:
 
 
 def run_single_pass(session: Session, prep: PreparedSpecialist,
-                    response: dict[str, Any]) -> ArmResult:
-    inner = FakeLLMBackend()
-    inner.register(prep.spec.agent_id, resolve_anchors(response, prep))
-    backend = RecordingBackend(inner)
+                    response: dict[str, Any] | None = None, *, backend=None) -> ArmResult:
+    """Scripted (``response``) or live (``backend``) single-pass specialist."""
+    if backend is None:
+        inner = FakeLLMBackend()
+        inner.register(prep.spec.agent_id, resolve_anchors(response, prep))
+        backend = inner
+    backend = RecordingBackend(backend)
     client, prompts = _client(session, backend)
     request = client.build_request(
         prep.spec.agent_id, prep.spec.agent_id, _single_pass_inputs(prep),
         evidence_ids=list(prep.packet.evidence_ids), case_id=prep.case_id,
         case_version=prep.snapshot_version, model_tier=prep.agent.model_tier.value)
-    result = client.generate_only(request)
+    try:
+        result = client.generate_only(request)
+    except Exception as exc:  # provider failure is a failed arm, never a pass
+        return ArmResult("single_pass", None, None, backend.calls,
+                         failure=f"provider error: {type(exc).__name__}: {exc}")
     run_id = f"{prep.analysis_run_id}:single_pass"
     if result.parsed is None:
         return ArmResult("single_pass", None, None, backend.calls,
@@ -252,19 +264,31 @@ def run_single_pass(session: Session, prep: PreparedSpecialist,
     return ArmResult("single_pass", validation, result.parsed, backend.calls)
 
 
+STAGE_KEYS = ("generate", "plan", "test", "parameters")
+
+
 def run_investigation(session: Session, prep: PreparedSpecialist,
-                      responses: dict[str, Any]) -> ArmResult:
-    inner = FakeLLMBackend()
-    for stage, response in responses.items():
-        inner.register("analyze", resolve_anchors(response, prep), key=stage)
-    backend = RecordingBackend(inner)
+                      responses: dict[str, Any] | None = None, *,
+                      backend=None) -> ArmResult:
+    """Scripted (``responses`` by stage key) or live (``backend``) investigation."""
+    if backend is None:
+        inner = FakeLLMBackend()
+        for stage, response in responses.items():
+            inner.register("analyze", resolve_anchors(response, prep), key=stage)
+        backend = inner
+    responses = responses or {k: None for k in STAGE_KEYS}
+    backend = RecordingBackend(backend)
     client, prompts = _client(session, backend)
-    investigation = SpecialistInvestigation(
-        prep.spec, client=client, audit=AuditLog(session), case_id=prep.case_id,
-        review_lookup=session).run(
-            packet_passages=prep.passages, indicators=prep.indicators,
-            value_sets=prep.value_sets, case_version=prep.snapshot_version,
-            keys={s: s for s in responses}, entity_aliases=prep.entity_aliases)
+    try:
+        investigation = SpecialistInvestigation(
+            prep.spec, client=client, audit=AuditLog(session), case_id=prep.case_id,
+            review_lookup=session).run(
+                packet_passages=prep.passages, indicators=prep.indicators,
+                value_sets=prep.value_sets, case_version=prep.snapshot_version,
+                keys={s: s for s in responses}, entity_aliases=prep.entity_aliases)
+    except Exception as exc:  # provider failure is a failed arm, never a pass
+        return ArmResult("investigation", None, None, backend.calls,
+                         failure=f"provider error: {type(exc).__name__}: {exc}")
     run_id = f"{prep.analysis_run_id}:investigation"
     failed = investigation.failed_stage
     if failed is not None:

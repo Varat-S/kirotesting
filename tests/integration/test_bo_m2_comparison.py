@@ -242,3 +242,56 @@ def test_borrower_aliases_come_from_the_entity_record():
                      "borrower_flag": True},
                     {"legal_name": "Other Co", "borrower_flag": False}]
     assert borrower_aliases(_E()) == ("HCA Healthcare, Inc.", "HCA Healthcare", "HCA")
+
+
+def _incomplete(plan):
+    return {**plan, "enquiries": [e for e in plan["enquiries"]
+                                  if e["requirement_kind"] != "contradictory"]}
+
+
+def test_one_replan_recovers_a_plan_that_omitted_mandatory_perspectives(db_session):
+    def mutate(stages, prep):
+        stages["plan_retry"] = stages["plan"]
+        stages["plan"] = _incomplete(stages["plan"])
+    records = _variant(db_session, mutate)
+    assert len(records) == 7  # the investigation completed after one re-plan
+
+
+def test_a_second_omission_still_fails_the_stage(db_session):
+    if db_session.get(Case, h.CASE) is None:
+        db_session.add(Case(case_id=h.CASE, status="open"))
+        db_session.flush()
+    prep = prepare_specialist(db_session, case_id=h.CASE, evidence=h.evidence_snapshot(),
+                              metrics=h.metrics(), spec=V3_SPEC_BY_CODE["M1S2"])
+    stages = {k: v for k, v in json.loads(
+        (Path(SCRIPTS) / "investigation.json").read_text()).items() if not k.startswith("_")}
+    stages["plan"] = stages["plan_retry"] = _incomplete(stages["plan"])
+    arm = run_investigation(db_session, prep, stages)
+    assert arm.validation is None
+    assert arm.failure.startswith("7_planning_retry rejected")
+    assert arm.investigation.model_calls == 3  # generate, plan, one re-plan
+
+
+def test_a_non_verbatim_quote_is_dropped_not_fatal(db_session):
+    """Live models misquote filings; one bad quote must not discard the stage."""
+    def mutate(stages, prep):
+        _result(stages, "h1")["evidence_assessments"][0]["quoted_excerpt"] = (
+            "Medicare and Medicaid accounted for 45 percent of all our revenues.")
+    records = _variant(db_session, mutate)
+    s1 = records["M1S2-H001"]
+    assert len(records) == 7
+    assert [q["action"] for q in s1.investigation["quote_repairs"]] == ["dropped_not_verbatim"]
+    assert s1.evidence_quotes == []  # nothing unverified reaches the record
+
+
+def test_an_invented_passage_id_still_rejects_the_testing_stage(db_session):
+    if db_session.get(Case, h.CASE) is None:
+        db_session.add(Case(case_id=h.CASE, status="open"))
+        db_session.flush()
+    prep = prepare_specialist(db_session, case_id=h.CASE, evidence=h.evidence_snapshot(),
+                              metrics=h.metrics(), spec=V3_SPEC_BY_CODE["M1S2"])
+    stages = {k: v for k, v in json.loads(
+        (Path(SCRIPTS) / "investigation.json").read_text()).items() if not k.startswith("_")}
+    _result(stages, "h1")["evidence_assessments"][0]["passage_id"] = "ev_invented"
+    arm = run_investigation(db_session, prep, stages)
+    assert arm.failure.startswith("8_testing rejected: service_governance")

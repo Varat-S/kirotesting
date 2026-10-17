@@ -177,15 +177,20 @@ class InvestigationResult:
     # carry a premise's metric link into the BO record as a quoted value.
     metric_traces: dict[str, dict[str, Any]] = field(default_factory=dict)
     adapter_notes: dict[str, list[str]] = field(default_factory=dict)
+    quote_repairs: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def completed(self) -> bool:
-        return bool(self.stages) and all(s.state in ("completed", "skipped")
-                                          for s in self.stages)
+        return bool(self.stages) and all(
+            s.state in ("completed", "completed_after_retry", "skipped")
+            for s in self.stages)
 
     @property
     def failed_stage(self) -> StageRecord | None:
-        return next((s for s in self.stages if s.state in ("rejected", "failed")), None)
+        # The last failure decides: a stage rejected and then retried reports
+        # the retry's outcome.
+        return next((s for s in reversed(self.stages)
+                     if s.state in ("rejected", "failed")), None)
 
     def progression(self) -> str | None:
         c = self.completeness
@@ -219,6 +224,8 @@ class InvestigationResult:
             "enquiries": executed,
             "progression": self.progression(),
             "adapter_notes": list(self.adapter_notes.get(bo_id, [])),
+            "quote_repairs": [q for q in self.quote_repairs
+                              if q["hypothesis_id"] == original],
         }
         if governed is not None:
             trace.update({
@@ -383,8 +390,7 @@ class SpecialistInvestigation:
         self._client = client
         self._gen = HypothesisGenerationService(client, audit=audit, case_id=case_id)
         self._plan = EvidenceEnquiryPlanningService(client, audit=audit, case_id=case_id)
-        self._test = HypothesisTestingService(client, audit=audit, case_id=case_id,
-                                              review_lookup=review_lookup)
+        self._client_audit = (audit, case_id, review_lookup)
         self._signal = CreditSignalAssessmentService(client, audit=audit, case_id=case_id)
         self._complete = MaterialEvidenceCompletenessService(audit=audit, case_id=case_id)
         self._case_id = case_id
@@ -398,6 +404,15 @@ class SpecialistInvestigation:
         spec = self.spec
         result = InvestigationResult(spec_code=spec.code)
         corpus = corpus_from_packet(packet_passages)
+        # The baseline's bounded quote recovery (layout gaps inside the cited
+        # passage), applied per quote instead of rejecting the whole stage.
+        from app.services.bo.recovery import recover_quote
+
+        audit, case_id, review_lookup = self._client_audit
+        self._test = HypothesisTestingService(
+            self._client, audit=audit, case_id=case_id, review_lookup=review_lookup,
+            quote_repair=lambda quote, pid: recover_quote(
+                quote=quote, cited_evidence_id=pid, corpus=packet_passages))
         grounding = grounding_from_indicators(indicators, spec.indicator_groups)
         metric_ids = frozenset(i.evidence_id for i in grounding)
         result.metric_traces = {
@@ -426,7 +441,7 @@ class SpecialistInvestigation:
             result.model_calls += 1
         except HypothesisGenerationRejectedError as exc:
             result.model_calls += 1
-            stage("6_generation", "rejected", exc.stage)
+            stage("6_generation", "rejected", f"{exc.stage}: {exc}")
             return result
         in_scope = [h for h in generated.hypotheses.hypotheses
                     if h.dimension.value == spec.dimension]
@@ -444,16 +459,37 @@ class SpecialistInvestigation:
             return self._gate(result, case_version)
 
         # Step 7 -- enquiry planning (model) + retrieval over the packet only.
+        planning = EnquiryPlanningInputs(hypotheses=result.hypotheses,
+                                         permitted_document_ids=list(corpus.document_ids))
         try:
-            planned = self._plan.plan(
-                EnquiryPlanningInputs(hypotheses=result.hypotheses,
-                                      permitted_document_ids=list(corpus.document_ids)),
-                case_version=case_version, key=keys.get("plan"))
+            planned = self._plan.plan(planning, case_version=case_version,
+                                      key=keys.get("plan"))
             result.model_calls += 1
         except EvidenceEnquiryPlanningRejectedError as exc:
             result.model_calls += 1
-            stage("7_planning", "rejected", exc.stage)
-            return result
+            if exc.stage != "coverage":
+                stage("7_planning", "rejected", f"{exc.stage}: {exc}")
+                return result
+            # One bounded follow-up (as the single-pass path has): the planner is
+            # told exactly which mandatory perspectives it omitted. The coverage
+            # rule itself is unchanged; a second omission fails the stage.
+            stage("7_planning", "rejected", f"coverage; one re-plan: {exc}")
+            planning.context = {"coverage_feedback": (
+                "Your previous plan was rejected because it omitted mandatory "
+                f"investigative perspectives: {exc}. Return the COMPLETE plan again, "
+                "with supporting and contradictory enquiries for every hypothesis, "
+                "an offsetting enquiry for every material negative hypothesis and an "
+                "effectiveness enquiry wherever an offset is named.")}
+            try:
+                planned = self._plan.plan(planning, case_version=case_version,
+                                          key=keys.get("plan_retry", keys.get("plan")))
+                result.model_calls += 1
+            except EvidenceEnquiryPlanningRejectedError as retry_exc:
+                result.model_calls += 1
+                stage("7_planning_retry", "rejected", f"{retry_exc.stage}: {retry_exc}")
+                return result
+            result.stages[-1] = StageRecord(
+                "7_planning", "completed_after_retry", result.stages[-1].detail)
         result.plan = planned.plan
         stage("7_planning", "completed", f"{len(planned.plan.enquiries)} enquiries")
         try:
@@ -478,9 +514,10 @@ class SpecialistInvestigation:
             result.model_calls += 1
         except HypothesisTestingRejectedError as exc:
             result.model_calls += 1
-            stage("8_testing", "rejected", exc.stage)
+            stage("8_testing", "rejected", f"{exc.stage}: {exc}")
             return result
         result.governed = list(tested.governed)
+        result.quote_repairs = list(tested.quote_repairs)
         stage("8_testing", "completed", f"{len(result.governed)} governed")
 
         # Steps 9-11 -- signals, impact, deterministic materiality rubric.
@@ -491,7 +528,7 @@ class SpecialistInvestigation:
                     validated_metric_ids=metric_ids, materiality_inputs={}),
                 case_version=case_version, key=keys.get("signal"), use_llm=False)
         except CreditSignalAssessmentRejectedError as exc:
-            stage("9_11_signals", "rejected", exc.stage)
+            stage("9_11_signals", "rejected", f"{exc.stage}: {exc}")
             return result
         result.findings = assessed.findings
         stage("9_11_signals", "completed",

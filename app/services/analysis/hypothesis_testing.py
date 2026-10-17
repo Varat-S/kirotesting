@@ -215,6 +215,13 @@ class HypothesisTestingInputs:
             "candidate_passages": passages,
             "unresolved_enquiries": self.bundle.unresolved_enquiries,
             "incomplete_coverage": self.bundle.incomplete_coverage,
+            # The only metric ids a premise may link to (with their trusted
+            # concept); without them a model can only invent ids, which never
+            # corroborate anything.
+            "approved_metrics": [
+                {"metric_id": i.evidence_id, "concept": i.concept, "value": i.value,
+                 "unit": i.unit, "period": i.period}
+                for i in self.grounding_items],
         }
 
 
@@ -224,6 +231,9 @@ class HypothesisTestingResult:
 
     governed: list[GovernedHypothesisTestResult]
     run: object
+    # Quotes that were not verbatim and were repaired or dropped (only when a
+    # ``quote_repair`` callable is configured); one audit record each.
+    quote_repairs: list[dict] = field(default_factory=list)
 
 
 class HypothesisTestingService:
@@ -237,8 +247,16 @@ class HypothesisTestingService:
         case_id: str | None = None,
         review_lookup=None,
         reviewer_authority=None,
+        quote_repair=None,
     ) -> None:
         self._client = client
+        # Optional ``(quote, passage_id) -> record`` recovery hook. When set, a
+        # quoted_excerpt that is not verbatim gets ONE bounded repair attempt
+        # (layout gaps inside the cited passage only); if that fails the excerpt
+        # alone is dropped and recorded, instead of rejecting the whole stage.
+        # Unknown passage or premise ids still reject the stage. Default (None):
+        # the original fail-closed behaviour.
+        self._quote_repair = quote_repair
         self._audit = audit
         self._case_id = case_id
         # Task 6C: a callable review_id -> HumanReview row (or None). Supplying a
@@ -300,6 +318,9 @@ class HypothesisTestingService:
         hyp_by_id = {h.hypothesis_id: h for h in inputs.hypotheses.hypotheses}
         passages = inputs.passage_index()
         grounding_ids = inputs.grounding_item_ids()
+        quote_repairs: list[dict] = []
+        if self._quote_repair is not None:
+            response, quote_repairs = self._repair_quotes(response, passages)
 
         # Structural/reference governance across the whole response.
         violations = self._reference_violations(
@@ -328,7 +349,35 @@ class HypothesisTestingService:
                          verified_adjudications, run_id=run.run_id)
             for result in response.results
         ]
-        return HypothesisTestingResult(governed=governed, run=run)
+        return HypothesisTestingResult(governed=governed, run=run,
+                                       quote_repairs=quote_repairs)
+
+    def _repair_quotes(self, response, passages):
+        """Repair layout-gap quotes in place; drop (and record) unrecoverable ones."""
+        records: list[dict] = []
+        results = []
+        for result in response.results:
+            assessments = []
+            for a in result.evidence_assessments:
+                text = passages.get(a.passage_id)
+                if text is None or not a.quoted_excerpt or a.quoted_excerpt in text:
+                    assessments.append(a)
+                    continue
+                rec = self._quote_repair(a.quoted_excerpt, a.passage_id) or {}
+                repaired = rec.get("replacement_quote")
+                if (rec.get("outcome") == "layout_gap" and repaired
+                        and repaired in text):
+                    a = a.model_copy(update={"quoted_excerpt": repaired})
+                    action = "repaired_layout_gap"
+                else:
+                    a = a.model_copy(update={"quoted_excerpt": None})
+                    action = "dropped_not_verbatim"
+                records.append({"hypothesis_id": result.hypothesis_id,
+                                "passage_id": a.passage_id, "action": action,
+                                "detail": rec.get("detail")})
+                assessments.append(a)
+            results.append(result.model_copy(update={"evidence_assessments": assessments}))
+        return response.model_copy(update={"results": results}), records
 
     # -- reference / structural governance ------------------------------------
 
