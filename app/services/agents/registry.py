@@ -38,6 +38,7 @@ AGENT_REGISTRY_VERSION = "agent-registry-1.1.0"
 # separate registry VERSION, not an in-place rewrite: runs recorded under 1.1.0
 # keep resolving against the unchanged v1 roster.
 AGENT_REGISTRY_VERSION_BO_V2 = "agent-registry-2.0.0"
+AGENT_REGISTRY_VERSION_BO_V3 = "agent-registry-3.0.0"
 
 
 class AgentRegistryError(ValueError):
@@ -433,8 +434,13 @@ def default_registry(bo_roster: str = "v1") -> AgentRegistry:
     swaps the six Business narrow agents for the hybrid six-agent arrangement
     (BO6 depends on BO1-BO5) and points the Business orchestrator/challenger at
     their v2 prompts; the other 19 jobs are identical.
+
+    ``bo_roster="v3"`` is the four-module Business roster (``bo/roster_v3.py``):
+    five Module 1 specialists, Agent 6, and declared-but-not-executed agents for
+    Modules 2-4 (30 jobs). Parameter ids are unchanged; ownership moves are in
+    ``BO_V2_TO_V3_PARAMETER_OWNER``.
     """
-    if bo_roster not in ("v1", "v2"):
+    if bo_roster not in ("v1", "v2", "v3"):
         raise AgentRegistryError(f"Unknown BO roster {bo_roster!r}.")
     defs: list[AgentDefinition] = []
 
@@ -459,7 +465,10 @@ def default_registry(bo_roster: str = "v1") -> AgentRegistry:
             ),
         )
 
-    if bo_roster == "v2":
+    if bo_roster == "v3":
+        defs.extend(_business_narrow_v3())
+        business_narrow_ids = [d.agent_id for d in defs]
+    elif bo_roster == "v2":
         defs.extend(_business_narrow_v2())
         business_narrow_ids = [d.agent_id for d in defs]
     else:
@@ -581,14 +590,14 @@ def default_registry(bo_roster: str = "v1") -> AgentRegistry:
 
     return AgentRegistry(
         defs,
-        version=AGENT_REGISTRY_VERSION_BO_V2 if bo_roster == "v2"
-        else AGENT_REGISTRY_VERSION,
+        version={"v2": AGENT_REGISTRY_VERSION_BO_V2,
+                 "v3": AGENT_REGISTRY_VERSION_BO_V3}.get(bo_roster, AGENT_REGISTRY_VERSION),
     )
 
 
 def _bo_prompt(bo_roster: str, role: str) -> str | None:
     """Prompt name of the Business orchestrator/challenger for a roster."""
-    if bo_roster != "v2":
+    if bo_roster not in ("v2", "v3"):
         return None
     from app.services.bo.plans import BO_CHALLENGER_PROMPT, BO_ORCHESTRATOR_PROMPT
 
@@ -638,6 +647,45 @@ def _business_narrow_v2() -> list[AgentDefinition]:
                     "parameters:bo_indicators:" + ",".join(sorted(spec.indicator_groups))),
             )
         )
+    return defs
+
+
+def _business_narrow_v3() -> list[AgentDefinition]:
+    """The four-module Business roster (Module 1 runs; Modules 2-4 declared)."""
+    from app.services.bo.roster_v3 import V3_M1_PRIMARY_IDS, V3_SPECS
+
+    defs = []
+    for spec in V3_SPECS:
+        if not spec.executable:
+            # Ownership contract only: no prompt, no routing, never scheduled.
+            defs.append(AgentDefinition(
+                agent_id=spec.agent_id, topic=Topic.BUSINESS,
+                task_type="not_executed", model_tier=ModelTier.NARROW,
+                owned_parameters=spec.owned_parameters,
+                selector_identity=(f"module:{spec.module}", "not_executed"),
+            ))
+            continue
+        agent_6 = spec.code == "M1A6"
+        defs.append(AgentDefinition(
+            agent_id=spec.agent_id,
+            topic=Topic.BUSINESS,
+            task_type=spec.agent_id,
+            model_tier=ModelTier.NARROW,
+            # Agent 6 integrates the VALIDATED, completeness-gated M1 primaries.
+            dependencies=V3_M1_PRIMARY_IDS if agent_6 else (),
+            owned_parameters=spec.owned_parameters,
+            prompt_name=spec.agent_id,
+            response_schema_ref=spec.agent_id,
+            routing=RoutingSpec(
+                agent_id=spec.agent_id,
+                narrative_selector=_text_matches(*spec.all_terms()),
+                parameter_selector=_indicator_groups(spec.indicator_groups),
+            ),
+            selector_identity=(
+                f"module:{spec.module}", f"dimension:{spec.dimension}",
+                f"retrieval_plan:{spec.plan_hash()}",
+                "parameters:bo_indicators:" + ",".join(sorted(spec.indicator_groups))),
+        ))
     return defs
 
 

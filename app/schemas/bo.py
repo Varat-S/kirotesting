@@ -140,6 +140,15 @@ class HypothesisRecord(BaseModel):
     recovery: list[dict[str, Any]] = Field(default_factory=list)
     supersedes_id: str | None = None
     acceptance_state: AcceptanceState = AcceptanceState.ACCEPTED
+    # Roster v3 audit fields (absent in older payloads; defaults keep them
+    # readable). Which logically separate validator produced this record.
+    validator_id: str | None = None
+    validator_version: str | None = None
+    # Step 11 decision: policy version, rule, inputs, model proposal.
+    presentation_basis: dict[str, Any] = Field(default_factory=dict)
+    # Investigation trace (steps 6-12) when the record came from the
+    # hypothesis-investigation path; empty for the single-pass path.
+    investigation: dict[str, Any] = Field(default_factory=dict)
 
     @property
     def usable(self) -> bool:

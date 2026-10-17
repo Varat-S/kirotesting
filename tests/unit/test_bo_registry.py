@@ -43,7 +43,7 @@ def test_v1_roster_is_unchanged_and_still_the_default():
     assert {d.agent_id for d in _business_narrow(registry)} == set(BO_V1_TO_V2_AGENT)
     assert default_registry("v1").registry_hash() == registry.registry_hash()
     with pytest.raises(AgentRegistryError):
-        default_registry("v3")
+        default_registry("v9")
 
 
 def test_every_business_parameter_has_exactly_one_owner():

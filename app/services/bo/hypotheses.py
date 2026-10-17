@@ -47,6 +47,7 @@ from app.services.bo.plans import (
     REQUIRES_COMPANY_EVIDENCE,
     BoAgentSpec,
 )
+from app.services.bo.presentation import classify_presentation
 from app.services.bo.reconcile import tokens
 from app.services.bo.recovery import recover_quote
 from app.services.orchestration.benchmark_context import (
@@ -166,6 +167,22 @@ def unbound_numbers(text: str, quoted_values: list[float], quotes: list[str]) ->
     return loose
 
 
+# Identifies the validation logic on every record it produces. Bump when a
+# check changes what is accepted, held back or rejected.
+HYPOTHESIS_VALIDATOR_VERSION = "bo-hypothesis-validator-2.1.0"
+_V2_VALIDATOR_IDS = {"BO1": "validator_1", "BO2": "validator_2", "BO3": "validator_3",
+                     "BO4": "validator_4", "BO5": "validator_5", "BO6": "agent6_governance"}
+
+
+def validator_identity(spec: BoAgentSpec) -> str:
+    """The logically separate validator that governs ``spec``'s output.
+
+    Validation code is shared; the identity (and the sealed packet, owned
+    parameters and id prefix it is bound to) is per agent.
+    """
+    return spec.validator_id or _V2_VALIDATOR_IDS.get(spec.code) or f"validator_{spec.code}"
+
+
 @dataclass
 class HypothesisValidation:
     records: list[HypothesisRecord] = field(default_factory=list)
@@ -188,8 +205,17 @@ class HypothesisValidator:
         indicators: IndicatorSet,
         primary_hypotheses: dict[str, HypothesisRecord] | None = None,
         corpus: list[dict[str, Any]] | None = None,
+        apply_presentation_policy: bool = False,
+        materiality_basis: str | None = None,
     ) -> None:
         self._spec = spec
+        # v3: step 11 class comes from the deterministic policy, not the model.
+        # v2 keeps its recorded behaviour (model label, demoted if audit-only).
+        self._presentation_policy = apply_presentation_policy
+        # Declared by the caller, never by the model: "rubric" when materiality
+        # comes from the deterministic rubric (investigation path).
+        self._materiality_basis = materiality_basis
+        self.validator_id = validator_identity(spec)
         self._passages = dict(passages)  # admitted evidence_id -> passage text
         self._indicators = indicators
         self._known = indicators.known_values()
@@ -550,7 +576,19 @@ class HypothesisValidator:
                 outcome_evidence_ids=valid_outcomes)
 
         admissibility = derive_admissibility(claim_type, disposition)
-        if admissibility is Admissibility.AUDIT_ONLY and display is DisplayPriority.DISPLAY:
+        presentation_basis: dict[str, Any] = {}
+        if self._presentation_policy:
+            decision = classify_presentation(
+                disposition=disposition, admissibility=admissibility,
+                materiality=materiality,
+                materiality_basis=self._materiality_basis or (
+                    "model_proposed_capped"
+                    if materiality.value != item.get("materiality")
+                    else "model_proposed"),
+                model_proposed=item.get("display_priority"))
+            display = decision.presentation
+            presentation_basis = decision.as_record()
+        elif admissibility is Admissibility.AUDIT_ONLY and display is DisplayPriority.DISPLAY:
             display = DisplayPriority.ON_DEMAND
         review = bool(item.get("review_required")) or bool(flags) or (
             materiality is Materiality.HIGH
@@ -598,6 +636,9 @@ class HypothesisValidator:
             review_flags=flags,
             transmission_mechanism=mechanism,
             fo_handoffs=fo_handoffs,
+            validator_id=self.validator_id,
+            validator_version=HYPOTHESIS_VALIDATOR_VERSION,
+            presentation_basis=presentation_basis,
             recovery=recovery_records,
         )
 

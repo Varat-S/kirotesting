@@ -70,6 +70,9 @@ class ParameterStatus(str, Enum):
     NOT_APPLICABLE = "not_applicable"
     PROPOSED_NEW_CALCULATION = "proposed_new_calculation"
     REQUIRES_REVIEW = "requires_review"
+    # The owning agent is declared but not executed (BO roster v3, modules 2-4).
+    # Never usable for scoring and never a neutral value.
+    NOT_ASSESSED = "not_assessed"
 
 
 class EvidenceQuality(str, Enum):
@@ -281,6 +284,15 @@ class ParameterResult(BaseModel):
                 raise ValueError(
                     f"Deterministic ParameterResult {self.parameter_result_id!r} "
                     "must NOT carry an agent_run_id (Req 2.2)."
+                )
+        elif self.status is ParameterStatus.NOT_ASSESSED:
+            # The owning agent is declared but was never run: there is no run
+            # to cite and nothing may stand in for a value.
+            if not self.agent_id or self.agent_run_id is not None or self.value is not None:
+                raise ValueError(
+                    f"not_assessed ParameterResult {self.parameter_result_id!r} "
+                    "must name its owning agent and carry no agent_run_id and no "
+                    "value."
                 )
         else:  # llm or hybrid
             if not self.agent_id or not self.agent_run_id:

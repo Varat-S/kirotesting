@@ -74,6 +74,8 @@ def test_all_required_event_types_present() -> None:
         "rerun_triggered",
         "descendant_invalidated",
         "candidate_evaluated",
+        # BO roster v3: one per primary-agent output, by its own validator.
+        "agent_output_validated",
     }
     sector_benchmarking = {
         # Sector benchmarking events (healthcare / medical devices extension).

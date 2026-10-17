@@ -42,6 +42,14 @@ class BoAgentSpec:
     task_sections: tuple[str, ...] = ()
     # Which groups of deterministic indicators this specialist receives.
     indicator_groups: tuple[str, ...] = ()
+    # Roster v3 metadata (defaults keep v1/v2 specs unchanged). ``module`` is the
+    # internal BO module; ``dimension`` is the credit dimension the agent owns;
+    # an agent with ``executable=False`` declares ownership only and is never
+    # run; ``validator_id`` names its logically separate validator.
+    module: str = "M1"
+    dimension: str | None = None
+    executable: bool = True
+    validator_id: str | None = None
 
     def plan_hash(self) -> str:
         return content_hash(

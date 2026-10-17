@@ -84,6 +84,8 @@ class EventType(str, Enum):
     RERUN_TRIGGERED = "rerun_triggered"
     DESCENDANT_INVALIDATED = "descendant_invalidated"
     CANDIDATE_EVALUATED = "candidate_evaluated"
+    # One per primary-agent output, written by its logically separate validator.
+    AGENT_OUTPUT_VALIDATED = "agent_output_validated"
     # Sector benchmarking events (healthcare / medical devices extension).
     REFERENCE_DATASET_IMPORTED = "reference_dataset_imported"
     SECTOR_CLASSIFIED = "sector_classified"

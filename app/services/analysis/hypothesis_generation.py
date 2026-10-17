@@ -103,10 +103,13 @@ class HypothesisGenerationInputs:
     benchmarks: list[dict] = field(default_factory=list)
     snippets: list[dict] = field(default_factory=list)
     data_limitations: list[str] = field(default_factory=list)
+    # BO roster v3: a specialist investigates only its own dimension(s). Empty
+    # means module-wide (the original behaviour); the payload is then unchanged.
+    dimension_scope: list[str] = field(default_factory=list)
 
     def to_payload(self) -> dict[str, Any]:
         """The exact context forwarded to the model (allow-lists included)."""
-        return {
+        payload = {
             "canonical_facts": self.canonical_facts,
             "metrics": self.metrics,
             "trends": self.trends,
@@ -116,6 +119,9 @@ class HypothesisGenerationInputs:
             "allowed_evidence_ids": list(self.evidence_ids),
             "allowed_calculation_refs": list(self.calculation_refs),
         }
+        if self.dimension_scope:
+            payload["dimension_scope"] = list(self.dimension_scope)
+        return payload
 
     def evidence_allow_list(self) -> set[str]:
         return set(self.evidence_ids)

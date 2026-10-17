@@ -115,6 +115,10 @@ class EvidenceCompletenessInputs:
     not_applicable_dimensions: dict[str, "str | DimensionNonApplicability"] = field(
         default_factory=dict
     )
+    # BO roster v3: the dimensions this assessment is responsible for. Other
+    # dimensions are owned (and gated) by other specialists, so they are neither
+    # "not applicable" nor gaps here. Empty means all dimensions.
+    dimension_scope: tuple[str, ...] = ()
 
 
 @dataclass
@@ -492,7 +496,9 @@ class MaterialEvidenceCompletenessService:
 
         assessments: list[DimensionCoverageAssessment] = []
         gaps: list[MaterialEvidenceGap] = []
-        for dim in _ALL_DIMENSIONS:
+        scope = ([d for d in _ALL_DIMENSIONS if d.value in inputs.dimension_scope]
+                 if inputs.dimension_scope else list(_ALL_DIMENSIONS))
+        for dim in scope:
             evaluated = by_dim[dim]
             claim = self._na_claim(inputs.not_applicable_dimensions.get(dim.value))
             # Genuine NOT_APPLICABLE requires an AUTHORITATIVE, approved claim.
