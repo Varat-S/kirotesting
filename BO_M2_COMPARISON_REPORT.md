@@ -3,10 +3,12 @@
 Branch `feat/bo-investigation-integration`. Architecture: [`BO_ARCHITECTURE_V3_SPEC.md`](BO_ARCHITECTURE_V3_SPEC.md).
 Background: [`BO_INTEGRATION_M0_ASSESSMENT.md`](BO_INTEGRATION_M0_ASSESSMENT.md).
 
-**Status: M1 complete. M2 offline comparison complete on the synthetic case and on HCA
-FY2025, including the approved fixes R1–R4 (§5, §5a). Ready for review** (§6).
+**Status: M1 complete. M2 complete: scripted comparisons on the synthetic case and HCA
+FY2025 (§4–§5a), and live runs on HCA with `gemini-3.1-flash-lite` (§5b). Ready for
+review** (§6).
 
-No paid model call was made. Every model response in this report is scripted.
+Sections 4–5a use scripted model responses. Section 5b reports real, paid model calls
+(about $0.43 in total).
 
 ## 1. What was implemented
 
@@ -43,7 +45,8 @@ No paid model call was made. Every model response in this report is scripted.
 | After M1 (`4c9e41a`) | 1294 | 0 | 14 |
 | After M2 (`ceeb3bb`) | 1302 | 0 | 14 |
 | After fixes R1–R4 (`c4edbeb`) | 1309 | 0 | 14 |
-| After HCA run (this commit; HCA filing present) | 1311 | 0 | 14 |
+| After HCA run (`846b800`; HCA filing present) | 1311 | 0 | 14 |
+| After live-run fixes (`19ec617`; `google-genai` installed) | 1323 | 0 | 13 |
 
 Remaining skips: no OCR engine (5), HCA 10-K not acquired (2), no PDF backend,
 `google-genai` not installed, live tests gated (`BO_LIVE_TEST`), and others that
@@ -239,23 +242,91 @@ What HCA adds to the synthetic result:
 5. **Cost.** About 5× the request volume of the single pass, mostly the passages sent to
    the testing stage.
 
+## 5b. Live runs (HCA FY2025, M1S2, `gemini-3.1-flash-lite` on Vertex)
+
+Tool: `python -m app.services.bo.m2_live` (temporary). Per run it writes an HTML and a
+PDF transcript of every model call (prompt, inputs, raw output, tokens) and of what the
+validators did with each finding, under `output/m2_live*/` (git-ignored).
+
+**The first live runs exposed five integration defects that the scripted tests could not**
+(fixed in `771ed3d`, `2cf0e2f`, `19ec617`; scripted results unchanged after each fix):
+
+| Live failure | Cause | Fix |
+|---|---|---|
+| Planning rejected; whole investigation lost | Model omitted mandatory perspectives; planner fails closed | One bounded re-plan naming the omissions (as the single-pass path has) |
+| Testing rejected; whole investigation lost | One non-verbatim quote (page number inside a sentence, table rows, spliced text) rejects the stage | Baseline layout-gap recovery per quote; unrecoverable quotes dropped and recorded, not fatal |
+| Metric premises never corroborated | Testing payload never listed the approved metrics; model invented ids; claimed entity/scale had no metadata to match | Approved metrics (with entity and unit) sent to the model; prompt explains the grounding fields |
+| Correct facts never corroborated | Model (correctly) labelled the hypotheses inferences; verbatim check applied to reported facts only | Verbatim check applies to any factual, non-outcome premise; an inference can then reach at most `partially_supported` |
+| Whole output rejected at the end | Parameter values returned without evidence ids | Evidence derived from the cited governed hypotheses |
+
+Two rules were added while doing so, both checked against the unchanged scripted scenarios
+(still 5/5 defects held back, 2/2 controls usable on both cases): an interpretive
+statement is an inference, not a reported fact (prompt); and a **positive** hypothesis
+whose outcome premise is not corroborated is `unverified` (a strength must be
+demonstrated; a risk may stand qualified). On HCA, H2 (rates → volumes) is now held back
+by the baseline's lexical rule rather than by the investigation governance itself, which
+reaches `partially_supported`.
+
+**Final live comparison (3 runs, after the fixes):**
+
+| | Single pass | Investigation |
+|---|---|---|
+| Hypotheses per run | 3, 3, 2 | 2, 2, 2 |
+| Usable per run | 2, 3, 1 | 1, 1, 1 |
+| What was found | payer-category concentration (usable in 1 of 3 runs; quote failed in 2); contract renewal / termination risk (every run, as management claim or generic risk); "switching costs not established" (2 of 3 runs, recorded as a *supported* hypothesis) | payer reliance (48.9 %) → bargaining power and margin pressure: `qualified`, every run; Florida/Texas 51 % concentration: `unverified`, every run |
+| `customer_dependence` | concentrated_payer_categories in 1 of 3 runs | concentrated_payer_categories in 3 of 3 |
+| `contract_termination_risk` | moderate in 3 of 3 (on management-claim / risk-factor findings) | unavailable in 3 of 3 (no finding carries it) |
+| Step 12 gate | n/a | `blocked_pending_evidence` every run |
+| Average cost / time per run | $0.0071 / 6.6 s | $0.0238 / 27.5 s (≈ 3.4× / 4.2×) |
+
+Observations:
+
+1. **The investigation path is more consistent.** The same two hypotheses, the same
+   dispositions and the same parameter values in all three runs; the single pass varied
+   in what survived and in its parameters.
+2. **It finds less.** Two hypotheses per run, and it never surfaced contract renewal risk,
+   which the single pass reported every time (as a disclosed risk, appropriately
+   qualified there). Neither arm surfaced competitor exclusivity, price transparency or
+   narrow networks, which are in the packet.
+3. **Ownership leakage persists.** In every investigation run the model put Florida/Texas
+   geographic concentration under Customer Stickiness, which belongs to Module 2, despite
+   the prompt saying it is context only. It was held back, but because its premises were
+   not verbatim, not because of ownership. No deterministic check enforces dimension
+   ownership of the *content* of a hypothesis.
+4. **Two instructions were not followed by the live model:** assess every
+   contradictory-search passage (the R3 flag fired on every finding) and stay within the
+   dimension's remit.
+5. **The step 12 gate** reported "blocked" in every run: under the agreed order this is
+   what keeps Agent 6 from consuming these findings unqualified.
+
+Caveats: one model, one case, three runs per configuration, no reviewer-verified answer
+key (the HCA review manifest is still an unverified template). These are observations,
+not a measured quality difference.
+
 ## 6. Recommendation and decisions for review
 
-The investigation path's deterministic controls are clearly stronger on these error
-types, on both cases. Two refinements would reduce the recall it loses, and I suggest
-making them before M3:
+After the live runs: the investigation path's deterministic controls are stronger and
+its output more consistent, but with this model it covers less ground, costs about 3.4×
+more per specialist, and does not keep to its dimension on its own. Options:
+
+* **A. Proceed to M3** with the investigation path, adding during M3 a coverage floor
+  (the single-pass findings for the same specialist become hypotheses the investigation
+  must test) and an ownership check in Agent 6 / the challenger.
+* **B. One more M2 increment first** on generation breadth (e.g. seed generation with the
+  specialist's retrieval-plan purposes and checklist questions) and a stronger model tier
+  for testing only, then re-run live.
+* **C. Hybrid:** single pass for breadth, investigation loop only for findings that are
+  material or positive.
+
+My recommendation is **B**: breadth is the main live weakness, and it is cheap to measure
+with the harness now in place.
+
+R1a and R3a, proposed after the scripted HCA run, were implemented in `44270ad`:
 
 | # | Refinement | Fixes |
 |---|---|---|
 | R1a | Treat the borrower's names and aliases from the entity record (e.g. "HCA", "HCA Healthcare") as equivalent to "we / us / our" in the verbatim check. Still no paraphrase of content words, figures or negations. | H7 |
 | R3a | Require the testing stage to assess every passage returned by a contradictory search (schema rule), and flag only true omissions; a passage the model explicitly weighed is not re-flagged. Supported findings that rest on a passage the model also labelled supporting remain for the step 14 challenger. | R3 firing on every finding |
-
-Then:
-
-1. Approve M3 (investigation path for the other four Module 1 specialists and Agent 6,
-   behind the v3 roster), or ask for further M2 work first.
-2. A small budgeted live run for M1S2 only, to measure what scripts cannot: whether the
-   loop makes a real model surface more material issues, and the real token cost.
 
 The original R1–R5 proposal is kept below for reference; R1–R4 are implemented (§5) and
 R5 is still open.
@@ -291,4 +362,7 @@ R5 is still open.
 | `ceeb3bb` | M2 harness, scenarios, first results, report |
 | `c4edbeb` | Fixes R1–R4, re-run, adversarial tests |
 | `389b265` | HCA scenarios and scripts, committed before the first HCA run |
-| (this commit) | HCA results, HCA test, report |
+| `846b800` | HCA results, HCA test, report |
+| `44270ad` | R1a / R3a |
+| `771ed3d`, `2cf0e2f`, `19ec617` | Live harness and transcripts; fixes found by live runs |
+| (this commit) | Live results in this report |
