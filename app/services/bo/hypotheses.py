@@ -127,6 +127,16 @@ def quote_in_passage(quote: str, passage_text: str) -> bool:
     return len(needle) >= MIN_QUOTE_CHARS and needle in normalise(passage_text)
 
 
+_CHANGE_WORD = re.compile(
+    r"\b(?:reduc|decreas|increas|improv|declin|lower|higher|grew|grow|fell|rose|"
+    r"rise|risen|drop|cut|saved|saving)\w*", re.I)
+
+
+def shows_measured_outcome(text: str) -> bool:
+    """Heuristic: the passage reports a measured change (a figure + a change word)."""
+    return bool(re.search(r"\d", text or "")) and bool(_CHANGE_WORD.search(text or ""))
+
+
 def derive_admissibility(claim_type: ClaimType, disposition: Disposition) -> Admissibility:
     if disposition in (Disposition.REJECTED, Disposition.UNVERIFIED):
         return Admissibility.AUDIT_ONLY
@@ -566,10 +576,28 @@ class HypothesisValidator:
                 adjust("Mitigant existence has no verified quote; set to unverified.")
                 existence = "unverified"
             valid_outcomes = [e for e in outcome_ids if e in self._passages]
+            # Fix R4: an admitted passage is not outcome evidence unless it
+            # reports a measured change (lexical heuristic, flagged as such).
+            measured = [e for e in valid_outcomes
+                        if shows_measured_outcome(self._passages[e])]
             if effectiveness is MitigantEffectiveness.DEMONSTRATED and not valid_outcomes:
                 adjust("The mitigant is called demonstrated without evidence of a "
                        "measured outcome; set to unproven.")
                 effectiveness = MitigantEffectiveness.UNPROVEN
+            elif effectiveness is MitigantEffectiveness.DEMONSTRATED and not measured:
+                adjust("The passages cited as outcome evidence report no measured "
+                       "change; mitigant set to unproven.")
+                effectiveness = MitigantEffectiveness.UNPROVEN
+                flags.append({
+                    "rule_id": "mitigant_outcome_not_measured",
+                    "layer": "D_evidence_sufficiency", "effect": "qualify",
+                    "description": "The cited outcome passages contain no measured "
+                                   "change (a figure with an increase, decrease or "
+                                   "similar), so effectiveness is not shown.",
+                    "heuristic": True, "fo_handoff_variable": None,
+                    "correction": "Cite a passage that reports the measured result "
+                                  "of the mitigant, or call it unproven."})
+            valid_outcomes = measured
             mitigant = MitigantAssessment(
                 capability=str(mitigant_raw.get("capability") or ""),
                 existence=existence, effectiveness=effectiveness,

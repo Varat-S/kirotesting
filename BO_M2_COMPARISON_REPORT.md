@@ -3,9 +3,9 @@
 Branch `feat/bo-investigation-integration`. Architecture: [`BO_ARCHITECTURE_V3_SPEC.md`](BO_ARCHITECTURE_V3_SPEC.md).
 Background: [`BO_INTEGRATION_M0_ASSESSMENT.md`](BO_INTEGRATION_M0_ASSESSMENT.md).
 
-**Status: M1 complete. M2 offline comparison complete on a synthetic case; the HCA
-FY2025 arm has not been run because the filing is not yet in the workspace.
-Not ready for M3** — see §5.
+**Status: M1 complete. M2 offline comparison complete on a synthetic case, including
+the approved fixes R1–R4 (§5). The HCA FY2025 arm has not been run because the filing
+is not yet in the workspace. Ready for review; M3 should wait for the HCA arm** (§6).
 
 No paid model call was made. Every model response in this report is scripted.
 
@@ -42,7 +42,8 @@ No paid model call was made. Every model response in this report is scripted.
 | Baseline `0ccb429`, benchmark workbook + derived artefacts restored (local, git-ignored) | 1007 | 0 | 14 |
 | After Daniel import (`422af03`) | 1262 | 0 | 14 |
 | After M1 (`4c9e41a`) | 1294 | 0 | 14 |
-| After M2 (this commit) | 1302 | 0 | 14 |
+| After M2 (`ceeb3bb`) | 1302 | 0 | 14 |
+| After fixes R1–R4 (this commit) | 1309 | 0 | 14 |
 
 Remaining skips: no OCR engine (5), HCA 10-K not acquired (2), no PDF backend,
 `google-genai` not installed, live tests gated (`BO_LIVE_TEST`), and others that
@@ -134,10 +135,75 @@ available offline.
    path retrieves contradicting passages per hypothesis, so they are visible in the
    trace. If the testing model ignores them, nothing deterministic flags it.
 
-## 5. Recommendation and decisions for review
+The tables above are the first recorded run (commit `ceeb3bb`). §5 shows the same
+scenarios after the approved fixes.
 
-Do not start M3 with the investigation path as it is. Proposed next step (small,
-deterministic, re-measurable on the same pre-registered scenarios plus HCA):
+## 5. Fixes R1–R4 (approved 17 Oct) and re-run
+
+Same manifest, same scripts, same inputs. Nothing in the scenarios was changed.
+
+| Fix | Implementation | Where |
+|---|---|---|
+| R1 Verbatim reported-fact channel | A premise of a hypothesis classified `reported_fact` (not an outcome premise) is corroborated when its quote is verbatim in a cited passage and covers every content word, number and negation of the premise. A reported fact that is only partly corroborated becomes `unverified` (all or nothing). Inferences never use this channel. | `analysis/grounding.py` (`verbatim_fact_support`), `analysis/hypothesis_testing.py` |
+| R2 Fail-closed metric links | A metric link without a `claimed_concept` corroborates nothing. An inference whose material premises are all corroborated facts (none adjudicated) has not stated its inferential step and becomes `unverified`. | `analysis/hypothesis_testing.py` |
+| R3 Unassessed contradiction | Passages returned by a contradictory-evidence search that the testing model never labelled contradicting, irrelevant or contextual: flagged, listed in missing information, review required, `supported` capped at `qualified`. Investigation path only; the single-pass path has no per-hypothesis contradictory search to check against. | `bo/investigation.py` |
+| R4 Mitigant outcome evidence | "Demonstrated" needs a cited passage that reports a measured change (a figure plus a change word). Lexical heuristic, flagged `heuristic: true`. Applies to v2 and v3 single-pass validation. | `bo/hypotheses.py` |
+
+| Scenario | Kind | Single pass | Investigation, before | Investigation, after |
+|---|---|---|---|---|
+| S1 payer-category share | control | supported, usable | unverified | **supported, usable** |
+| S2 genuine quote → wrong inference | defect | unverified | unverified | unverified |
+| S3 correct number → irrelevant claim | defect | supported, **usable** | supported, **usable** | **unverified** |
+| S4 absence as safety | defect | unverified | unverified | unverified |
+| S5 mitigant without outcome | defect | supported, **usable**; mitigant now *unproven* (R4) | unverified | unverified; mitigant *unproven* |
+| S6 ignored contradiction | defect | supported, **usable** | unverified | unverified |
+| S7 no volume guarantee, terminable | control | qualified, usable | unverified | **qualified, usable** (R3 flag) |
+
+| Measure | Single pass | Investigation, before | Investigation, after |
+|---|---|---|---|
+| Defects held back (of 5) | 2 | 4 | **5** |
+| Correct findings usable (of 2) | 2 | 0 | **2** |
+| Parameters: correct accepted / defective held back | 1 / 0 of 2 | 0 / 2 of 2 | **1 / 2 of 2** |
+| Model calls; request / response chars | 1; 10,489 / 4,981 | 4; 46,863 / 23,520 | 4; 46,862 / 23,520 |
+
+Adversarial variants (tests in `tests/integration/test_bo_m2_comparison.py`):
+
+* S3 with the metric's concept copied correctly → still `unverified` (R2, undeclared inferential step).
+* S2 relabelled as a `reported_fact` → `unverified` (R1 all-or-nothing).
+* S7 with "do not" dropped from the premise → `unverified` (R1 negation check).
+* `verbatim_fact_support` unit cases: changed figure, non-verbatim quote, dropped negation, added word → all rejected.
+
+Reading this honestly:
+
+* On these seven scripted scenarios, the investigation path now does what the manifest
+  asked of it, and the single-pass path still lets three defects through. That shows the
+  investigation path's **deterministic controls** are stronger on these error types. It
+  does not show that it produces better analysis with a real model.
+* I wrote both the scenarios and the fixes. The fixes were designed after seeing the
+  first run, so the "after" column is not an independent test. The HCA arm, with
+  scenarios written before any further code changes, is the next real check.
+* The cost is about 4× the calls and 4.5× the request volume per specialist (scripted
+  sizes; real token counts need a live run).
+* R4 is lexical. A passage containing an unrelated figure and the word "increased" would
+  pass it. It is recorded as a heuristic flag, consistent with the other Layer C/D rules.
+* R3 caps conservatively: a passage the model labelled *supporting* still counts as
+  unweighed if a contradictory search returned it. This may cost some correct
+  `supported` findings (S7 became `qualified`). The intent is for the step 14 challenger
+  or a reviewer to resolve it.
+
+## 6. Recommendation and decisions for review
+
+Proposed order:
+
+1. Run the HCA FY2025 M1S2 arm: scenarios and manifest written on real passages first,
+   then both arms, no code changes in between.
+2. If HCA confirms the pattern, approve M3 (roll the investigation path out to the other
+   four specialists and Agent 6, behind the v3 roster).
+3. A small budgeted live run for M1S2 only, to measure what scripts cannot: whether the
+   loop makes a real model surface more material issues, and the real token cost.
+
+The original R1–R5 proposal is kept below for reference; R1–R4 are implemented (§5) and
+R5 is still open.
 
 | # | Change | Addresses |
 |---|---|---|
@@ -147,15 +213,7 @@ deterministic, re-measurable on the same pre-registered scenarios plus HCA):
 | R4 | **Baseline mitigant check**: "demonstrated" needs an outcome-type passage, not merely an admitted one (apply to the single-pass validator too). | S5 baseline |
 | R5 | Optional, needs budget: an LLM entailment judge (supported by Daniel's grounding evaluator) evaluated live against these scenarios. | Narrative entailment generally |
 
-Decisions requested:
-
-1. Approve R1–R4 as the next increment (still M2), or choose differently.
-2. HCA: once the filing is in `examples/healthcare/hca-2025/filing/`, I will write the
-   HCA M1S2 scenario scripts (anchored on real passages) and re-run both arms.
-3. Live evaluation: a small budgeted run would test what this offline comparison cannot,
-   namely whether the investigation loop makes the model find more material issues.
-
-## 6. Remaining risks and assumptions
+## 7. Remaining risks and assumptions
 
 * Synthetic case only; seven scenarios; I wrote both arms' scripts. The "equally wrong
   model" design limits bias, but it is not an independent evaluation.
@@ -168,11 +226,12 @@ Decisions requested:
   would have been triggered by this script.
 * Agent 6, challenge, scoring and narrative were not exercised (M3/M4).
 
-## 7. Commits
+## 8. Commits
 
 | Commit | Content |
 |---|---|
 | `799b227` | M0 assessment |
 | `422af03` | Selective import of Daniel's services and tests |
 | `4c9e41a` | M1 |
-| (this commit) | M2 harness, scenarios, results, report |
+| `ceeb3bb` | M2 harness, scenarios, first results, report |
+| (this commit) | Fixes R1–R4, re-run, adversarial tests |

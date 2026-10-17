@@ -39,6 +39,7 @@ from pydantic import ValidationError
 
 from app.schemas.llm import (
     AnalyticalClaim,
+    ClaimClassification,
     ClaimKind,
     CreditHypothesis,
     CreditHypothesisSet,
@@ -63,6 +64,7 @@ from app.services.analysis.grounding import (
     EvidenceIndex,
     EvidenceItem,
     GroundingEvaluator,
+    verbatim_fact_support,
 )
 from app.services.audit.log import ActorType, AuditLog
 
@@ -447,6 +449,13 @@ class HypothesisTestingService:
                 "approved grounding item"
             ]
         notes: list[str] = []
+        # Fix R2: the premise must SAY which concept it relies on; a link without
+        # a claimed concept would let any approved number corroborate any text.
+        if not premise.claimed_concept:
+            return None, [
+                f"premise links metric {premise.grounding_metric_id!r} without a "
+                "claimed_concept; a metric corroborates only the concept it measures"
+            ]
         # Required concept metadata: a metric with no declared concept cannot be
         # used to corroborate an economic proposition (fail-closed).
         if not item.concept:
@@ -535,6 +544,7 @@ class HypothesisTestingService:
         inputs: HypothesisTestingInputs,
         passages: dict[str, str],
         verified_adjudications: tuple = (),
+        hypothesis: CreditHypothesis | None = None,
     ) -> list[PremiseCorroboration]:
         """Compute per-premise corroboration (grounding OR AUTHORISED adjudication).
 
@@ -550,6 +560,16 @@ class HypothesisTestingService:
             notes: list[str] = list(link_notes)
             if grounding is not None and grounding.is_grounded:
                 basis.append("deterministic_grounding")
+            # Fix R1: a REPORTED FACT premise restated from a verified verbatim
+            # quote is corroborated by the source itself. Never for an outcome
+            # premise or for a hypothesis classified as anything but a fact.
+            if (hypothesis is not None
+                    and hypothesis.classification is ClaimClassification.REPORTED_FACT
+                    and not premise.is_outcome_premise
+                    and any(verbatim_fact_support(premise.premise, premise.grounding_claim,
+                                                  passages[pid])
+                            for pid in premise.supporting_passage_ids if pid in passages)):
+                basis.append("verbatim_reported_fact")
             adj = self._verified_adjudication_for(
                 verified_adjudications, result.hypothesis_id, premise.premise_id
             )
@@ -706,7 +726,7 @@ class HypothesisTestingService:
         # EVERY MATERIAL premise is corroborated -- one unrelated grounded fact
         # can no longer carry the whole hypothesis.
         premise_corroboration = self._corroborate_premises(
-            result, inputs, passages, verified_adjudications
+            result, inputs, passages, verified_adjudications, hypothesis
         )
         grounding = [pc.grounding for pc in premise_corroboration if pc.grounding]
         material_pcs = [pc for pc in premise_corroboration if pc.material]
@@ -797,6 +817,29 @@ class HypothesisTestingService:
                 "PARTIALLY_SUPPORTED requires an independently corroborated "
                 "premise; only model judgement present -> UNVERIFIED"
             )
+
+        # Fix R1: a reported fact is either in the source or it is not. Partial
+        # corroboration of a "fact" means part of it is not a fact.
+        if (hypothesis.classification is ClaimClassification.REPORTED_FACT
+                and effective is _SUPPORTING.PARTIALLY_SUPPORTED):
+            effective = _SUPPORTING.UNVERIFIED
+            reasons.append(
+                "reported fact only partly corroborated by its sources -> UNVERIFIED")
+
+        # Fix R2: an inference whose material premises are ALL corroborated facts
+        # (and none adjudicated) never states its inferential step as a premise.
+        # Correct facts do not establish an unstated inference.
+        adjudicated = any("human_adjudication" in pc.corroboration_basis
+                          for pc in premise_corroboration)
+        if (hypothesis.classification in (ClaimClassification.INFERENCE,
+                                          ClaimClassification.ASSUMPTION)
+                and all_material_corroborated and not adjudicated
+                and effective in (_SUPPORTING.SUPPORTED,
+                                  _SUPPORTING.PARTIALLY_SUPPORTED)):
+            effective = _SUPPORTING.UNVERIFIED
+            reasons.append(
+                "inference rests only on corroborated factual premises; the "
+                "inferential step is not declared as a premise -> UNVERIFIED")
 
         # An outcome/causal premise the model labelled established, but which no
         # independent channel corroborated, is a consequential model assertion.

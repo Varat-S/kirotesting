@@ -275,3 +275,43 @@ class GroundingEvaluator:
             adjudicated=True,
             detail=detail or "Human-adjudicated grounding verdict.",
         )
+
+
+# -- verbatim reported-fact support (BO roster v3, fix R1) ---------------------
+
+_VERBATIM_STOP = frozenset(
+    "a an and are as at be by for from has have in is it its of on or that the "
+    "their this to was were which with our we".split())
+_NEGATIONS = frozenset({"not", "no", "never", "nor", "without"})
+_MIN_VERBATIM_CHARS = 20
+
+
+def _norm(text: str) -> str:
+    text = (text or "").replace("\u2019", "'").replace("\u201c", '"').replace("\u201d", '"')
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def _content(text: str) -> tuple[set[str], set[str], set[str]]:
+    """(stemmed content words, numbers, negations) of ``text``."""
+    words = re.findall(r"[a-z][a-z'-]+", _norm(text))
+    stems = {w[:6] for w in words if w not in _VERBATIM_STOP and w not in _NEGATIONS}
+    numbers = set(re.findall(r"\d+(?:\.\d+)?", _norm(text).replace(",", "")))
+    return stems, numbers, {w for w in words if w in _NEGATIONS}
+
+
+def verbatim_fact_support(statement: str, quote: str | None, passage_text: str) -> bool:
+    """True when ``quote`` is verbatim in the passage AND covers ``statement``.
+
+    Establishes SOURCE AUTHENTICITY of a restated fact, nothing more: every
+    content word (light stem), every number and every negation in the statement
+    must appear in the verbatim quote. A paraphrase that adds a word, a figure or
+    drops/adds a negation does not qualify. Never use it for an inference or an
+    outcome: a genuine quotation alone does not establish an inferential step.
+    """
+    if not quote or len(_norm(quote)) < _MIN_VERBATIM_CHARS:
+        return False
+    if _norm(quote) not in _norm(passage_text):
+        return False
+    s_words, s_nums, s_neg = _content(statement)
+    q_words, q_nums, q_neg = _content(quote)
+    return bool(s_words) and s_words <= q_words and s_nums <= q_nums and s_neg == q_neg

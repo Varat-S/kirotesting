@@ -285,6 +285,23 @@ def to_bo_items(result: InvestigationResult, spec: BoAgentSpec) -> list[dict[str
                 or not g.independently_corroborated):
             disposition = Disposition.QUALIFIED
             notes.append("supported_without_deterministic_corroboration")
+        # Fix R3: passages a contradictory-evidence search returned for this
+        # hypothesis that the testing model never weighed as contradicting,
+        # irrelevant or contextual. Their relevance is unknown, so the finding
+        # cannot stand as supported and a reviewer must look at them.
+        weighed = {a.passage_id for a in g.evidence_assessments if a.assessment in (
+            EvidenceAssessmentKind.CONTRADICTS_PREMISE, EvidenceAssessmentKind.IRRELEVANT,
+            EvidenceAssessmentKind.CONTEXTUAL)}
+        contested = sorted({
+            rp.passage.passage_id
+            for ex in (result.bundle.by_hypothesis.get(h.hypothesis_id, [])
+                       if result.bundle else [])
+            if ex.enquiry.requirement_kind.value == "contradictory"
+            for rp in ex.result.ranked_passages} - weighed)
+        if contested:
+            notes.append("unassessed_contradictory_candidates")
+            if disposition is Disposition.SUPPORTED:
+                disposition = Disposition.QUALIFIED
         finding = _finding_for(result, h.hypothesis_id)
         supporting = [a.passage_id for a in g.evidence_assessments
                       if a.assessment in _SUPPORTING]
@@ -325,6 +342,8 @@ def to_bo_items(result: InvestigationResult, spec: BoAgentSpec) -> list[dict[str
                 quoted_values.append(dict(trace))
         missing = list(dict.fromkeys([
             *h.missing_information, *g.unresolved_evidence_requirements,
+            *([f"Contradictory-search passages not assessed: {', '.join(contested)}"]
+              if contested else []),
             *(finding.impact.missing_information if finding else [])]))
         materiality = (finding.materiality.materiality.value if finding
                        else BoMateriality.LOW.value)
@@ -347,7 +366,7 @@ def to_bo_items(result: InvestigationResult, spec: BoAgentSpec) -> list[dict[str
             "missing_information": missing,
             "mitigant": mitigant,
             "review_required": bool(
-                g.human_review_required
+                contested or g.human_review_required
                 or (finding and finding.materiality.requires_human_review)),
             "_adapter_notes": notes,
         })

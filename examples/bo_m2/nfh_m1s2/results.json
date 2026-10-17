@@ -2,25 +2,15 @@
  "arms": {
   "investigation": {
    "arm": "investigation",
-   "controls_as_expected": 0,
+   "controls_as_expected": 2,
    "controls_total": 2,
-   "controls_usable": 0,
-   "defects_as_expected": 4,
-   "defects_held_back": 4,
+   "controls_usable": 2,
+   "defects_as_expected": 5,
+   "defects_held_back": 5,
    "defects_total": 5,
    "failure": null,
    "issues": [],
    "parameter_changes": [
-    {
-     "detail": "None of the hypotheses cited for this value survived validation as a usable finding.",
-     "hypothesis_ids": [
-      "M1S2-H001"
-     ],
-     "original_status": "ok",
-     "original_value": "concentrated_payer_categories",
-     "parameter_id": "customer_dependence_assessment",
-     "reason": "no_validated_supporting_hypothesis"
-    },
     {
      "detail": "None of the hypotheses cited for this value survived validation as a usable finding.",
      "hypothesis_ids": [
@@ -32,14 +22,14 @@
      "reason": "no_validated_supporting_hypothesis"
     },
     {
-     "detail": "'high' asserts something specific about this company, but no linked hypothesis is an established, company-specific finding (they are: qualified_narrative/deterministic_calculation).",
+     "detail": "None of the hypotheses cited for this value survived validation as a usable finding.",
      "hypothesis_ids": [
       "M1S2-H003"
      ],
      "original_status": "ok",
      "original_value": "high",
      "parameter_id": "switching_cost_assessment",
-     "reason": "needs_company_specific_evidence"
+     "reason": "no_validated_supporting_hypothesis"
     }
    ],
    "parameters": {
@@ -48,8 +38,8 @@
      "value": null
     },
     "customer_dependence_assessment": {
-     "status": "unavailable",
-     "value": null
+     "status": "ok",
+     "value": "concentrated_payer_categories"
     },
     "switching_cost_assessment": {
      "status": "unavailable",
@@ -58,29 +48,27 @@
    },
    "scenarios": [
     {
-     "admissibility": "audit_only",
-     "as_expected": false,
+     "admissibility": "established",
+     "as_expected": true,
      "contradicting_evidence": 0,
      "contradictory_enquiry_hits": 0,
-     "disposition": "unverified",
+     "disposition": "supported",
      "hypothesis_id": "M1S2-H001",
      "investigation": {
       "adapter_notes": [],
-      "downgrade_reasons": [
-       "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Medicare and Medicaid accounted for 45% of revenues']"
-      ],
-      "effective_status": "unverified",
-      "independently_corroborated": false,
+      "downgrade_reasons": [],
+      "effective_status": "supported",
+      "independently_corroborated": true,
       "proposed_status": "supported"
      },
      "kind": "control",
      "missing_information": 0,
      "mitigant_effectiveness": null,
      "present": true,
-     "presentation": "on_demand",
+     "presentation": "display",
      "review_flags": [],
      "scenario": "S1_control_payer_category_share",
-     "usable": false
+     "usable": true
     },
     {
      "admissibility": "audit_only",
@@ -90,7 +78,9 @@
      "disposition": "unverified",
      "hypothesis_id": "M1S2-H002",
      "investigation": {
-      "adapter_notes": [],
+      "adapter_notes": [
+       "unassessed_contradictory_candidates"
+      ],
       "downgrade_reasons": [
        "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Contracts are multi-year agreements that set negotiated rates', 'The agreements commit payers to patient volumes']"
       ],
@@ -99,7 +89,7 @@
       "proposed_status": "supported"
      },
      "kind": "defect",
-     "missing_information": 0,
+     "missing_information": 1,
      "mitigant_effectiveness": null,
      "present": true,
      "presentation": "on_demand",
@@ -108,27 +98,31 @@
      "usable": false
     },
     {
-     "admissibility": "qualified_narrative",
-     "as_expected": false,
+     "admissibility": "audit_only",
+     "as_expected": true,
      "contradicting_evidence": 0,
      "contradictory_enquiry_hits": 2,
-     "disposition": "supported",
+     "disposition": "unverified",
      "hypothesis_id": "M1S2-H003",
      "investigation": {
-      "adapter_notes": [],
-      "downgrade_reasons": [],
-      "effective_status": "supported",
-      "independently_corroborated": true,
+      "adapter_notes": [
+       "unassessed_contradictory_candidates"
+      ],
+      "downgrade_reasons": [
+       "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Texas facilities generated 30% of consolidated revenues']"
+      ],
+      "effective_status": "unverified",
+      "independently_corroborated": false,
       "proposed_status": "supported"
      },
      "kind": "defect",
-     "missing_information": 0,
+     "missing_information": 1,
      "mitigant_effectiveness": null,
      "present": true,
-     "presentation": "display",
+     "presentation": "on_demand",
      "review_flags": [],
      "scenario": "S3_correct_number_irrelevant_claim",
-     "usable": true
+     "usable": false
     },
     {
      "admissibility": "audit_only",
@@ -138,7 +132,9 @@
      "disposition": "unverified",
      "hypothesis_id": "M1S2-H004",
      "investigation": {
-      "adapter_notes": [],
+      "adapter_notes": [
+       "unassessed_contradictory_candidates"
+      ],
       "downgrade_reasons": [
        "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['No individual payer exceeds 10% of revenues']"
       ],
@@ -147,7 +143,7 @@
       "proposed_status": "supported"
      },
      "kind": "defect",
-     "missing_information": 0,
+     "missing_information": 1,
      "mitigant_effectiveness": null,
      "present": true,
      "presentation": "on_demand",
@@ -163,7 +159,9 @@
      "disposition": "unverified",
      "hypothesis_id": "M1S2-H005",
      "investigation": {
-      "adapter_notes": [],
+      "adapter_notes": [
+       "unassessed_contradictory_candidates"
+      ],
       "downgrade_reasons": [
        "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Multi-year agreements exist', 'Multi-year agreements have reduced contract terminations']"
       ],
@@ -172,7 +170,7 @@
       "proposed_status": "supported"
      },
      "kind": "defect",
-     "missing_information": 0,
+     "missing_information": 1,
      "mitigant_effectiveness": "unproven",
      "present": true,
      "presentation": "on_demand",
@@ -188,7 +186,9 @@
      "disposition": "unverified",
      "hypothesis_id": "M1S2-H006",
      "investigation": {
-      "adapter_notes": [],
+      "adapter_notes": [
+       "unassessed_contradictory_candidates"
+      ],
       "downgrade_reasons": [
        "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Payers are unlikely to terminate their contracts']"
       ],
@@ -197,7 +197,7 @@
       "proposed_status": "supported"
      },
      "kind": "defect",
-     "missing_information": 0,
+     "missing_information": 1,
      "mitigant_effectiveness": null,
      "present": true,
      "presentation": "on_demand",
@@ -206,34 +206,36 @@
      "usable": false
     },
     {
-     "admissibility": "audit_only",
-     "as_expected": false,
+     "admissibility": "qualified_narrative",
+     "as_expected": true,
      "contradicting_evidence": 0,
      "contradictory_enquiry_hits": 2,
-     "disposition": "unverified",
+     "disposition": "qualified",
      "hypothesis_id": "M1S2-H007",
      "investigation": {
-      "adapter_notes": [],
-      "downgrade_reasons": [
-       "proposed SUPPORTED downgraded to unverified: material premise(s) lack independent corroboration: ['Agreements do not guarantee minimum volumes and are terminable on notice']"
+      "adapter_notes": [
+       "unassessed_contradictory_candidates"
       ],
-      "effective_status": "unverified",
-      "independently_corroborated": false,
+      "downgrade_reasons": [],
+      "effective_status": "supported",
+      "independently_corroborated": true,
       "proposed_status": "supported"
      },
      "kind": "control",
-     "missing_information": 0,
+     "missing_information": 1,
      "mitigant_effectiveness": null,
      "present": true,
-     "presentation": "on_demand",
-     "review_flags": [],
+     "presentation": "display",
+     "review_flags": [
+      "generic_risk_disclosure_only"
+     ],
      "scenario": "S7_control_terminable_no_volume_commitment",
-     "usable": false
+     "usable": true
     }
    ],
    "usage": {
     "model_calls": 4,
-    "request_chars": 46863,
+    "request_chars": 46862,
     "response_chars": 23520
    },
    "valid": true
@@ -334,10 +336,12 @@
      "hypothesis_id": "M1S2-H005",
      "kind": "defect",
      "missing_information": 0,
-     "mitigant_effectiveness": "demonstrated",
+     "mitigant_effectiveness": "unproven",
      "present": true,
      "presentation": "display",
-     "review_flags": [],
+     "review_flags": [
+      "mitigant_outcome_not_measured"
+     ],
      "scenario": "S5_mitigant_without_outcome",
      "usable": true
     },
@@ -384,9 +388,9 @@
  },
  "case_id": "NFH_BO",
  "comparison_version": "m2-comparison-1",
- "identical_inputs_fingerprint": "6c7a6b63dd348e5e61eec19b29db8fe29bdc4ebac003f31815874cc0d055e004",
+ "identical_inputs_fingerprint": "0a4022624696abf293c33ffcd488e086f78be6c48d4adb4023b7441b5bc16f30",
  "investigation": {
-  "material_gaps": 16,
+  "material_gaps": 17,
   "out_of_scope": [
    {
     "dimension": "operating_model_cost_resilience",
@@ -422,7 +426,7 @@
     "state": "completed"
    },
    {
-    "detail": "progression=blocked_pending_evidence; 16 gap(s)",
+    "detail": "progression=blocked_pending_evidence; 17 gap(s)",
     "stage": "12_completeness",
     "state": "completed"
    },
