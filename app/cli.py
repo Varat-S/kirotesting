@@ -133,6 +133,13 @@ def main(argv=None):
         help="Use the configured live provider (LLM_PROVIDER); incurs model cost",
     )
     bo_run.add_argument("--pdf", action="store_true")
+    bo_run.add_argument(
+        "--roster", choices=("v2", "v3"), default="v2",
+        help=("BO agent roster. 'v2' is the legacy six-specialist roster (default, "
+              "unchanged). 'v3' is the four-module eight-primary roster with the "
+              "stronger module-completeness and Agent 6 gates. The active roster is "
+              "always reported in the run summary."),
+    )
     bo_spec = commands.add_parser(
         "run-bo-specialists",
         help="Run the six BO specialists and validators only; write the demo reports",
@@ -480,6 +487,7 @@ def _run_bo_case(session, database, args):
         manifest = load_manifest(args.manifest)
     result = BusinessOverviewRunner(
         session, backend=backend, data_root=database.parent, output_root=args.output,
+        bo_roster=getattr(args, "roster", "v2"),
     ).run_case(
         args.case_id, package=package, produce_pdf=args.pdf, manifest=manifest,
     )
@@ -495,6 +503,11 @@ def _run_bo_case(session, database, args):
         "analysis_run_id": result.analysis_run_id,
         "scope": "business_overview_only",
         "execution_mode": result.execution_mode,
+        # A-1: report the roster that actually ran, taken from the recorded
+        # registry version, so a run can never be silently misattributed to a
+        # different architecture than the one that produced it.
+        "bo_roster": getattr(args, "roster", "v2"),
+        "agent_registry_version": (result.audit or {}).get("registry", {}).get("version"),
         "conclusion_status": result.conclusion_status,
         "human_review_status": "pending",
         "handoff_id": result.handoff["handoff_id"],
