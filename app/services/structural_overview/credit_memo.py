@@ -67,7 +67,8 @@ def calculate_financials(packet: FinancialOverview) -> list[FinancialCalculation
 def build_partial_assessment(bo_payload: dict, fo_payload: dict) -> PartialCreditAssessment:
     bo = adapt_business_overview(bo_payload)
     fo = FinancialOverview.model_validate(fo_payload)
-    if fo.case_id != bo.borrower.case_id or fo.borrower_name != bo.borrower.legal_name:
+    if (fo.case_id != bo.borrower.case_id
+            or fo.borrower_name != bo.borrower.reporting_entity_name):
         raise ValueError("BO/FO borrower or case identity mismatch")
     if bo.borrower.as_of_date and str(fo.periods[-1].fiscal_year) != bo.borrower.as_of_date[:4]:
         raise ValueError("FO latest fiscal year must match the BO as-of year")
@@ -89,12 +90,63 @@ def build_partial_assessment(bo_payload: dict, fo_payload: dict) -> PartialCredi
             evidence_ids=sorted({e for f in matched for e in f.supporting_evidence_ids}),
             limitations=("Simulation-dependent relationship. Synthetic FO does not increase BO certainty. " if synthetic else "Supplied FO inputs require independent source and governance verification. ") + "No independent confirmation or causal attribution; original BO qualifications and human review remain in force.",
         ))
+    borrower_identified = bo.borrower.identification_status == "identified"
     relationships = [StructuralItem(
-        topic="Borrower legal identity", status="partial", description=bo.borrower.legal_name + "; name supplied by BO, legal obligor verification outstanding.",
-        source_refs=[bo.source_handoff_id], provenance="bo_analytical_finding",
+        topic="Borrower legal identity",
+        status="partial" if borrower_identified else "unavailable",
+        description=(
+            f"{bo.borrower.legal_name} ({bo.borrower.entity_id}); governed M3 identification. "
+            "SO legal verification remains outstanding."
+            if borrower_identified else
+            (bo.borrower.identification_limitation
+             or "Transaction borrower is unavailable; SO must establish the obligor.")
+        ),
+        source_refs=[bo.source_handoff_id],
+        provenance="bo_analytical_finding" if borrower_identified else "unavailable",
     )]
-    for topic in ("Parent/subsidiary and ownership relationships", "Operating segments and relevant legal entities",
-                  "Debt composition and existing obligations", "Maturity profile", "Guarantees and collateral", "Facility terms and covenants"):
+    entities = bo.corporate_structure.legal_entities
+    ownership = bo.corporate_structure.ownership_relationships
+    cash_locations = bo.corporate_structure.cash_flow_locations
+    relationships.extend([
+        StructuralItem(
+            topic="Material legal entities",
+            status="partial" if entities else "unavailable",
+            description=(
+                "; ".join(
+                    f"{entity.legal_name} ({entity.classification}; {entity.verification_status})"
+                    for entity in entities
+                ) if entities else "No validator-admitted legal entities are available."
+            ),
+            source_refs=[entity.entity_id for entity in entities],
+            provenance="bo_analytical_finding" if entities else "unavailable",
+        ),
+        StructuralItem(
+            topic="Parent/subsidiary and ownership relationships",
+            status="partial" if ownership else "unavailable",
+            description=(
+                "; ".join(
+                    f"{edge.parent_entity_id} -> {edge.subsidiary_entity_id} ({edge.confirmation_status})"
+                    for edge in ownership
+                ) if ownership else "No validator-admitted ownership edges are available."
+            ),
+            source_refs=[edge.relationship_id for edge in ownership],
+            provenance="bo_analytical_finding" if ownership else "unavailable",
+        ),
+        StructuralItem(
+            topic="Cash-flow locations",
+            status="partial" if cash_locations else "unavailable",
+            description=(
+                "; ".join(
+                    f"{item.entity_id}: {item.measure_type} ({item.reporting_scope}; {item.provenance_status})"
+                    for item in cash_locations
+                ) if cash_locations else "No validator-admitted cash-flow locations are available."
+            ),
+            source_refs=[item.cash_flow_id for item in cash_locations],
+            provenance="bo_analytical_finding" if cash_locations else "unavailable",
+        ),
+    ])
+    for topic in ("Debt composition and existing obligations", "Maturity profile",
+                  "Guarantees and collateral", "Facility terms and covenants"):
         relationships.append(StructuralItem(topic=topic, status="unavailable",
             description="Unavailable in the integrated contracts; documentary verification required.", provenance="unavailable"))
     current = fo.periods[-1]
@@ -113,7 +165,16 @@ def build_partial_assessment(bo_payload: dict, fo_payload: dict) -> PartialCredi
     }
     sections = dict(bo.downstream_dependencies.sections)
     sections["financial_overview"] = DownstreamSection(status="partial", reason="Synthetic fixture only; real financial analysis unavailable." if synthetic else "FO packet supplied; source admission and governance must be independently verified.", source_ids=[fo.source_run_id])
-    sections["structural_overview"] = DownstreamSection(status="partial", reason="Replaceable deterministic scaffold; legal and facility inputs unavailable.")
+    sections["structural_overview"] = DownstreamSection(
+        status="partial" if bo.corporate_structure.source_status == "validated" else "unavailable",
+        reason=(
+            "Governed M3 corporate structure is present; obligor, ranking, restrictions, and facility terms still require SO verification."
+            if bo.corporate_structure.source_status == "validated" else
+            "No governed M3 corporate structure is available; legal and facility analysis remain unavailable."
+        ),
+        source_ids=[bo.source_handoff_id]
+        if bo.corporate_structure.source_status == "validated" else [],
+    )
     sections["facility_underwriting"] = DownstreamSection(status="blocked", reason=gaps["facility_underwriting"][0])
     sections["human_approval"] = DownstreamSection(status="blocked", reason="BO review pending; full credit assessment incomplete.")
     data = bo.model_dump(mode="json")

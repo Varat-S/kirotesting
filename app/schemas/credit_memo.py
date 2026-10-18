@@ -127,7 +127,8 @@ class PartialCreditAssessment(StructuralOverviewAssessment):
         if "INCOMPLETE" not in self.disclosure or (synthetic and "simulated financial information" not in self.disclosure):
             raise ValueError("Incomplete/synthetic disclosure is required")
         if (self.financial_overview.case_id != self.borrower.case_id
-                or self.financial_overview.borrower_name != self.borrower.legal_name):
+                or self.financial_overview.borrower_name
+                != self.borrower.reporting_entity_name):
             raise ValueError("BO/FO identity mismatch")
         metric_refs = {f"{c.period}:{c.metric_id}" for c in self.financial_calculations}
         findings = [f for group in (self.business_assessment.business_model_and_revenue_drivers,

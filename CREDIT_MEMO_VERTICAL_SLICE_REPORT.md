@@ -1,5 +1,9 @@
 # Mixed real/simulated credit memo vertical slice
 
+> Historical report for the accepted-handoff prototype. The current live-agent
+> BO + simulated FO + governed M3/SO test is documented in
+> `BO_FO_SO_VERTICAL_SLICE_REPORT.md`.
+
 ## Result
 
 The offline pipeline produces a validated partial assessment, deterministic HTML, and an actual six-page PDF for HCA Healthcare, Inc. It combines the existing live BO handoff with invented FO inputs and a deterministic, replaceable Structural Overview scaffold. Every PDF page carries an incompleteness/simulation notice. There is no final obligor rating, facility rating, credit decision, or human approval.
