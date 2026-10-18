@@ -147,6 +147,49 @@ def test_all_four_modules_agent6_synthesis_challenge_score_and_report(db_session
     assert len(backend.requests) >= 11
 
 
+def test_validated_m3_extension_flows_through_module_conclusion_and_handoff(
+        db_session, tmp_path):
+    script = _script()
+    evidence = {"$evidence": "executive officers"}
+    script["m3_corporate_management"]["m3_assessment"] = {
+        "schema_version": "bo-m3-corporate-assessment-1.0",
+        "borrower_identification": {
+            "status": "unavailable", "entity_id": None, "evidence_ids": [],
+            "limitation": "No proposed borrowing entity is identified.",
+        },
+        "legal_entities": [{
+            "entity_id": "reporting-parent", "legal_name": "Example Parent",
+            "jurisdiction": None, "classification": "reporting_parent",
+            "verification_status": "verified", "evidence_ids": [evidence],
+            "materiality_reason": "Reporting entity relevant to governance.",
+        }],
+        "ownership_relationships": [], "cash_flow_locations": [],
+        "cash_transfer_relationships": [], "structural_credit_findings": [],
+        "management_assessments": [{
+            "observation_id": "MO1", "management_id": "board",
+            "legal_name": "Board of Directors", "role": "Board", "effective_from": None,
+            "effective_to": None, "dimension": "competence",
+            "hypothesis": "The board oversees succession planning.",
+            "credit_mechanism": "Succession oversight may reduce leadership continuity risk.",
+            "supporting_evidence_ids": [evidence], "contradicting_evidence_ids": [],
+            "supporting_evidence_investigated": True,
+            "contradictory_evidence_investigated": True,
+            "disposition": "qualified", "admissibility": "qualified_narrative",
+            "confidence": "medium", "materiality": "medium", "missing_information": [],
+            "validation_reasons": [],
+        }],
+        "governance_screening": [],
+        "information_gaps": ["Management outcomes are not disclosed."],
+        "downstream_dependencies": [],
+    }
+    result, _ = _run(db_session, tmp_path, script=script)
+    module = result.handoff["module_conclusions"]["M3"]
+    assert module["m3_assessment_status"] == "validated"
+    assert module["m3_assessment"]["schema_version"] == \
+        "bo-m3-corporate-assessment-1.0"
+    assert module["m3_assessment"]["model_proposal"]["legal_entities"]
+
+
 def test_incomplete_module_blocks_agent6_and_remains_visible(db_session, tmp_path):
     script = _script()
     script["m1_pricing_power"]["hypotheses"][0][

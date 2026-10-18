@@ -52,6 +52,31 @@ CHALLENGE_OUTCOMES = [
 _STR_LIST = {"type": "array", "items": {"type": "string"}}
 _NULLABLE_STR = {"type": ["string", "null"]}
 
+_M3_ASSESSMENT: dict[str, Any] = {
+    "type": "object",
+    "required": [
+        "schema_version", "borrower_identification", "legal_entities",
+        "ownership_relationships", "cash_flow_locations",
+        "cash_transfer_relationships", "structural_credit_findings",
+        "management_assessments", "governance_screening", "information_gaps",
+        "downstream_dependencies",
+    ],
+    "properties": {
+        "schema_version": {"type": "string", "enum": ["bo-m3-corporate-assessment-1.0"]},
+        "borrower_identification": {"type": "object"},
+        "legal_entities": {"type": "array", "items": {"type": "object"}},
+        "ownership_relationships": {"type": "array", "items": {"type": "object"}},
+        "cash_flow_locations": {"type": "array", "items": {"type": "object"}},
+        "cash_transfer_relationships": {"type": "array", "items": {"type": "object"}},
+        "structural_credit_findings": {"type": "array", "items": {"type": "object"}},
+        "management_assessments": {"type": "array", "items": {"type": "object"}},
+        "governance_screening": {"type": "array", "items": {"type": "object"}},
+        "information_gaps": _STR_LIST,
+        "downstream_dependencies": {"type": "array", "items": {"type": "object"}},
+    },
+    "additionalProperties": True,
+}
+
 _QUOTED_VALUE: dict[str, Any] = {
     "type": "object",
     "required": ["parameter_result_id", "value"],
@@ -187,6 +212,7 @@ BO_NARROW_JSON_SCHEMA: dict[str, Any] = {
             },
         },
         "missing_information": _STR_LIST,
+        "m3_assessment": _M3_ASSESSMENT,
     },
     "additionalProperties": True,
 }
@@ -554,12 +580,50 @@ _AGENT_BRIEFS.update({
     ),
     "M3": (
         "You are the Corporate Structure & Senior Management specialist (Business "
-        "Overview Module 3).\nAssess management quality, key-person dependency, "
-        "governance concerns, corporate and operating-entity structure, litigation, "
-        "and material company-specific events. Generic governance policies do not "
-        "prove effective governance or management quality. Distinguish current "
-        "proceedings, contingent exposures, and hypothetical risks. Record missing "
-        "management, ownership, succession, and governance evidence explicitly."
+        "Overview Module 3). Produce the normal hypotheses AND one m3_assessment "
+        "using schema_version bo-m3-corporate-assessment-1.0.\n"
+        "The m3_assessment contains borrower_identification, legal_entities, "
+        "ownership_relationships, cash_flow_locations, cash_transfer_relationships, "
+        "structural_credit_findings, management_assessments, governance_screening, "
+        "information_gaps and downstream_dependencies. Use stable IDs. Every graph "
+        "edge references an entity ID and carries evidence_ids plus verified, qualified, "
+        "unverified or disputed status. Every structural/governance finding and "
+        "management observation carries supporting_evidence_investigated and "
+        "contradictory_evidence_investigated booleans, evidence IDs, the existing BO "
+        "disposition/admissibility/confidence/materiality states, and a causal or credit "
+        "mechanism. Do not emit validation_issues, rejected_items or model_proposal; "
+        "Validator 7 creates them.\n"
+        "Each cash_flow_location must label cash_flow_roles separately as "
+        "operating_cash_generator, legal_cash_controller, cash_holder or "
+        "debt_service_obligor. Each transfer must label transfer_evidence_state as "
+        "capacity_only, documented_actual_transfer, proposed or unknown; capacity is "
+        "not evidence of an actual distribution.\n"
+        "Corporate and cash-flow structure: identify only material parents, holding "
+        "companies, operating subsidiaries, joint ventures, partially owned entities "
+        "and the proposed borrower. Do not assume the reporting parent is the borrower. "
+        "If no borrower is evidenced, set borrower status to unavailable and keep all "
+        "borrower-specific findings unverified. Keep separate the entity generating "
+        "cash, controlling it, capable of receiving a transfer, actually receiving a "
+        "distribution, and obligated to service debt. Never allocate consolidated cash "
+        "flow to a subsidiary, infer unrestricted access from ownership/control, or "
+        "state a potential restriction as established. Describe preliminary structural "
+        "subordination only as a hypothesis requiring downstream legal verification.\n"
+        "Management competence: examine relevant experience, demonstrated execution, "
+        "continuity, succession, key-person dependence and performance through "
+        "disruptions. Tenure, qualifications or company growth alone do not demonstrate "
+        "competence; distinguish company outcomes from outcomes attributable to leaders.\n"
+        "Credibility and integrity: compare representations with outcomes and examine "
+        "restatements, established regulatory findings, conflicts, transparency, control "
+        "failures, remediation and accountability. Separate allegations, investigations, "
+        "established findings and responses. Absence of misconduct evidence is not proof "
+        "of integrity. Avoid personality judgments.\n"
+        "Screen governance, audit/reporting issues, related-party transfers, conflicts, "
+        "possible value diversion and material owner influence. If nothing relevant is "
+        "found, record the evidence limitation, not an assertion that no risk exists. "
+        "Every material conclusion needs a credit mechanism, supporting evidence, any "
+        "contradictory evidence, disposition and downstream verification needs. Route "
+        "quantification to FO, strategy/stewardship to M4, and definitive obligor, legal "
+        "ranking, guarantee, collateral, covenant or facility analysis to SO."
     ),
     "M4": (
         "You are the Strategy & Capital Allocation specialist (Business Overview "

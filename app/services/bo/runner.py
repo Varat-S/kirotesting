@@ -73,6 +73,7 @@ from app.services.bo.hypotheses import (
     gate_parameters,
 )
 from app.services.bo.indicators import IndicatorSet, build_indicators
+from app.services.bo.m3_validation import M3AssessmentError, validate_m3_assessment
 from app.services.bo.sectors import CoverageOutcome, detect_sector
 from app.services.bo.plans import (
     PARAMETER_VALUE_SETS,
@@ -440,6 +441,7 @@ class _BoRun:
         self.rerun_reason: str | None = None
         self.conclusion_status = "unavailable"
         self.module_conclusions: dict[str, dict[str, Any]] = {}
+        self.m3_assessments: dict[str, dict[str, Any]] = {}
         self.started_at = datetime.now(timezone.utc)
         self.completed_at: datetime | None = None
 
@@ -767,6 +769,18 @@ class _BoRun:
                                                | ({"No governed findings were produced."}
                                                   if no_governed_output else set())),
             }
+            if module == "M3":
+                assessment = next(
+                    (self.m3_assessments[a] for a in agent_ids
+                     if a in self.m3_assessments), None)
+                out[module]["m3_assessment"] = assessment
+                out[module]["m3_assessment_status"] = (
+                    "validated" if assessment is not None else "unavailable")
+                if assessment is None:
+                    out[module]["missing_information"] = sorted({
+                        *out[module]["missing_information"],
+                        "Versioned M3 entity, cash-flow and management assessment unavailable.",
+                    })
         self.module_conclusions = out
         return out
 
@@ -895,6 +909,13 @@ class _BoRun:
             corpus=self.corpus,
         ).validate(parsed, analysis_run_id=self.analysis_run_id, agent_run_id=run_id)
         issues += validation.issues
+        m3_assessment = None
+        if spec.code == "M3" and isinstance(parsed.get("m3_assessment"), dict):
+            try:
+                m3_assessment = validate_m3_assessment(
+                    parsed["m3_assessment"], allowed_evidence_ids=allowed)
+            except M3AssessmentError as exc:
+                issues.append(str(exc))
         if issues:
             self._reject(agent.agent_id, run_id, issues)
             return
@@ -956,6 +977,12 @@ class _BoRun:
             records.append(record)
         self.promoted[agent.agent_id] = promoted
         self.hypotheses[agent.agent_id] = records
+        if m3_assessment is not None:
+            self.m3_assessments[agent.agent_id] = m3_assessment.model_dump(mode="json")
+            validation.adjustments.extend({
+                "hypothesis_id": issue.item_id or "(m3_assessment)",
+                "note": f"{issue.rule_id}: {issue.reason}",
+            } for issue in m3_assessment.validation_issues)
         self.retrieval_requests[agent.agent_id] = [
             r for r in parsed.get("retrieval_requests") or [] if isinstance(r, dict)]
         outcome_record = self.agents[agent.agent_id]
