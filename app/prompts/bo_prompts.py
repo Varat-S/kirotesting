@@ -889,6 +889,9 @@ _ORCHESTRATOR_TEMPLATE = (
     "each with a short title. Do not repeat a claim across lists.\n"
     "- Put unresolved matters in open_questions and required work in "
     "follow_up.\n"
+    "- If validation_feedback is present, correct every listed deterministic "
+    "error and return the complete synthesis again; do not invent or alter the "
+    "underlying findings.\n"
     "Return JSON matching the response schema."
 )
 

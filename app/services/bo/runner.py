@@ -23,6 +23,8 @@ only Business Overview agents can ever be selected.
 
 from __future__ import annotations
 
+import copy
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -439,6 +441,7 @@ class _BoRun:
         self.conclusion_row_id: str | None = None
         self.orchestrator_output: dict | None = None
         self.orchestrator_history: list[dict] = []
+        self.orchestrator_validation_feedback: list[str] = []
         self.challenge_rounds: list[dict] = []
         self.remediation: dict | None = None
         self.feedback: dict[str, list[dict]] = {}
@@ -464,6 +467,19 @@ class _BoRun:
             self._build_module_conclusions()
         self._score_business(authoritative=False)
         self._stage("orchestrator", {BO_ORCHESTRATOR_ID})
+        if (self.conclusion is None
+                and self.agents[BO_ORCHESTRATOR_ID].status == "rejected"):
+            # A structurally valid synthesis can still violate a deterministic
+            # claim-level rule. Give only the orchestrator one bounded chance to
+            # correct the exact errors; specialists and their governed findings
+            # are unchanged. A second invalid answer remains rejected.
+            self.orchestrator_validation_feedback = list(
+                self.agents[BO_ORCHESTRATOR_ID].issues)
+            self.rerun_reason = "orchestrator_validation_repair"
+            self._stage("orchestrator_validation_repair",
+                        {BO_ORCHESTRATOR_ID}, force=True)
+            self.rerun_reason = None
+            self.orchestrator_validation_feedback = []
         self._challenge_phase()
         if self.roster_version == "v3":
             self._score_business(authoritative=True)
@@ -826,6 +842,14 @@ class _BoRun:
                     "missing modules; never treat incomplete as neutral risk."))
         if self.feedback.get(agent.agent_id):
             extras["challenge_feedback"] = self.feedback[agent.agent_id]
+        if self.orchestrator_validation_feedback:
+            extras["validation_feedback"] = {
+                "instruction": (
+                    "Your previous synthesis failed deterministic validation. "
+                    "Return the complete synthesis again after correcting every "
+                    "listed issue. Do not change or invent source findings."),
+                "issues": list(self.orchestrator_validation_feedback),
+            }
         orchestrator_input = build_business_orchestrator_input(
             analysis_run_id=self.analysis_run_id,
             parameters=[*self._business_parameters(), *self.rubric_results],
@@ -1199,6 +1223,43 @@ class _BoRun:
         issues = validate_orchestrator_output(
             parsed, hypotheses=all_by_id, reconciliation=self.reconciliation,
             indicators=self.indicators, accepted_parameter_ids=accepted_ids)
+        canonicalized_claims: list[str] = []
+        if self.rerun_reason == "orchestrator_validation_repair" and any(
+                issue.startswith("evidence_exists:") for issue in issues):
+            repaired = copy.deepcopy(parsed)
+            evidence_issue_ids = {
+                match.group(1)
+                for issue in issues if issue.startswith("evidence_exists:")
+                if (match := re.search(r"Claim '([^']+)'", issue)) is not None
+            }
+            for _, claim in iter_claims(repaired):
+                if claim.get("claim_id") not in evidence_issue_ids:
+                    continue
+                governed = [all_by_id[hid]
+                            for hid in claim.get("hypothesis_ids") or []
+                            if hid in all_by_id and all_by_id[hid].usable]
+                if governed:
+                    claim["evidence_ids"] = sorted({
+                        evidence_id for hypothesis in governed
+                        for evidence_id in hypothesis.evidence_ids()
+                    })
+                    canonicalized_claims.append(claim["claim_id"])
+            if canonicalized_claims:
+                repaired_issues = validate_orchestrator_output(
+                    repaired, hypotheses=all_by_id,
+                    reconciliation=self.reconciliation,
+                    indicators=self.indicators,
+                    accepted_parameter_ids=accepted_ids)
+                if not repaired_issues:
+                    parsed, issues = repaired, []
+                    self.agents[agent.agent_id].adjustments.extend({
+                        "claim_id": claim_id,
+                        "note": (
+                            "Unknown model-supplied evidence references were "
+                            "replaced with the canonical evidence IDs from the "
+                            "claim's validated hypotheses during the single "
+                            "orchestrator repair attempt."),
+                    } for claim_id in canonicalized_claims)
         conclusion = None
         if not issues:
             conclusion = build_topic_conclusion(
@@ -1216,6 +1277,7 @@ class _BoRun:
             "issues": list(issues),
             "claims": len(iter_claims(parsed)),
             "hypotheses_available": len(by_id),
+            "canonicalized_evidence_claims": canonicalized_claims,
         })
         if conclusion is None:
             self._reject(agent.agent_id, run_id, issues)

@@ -281,6 +281,51 @@ def test_invalid_orchestrator_answer_produces_no_conclusion(
     assert escalations and all(e.mandatory for e in escalations)
 
 
+def test_orchestrator_validation_repair_is_bounded_and_targeted(db_session, tmp_path):
+    script = good_script()
+    invalid = orchestrator_answer()
+    invalid["key_drivers"].append(claim(
+        "bo_d9", "driver", "BO2", "Government payers were 61% of revenue.",
+        ["BO2-H002"], claim_type="fact"))
+    script["orchestrate"] = [invalid, orchestrator_answer()]
+
+    result, backend = run(db_session, tmp_path, script)
+
+    assert result.conclusion_status == "accepted"
+    assert backend.calls("orchestrate") == 2
+    assert backend.calls("challenge") == 1
+    assert [item["status"] for item in result.audit["orchestrator"]["history"]] == [
+        "rejected", "accepted"]
+    repair_input = [inputs for method, inputs in backend.requests
+                    if method == "orchestrate"][1]
+    assert any("unquoted_number" in issue
+               for issue in repair_input["validation_feedback"]["issues"])
+    for specialist in BO_NARROW_AGENT_IDS:
+        assert backend.calls(specialist) == 1
+
+
+def test_orchestrator_repair_canonicalizes_unknown_evidence_only(
+        db_session, tmp_path):
+    script = good_script()
+    first = orchestrator_answer()
+    first["key_drivers"].append(claim(
+        "bo_d9", "driver", "BO2", "Government payers were 61% of revenue.",
+        ["BO2-H002"], claim_type="fact"))
+    repaired = orchestrator_answer()
+    repaired["key_drivers"][0]["evidence_ids"] = ["fabricated-evidence-id"]
+    script["orchestrate"] = [first, repaired]
+
+    result, backend = run(db_session, tmp_path, script)
+
+    assert result.conclusion_status == "accepted"
+    assert backend.calls("orchestrate") == 2
+    history = result.audit["orchestrator"]["history"]
+    assert history[1]["canonicalized_evidence_claims"] == ["bo_d1"]
+    claims = {c["claim_id"]: c for c in result.audit["orchestrator"]["claims"]}
+    assert {item["evidence_id"] for item in claims["bo_d1"]["evidence"]} == {
+        "ev_model", "ev_season"}
+
+
 def test_conclusion_claims_carry_claim_specific_references(db_session, tmp_path):
     result, _ = run(db_session, tmp_path)
     claims = {c["claim_id"]: c for c in result.audit["orchestrator"]["claims"]}

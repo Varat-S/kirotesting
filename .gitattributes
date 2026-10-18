@@ -3,3 +3,4 @@
 *.xlsx binary
 # SEC fixtures have manifest hashes; never rewrite their original bytes.
 examples/sec/** -text
+examples/healthcare/*/filing/** -text

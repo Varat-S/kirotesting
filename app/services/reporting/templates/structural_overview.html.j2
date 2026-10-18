@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Structural Overview Thin Slice — {{ assessment.borrower.legal_name }}</title>
+  <style>
+    body { color: #1d2939; font: 15px/1.45 Arial, sans-serif; margin: 2rem auto; max-width: 1100px; padding: 0 1rem; }
+    h1, h2, h3 { color: #101828; } .meta { background: #f2f4f7; padding: 1rem; }
+    .warning { background: #fffaeb; border-left: 4px solid #f79009; padding: .8rem; }
+    .blocked { color: #b42318; } code { overflow-wrap: anywhere; }
+    table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #d0d5dd; padding: .5rem; text-align: left; vertical-align: top; }
+    li { margin-bottom: .45rem; }
+  </style>
+</head>
+<body data-assessment-id="{{ assessment.assessment_id }}" data-content-hash="{{ assessment.content_hash }}">
+  <h1>Structural Overview — Partial Assessment</h1>
+  <div class="meta">
+    <strong>{{ assessment.borrower.legal_name }}</strong><br>
+    Case {{ assessment.borrower.case_id }} · As of {{ assessment.borrower.as_of_date or "unavailable" }}<br>
+    Source BO run <code>{{ assessment.source_bo_run_id }}</code> · Handoff <code>{{ assessment.source_handoff_id }}</code>
+  </div>
+  <p class="warning">Status: <strong>{{ assessment.status }}</strong>. BO score band
+    <strong>{{ assessment.governance.provisional_business_risk_band }}</strong> is
+    <strong>{{ assessment.governance.business_risk_score_status }}</strong>; it is not a final credit rating.
+    Human review is {{ assessment.governance.human_review_status }}.</p>
+
+  <h2>Business Overview findings</h2>
+  {% for key, title in [
+    ('business_model_and_revenue_drivers', 'Business model and revenue drivers'),
+    ('industry_and_competitive_risks', 'Industry and competitive risks'),
+    ('management_and_operational_findings', 'Management and operations'),
+    ('strategy_and_capital_allocation_findings', 'Strategy and capital allocation')
+  ] %}
+  <h3>{{ title }}</h3>
+  <ul>{% for finding in assessment.business_assessment[key] %}
+    <li data-hypothesis-id="{{ finding.provenance.source_hypothesis_id }}">
+      {{ finding.claim }}
+      <em>[{{ finding.disposition }}; {{ finding.admissibility }}; {{ finding.materiality }}]</em><br>
+      Evidence: {% for evidence_id in finding.supporting_evidence_ids %}<code>{{ evidence_id }}</code>{% if not loop.last %}, {% endif %}{% else %}unavailable{% endfor %}
+    </li>{% endfor %}</ul>
+  {% endfor %}
+
+  <h2>Material strengths and vulnerabilities</h2>
+  <table><thead><tr><th>Type</th><th>Conclusion</th><th>Qualification</th><th>Evidence</th></tr></thead><tbody>
+  {% for kind, records in [('Strength', assessment.business_assessment.business_strengths), ('Vulnerability', assessment.business_assessment.material_business_vulnerabilities)] %}
+    {% for item in records %}<tr><td>{{ kind }}</td><td>{{ item.title }} — {{ item.text }}</td><td>{{ item.qualification }}</td><td>{% for ref in item.evidence_ids %}<code>{{ ref }}</code><br>{% endfor %}</td></tr>{% endfor %}
+  {% endfor %}
+  </tbody></table>
+
+  <h2>Compound risks</h2>
+  {% for risk in assessment.business_assessment.compound_risks %}
+    <article data-claim-id="{{ risk.claim_id }}"><h3>{{ risk.title }}</h3><p>{{ risk.text }}</p>
+      <p>Components: {% for ref in risk.component_hypothesis_ids %}<code>{{ ref }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+      <p>Evidence: {% for ref in risk.evidence_ids %}<code>{{ ref }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p></article>
+  {% else %}<p>No compound risks were supplied by BO.</p>{% endfor %}
+
+  <h2>Outstanding challenges and review</h2>
+  <ul>{% for challenge in assessment.governance.unresolved_challenges %}
+    <li data-challenge-id="{{ challenge.challenge_id }}"><strong>{{ challenge.severity }}</strong>: {{ challenge.reason }} (target {{ challenge.target }})</li>
+  {% else %}<li>No unresolved BO challenges.</li>{% endfor %}</ul>
+
+  <h2>Missing downstream analysis</h2>
+  <table><thead><tr><th>Section</th><th>Status</th><th>Reason</th></tr></thead><tbody>
+  {% for name, section in assessment.downstream_dependencies.sections | dictsort %}
+    <tr><td>{{ name }}</td><td class="{{ section.status }}">{{ section.status }}</td><td>{{ section.reason }}</td></tr>
+  {% endfor %}</tbody></table>
+  <h3>Open financial questions</h3><ul>{% for question in assessment.downstream_dependencies.additional_financial_questions %}<li>{{ question }}</li>{% else %}<li>No explicit BO questions; Financial Overview remains unavailable.</li>{% endfor %}</ul>
+
+  <hr><p>Schema {{ assessment.schema_version }} · Transformation {{ assessment.audit_metadata.transformation_version }} · Content hash <code>{{ assessment.content_hash }}</code></p>
+</body>
+</html>

@@ -714,8 +714,10 @@ class BoReportBuilder:
             business_topic_conclusion_id=run.conclusion_row_id
             if run.conclusion is not None else None,
             conclusion_status=run.conclusion_status,
-            # Do not advertise a score next to a run that produced no validated
-            # conclusion; a downstream consumer must not read it as endorsed.
+            # A-3: do not advertise a risk score next to a run that produced no
+            # validated conclusion. The score id/status/band are only meaningful
+            # when there is a conclusion they belong to; otherwise report them as
+            # unavailable so a downstream consumer cannot read a score as endorsed.
             business_risk_score_id=run.score.score_id
             if run.conclusion is not None else None,
             business_risk_score_status=run.score.status.value
