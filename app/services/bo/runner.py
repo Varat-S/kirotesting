@@ -46,6 +46,7 @@ from app.models.orm import (
 from app.models.orm import AgenticAnalysisRun as RunRow
 from app.prompts.bo_prompts import (
     BO_CHALLENGE_JSON_SCHEMA,
+    BO_M3_JSON_SCHEMA,
     BO_NARROW_JSON_SCHEMA,
     BO_ORCHESTRATOR_JSON_SCHEMA,
     bo_prompt_catalogue,
@@ -725,7 +726,8 @@ class _BoRun:
                     k: self.last_parsed.get(agent.agent_id, {}).get(k)
                     for k in ("parameters", "hypotheses", "checklist_responses")},
             }
-        return self._task(agent, inputs, evidence_ids, BO_NARROW_JSON_SCHEMA, parents)
+        schema = BO_M3_JSON_SCHEMA if spec.code == "M3" else BO_NARROW_JSON_SCHEMA
+        return self._task(agent, inputs, evidence_ids, schema, parents)
 
     def _business_parameters(self) -> list[ParameterResult]:
         return [p for a in self.narrow_agent_ids for p in self.promoted.get(a, [])]
@@ -896,7 +898,8 @@ class _BoRun:
         packet = self.packets[agent.agent_id]
         outcome = DeterministicValidator.for_agent(
             packet, agent, known_parameters=self.indicators.known_values(),
-        ).validate(parsed, schema=BO_NARROW_JSON_SCHEMA)
+        ).validate(parsed, schema=(BO_M3_JSON_SCHEMA if spec.code == "M3"
+                                   else BO_NARROW_JSON_SCHEMA))
         issues = [f"{i.check.value}: {i.detail}" for i in outcome.issues]
         allowed = set(packet.evidence_ids)
         validation = HypothesisValidator(

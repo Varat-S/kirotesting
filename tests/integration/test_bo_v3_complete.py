@@ -176,7 +176,6 @@ def test_validated_m3_extension_flows_through_module_conclusion_and_handoff(
             "contradictory_evidence_investigated": True,
             "disposition": "qualified", "admissibility": "qualified_narrative",
             "confidence": "medium", "materiality": "medium", "missing_information": [],
-            "validation_reasons": [],
         }],
         "governance_screening": [],
         "information_gaps": ["Management outcomes are not disclosed."],

@@ -52,6 +52,50 @@ CHALLENGE_OUTCOMES = [
 _STR_LIST = {"type": "array", "items": {"type": "string"}}
 _NULLABLE_STR = {"type": ["string", "null"]}
 
+_M3_ENTITY: dict[str, Any] = {
+    "type": "object",
+    "required": ["entity_id", "legal_name", "jurisdiction", "classification",
+                 "verification_status", "evidence_ids", "materiality_reason"],
+    "properties": {
+        "entity_id": {"type": "string"}, "legal_name": {"type": "string"},
+        "jurisdiction": _NULLABLE_STR,
+        "classification": {"type": "string", "enum": [
+            "ultimate_parent", "intermediate_holding_company", "reporting_parent",
+            "operating_subsidiary", "joint_venture", "partially_owned_subsidiary",
+            "proposed_borrower", "other_material_entity"]},
+        "verification_status": {"type": "string", "enum": [
+            "verified", "qualified", "unverified", "disputed"]},
+        "evidence_ids": _STR_LIST, "materiality_reason": {"type": "string"},
+    },
+    "additionalProperties": False,
+}
+
+_M3_FINDING: dict[str, Any] = {
+    "type": "object",
+    "required": [
+        "finding_id", "hypothesis_id", "credit_hypothesis", "causal_mechanism",
+        "supporting_evidence_ids", "contradicting_evidence_ids",
+        "supporting_evidence_investigated", "contradictory_evidence_investigated",
+        "disposition", "admissibility", "confidence", "materiality",
+        "downstream_verification_requirements", "borrower_specific",
+    ],
+    "properties": {
+        "finding_id": {"type": "string"}, "hypothesis_id": _NULLABLE_STR,
+        "credit_hypothesis": {"type": "string"}, "causal_mechanism": {"type": "string"},
+        "supporting_evidence_ids": _STR_LIST, "contradicting_evidence_ids": _STR_LIST,
+        "supporting_evidence_investigated": {"type": "boolean"},
+        "contradictory_evidence_investigated": {"type": "boolean"},
+        "disposition": {"type": "string", "enum": DISPOSITIONS},
+        "admissibility": {"type": "string", "enum": [
+            "established", "attributed", "qualified_narrative", "audit_only"]},
+        "confidence": {"type": "string", "enum": CONFIDENCES},
+        "materiality": {"type": "string", "enum": ["low", "medium", "high"]},
+        "downstream_verification_requirements": _STR_LIST,
+        "borrower_specific": {"type": "boolean"},
+    },
+    "additionalProperties": False,
+}
+
 _M3_ASSESSMENT: dict[str, Any] = {
     "type": "object",
     "required": [
@@ -63,18 +107,109 @@ _M3_ASSESSMENT: dict[str, Any] = {
     ],
     "properties": {
         "schema_version": {"type": "string", "enum": ["bo-m3-corporate-assessment-1.0"]},
-        "borrower_identification": {"type": "object"},
-        "legal_entities": {"type": "array", "items": {"type": "object"}},
-        "ownership_relationships": {"type": "array", "items": {"type": "object"}},
-        "cash_flow_locations": {"type": "array", "items": {"type": "object"}},
-        "cash_transfer_relationships": {"type": "array", "items": {"type": "object"}},
-        "structural_credit_findings": {"type": "array", "items": {"type": "object"}},
-        "management_assessments": {"type": "array", "items": {"type": "object"}},
-        "governance_screening": {"type": "array", "items": {"type": "object"}},
+        "borrower_identification": {
+            "type": "object",
+            "required": ["status", "entity_id", "evidence_ids", "limitation"],
+            "properties": {
+                "status": {"type": "string", "enum": ["identified", "unavailable", "disputed"]},
+                "entity_id": _NULLABLE_STR, "evidence_ids": _STR_LIST,
+                "limitation": _NULLABLE_STR,
+            },
+            "additionalProperties": False,
+        },
+        "legal_entities": {"type": "array", "items": _M3_ENTITY},
+        "ownership_relationships": {"type": "array", "items": {
+            "type": "object",
+            "required": ["relationship_id", "parent_entity_id", "subsidiary_entity_id",
+                         "ownership_percentage", "control_basis", "effective_from",
+                         "effective_to", "evidence_ids", "confirmation_status", "uncertainty"],
+            "properties": {
+                "relationship_id": {"type": "string"}, "parent_entity_id": {"type": "string"},
+                "subsidiary_entity_id": {"type": "string"},
+                "ownership_percentage": {"type": ["number", "null"]},
+                "control_basis": _NULLABLE_STR, "effective_from": _NULLABLE_STR,
+                "effective_to": _NULLABLE_STR, "evidence_ids": _STR_LIST,
+                "confirmation_status": {"type": "string", "enum": [
+                    "verified", "qualified", "unverified", "disputed"]},
+                "uncertainty": _NULLABLE_STR,
+            }, "additionalProperties": False,
+        }},
+        "cash_flow_locations": {"type": "array", "items": {
+            "type": "object",
+            "required": ["cash_flow_id", "entity_id", "amount", "period", "currency",
+                         "units", "accounting_basis", "reporting_scope", "cash_flow_roles",
+                         "evidence_ids", "provenance_status", "missing_information"],
+            "properties": {
+                "cash_flow_id": {"type": "string"}, "entity_id": {"type": "string"},
+                "amount": {"type": ["number", "null"]}, "period": _NULLABLE_STR,
+                "currency": _NULLABLE_STR, "units": _NULLABLE_STR,
+                "accounting_basis": _NULLABLE_STR,
+                "reporting_scope": {"type": "string", "enum": ["consolidated", "segment", "entity"]},
+                "cash_flow_roles": {"type": "array", "items": {"type": "string", "enum": [
+                    "operating_cash_generator", "legal_cash_controller", "cash_holder",
+                    "debt_service_obligor"]}},
+                "evidence_ids": _STR_LIST,
+                "provenance_status": {"type": "string", "enum": [
+                    "verified", "qualified", "unverified", "disputed"]},
+                "missing_information": _STR_LIST,
+            }, "additionalProperties": False,
+        }},
+        "cash_transfer_relationships": {"type": "array", "items": {
+            "type": "object",
+            "required": ["transfer_id", "source_entity_id", "destination_entity_id",
+                         "mechanism", "transfer_evidence_state",
+                         "known_restrictions_or_dependencies", "evidence_ids",
+                         "confirmation_status", "uncertainty"],
+            "properties": {
+                "transfer_id": {"type": "string"}, "source_entity_id": {"type": "string"},
+                "destination_entity_id": {"type": "string"},
+                "mechanism": {"type": "string", "enum": [
+                    "dividend", "intercompany_loan", "cash_pool", "management_fee",
+                    "distribution", "other"]},
+                "transfer_evidence_state": {"type": "string", "enum": [
+                    "capacity_only", "documented_actual_transfer", "proposed", "unknown"]},
+                "known_restrictions_or_dependencies": _STR_LIST, "evidence_ids": _STR_LIST,
+                "confirmation_status": {"type": "string", "enum": [
+                    "verified", "qualified", "unverified", "disputed"]},
+                "uncertainty": _NULLABLE_STR,
+            }, "additionalProperties": False,
+        }},
+        "structural_credit_findings": {"type": "array", "items": _M3_FINDING},
+        "management_assessments": {"type": "array", "items": {
+            "type": "object",
+            "required": ["observation_id", "management_id", "legal_name", "role",
+                         "effective_from", "effective_to", "dimension", "hypothesis",
+                         "credit_mechanism", "supporting_evidence_ids",
+                         "contradicting_evidence_ids", "supporting_evidence_investigated",
+                         "contradictory_evidence_investigated", "disposition", "admissibility",
+                         "confidence", "materiality", "missing_information"],
+            "properties": {
+                "observation_id": {"type": "string"}, "management_id": {"type": "string"},
+                "legal_name": {"type": "string"}, "role": {"type": "string"},
+                "effective_from": _NULLABLE_STR, "effective_to": _NULLABLE_STR,
+                "dimension": {"type": "string", "enum": ["competence", "credibility_integrity"]},
+                "hypothesis": {"type": "string"}, "credit_mechanism": {"type": "string"},
+                "supporting_evidence_ids": _STR_LIST, "contradicting_evidence_ids": _STR_LIST,
+                "supporting_evidence_investigated": {"type": "boolean"},
+                "contradictory_evidence_investigated": {"type": "boolean"},
+                "disposition": {"type": "string", "enum": DISPOSITIONS},
+                "admissibility": {"type": "string", "enum": [
+                    "established", "attributed", "qualified_narrative", "audit_only"]},
+                "confidence": {"type": "string", "enum": CONFIDENCES},
+                "materiality": {"type": "string", "enum": ["low", "medium", "high"]},
+                "missing_information": _STR_LIST,
+            }, "additionalProperties": False,
+        }},
+        "governance_screening": {"type": "array", "items": _M3_FINDING},
         "information_gaps": _STR_LIST,
-        "downstream_dependencies": {"type": "array", "items": {"type": "object"}},
+        "downstream_dependencies": {"type": "array", "items": {
+            "type": "object", "required": ["module", "question"],
+            "properties": {"module": {"type": "string", "enum": ["FO", "M4", "SO"]},
+                           "question": {"type": "string"}},
+            "additionalProperties": False,
+        }},
     },
-    "additionalProperties": True,
+    "additionalProperties": False,
 }
 
 _QUOTED_VALUE: dict[str, Any] = {
@@ -212,9 +347,35 @@ BO_NARROW_JSON_SCHEMA: dict[str, Any] = {
             },
         },
         "missing_information": _STR_LIST,
-        "m3_assessment": _M3_ASSESSMENT,
     },
     "additionalProperties": True,
+}
+
+# M3's assessment contract is substantially larger than the ordinary narrow
+# response.  Vertex rejects the combined schema when M1A6-only hypothesis
+# fields are also present (HTTP 400: schema complexity), even though each M3
+# subsection is valid on its own.  Keep the ordinary specialist envelope but
+# omit fields that have no meaning for M3.  The runtime validator uses ``get``
+# for these optional fields, so this changes neither M3 validation nor output
+# promotion; it only avoids advertising irrelevant branches to the provider.
+_M3_HYPOTHESIS: dict[str, Any] = {
+    **_HYPOTHESIS,
+    "properties": {
+        key: value for key, value in _HYPOTHESIS["properties"].items()
+        if key not in {
+            "mitigant", "fo_handoff", "transmission_mechanism",
+            "component_hypothesis_ids", "interaction_kind",
+        }
+    },
+}
+
+BO_M3_JSON_SCHEMA: dict[str, Any] = {
+    **BO_NARROW_JSON_SCHEMA,
+    "properties": {
+        **BO_NARROW_JSON_SCHEMA["properties"],
+        "hypotheses": {"type": "array", "items": _M3_HYPOTHESIS},
+        "m3_assessment": _M3_ASSESSMENT,
+    },
 }
 
 _BO_CLAIM: dict[str, Any] = {
@@ -797,7 +958,8 @@ def bo_v3_prompt_catalogue() -> list[dict]:
         entries.append({
             "name": spec.agent_id, "role": spec.agent_id,
             "template": specialist_block(spec) + "\n" + SHARED_RULES,
-            "response_schema": BO_NARROW_JSON_SCHEMA,
+            "response_schema": (BO_M3_JSON_SCHEMA if spec.code == "M3"
+                                else BO_NARROW_JSON_SCHEMA),
             "label": f"Business Overview v3 specialist {spec.code}: {spec.title}",
         })
         entries.append({

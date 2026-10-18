@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+import jsonschema
+
+from app.prompts.bo_prompts import BO_M3_JSON_SCHEMA, BO_NARROW_JSON_SCHEMA
 from app.schemas.bo import AcceptedBusinessOverview
 from app.services.bo.m3_validation import validate_m3_assessment
 
@@ -109,6 +112,28 @@ def proposal():
 
 def validate(value=None):
     return validate_m3_assessment(value or proposal(), allowed_evidence_ids=EVIDENCE)
+
+
+def test_provider_schema_describes_nested_m3_objects_instead_of_empty_shells():
+    value = proposal()
+    for record in [*value["structural_credit_findings"],
+                   *value["governance_screening"]]:
+        record.setdefault("hypothesis_id", None)
+        record.pop("validation_reasons", None)
+    for record in value["management_assessments"]:
+        record.pop("validation_reasons", None)
+    jsonschema.validate(
+        {"parameters": [], "hypotheses": [], "m3_assessment": value},
+        BO_M3_JSON_SCHEMA)
+    assert "m3_assessment" not in BO_NARROW_JSON_SCHEMA["properties"]
+    # M1A6-only branches would push the combined M3 response over Vertex's
+    # structured-schema complexity limit and have no meaning for this module.
+    m3_hypothesis = BO_M3_JSON_SCHEMA["properties"]["hypotheses"]["items"]
+    assert "component_hypothesis_ids" not in m3_hypothesis["properties"]
+    assert "retrieval_requests" in BO_M3_JSON_SCHEMA["properties"]
+    entity = BO_M3_JSON_SCHEMA["properties"]["m3_assessment"]["properties"][
+        "legal_entities"]["items"]
+    assert {"entity_id", "legal_name", "classification"} <= set(entity["properties"])
 
 
 def test_case_a_complex_group_principal_graph_is_material_and_bounded():
