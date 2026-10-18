@@ -35,6 +35,9 @@ class RecordingBackend(LLMBackend):
     def model_id(self) -> str:
         return getattr(self._inner, "model_id", "unknown")
 
+    def cache_identity(self, model_tier: str | None = None):
+        return self._inner.cache_identity(model_tier)
+
     def generate(self, request: LLMRequest) -> LLMRawResult:
         entry: dict[str, Any] = {
             "task_type": request.method, "prompt_id": request.prompt.prompt_id,

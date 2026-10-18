@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=120, ge=1, le=600)
     llm_max_output_tokens: int = Field(default=12000, ge=256, le=64000)
     llm_max_input_bytes: int = Field(default=1500000, ge=1000)
+    # None preserves provider/model defaults. Overrides never guarantee determinism.
+    llm_temperature: float | None = Field(default=None, ge=0, le=2, allow_inf_nan=False)
+    # For custom/OpenAI-compatible models, explicitly declare capability and range.
+    llm_temperature_supported: bool | None = None
+    llm_temperature_max: float = Field(default=2, gt=0, le=2, allow_inf_nan=False)
     sec_user_agent: str | None = Field(default=None)
 
     # --- Agentic analysis executor (Milestone 5) ---

@@ -1,0 +1,176 @@
+{
+  "schema_version": "fo-adapter-1.0",
+  "source_run_id": "fo_synthetic_demo_001",
+  "case_id": "HCA_2025_BO_LIVE",
+  "borrower_name": "HCA Healthcare, Inc.",
+  "provenance": "synthetic_fixture",
+  "notice": "SIMULATED FINANCIAL INFORMATION: invented integration fixture, not extracted from HCA SEC filings and not a real financial assessment.",
+  "periods": [
+    {
+      "fiscal_year": 2024,
+      "facts": {
+        "revenue": {
+          "value": 60000,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "operating_income": {
+          "value": 9000,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "operating_expenses": {
+          "value": 51000,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "ebitda": {
+          "value": 12000,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "total_debt": {
+          "value": 40000,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "unrestricted_cash": {
+          "value": 2000,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "undrawn_revolver": {
+          "value": 5000,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "cfo": {
+          "value": 8000,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "capex": {
+          "value": 4500,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "interest_expense": {
+          "value": 2000,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        }
+      }
+    },
+    {
+      "fiscal_year": 2025,
+      "facts": {
+        "revenue": {
+          "value": 63000,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "operating_income": {
+          "value": 8820,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "operating_expenses": {
+          "value": 54180,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "ebitda": {
+          "value": 11970,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "total_debt": {
+          "value": 42000,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "unrestricted_cash": {
+          "value": 2200,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "undrawn_revolver": {
+          "value": 4800,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "cfo": {
+          "value": 8200,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "capex": {
+          "value": 5000,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        },
+        "interest_expense": {
+          "value": 2200,
+          "units": "USD million",
+          "provenance": "synthetic_fixture",
+          "evidence_ids": []
+        }
+      }
+    }
+  ],
+  "findings": [
+    {
+      "finding_id": "FO-S1",
+      "kind": "strength",
+      "text": "Illustrative operating cash flow exceeds capital expenditure in both periods.",
+      "provenance": "synthetic_fixture",
+      "metric_refs": [
+        "cfo",
+        "capex",
+        "free_cash_flow"
+      ]
+    },
+    {
+      "finding_id": "FO-W1",
+      "kind": "vulnerability",
+      "text": "Illustrative operating margin falls from 15% to 14% as expenses rise faster than revenue. Net leverage increases and interest coverage declines; these are fixture observations only.",
+      "provenance": "synthetic_fixture",
+      "metric_refs": [
+        "operating_margin",
+        "operating_expenses",
+        "net_debt_to_ebitda",
+        "interest_coverage"
+      ]
+    }
+  ],
+  "assumptions": [
+    "All financial figures are invented, in USD million, for fiscal years ending December 31; balances are year-end and flows cover the full year.",
+    "Operating expenses = revenue minus operating income. EBITDA = operating income plus illustrative depreciation/amortization of 3000 in 2024 and 3150 in 2025. No exceptional-item adjustments are assumed.",
+    "Cash is assumed unrestricted; undrawn revolver is assumed available solely for illustration. Positive capex is a cash outflow; free cash flow excludes acquisitions.",
+    "Net leverage excludes operating leases. Interest coverage uses EBITDA and expensed interest, excluding capitalized interest. No causal inference about actual HCA expenses is supported."
+  ],
+  "missing_information": [
+    "Admitted financial statements, reconciliation and real FO analysis",
+    "Debt instrument composition, maturities, leases and covenant headroom",
+    "Restricted cash, revolver conditions and facility-specific guarantees/security"
+  ]
+}

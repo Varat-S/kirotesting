@@ -5,7 +5,7 @@ methods -- ``extract``, ``analyze`` and ``challenge`` (Req 19.3). Each call:
 
 * resolves the approved prompt version from the :class:`PromptRegistry`;
 * sends the request to a pluggable ``LLMBackend`` requesting structured JSON,
-  passing ``temperature=0`` where supported (Req 19.4);
+  applying provider/model-aware sampling configuration where supported;
 * VALIDATES the raw response against the prompt's FIXED response JSON Schema
   BEFORE use (Req 19.4, 12.5, 13.2); invalid output is rejected;
 * logs the FULL run to the ``model_runs`` registry -- prompt ID/version/hash,
@@ -65,7 +65,7 @@ class LLMRequest:
     evidence_ids: list[str] = field(default_factory=list)
     case_id: str | None = None
     case_version: int | None = None
-    temperature: float = 0.0
+    temperature: float | None = None
     key: str | None = None
     # Model tier for provider routing (narrow|orchestrator|challenge). The
     # fake/OpenAI backends ignore it; the Vertex backend maps it to a model.
@@ -83,6 +83,11 @@ class LLMRawResult:
 
 class LLMBackend(ABC):
     """A provider backend. Returns a RAW structured-JSON string response."""
+
+    def cache_identity(self, model_tier: str | None = None) -> tuple[str, dict[str, Any]]:
+        """Offline backends retain the legacy identity; providers resolve actual settings."""
+        model = getattr(self, "model_id", getattr(self, "_model_id", "unknown"))
+        return model, {"temperature": 0.0}
 
     @abstractmethod
     def generate(self, request: LLMRequest) -> LLMRawResult:
@@ -139,7 +144,10 @@ class FakeLLMBackend(LLMBackend):
         return LLMRawResult(
             raw_response=script,
             model_id=self._model_id,
-            model_config={"temperature": request.temperature, "backend": "fake"},
+            model_config={"temperature": request.temperature if request.temperature is not None else 0.0,
+                          "requested_temperature": request.temperature,
+                          "effective_temperature": request.temperature if request.temperature is not None else 0.0,
+                          "backend": "fake"},
         )
 
 
@@ -349,7 +357,7 @@ class LLMClient:
             evidence_ids=list(evidence_ids or []),
             case_id=case_id,
             case_version=case_version,
-            temperature=0.0,
+            temperature=None,
             key=key,
             model_tier=model_tier,
         )
@@ -465,7 +473,7 @@ class LLMClient:
             parsed_response=parsed,
             validation_outcome=outcome,
             validation_detail=detail,
-            temperature=request.temperature,
+            temperature=raw.model_config.get("effective_temperature", raw.model_config.get("temperature")),
         )
         if self._session is not None:
             self._session.add(run)
