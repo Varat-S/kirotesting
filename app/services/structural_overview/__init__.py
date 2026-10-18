@@ -1,4 +1,4 @@
-"""Minimal Structural Overview integration services."""
+"""Governed Structural Overview integration services."""
 
 from app.services.structural_overview.adapter import (
     StructuralOverviewInputError,

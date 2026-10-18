@@ -1,4 +1,4 @@
-"""Versioned contract for the BO-to-Structural-Overview integration slice."""
+"""Versioned contract for the governed BO-to-Structural-Overview boundary."""
 
 from __future__ import annotations
 
@@ -6,9 +6,20 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.bo_m3 import (
+    BorrowerIdentification,
+    CashFlowLocation,
+    CashTransferRelationship,
+    LegalEntity,
+    M3ValidationIssue,
+    ManagementObservation,
+    OwnershipRelationship,
+    StructuralCreditFinding,
+)
 
-ASSESSMENT_SCHEMA_VERSION = "structural-overview-assessment-1.0"
-TRANSFORMATION_VERSION = "bo-to-so-1.0"
+
+ASSESSMENT_SCHEMA_VERSION = "structural-overview-assessment-1.1"
+TRANSFORMATION_VERSION = "bo-to-so-1.1"
 
 
 class StrictModel(BaseModel):
@@ -16,8 +27,12 @@ class StrictModel(BaseModel):
 
 
 class BorrowerContext(StrictModel):
-    legal_name: str
+    reporting_entity_name: str
+    legal_name: str | None = None
     entity_id: str | None = None
+    identification_status: Literal["identified", "unavailable", "disputed"]
+    identification_evidence_ids: list[str] = Field(default_factory=list)
+    identification_limitation: str | None = None
     case_id: str
     as_of_date: str | None = None
     evidence_cutoff_timestamp: str | None = None
@@ -86,6 +101,39 @@ class BusinessAssessment(StrictModel):
     compound_risks: list[CompoundRisk] = Field(default_factory=list)
 
 
+class CorporateStructureAudit(StrictModel):
+    """Non-consumable M3 material retained only for traceability."""
+
+    validation_issues: list[M3ValidationIssue] = Field(default_factory=list)
+    rejected_items: list[dict[str, Any]] = Field(default_factory=list)
+    model_proposal: dict[str, Any] = Field(default_factory=dict)
+
+
+class CorporateStructureAssessment(StrictModel):
+    """Governed M3 output crossing the BO-to-SO boundary.
+
+    Lists outside ``audit`` contain only records admitted by validator 7.  SO
+    must still independently verify obligor identity, ranking, restrictions,
+    and facility-specific legal effect.
+    """
+
+    source_status: Literal["validated", "unavailable"]
+    source_schema_version: str | None = None
+    validator_id: str | None = None
+    validator_version: str | None = None
+    borrower_identification: BorrowerIdentification
+    legal_entities: list[LegalEntity] = Field(default_factory=list)
+    ownership_relationships: list[OwnershipRelationship] = Field(default_factory=list)
+    cash_flow_locations: list[CashFlowLocation] = Field(default_factory=list)
+    cash_transfer_relationships: list[CashTransferRelationship] = Field(default_factory=list)
+    structural_credit_findings: list[StructuralCreditFinding] = Field(default_factory=list)
+    management_assessments: list[ManagementObservation] = Field(default_factory=list)
+    governance_screening: list[StructuralCreditFinding] = Field(default_factory=list)
+    information_gaps: list[str] = Field(default_factory=list)
+    downstream_dependencies: list[dict[str, str]] = Field(default_factory=list)
+    audit: CorporateStructureAudit = Field(default_factory=CorporateStructureAudit)
+
+
 class EvidenceReference(StrictModel):
     evidence_id: str
     source_hypothesis_ids: list[str] = Field(default_factory=list)
@@ -130,13 +178,14 @@ class AssessmentAuditMetadata(StrictModel):
 
 
 class StructuralOverviewAssessment(StrictModel):
-    schema_version: Literal["structural-overview-assessment-1.0"] = ASSESSMENT_SCHEMA_VERSION
+    schema_version: Literal["structural-overview-assessment-1.1"] = ASSESSMENT_SCHEMA_VERSION
     assessment_id: str
     status: Literal["complete", "partial", "blocked"]
     source_handoff_id: str
     source_bo_run_id: str
     borrower: BorrowerContext
     business_assessment: BusinessAssessment
+    corporate_structure: CorporateStructureAssessment
     evidence_references: list[EvidenceReference] = Field(default_factory=list)
     governance: GovernanceState
     downstream_dependencies: DownstreamDependencies

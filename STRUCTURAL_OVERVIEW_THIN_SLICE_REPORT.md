@@ -1,5 +1,8 @@
 # Structural Overview Thin-Slice Integration Report
 
+> Historical delivery record for schema 1.0. The governed M3 integration and
+> schema 1.1 behavior are documented in `SO_M3_INTEGRATION_REPORT.md`.
+
 ## Delivery baseline
 
 - Source branch: `test/bo-live-end-to-end`
