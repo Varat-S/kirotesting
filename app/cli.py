@@ -160,6 +160,8 @@ def main(argv=None):
                          help="Model price per million input tokens (optional)")
     bo_spec.add_argument("--price-out", type=float,
                          help="Model price per million output tokens (optional)")
+    bo_spec.add_argument("--roster", choices=("v2", "v3"), default="v2",
+                         help="BO specialist roster to execute (default: v2)")
     bo_review = commands.add_parser(
         "bo-review",
         help="Record your explicit decision on a pending Business Overview handoff",
@@ -427,7 +429,7 @@ def _run_bo_specialists(session, database, args):
         session, args.case_id, package=package, backend=backend,
         data_root=database.parent, output_root=args.output,
         coverage_checks=load_case_checks(args.coverage) if args.coverage else None,
-        baseline_calls=args.baseline, prices=prices)
+        baseline_calls=args.baseline, prices=prices, bo_roster=args.roster)
     payload = result["payload"]
     metrics = payload["metrics"]
     return {

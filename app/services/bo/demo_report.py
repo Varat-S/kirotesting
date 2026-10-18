@@ -1,4 +1,4 @@
-"""BO-only demonstration deliverables for the six specialists.
+"""BO-only demonstration deliverables for the selected specialist roster.
 
 From one specialists run this module produces, all from the SAME structured
 payload (so the reports cannot drift from the data):
@@ -8,7 +8,7 @@ payload (so the reports cannot drift from the data):
                                 findings (no model wrote it; nothing is reworded)
 * ``specialists_comparison.html`` (+ ``.pdf`` when reportlab is installed)
                                 prompt, evidence, numbers, output and verdict for
-                                BO1-BO6
+                                every selected specialist
 * ``validation_audit.html``     every rejected, qualified, corrected,
                                 reclassified or unresolved hypothesis
 * ``benchmark.html``            old-versus-new comparison, when a baseline is given
@@ -29,7 +29,6 @@ from sqlalchemy import select
 from app.core.hashing import canonical_json
 from app.models.orm import AgentRunRow, RetrievalAttemptRow
 from app.prompts.bo_prompts import SHARED_RULES, specialist_block
-from app.services.bo.plans import BO_AGENT_SPECS, BO_NARROW_AGENT_IDS
 
 PAYLOAD_VERSION = "bo-specialists-run-1.0"
 DEBT_RULE = "operating_pressure_to_debt_capacity"
@@ -65,7 +64,8 @@ def build_payload(run, *, calls: list[dict[str, Any]] | None = None,
     agents = []
     totals = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
     latency = 0
-    for spec in BO_AGENT_SPECS:
+    specs = [run.spec_by_agent[agent_id] for agent_id in run.narrow_agent_ids]
+    for spec in specs:
         outcome = run.agents[spec.agent_id]
         agent_calls = []
         for call in calls_by_agent.get(spec.agent_id, []):
@@ -132,7 +132,7 @@ def build_payload(run, *, calls: list[dict[str, Any]] | None = None,
             "agent_registry_hash": run.registry.registry_hash(),
             "prompts": {n: {"prompt_id": p.prompt_id, "content_hash": p.content_hash}
                         for n, p in sorted(run.prompts.items())
-                        if n in BO_NARROW_AGENT_IDS},
+                        if n in set(run.narrow_agent_ids)},
             "retrieval_budget": vars(run.runner.retriever.budget),
             "started_at": run.started_at.isoformat(),
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,
@@ -455,11 +455,15 @@ def render_comparison(payload: dict[str, Any]) -> str:
            if cost["determinable"] else _e(cost["reason"])) + "</p>")
     for agent in payload["agents"]:
         body.append(_agent_section(agent, payload))
-    body.append("<h2 id='shared'>Rules shared by all six specialists</h2>"
+    count = len(payload["agents"])
+    count_label = "six" if count == 6 else str(count)
+    body.append(f"<h2 id='shared'>Rules shared by all {count_label} specialists</h2>"
                 "<p class='muted'>This block is identical in every prompt and names no "
                 "parameter. Each specialist's own parameters are in its role block "
                 "above.</p><pre>" + _e(payload["shared_rules"]) + "</pre>")
-    return _page("Business Overview: six-specialist comparison", payload, body)
+    return _page(
+        f"Business Overview: {len(payload['agents'])}-specialist comparison",
+        payload, body)
 
 
 def _summary_row(agent) -> str:
@@ -860,7 +864,9 @@ def write_comparison_pdf(payload: dict[str, Any], path: Path) -> bool:
         from reportlab.lib.pagesizes import A3, landscape
         from reportlab.lib.styles import ParagraphStyle
         from reportlab.lib.units import mm
-        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+        from reportlab.platypus import (
+            PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+        )
     except ImportError:
         return False
     translate = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"',
@@ -883,6 +889,74 @@ def write_comparison_pdf(payload: dict[str, Any], path: Path) -> bool:
         return Paragraph(markup, style)
 
     agents = payload["agents"]
+    if len(agents) > 6:
+        doc = SimpleDocTemplate(
+            str(path), pagesize=landscape(A3), leftMargin=12 * mm,
+            rightMargin=12 * mm, topMargin=10 * mm, bottomMargin=10 * mm,
+            title="Business Overview specialist live transcript")
+        title = ParagraphStyle("t", fontName="Helvetica-Bold", fontSize=15, leading=18)
+        heading = ParagraphStyle("h2", fontName="Helvetica-Bold", fontSize=11,
+                                 leading=14, spaceBefore=7, spaceAfter=3)
+        mono = ParagraphStyle("mono", fontName="Courier", fontSize=6.6, leading=8.2,
+                              borderColor=colors.HexColor("#d5dbe2"), borderWidth=.4,
+                              borderPadding=5, backColor=colors.HexColor("#f6f7f9"))
+
+        def shortened(value: Any) -> Any:
+            if isinstance(value, dict):
+                return {key: shortened(item) for key, item in value.items()}
+            if isinstance(value, list):
+                return [shortened(item) for item in value]
+            if isinstance(value, str) and len(value) > 1200:
+                return value[:1200] + (
+                    f" ... [{len(value) - 1200} more characters in specialists_comparison.html]")
+            return value
+
+        def block(label_text: str, value: Any):
+            if not isinstance(value, str):
+                value = json.dumps(shortened(value), indent=2, ensure_ascii=False,
+                                   default=str)
+            rendered = html.escape(clean(shortened(value))).replace("\n", "<br/>")
+            return [Paragraph(label_text, heading), Paragraph(rendered, mono)]
+
+        meta = payload["meta"]
+        story = [
+            Paragraph(f"Business Overview: {len(agents)}-specialist live transcript", title),
+            Paragraph(html.escape(clean(
+                f"{meta['borrower']}, case {meta['case_id']}, run {meta['analysis_run_id']}, "
+                f"{meta['execution_mode'].replace('_', ' ')}, models "
+                f"{', '.join(meta['models']) or 'n/a'}.")), body),
+        ]
+        for index, agent in enumerate(agents):
+            if index:
+                story.append(PageBreak())
+            story.append(Paragraph(
+                f"{agent['code']} - {html.escape(clean(agent['title']))}", title))
+            story.append(Paragraph(html.escape(clean(
+                f"Agent {agent['agent_id']}; status {agent['status']}; "
+                f"validator issues {len(agent['validation_issues'])}; "
+                f"adjustments {len(agent['validator_adjustments'])}.")), body))
+            for call_index, call in enumerate(agent["calls"], 1):
+                usage = call.get("usage") or {}
+                story.append(Paragraph(html.escape(clean(
+                    f"Call {call_index}/{len(agent['calls'])}; model {call.get('model_id')}; "
+                    f"{usage.get('input_tokens')} input, {usage.get('output_tokens')} output, "
+                    f"{usage.get('total_tokens')} total tokens; {call.get('latency_ms')} ms.")),
+                    body))
+                story += block("Effective instructions", call.get("effective_instructions"))
+                story += block("Inputs", call.get("inputs"))
+                story += block("Model output", call.get("output") or call.get("raw_response")
+                               or call.get("error"))
+            story += block("Deterministic validator result", {
+                "status": agent["status"], "detail": agent["detail"],
+                "issues": agent["validation_issues"],
+                "adjustments": agent["validator_adjustments"],
+                "parameters_after_validation": agent["parameters"],
+                "hypotheses_after_validation": agent["hypotheses"],
+                "coverage": agent["coverage"],
+            })
+        doc.build(story)
+        return True
+
     cells: dict[str, dict[str, Any]] = {}
     depth = 0
     for agent in agents:
@@ -968,14 +1042,14 @@ def write_comparison_pdf(payload: dict[str, Any], path: Path) -> bool:
     title = ParagraphStyle("t", fontName="Helvetica-Bold", fontSize=14, leading=17)
     small = ParagraphStyle("s", fontName="Helvetica", fontSize=8, leading=10)
     doc.build([
-        Paragraph("Business Overview: six-specialist comparison", title),
+        Paragraph(f"Business Overview: {len(agents)}-specialist comparison", title),
         Paragraph(html.escape(clean(
             f"{meta['borrower']}, case {meta['case_id']}, run {meta['analysis_run_id']}, "
             f"{meta['execution_mode'].replace('_', ' ')}, model(s) "
-            f"{', '.join(meta['models']) or 'n/a'}. Six specialists and validators only.")),
+            f"{', '.join(meta['models']) or 'n/a'}. {len(agents)} specialists and validators only.")),
             small),
         Spacer(1, 3 * mm), table, Spacer(1, 5 * mm),
-        Paragraph("Rules shared by all six specialists (identical in every prompt)",
+        Paragraph(f"Rules shared by all {len(agents)} specialists (identical in every prompt)",
                   ParagraphStyle("h2", fontName="Helvetica-Bold", fontSize=9, leading=11)),
         para(payload["shared_rules"],
              ParagraphStyle("r", fontName="Helvetica", fontSize=7.5, leading=9.5))])

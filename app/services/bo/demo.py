@@ -1,4 +1,4 @@
-"""One-command BO specialists demonstration (six agents + validators + reports).
+"""One-command BO specialists demonstration (selected roster + validators + reports).
 
 Runs phases 1-3 of the Business Overview for a case, writes the structured JSON
 and the three human-readable reports, and optionally benchmarks the run against
@@ -41,6 +41,7 @@ def run_demo(
     prices: dict[str, float] | None = None,
     sector="auto",
     prepared=None,
+    bo_roster="v2",
 ) -> dict[str, Any]:
     output_root = Path(output_root)
     if prepared is None:
@@ -64,7 +65,7 @@ def run_demo(
         replay = RecordingBackend(benchmark.replay_backend(calls))
         replay_run = BusinessOverviewRunner(
             session, backend=replay, data_root=data_root, output_root=output_root,
-            coverage_checks=coverage_checks, sector=sector,
+            coverage_checks=coverage_checks, sector=sector, bo_roster=bo_roster,
         ).run_specialists(case_id, prepared=prepared)
         replayed = build_payload(replay_run, calls=replay.calls,
                                  execution_mode="offline_simulation")
@@ -91,7 +92,7 @@ def run_demo(
     recorder = RecordingBackend(backend)
     run = BusinessOverviewRunner(
         session, backend=recorder, data_root=data_root, output_root=output_root,
-        coverage_checks=coverage_checks, sector=sector,
+        coverage_checks=coverage_checks, sector=sector, bo_roster=bo_roster,
     ).run_specialists(case_id, prepared=prepared)
     mode = execution_mode(backend)
     payload = build_payload(run, calls=recorder.calls, execution_mode=mode, prices=prices)
