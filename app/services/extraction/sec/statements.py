@@ -13,6 +13,7 @@ from .linkbases import (
 from .narrative import narrative_evidence
 from .proxy import parse_proxy
 from .subsidiaries import find_exhibit21, parse_exhibit21
+from .xml import rich_text, safe_xml
 
 
 def parse_bundle(bundle, *, entity_id, scope="consolidated", accounting_basis="GAAP"):
@@ -57,6 +58,12 @@ def parse_bundle(bundle, *, entity_id, scope="consolidated", accounting_basis="G
             narrative.extend(parse_proxy(file))
         elif find_exhibit21(file):
             subsidiaries.extend(parse_exhibit21(file))
+            narrative.extend(narrative_evidence(
+                rich_text(safe_xml(file.content, html=True)),
+                document_id=file.document_id,
+                accession=bundle.accession,
+                kind="Exhibit 21",
+            ))
     diagnostics = {
         "cik": bundle.cik,
         "ticker": bundle.ticker,

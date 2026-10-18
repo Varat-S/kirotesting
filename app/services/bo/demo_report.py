@@ -11,6 +11,8 @@ payload (so the reports cannot drift from the data):
                                 every selected specialist
 * ``validation_audit.html``     every rejected, qualified, corrected,
                                 reclassified or unresolved hypothesis
+* ``m3_governed_assessment.*``  Validator 7's authoritative post-validation
+                                M3 object and a deterministic audit view
 * ``benchmark.html``            old-versus-new comparison, when a baseline is given
 
 The executive summary quotes each validated hypothesis as the agent wrote it and
@@ -31,6 +33,7 @@ from app.models.orm import AgentRunRow, RetrievalAttemptRow
 from app.prompts.bo_prompts import SHARED_RULES, specialist_block
 
 PAYLOAD_VERSION = "bo-specialists-run-1.0"
+M3_EXPORT_VERSION = "bo-m3-governed-export-1.0"
 DEBT_RULE = "operating_pressure_to_debt_capacity"
 
 
@@ -148,6 +151,8 @@ def build_payload(run, *, calls: list[dict[str, Any]] | None = None,
         "agents": agents,
         "indicators": [t.model_dump(mode="json") for t in run.indicators.traces],
         "fo_handoffs": run.fo_handoffs(),
+        # This is the runner's authoritative state, not a report-side replay.
+        "module_conclusions": run.module_conclusions,
         "passages": passages,
         "usage": {**totals, "model_latency_ms_total": latency,
                   "calls": len(calls)},
@@ -270,7 +275,7 @@ def _page(title: str, payload: dict[str, Any], body: list[str]) -> str:
         f"<style>{_CSS}</style></head><body><h1>{_e(title)}</h1>",
         f"<div class='muted'>{_e(meta['borrower'])} &middot; case {_e(meta['case_id'])} &middot; "
         f"as of {_e(meta['as_of_date'])} &middot; run {_e(meta['analysis_run_id'])}</div>",
-        f"<div class='banner'>{_e(mode)}. Six Business Overview specialists and their "
+        f"<div class='banner'>{_e(mode)}. {len(payload['agents'])} Business Overview specialists and their "
         "deterministic validators only: no orchestrator, challenger, score, rating or "
         "debt-capacity view.</div>", *body, "</body></html>"])
 
@@ -357,26 +362,42 @@ def render_executive_summary(payload: dict[str, Any]) -> str:
     def agent(*codes):
         return lambda h: h["section"] in codes
 
-    sections = [
-        ("Cross-specialist risk interactions",
-         "BO6 combines validated findings of BO1&ndash;BO5. An interaction is never "
-         "more certain than the findings it is built from.",
-         pick(agent("BO6"))),
-        ("How the company generates revenue", "",
-         pick(lambda h: h["section"] == "BO1" and h["direction"] in ("neutral", "mixed"))),
-        ("Sources of operating resilience",
-         "Favourable findings from any specialist. A mitigant marked unproven exists "
-         "but has no measured outcome in the evidence.",
-         pick(lambda h: h["direction"] == "positive")),
-        ("Material operating risks and vulnerabilities", "",
-         pick(lambda h: h["section"] in ("BO1", "BO4") and h["direction"] == "negative"
-              and h["materiality"] == "high")),
-        ("Competitive and payer dynamics", "", pick(agent("BO2", "BO3"))),
-        ("Management and execution", "", pick(agent("BO4", "BO1"))),
-        ("External and regulatory exposures", "", pick(agent("BO5"))),
-    ]
-    # Interactions are shown after the per-area findings they rest on.
-    sections.append(sections.pop(0))
+    codes = {a["code"] for a in payload["agents"]}
+    if "M3" in codes:  # specialist-only v3: provisional findings, no synthesis claim
+        sections = [
+            ("Business model and revenue quality", "", pick(agent("M1S1"))),
+            ("Customer, payer and pricing risks", "", pick(agent("M1S2", "M1S3"))),
+            ("Operating model and competitive position", "",
+             pick(agent("M1S4", "M1S5"))),
+            ("Industry context and disclosed risks", "", pick(agent("M2"))),
+            ("Corporate structure, management and governance", "", pick(agent("M3"))),
+            ("Strategy and capital stewardship",
+             "Intentions and ordinary investment activity are not presented as "
+             "demonstrated credit resilience.", pick(agent("M4"))),
+            ("Qualified cross-specialist interactions",
+             "These are provisional specialist findings, not an orchestrator "
+             "conclusion or credit recommendation.", pick(agent("M1A6"))),
+        ]
+    else:
+        sections = [
+            ("Cross-specialist risk interactions",
+             "BO6 combines validated findings of BO1&ndash;BO5. An interaction is "
+             "never more certain than the findings it is built from.", pick(agent("BO6"))),
+            ("How the company generates revenue", "",
+             pick(lambda h: h["section"] == "BO1"
+                  and h["direction"] in ("neutral", "mixed"))),
+            ("Sources of operating resilience",
+             "Favourable findings from any specialist. A mitigant marked unproven "
+             "exists but has no measured outcome in the evidence.",
+             pick(lambda h: h["direction"] == "positive")),
+            ("Material operating risks and vulnerabilities", "",
+             pick(lambda h: h["section"] in ("BO1", "BO4")
+                  and h["direction"] == "negative" and h["materiality"] == "high")),
+            ("Competitive and payer dynamics", "", pick(agent("BO2", "BO3"))),
+            ("Management and execution", "", pick(agent("BO4", "BO1"))),
+            ("External and regulatory exposures", "", pick(agent("BO5"))),
+        ]
+        sections.append(sections.pop(0))
 
     body = ["<p>Every statement below is a hypothesis written by a specialist and "
             "passed by the deterministic validators, quoted as written. The tag "
@@ -431,6 +452,73 @@ def render_executive_summary(payload: dict[str, Any]) -> str:
     body.append("<p class='muted'>This summary contains no borrower rating and no "
                 "debt-capacity conclusion; those are outside the Business Overview.</p>")
     return _page("Business Overview: executive summary", payload, body)
+
+
+def build_m3_governed_export(payload: dict[str, Any]) -> dict[str, Any]:
+    """Pure view of the runner-owned M3 assessment; never re-validates it."""
+    module = (payload.get("module_conclusions") or {}).get("M3") or {}
+    assessment = module.get("m3_assessment")
+    m3_agent = next((a for a in payload.get("agents", []) if a.get("code") == "M3"), None)
+    status = module.get("m3_assessment_status") or "unavailable"
+    reason = None
+    if assessment is None:
+        reason = ("No authoritative post-validation M3 assessment exists. "
+                  + " ".join(module.get("missing_information") or [])).strip()
+    return {
+        "document": "m3_governed_assessment",
+        "version": M3_EXPORT_VERSION,
+        "case_id": payload.get("meta", {}).get("case_id"),
+        "analysis_run_id": payload.get("meta", {}).get("analysis_run_id"),
+        "latest_accepted_specialist_attempt": (
+            m3_agent["agent_run_ids"][-1]
+            if m3_agent and m3_agent.get("status") == "validated"
+            and m3_agent.get("agent_run_ids") else None),
+        "assessment_status": status,
+        "unavailable_reason": reason,
+        "authoritative_source": "module_conclusions.M3.m3_assessment",
+        "governed_assessment": assessment,
+    }
+
+
+def render_m3_governed_assessment(export: dict[str, Any],
+                                  payload: dict[str, Any]) -> str:
+    assessment = export.get("governed_assessment")
+    if assessment is None:
+        body = ["<h2>Governed assessment</h2><p><strong>unavailable</strong></p>",
+                f"<p>{_e(export.get('unavailable_reason') or 'No validated M3 output exists.')}</p>"]
+        return _page("M3 governed assessment", payload, body)
+
+    excluded = {"model_proposal", "validation_issues", "rejected_items"}
+    governed = {k: v for k, v in assessment.items() if k not in excluded}
+    borrower = assessment.get("borrower_identification") or {}
+    unresolved = {
+        "borrower_limitation": borrower.get("limitation"),
+        "information_gaps": assessment.get("information_gaps") or [],
+        "downstream_dependencies": assessment.get("downstream_dependencies") or [],
+    }
+
+    def json_block(value: Any) -> str:
+        if value in (None, [], {}):
+            return "<p class='muted'>None / unavailable.</p>"
+        return "<pre>" + _e(json.dumps(value, indent=2, ensure_ascii=False)) + "</pre>"
+
+    body = [
+        "<p>This is a deterministic view of the runner's authoritative "
+        "<code>module_conclusions.M3.m3_assessment</code>. It is not reconstructed "
+        "from the transcript.</p>",
+        "<table><tr><th>Assessment schema</th><td>" + _e(assessment.get("schema_version"))
+        + "</td></tr><tr><th>Validator</th><td>" + _e(assessment.get("validator_id"))
+        + " / " + _e(assessment.get("validator_version"))
+        + "</td></tr><tr><th>Latest accepted attempt</th><td>"
+        + _e(export.get("latest_accepted_specialist_attempt") or "unavailable")
+        + "</td></tr></table>",
+        "<h2>1. Model proposal</h2>", json_block(assessment.get("model_proposal")),
+        "<h2>2. Validator findings</h2>", json_block(assessment.get("validation_issues")),
+        "<h2>3. Final governed content</h2>", json_block(governed),
+        "<h2>4. Excluded material</h2>", json_block(assessment.get("rejected_items")),
+        "<h2>5. Unresolved information</h2>", json_block(unresolved),
+    ]
+    return _page("M3 governed assessment", payload, body)
 
 
 # --------------------------------------------------------------------------- #
@@ -1062,10 +1150,16 @@ def write_reports(payload: dict[str, Any], folder: Path, *, benchmark: str | Non
     paths = {"specialists_run.json": folder / "specialists_run.json"}
     paths["specialists_run.json"].write_text(
         canonical_json(payload) + "\n", encoding="utf-8", newline="\n")
+    m3_export = build_m3_governed_export(payload)
+    paths["m3_governed_assessment.json"] = folder / "m3_governed_assessment.json"
+    paths["m3_governed_assessment.json"].write_text(
+        canonical_json(m3_export) + "\n", encoding="utf-8", newline="\n")
     for name, content in (
             ("executive_summary.html", render_executive_summary(payload)),
             ("specialists_comparison.html", render_comparison(payload)),
-            ("validation_audit.html", render_audit(payload))):
+            ("validation_audit.html", render_audit(payload)),
+            ("m3_governed_assessment.html",
+             render_m3_governed_assessment(m3_export, payload))):
         paths[name] = folder / name
         paths[name].write_text(content, encoding="utf-8", newline="\n")
     if benchmark is not None:

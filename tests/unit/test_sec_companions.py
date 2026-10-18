@@ -73,3 +73,18 @@ def test_exhibit_heading_fallback_and_header_rows_filtered():
     assert len(rows) == 1 and rows[0]["name"] == "Example International Ltd"
     assert rows[0]["jurisdiction"] == "Singapore" and rows[0]["document_id"] == "EX21"
     assert rows[0]["status"] == "unverified"
+
+
+def test_paragraph_form_exhibit_21_preserves_named_legal_entities():
+    file = filing_file(
+        "paragraphs.htm", "exhibit_21",
+        b"<html><p>Exhibit 21</p><p>ALABAMA</p>"
+        b"<p>Example Hospital Holdings, Inc.</p><p>Example Surgery Center, LLC</p>"
+        b"<p>ALASKA</p><p>Example Alaska, L.P.</p></html>",
+    ).model_copy(update={"admitted": True, "document_id": "EX21-P"})
+    rows = parse_exhibit21(file)
+    assert [(r["name"], r["jurisdiction"]) for r in rows] == [
+        ("Example Hospital Holdings, Inc.", "ALABAMA"),
+        ("Example Surgery Center, LLC", "ALABAMA"),
+        ("Example Alaska, L.P.", "ALASKA"),
+    ]

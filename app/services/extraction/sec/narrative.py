@@ -60,7 +60,14 @@ def narrative_evidence(text, *, document_id, accession, kind="10-K"):
         passages = [{"section": kind, "heading": kind, "text": text, "location": 0}]
     results = []
     for passage in passages:
-        for chunk in find_excerpts(passage["text"]):
+        chunks = find_excerpts(passage["text"])
+        if kind == "Exhibit 21":
+            chunks = [
+                {"text": passage["text"][start:start + 2000], "location": start,
+                 "candidate_topics": ["legal_entities"]}
+                for start in range(0, len(passage["text"]), 2000)
+            ]
+        for chunk in chunks:
             evidence = {
                 **chunk,
                 "location": passage["location"] + chunk["location"],

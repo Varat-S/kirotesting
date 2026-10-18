@@ -9,6 +9,8 @@ import pytest
 
 from app.models.orm import AgentRunRow, EvidencePacketRow, RiskScoreRow
 from app.services.bo.offline import ScriptedBoBackend
+from app.services.bo.demo_report import build_m3_governed_export
+from app.services.bo.m3_replay import replay_recorded_m3_assessment
 from app.services.bo.roster_v3 import V3_PRIMARY_AGENT_IDS, V3_SPECS
 from app.services.bo.runner import BusinessOverviewRunner
 from tests import bo_helpers as h
@@ -160,6 +162,7 @@ def test_validated_m3_extension_flows_through_module_conclusion_and_handoff(
         "legal_entities": [{
             "entity_id": "reporting-parent", "legal_name": "Example Parent",
             "jurisdiction": None, "classification": "reporting_parent",
+            "identity_type": "legal_entity",
             "verification_status": "verified", "evidence_ids": [evidence],
             "materiality_reason": "Reporting entity relevant to governance.",
         }],
@@ -169,6 +172,8 @@ def test_validated_m3_extension_flows_through_module_conclusion_and_handoff(
             "observation_id": "MO1", "management_id": "board",
             "legal_name": "Board of Directors", "role": "Board", "effective_from": None,
             "effective_to": None, "dimension": "competence",
+            "evidence_basis": "reported_experience", "attribution": "company_reported",
+            "assurance_scope": None, "assurance_date": None,
             "hypothesis": "The board oversees succession planning.",
             "credit_mechanism": "Succession oversight may reduce leadership continuity risk.",
             "supporting_evidence_ids": [evidence], "contradicting_evidence_ids": [],
@@ -187,6 +192,17 @@ def test_validated_m3_extension_flows_through_module_conclusion_and_handoff(
     assert module["m3_assessment"]["schema_version"] == \
         "bo-m3-corporate-assessment-1.0"
     assert module["m3_assessment"]["model_proposal"]["legal_entities"]
+    export = build_m3_governed_export({
+        "meta": {"case_id": h.CASE, "analysis_run_id": result.analysis_run_id},
+        "module_conclusions": result.handoff["module_conclusions"],
+        "agents": [{"code": "M3", "status": "validated",
+                    "agent_run_ids": ["attempt-1"]}],
+    })
+    assert export["governed_assessment"] == module["m3_assessment"]
+    assert export["authoritative_source"] == "module_conclusions.M3.m3_assessment"
+    replay = replay_recorded_m3_assessment(db_session, result.analysis_run_id)
+    assert replay["model_called"] is False
+    assert replay["governed_assessment"] == module["m3_assessment"]
 
 
 def test_incomplete_module_blocks_agent6_and_remains_visible(db_session, tmp_path):

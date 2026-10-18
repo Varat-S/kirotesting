@@ -42,6 +42,7 @@ def run_demo(
     sector="auto",
     prepared=None,
     bo_roster="v2",
+    transaction_borrower_entity_id: str | None = None,
 ) -> dict[str, Any]:
     output_root = Path(output_root)
     if prepared is None:
@@ -66,6 +67,7 @@ def run_demo(
         replay_run = BusinessOverviewRunner(
             session, backend=replay, data_root=data_root, output_root=output_root,
             coverage_checks=coverage_checks, sector=sector, bo_roster=bo_roster,
+            transaction_borrower_entity_id=transaction_borrower_entity_id,
         ).run_specialists(case_id, prepared=prepared)
         replayed = build_payload(replay_run, calls=replay.calls,
                                  execution_mode="offline_simulation")
@@ -93,6 +95,7 @@ def run_demo(
     run = BusinessOverviewRunner(
         session, backend=recorder, data_root=data_root, output_root=output_root,
         coverage_checks=coverage_checks, sector=sector, bo_roster=bo_roster,
+        transaction_borrower_entity_id=transaction_borrower_entity_id,
     ).run_specialists(case_id, prepared=prepared)
     mode = execution_mode(backend)
     payload = build_payload(run, calls=recorder.calls, execution_mode=mode, prices=prices)

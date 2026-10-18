@@ -198,7 +198,10 @@ def test_real_sec_zip_upload_retains_diagnostics_and_excludes_late_proxy(
     assert len(value["rejected_sources"]) == 1
     assert len(evidence["facts"]) == 1305
     assert len(evidence["sec_filings"][0]["contexts"]) == 281
-    assert len(evidence["narrative_evidence"]) == 156
+    # 156 primary/proxy passages plus one inspectable Exhibit 21 chunk.
+    assert len(evidence["narrative_evidence"]) == 157
+    assert sum(p["section"] == "Exhibit 21"
+               for p in evidence["narrative_evidence"]) == 1
     assert any(f["dimensions"] for f in evidence["facts"])
     assert value["metrics"]["operating_margin"]["result"] == pytest.approx(
         130387 / 215938

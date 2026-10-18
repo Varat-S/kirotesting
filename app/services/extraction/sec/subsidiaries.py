@@ -46,4 +46,35 @@ def parse_exhibit21(file):
                 "status": "unverified",
             }
         )
+    if rows:
+        return rows
+
+    # Some issuers publish Exhibit 21 as paragraphs: an uppercase jurisdiction
+    # heading followed by one legal name per paragraph, with no HTML table.
+    # Preserve the disclosed names as unverified evidence; do not infer roles,
+    # ownership percentages, guarantor status, or materiality from the list.
+    jurisdiction = None
+    legal_suffix = re.compile(
+        r"(?:\bInc\.?|\bLLC|\bL\.L\.C\.|\bL\.P\.|\bLtd\.?|\bLimited|"
+        r"\bCorp\.?|\bCorporation|\bCompany|\bP\.C\.|\bPLLC)\s*$", re.I)
+    ignored = re.compile(r"^Exhibit\s+21(?:\.\d+)?$|^Subsidiaries", re.I)
+    for index, node in enumerate(root.iter()):
+        if local(node.tag).lower() != "p":
+            continue
+        value = " ".join(rich_text(node).split())
+        if not value or ignored.search(value):
+            continue
+        if value == value.upper() and len(value) <= 80 and not legal_suffix.search(value):
+            jurisdiction = value
+            continue
+        if legal_suffix.search(value):
+            rows.append({
+                "name": value,
+                "jurisdiction": jurisdiction,
+                "other": [],
+                "document_id": file.document_id,
+                "sec_accession": file.accession,
+                "location": index,
+                "status": "unverified",
+            })
     return rows

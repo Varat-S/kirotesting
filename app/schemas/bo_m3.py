@@ -28,6 +28,9 @@ class LegalEntity(_Strict):
         "proposed_borrower", "other_material_entity",
     ]
     verification_status: Literal["verified", "qualified", "unverified", "disputed"]
+    identity_type: Literal[
+        "legal_entity", "operating_unit", "collective_grouping", "unresolved",
+    ] = "unresolved"
     evidence_ids: list[str] = Field(default_factory=list)
     materiality_reason: str
 
@@ -53,6 +56,11 @@ class CashFlowLocation(_Strict):
     currency: str | None = None
     units: str | None = None
     accounting_basis: str | None = None
+    measure_type: Literal[
+        "revenue", "ebitda", "operating_income", "operating_cash_flow",
+        "free_cash_flow", "cash_balance", "distributable_cash",
+        "actual_upstream_distribution", "unclassified",
+    ] = "unclassified"
     reporting_scope: Literal["consolidated", "segment", "entity"]
     cash_flow_roles: list[Literal[
         "operating_cash_generator", "legal_cash_controller", "cash_holder",
@@ -117,6 +125,16 @@ class ManagementObservation(_Strict):
     effective_from: str | None = None
     effective_to: str | None = None
     dimension: Literal["competence", "credibility_integrity"]
+    evidence_basis: Literal[
+        "reported_experience", "credentials_or_tenure", "outcome_evidence",
+        "control_assurance", "misconduct_or_enforcement", "unclassified",
+    ] = "unclassified"
+    attribution: Literal[
+        "company_reported", "independently_observed", "auditor_assured",
+        "validator_inference", "unclassified",
+    ] = "unclassified"
+    assurance_scope: str | None = None
+    assurance_date: str | None = None
     hypothesis: str
     credit_mechanism: str
     supporting_evidence_ids: list[str] = Field(default_factory=list)

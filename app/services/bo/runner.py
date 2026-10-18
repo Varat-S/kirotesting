@@ -206,6 +206,7 @@ class BusinessOverviewRunner:
         sector="auto",
         coverage_checks=None,
         bo_roster: str = "v2",
+        transaction_borrower_entity_id: str | None = None,
         investigation_mode: InvestigationMode = InvestigationMode.SINGLE_PASS,
     ) -> None:
         settings = get_settings()
@@ -218,6 +219,10 @@ class BusinessOverviewRunner:
         if bo_roster not in {"v2", "v3"}:
             raise ValueError("bo_roster must be 'v2' or 'v3'.")
         self.bo_roster = bo_roster
+        # This is deliberately explicit. A reporting-company flag or a debt
+        # issuer found in a filing is not transaction evidence for a proposed
+        # facility borrower.
+        self.transaction_borrower_entity_id = transaction_borrower_entity_id
         self.investigation_mode = investigation_mode
         if investigation_mode is not InvestigationMode.SINGLE_PASS:
             raise ValueError(
@@ -916,7 +921,12 @@ class _BoRun:
         if spec.code == "M3" and isinstance(parsed.get("m3_assessment"), dict):
             try:
                 m3_assessment = validate_m3_assessment(
-                    parsed["m3_assessment"], allowed_evidence_ids=allowed)
+                    parsed["m3_assessment"], allowed_evidence_ids=allowed,
+                    validated_borrower_entity_ids=(
+                        {self.runner.transaction_borrower_entity_id}
+                        if self.runner.transaction_borrower_entity_id else set()),
+                    evidence_texts={e: self.passage_text[e] for e in allowed
+                                    if e in self.passage_text})
             except M3AssessmentError as exc:
                 issues.append(str(exc))
         if issues:
@@ -1068,10 +1078,23 @@ class _BoRun:
         for agent_id in self.primary_agent_ids:
             if self.agents[agent_id].status != "validated":
                 continue
+            records = {h.hypothesis_id: h for h in self.hypotheses.get(agent_id, [])}
+
+            def recovery_exhausted(outcome) -> bool:
+                cited = [records[h] for h in outcome.hypothesis_ids if h in records]
+                return bool(cited) and all(
+                    not record.usable and any(
+                        "recovery attempt" in note and "no match" in note
+                        for note in record.validation_notes)
+                    for record in cited)
+
             unanswered = [
                 c for c in self.coverage
                 if c.agent_id == agent_id and not c.addressed_by and c.passages_located
-                and c.response_status != "not_supported_by_evidence"]
+                and c.response_status != "not_supported_by_evidence"
+                # Quote recovery has already searched the full admitted corpus.
+                # Re-sending the same large packet cannot create source text.
+                and not recovery_exhausted(c)]
             if unanswered:
                 self.coverage_requests[agent_id] = [
                     {"check_id": c.check.check_id, "question": c.check.question,

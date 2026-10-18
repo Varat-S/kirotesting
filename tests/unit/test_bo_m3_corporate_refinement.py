@@ -14,10 +14,12 @@ from app.services.bo.m3_validation import validate_m3_assessment
 EVIDENCE = {"e_parent", "e_opco", "e_owner", "e_cash", "e_restrict", "e_mgr", "e_bad"}
 
 
-def entity(eid, name, classification, evidence="e_parent", status="verified"):
+def entity(eid, name, classification, evidence="e_parent", status="verified",
+           identity_type="legal_entity"):
     return {
         "entity_id": eid, "legal_name": name, "jurisdiction": "US-DE",
         "classification": classification, "verification_status": status,
+        "identity_type": identity_type,
         "evidence_ids": [evidence] if evidence else [],
         "materiality_reason": "Material to cash generation or borrower access.",
     }
@@ -48,6 +50,8 @@ def management(oid="MO1", **updates):
         "observation_id": oid, "management_id": "mgr-1", "legal_name": "Alex Doe",
         "role": "Chief Executive Officer", "effective_from": "2024-01-01",
         "effective_to": None, "dimension": "competence",
+        "evidence_basis": "outcome_evidence", "attribution": "independently_observed",
+        "assurance_scope": None, "assurance_date": None,
         "hypothesis": "Management execution is vulnerable after repeated disruptions.",
         "credit_mechanism": "Execution failures can weaken operating stability and cash generation.",
         "supporting_evidence_ids": ["e_mgr"], "contradicting_evidence_ids": [],
@@ -90,6 +94,7 @@ def proposal():
             "cash_flow_id": "CF1", "entity_id": "opco", "amount": 25.0,
             "period": "FY2025", "currency": "USD", "units": "millions",
             "accounting_basis": "entity statutory cash from operations",
+            "measure_type": "operating_cash_flow",
             "reporting_scope": "entity", "evidence_ids": ["e_cash"],
             "cash_flow_roles": ["operating_cash_generator", "legal_cash_controller"],
             "provenance_status": "verified", "missing_information": [],
@@ -110,8 +115,10 @@ def proposal():
     }
 
 
-def validate(value=None):
-    return validate_m3_assessment(value or proposal(), allowed_evidence_ids=EVIDENCE)
+def validate(value=None, *, borrowers=None):
+    return validate_m3_assessment(
+        value or proposal(), allowed_evidence_ids=EVIDENCE,
+        validated_borrower_entity_ids={"holdco"} if borrowers is None else borrowers)
 
 
 def test_provider_schema_describes_nested_m3_objects_instead_of_empty_shells():
@@ -238,3 +245,60 @@ def test_case_j_legacy_handoff_remains_interpretable_with_qualification_and_hash
     assert legacy.schema_version == "bo-handoff-1.1"
     assert legacy.evidence_limitations == ["borrower unavailable"]
     assert legacy.module_conclusions == {}
+
+
+def test_reporting_parent_and_historical_issuer_do_not_establish_proposed_borrower():
+    value = proposal()
+    value["legal_entities"].append(
+        entity("issuer", "Example Historical Notes LLC", "other_material_entity"))
+    result = validate(value, borrowers=set())
+    assert result.borrower_identification.status == "unavailable"
+    assert {e.entity_id for e in result.legal_entities} >= {"parent", "issuer"}
+    assert any(d["module"] == "SO" and "obligor" in d["question"].lower()
+               for d in result.downstream_dependencies)
+
+
+def test_collective_grouping_is_excluded_from_legal_graph_and_dependent_edges():
+    value = proposal()
+    value["legal_entities"].append(entity(
+        "affiliates", "Example affiliates", "operating_subsidiary",
+        identity_type="collective_grouping"))
+    value["ownership_relationships"].append({
+        **deepcopy(value["ownership_relationships"][0]),
+        "relationship_id": "OR-COLLECTIVE", "subsidiary_entity_id": "affiliates",
+    })
+    result = validate(value)
+    assert "affiliates" not in {e.entity_id for e in result.legal_entities}
+    assert "OR-COLLECTIVE" not in {
+        r.relationship_id for r in result.ownership_relationships}
+    assert any(x["reason"] == "collective_grouping_is_not_a_legal_person"
+               for x in result.rejected_items)
+
+
+def test_revenue_cannot_become_cash_flow_and_cash_balance_is_not_generation():
+    value = proposal()
+    value["cash_flow_locations"][0].update(
+        measure_type="revenue", reporting_scope="entity")
+    result = validate(value)
+    assert result.cash_flow_locations == []
+    assert any(x["reason"] == "financial_measure_is_not_cash_flow"
+               for x in result.rejected_items)
+
+    value = proposal()
+    value["cash_flow_locations"][0].update(
+        measure_type="cash_balance", cash_flow_roles=["cash_holder"])
+    result = validate(value)
+    assert result.cash_flow_locations[0].measure_type == "cash_balance"
+    assert result.cash_flow_locations[0].cash_flow_roles == ["cash_holder"]
+
+
+def test_icfr_assurance_cannot_establish_broad_governance_effectiveness():
+    value = proposal()
+    value["governance_screening"] = [finding(
+        "G-ICFR", credit_hypothesis="Effective internal controls establish governance effectiveness.",
+        causal_mechanism="Internal control assurance proves broader operational governance.",
+        disposition="supported", admissibility="established", borrower_specific=False)]
+    result = validate(value)
+    governed = result.governance_screening[0]
+    assert governed.disposition.value == "qualified"
+    assert any(issue.rule_id == "m3.icfr_scope" for issue in result.validation_issues)

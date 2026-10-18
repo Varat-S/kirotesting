@@ -67,15 +67,32 @@ def _govern_finding(raw: dict[str, Any], *, allowed: set[str], borrower_known: b
         reasons.append("Borrower-specific conclusion is unavailable because no borrower is identified.")
         _issue(issues, "m3.borrower_unavailable", item_id, "downgraded", reasons[-1])
     if bucket == "management_assessments":
-        # Tenure/credentials or absence of misconduct alone never establishes a judgement.
+        # Reported background is useful, but is not outcome evidence of competence.
         text = " ".join((item.get("hypothesis") or "", item.get("credit_mechanism") or "")).lower()
-        if disposition == "supported" and (
+        weak_basis = item.get("evidence_basis") in {
+            "reported_experience", "credentials_or_tenure", "unclassified",
+        }
+        if disposition == "supported" and (weak_basis or (
             ("tenure" in text or "qualification" in text) and not contradicting
             or "no misconduct" in text or "absence of misconduct" in text
-        ):
+        )):
             disposition = "qualified"
-            reasons.append("Tenure, qualifications, or absence of misconduct alone cannot establish management competence or integrity.")
+            reasons.append("Reported experience, tenure, qualifications, or absence of misconduct alone cannot establish management competence or integrity; the observation remains attributed background unless outcome evidence is supplied.")
             _issue(issues, "m3.management_proxy", item_id, "downgraded", reasons[-1])
+        if item.get("evidence_basis") == "control_assurance":
+            scope = (item.get("assurance_scope") or "").casefold()
+            if "financial reporting" not in scope or not item.get("assurance_date"):
+                disposition = "unverified"
+                reasons.append("Control assurance must identify its financial-reporting scope and assurance date; it cannot establish operational, clinical or strategic governance.")
+                _issue(issues, "m3.icfr_scope", item_id, "downgraded", reasons[-1])
+    elif bucket == "governance_screening":
+        text = " ".join((item.get("credit_hypothesis") or "",
+                         item.get("causal_mechanism") or "")).casefold()
+        if disposition == "supported" and "internal control" in text and any(
+                word in text for word in ("governance", "operational", "clinical", "strategic")):
+            disposition = "qualified"
+            reasons.append("Auditor assurance over internal control over financial reporting is date- and scope-specific and does not establish broader operational, clinical or strategic governance effectiveness.")
+            _issue(issues, "m3.icfr_scope", item_id, "downgraded", reasons[-1])
     item["disposition"] = disposition
     claim_type = ClaimType.INFERENCE
     item["admissibility"] = derive_admissibility(claim_type, Disposition(disposition)).value
@@ -85,6 +102,8 @@ def _govern_finding(raw: dict[str, Any], *, allowed: set[str], borrower_known: b
 
 def validate_m3_assessment(
     proposal: dict[str, Any], *, allowed_evidence_ids: set[str],
+    validated_borrower_entity_ids: set[str] | None = None,
+    evidence_texts: dict[str, str] | None = None,
 ) -> M3CorporateAssessment:
     """Validate, filter and conservatively downgrade an M3 model proposal.
 
@@ -93,6 +112,18 @@ def validate_m3_assessment(
     original proposal is embedded verbatim for audit.
     """
     original = deepcopy(proposal)
+    proposal = deepcopy(proposal)
+    # Additive compatibility for 1.0 proposals created before identity_type was
+    # explicit. Parent classifications denote an individual corporate node;
+    # operating-subsidiary descriptions stay unresolved because they are often
+    # collective groups or segments rather than named legal persons.
+    for entity in proposal.get("legal_entities") or []:
+        if "identity_type" not in entity:
+            entity["identity_type"] = (
+                "legal_entity" if entity.get("classification") in {
+                    "ultimate_parent", "intermediate_holding_company",
+                    "reporting_parent", "proposed_borrower",
+                } else "unresolved")
     try:
         draft = M3CorporateAssessment.model_validate(proposal)
     except ValidationError as exc:
@@ -100,6 +131,8 @@ def validate_m3_assessment(
     data = draft.model_dump(mode="json")
     issues: list[dict] = []
     rejected: list[dict] = []
+    validated_borrowers = set(validated_borrower_entity_ids or ())
+    evidence_texts = evidence_texts or {}
 
     entities: dict[str, dict] = {}
     clean_entities = []
@@ -109,6 +142,12 @@ def validate_m3_assessment(
             _issue(issues, "m3.entity_id_unique", eid, "rejected", "Duplicate entity identifier.")
             rejected.append({"kind": "legal_entity", "item": entity,
                              "reason": "duplicate_entity_id"})
+            continue
+        if entity.get("identity_type") != "legal_entity":
+            reason = f"{entity.get('identity_type') or 'unresolved'}_is_not_a_legal_person"
+            _issue(issues, "m3.legal_entity_identity", eid, "rejected",
+                   "Only an individually identified legal person may enter the legal-entity graph.")
+            rejected.append({"kind": "legal_entity", "item": entity, "reason": reason})
             continue
         if entity["verification_status"] == "verified" and not _evidence_ok(
                 entity["evidence_ids"], allowed_evidence_ids):
@@ -123,11 +162,19 @@ def validate_m3_assessment(
     if borrower["status"] == "identified" and (
         borrower["entity_id"] not in entities
         or not _evidence_ok(borrower["evidence_ids"], allowed_evidence_ids)
+        or borrower["entity_id"] not in validated_borrowers
     ):
-        _issue(issues, "m3.borrower_evidence", borrower.get("entity_id"), "downgraded",
-               "Borrower identification does not resolve to an evidenced graph entity.")
-        borrower.update(status="disputed", entity_id=None, evidence_ids=[],
-                        limitation="Proposed borrower identity was not validated by Validator 7.")
+        _issue(issues, "m3.proposed_borrower_transaction_evidence",
+               borrower.get("entity_id"), "downgraded",
+               "Reporting identity, parent status, or historical debt issuance does not identify the obligor for the proposed facility; transaction evidence or a validated case specification is required.")
+        borrower.update(status="unavailable", entity_id=None, evidence_ids=[],
+                        limitation="Proposed borrower is unavailable; SO must confirm the facility obligor from transaction evidence.")
+        if not any(d.get("module") == "SO" and "obligor" in d.get("question", "").casefold()
+                   for d in data["downstream_dependencies"]):
+            data["downstream_dependencies"].append({
+                "module": "SO",
+                "question": "Confirm the proposed facility obligor and legal borrower from transaction-specific evidence.",
+            })
     borrower_known = borrower["status"] == "identified"
 
     seen_relationships: dict[tuple[str, str], dict] = {}
@@ -198,6 +245,8 @@ def validate_m3_assessment(
             reason = "duplicate_cash_flow_id"
         seen_cash_ids.add(cid)
         entity = entities.get(cash["entity_id"])
+        measure = cash.get("measure_type", "unclassified")
+        roles = set(cash.get("cash_flow_roles") or [])
         if entity is None:
             reason = "unknown_entity"
         elif cash["amount"] is not None and not _evidence_ok(
@@ -208,8 +257,14 @@ def validate_m3_assessment(
                   "operating_subsidiary", "joint_venture", "partially_owned_subsidiary"
               }):
             reason = "unsupported_subsidiary_allocation_of_consolidated_cash_flow"
+        elif measure in {"revenue", "ebitda", "operating_income", "unclassified"} and roles:
+            reason = "financial_measure_is_not_cash_flow"
+        elif measure == "cash_balance" and "operating_cash_generator" in roles:
+            reason = "cash_balance_is_not_cash_generation"
+        elif measure == "distributable_cash" and cash["reporting_scope"] != "entity":
+            reason = "distributable_cash_requires_entity_scope"
         if reason:
-            _issue(issues, "m3.cash_flow_provenance", cid, "rejected", reason)
+            _issue(issues, "m3.cash_flow_semantics", cid, "rejected", reason)
             rejected.append({"kind": "cash_flow_location", "item": cash, "reason": reason})
             continue
         clean_cash.append(cash)

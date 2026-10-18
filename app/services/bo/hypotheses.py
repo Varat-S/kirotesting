@@ -470,6 +470,22 @@ class HypothesisValidator:
                    "rather than supported.")
             disposition = Disposition.QUALIFIED
 
+        # M3 attribution guardrails. A filing can establish that management
+        # reports experience or tenure; that does not independently establish
+        # superior competence or execution quality.
+        claim_text = (item.get("claim") or "").casefold()
+        if (self._spec.code == "M3" and live
+                and any(term in claim_text for term in ("management", "leadership"))
+                and any(term in claim_text for term in ("experience", "tenure", "credential"))):
+            if claim_type is ClaimType.FACT:
+                claim_type = ClaimType.MANAGEMENT_CLAIM
+            if disposition is Disposition.SUPPORTED:
+                disposition = Disposition.QUALIFIED
+            adjust("Management experience or tenure is attributed to the reporting source; without demonstrated outcomes it does not establish superior competence or execution.")
+        if (self._spec.code == "M3" and live and "internal control" in claim_text
+                and "financial reporting" in claim_text):
+            adjust("Scoped to the cited auditor assurance over internal control over financial reporting, at its stated reporting date and materiality threshold; no broader operational, clinical or strategic governance conclusion is implied.")
+
         # --- Layer D: what kind of support is this? ---------------------------
         basis = derive_evidence_basis(
             quotes=quote_texts, has_calculation=bool(parameter_result_ids),

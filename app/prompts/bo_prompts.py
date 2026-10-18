@@ -55,7 +55,8 @@ _NULLABLE_STR = {"type": ["string", "null"]}
 _M3_ENTITY: dict[str, Any] = {
     "type": "object",
     "required": ["entity_id", "legal_name", "jurisdiction", "classification",
-                 "verification_status", "evidence_ids", "materiality_reason"],
+                 "identity_type", "verification_status", "evidence_ids",
+                 "materiality_reason"],
     "properties": {
         "entity_id": {"type": "string"}, "legal_name": {"type": "string"},
         "jurisdiction": _NULLABLE_STR,
@@ -63,6 +64,8 @@ _M3_ENTITY: dict[str, Any] = {
             "ultimate_parent", "intermediate_holding_company", "reporting_parent",
             "operating_subsidiary", "joint_venture", "partially_owned_subsidiary",
             "proposed_borrower", "other_material_entity"]},
+        "identity_type": {"type": "string", "enum": [
+            "legal_entity", "operating_unit", "collective_grouping", "unresolved"]},
         "verification_status": {"type": "string", "enum": [
             "verified", "qualified", "unverified", "disputed"]},
         "evidence_ids": _STR_LIST, "materiality_reason": {"type": "string"},
@@ -137,13 +140,18 @@ _M3_ASSESSMENT: dict[str, Any] = {
         "cash_flow_locations": {"type": "array", "items": {
             "type": "object",
             "required": ["cash_flow_id", "entity_id", "amount", "period", "currency",
-                         "units", "accounting_basis", "reporting_scope", "cash_flow_roles",
+                         "units", "accounting_basis", "measure_type", "reporting_scope",
+                         "cash_flow_roles",
                          "evidence_ids", "provenance_status", "missing_information"],
             "properties": {
                 "cash_flow_id": {"type": "string"}, "entity_id": {"type": "string"},
                 "amount": {"type": ["number", "null"]}, "period": _NULLABLE_STR,
                 "currency": _NULLABLE_STR, "units": _NULLABLE_STR,
                 "accounting_basis": _NULLABLE_STR,
+                "measure_type": {"type": "string", "enum": [
+                    "revenue", "ebitda", "operating_income", "operating_cash_flow",
+                    "free_cash_flow", "cash_balance", "distributable_cash",
+                    "actual_upstream_distribution", "unclassified"]},
                 "reporting_scope": {"type": "string", "enum": ["consolidated", "segment", "entity"]},
                 "cash_flow_roles": {"type": "array", "items": {"type": "string", "enum": [
                     "operating_cash_generator", "legal_cash_controller", "cash_holder",
@@ -178,7 +186,8 @@ _M3_ASSESSMENT: dict[str, Any] = {
         "management_assessments": {"type": "array", "items": {
             "type": "object",
             "required": ["observation_id", "management_id", "legal_name", "role",
-                         "effective_from", "effective_to", "dimension", "hypothesis",
+                         "effective_from", "effective_to", "dimension", "evidence_basis",
+                         "attribution", "assurance_scope", "assurance_date", "hypothesis",
                          "credit_mechanism", "supporting_evidence_ids",
                          "contradicting_evidence_ids", "supporting_evidence_investigated",
                          "contradictory_evidence_investigated", "disposition", "admissibility",
@@ -188,6 +197,13 @@ _M3_ASSESSMENT: dict[str, Any] = {
                 "legal_name": {"type": "string"}, "role": {"type": "string"},
                 "effective_from": _NULLABLE_STR, "effective_to": _NULLABLE_STR,
                 "dimension": {"type": "string", "enum": ["competence", "credibility_integrity"]},
+                "evidence_basis": {"type": "string", "enum": [
+                    "reported_experience", "credentials_or_tenure", "outcome_evidence",
+                    "control_assurance", "misconduct_or_enforcement", "unclassified"]},
+                "attribution": {"type": "string", "enum": [
+                    "company_reported", "independently_observed", "auditor_assured",
+                    "validator_inference", "unclassified"]},
+                "assurance_scope": _NULLABLE_STR, "assurance_date": _NULLABLE_STR,
                 "hypothesis": {"type": "string"}, "credit_mechanism": {"type": "string"},
                 "supporting_evidence_ids": _STR_LIST, "contradicting_evidence_ids": _STR_LIST,
                 "supporting_evidence_investigated": {"type": "boolean"},
@@ -759,6 +775,16 @@ _AGENT_BRIEFS.update({
         "debt_service_obligor. Each transfer must label transfer_evidence_state as "
         "capacity_only, documented_actual_transfer, proposed or unknown; capacity is "
         "not evidence of an actual distribution.\n"
+        "For every entity set identity_type: legal_entity only for an individually "
+        "identified legal person, operating_unit for a segment/facility, "
+        "collective_grouping for plural or aggregate descriptions, and unresolved "
+        "when the evidence does not establish identity. A collective description "
+        "must never be converted into a named subsidiary, obligor or guarantor.\n"
+        "For every cash_flow_location set measure_type. Revenue, EBITDA, operating "
+        "income, operating cash flow, free cash flow, cash balances, distributable "
+        "cash and actual upstream distributions are distinct. Revenue is never cash "
+        "flow or distributable cash; a cash balance is not distributable cash. Keep "
+        "consolidated measures at consolidated scope.\n"
         "Corporate and cash-flow structure: identify only material parents, holding "
         "companies, operating subsidiaries, joint ventures, partially owned entities "
         "and the proposed borrower. Do not assume the reporting parent is the borrower. "
@@ -772,12 +798,17 @@ _AGENT_BRIEFS.update({
         "Management competence: examine relevant experience, demonstrated execution, "
         "continuity, succession, key-person dependence and performance through "
         "disruptions. Tenure, qualifications or company growth alone do not demonstrate "
-        "competence; distinguish company outcomes from outcomes attributable to leaders.\n"
+        "competence; distinguish company outcomes from outcomes attributable to leaders. "
+        "Set evidence_basis and attribution explicitly. Reported experience is an "
+        "attributed background fact, not independent proof of competence.\n"
         "Credibility and integrity: compare representations with outcomes and examine "
         "restatements, established regulatory findings, conflicts, transparency, control "
         "failures, remediation and accountability. Separate allegations, investigations, "
         "established findings and responses. Absence of misconduct evidence is not proof "
-        "of integrity. Avoid personality judgments.\n"
+        "of integrity. Avoid personality judgments. An auditor opinion on internal "
+        "control must carry assurance_scope and assurance_date and must remain scoped "
+        "to internal control over financial reporting, not operational, clinical or "
+        "strategic governance.\n"
         "Screen governance, audit/reporting issues, related-party transfers, conflicts, "
         "possible value diversion and material owner influence. If nothing relevant is "
         "found, record the evidence limitation, not an assertion that no risk exists. "
