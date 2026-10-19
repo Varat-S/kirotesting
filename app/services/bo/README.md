@@ -140,6 +140,14 @@ agent definition hash and the registry hash. That is intended.
 # full BO path (orchestrator, challenger, memo)
 .venv\Scripts\python -m app.cli --database data/bo_demo.db --output output/bo_demo `
     run-bo-case <CASE> --package <package.json> [--responses script.json | --live]
+
+# complete an existing governed specialists-only artifact without replaying specialists
+.venv/bin/python -m scripts.complete_bo_recorded --source <specialists_run.json> \
+    --mode offline --output-dir <output-directory>
+.venv/bin/python -m scripts.complete_bo_recorded --source <specialists_run.json> \
+    --mode replay --replay <prior-bo_completion_packet.json>
+.venv/bin/python -m scripts.complete_bo_recorded --source <specialists_run.json> \
+    --mode live --output-dir <output-directory>  # provider cost: synthesis + challenge
 ```
 
 Live runs need a git-ignored `.env` in the repo root:
