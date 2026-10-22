@@ -33,7 +33,13 @@ from app.schemas.agentic import (
     Topic,
 )
 from app.schemas.bo import AcceptedBusinessOverview, CalculationTrace, HypothesisRecord
+from app.services.bo.corporate_structure import (
+    CaseCorporateStructureSource,
+    build_corporate_structure_artifact,
+)
+from app.services.bo.corporate_structure_render import render_corporate_structure_svg
 from app.services.bo.indicators import IndicatorSet
+from app.services.bo.m3_output import assemble_m3_output
 from app.services.bo.m3_validation import validate_m3_assessment
 from app.services.bo.reconcile import reconcile
 from app.services.bo.reporting import handoff_content_hash
@@ -250,7 +256,8 @@ def load_recorded_specialists(path: str | Path) -> RecordedSpecialists:
     reconciliation = reconcile(
         usable, [h for h in audit_only if h.disposition.value == "rejected"])
     governed_m3 = _govern_m3(agents)
-    modules = _module_conclusions(agents, hypotheses, governed_m3)
+    case_id = meta.get("case_id") or payload.get("case_id")
+    modules = _module_conclusions(agents, hypotheses, governed_m3, case_id=case_id)
 
     computed = {
         "agents_validated": sum(a.get("status") == "validated" for a in agents),
@@ -360,7 +367,44 @@ def _govern_m3(agents: list[dict[str, Any]]) -> dict[str, Any] | None:
     return governed
 
 
-def _module_conclusions(agents, hypotheses, governed_m3):
+def build_m3_corporate_structure(
+    agents: list[dict[str, Any]], *, case_id: str | None,
+):
+    """Build + render the Module 3 corporate-structure artifact for a case.
+
+    Honours the mandatory rule: a diagram is produced only when an explicitly
+    case-associated corporate-structure JSON is present in the M3 agent's call
+    inputs. A bundled development fixture is never auto-loaded here; absence
+    yields the mandated ``unavailable`` artifact. Returns ``(artifact, svg_or_none)``.
+    """
+    source = None
+    if case_id:
+        agent = next((a for a in agents
+                      if a.get("agent_id") == "m3_corporate_management"), None)
+        raw = None
+        if agent is not None:
+            for call in agent.get("calls") or []:
+                candidate = (call.get("inputs") or {}).get("corporate_structure_source")
+                if isinstance(candidate, dict):
+                    raw = candidate
+        if isinstance(raw, dict):
+            source = CaseCorporateStructureSource(
+                case_id=raw.get("case_id") or case_id,
+                payload=raw.get("payload") or {},
+                source_document_id=raw.get("source_document_id"),
+                document_hash=raw.get("document_hash"),
+                registered_case_id=raw.get("registered_case_id"),
+            )
+    artifact = build_corporate_structure_artifact(
+        source, expected_case_id=case_id or "")
+    svg = None
+    if artifact.status == "available" and source is not None:
+        svg = render_corporate_structure_svg(
+            artifact, (source.payload or {}).get("visual_spec") or {})
+    return artifact, svg
+
+
+def _module_conclusions(agents, hypotheses, governed_m3, *, case_id=None):
     module_agents = {
         "M1": {a.get("agent_id") for a in agents if str(a.get("code", "")).startswith("M1")},
         "M2": {a.get("agent_id") for a in agents if a.get("code") == "M2"},
@@ -387,6 +431,19 @@ def _module_conclusions(agents, hypotheses, governed_m3):
         }
     out["M3"]["m3_assessment"] = governed_m3
     out["M3"]["m3_assessment_status"] = "validated" if governed_m3 else "unavailable"
+    structure_artifact, structure_svg = build_m3_corporate_structure(
+        agents, case_id=case_id)
+    m3_output = assemble_m3_output(
+        structure=structure_artifact, governed_m3=governed_m3,
+        structure_svg=structure_svg)
+    out["M3"]["m3_output"] = m3_output
+    out["M3"]["corporate_structure_status"] = structure_artifact.status
+    # Reflect partial completion (A unavailable, B assessed) without silently
+    # marking the module fully complete, but never weaken an already-incomplete
+    # module (missing/failed narrative agents still dominate).
+    overall = m3_output["completion"]["status"]
+    if out["M3"]["status"] == "complete" and overall == "partial":
+        out["M3"]["status"] = "partial"
     return out
 
 
