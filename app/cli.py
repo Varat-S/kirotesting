@@ -202,17 +202,19 @@ def main(argv=None):
         "--live", action="store_true",
         help="Run the Pre-check Agent (going concern, covenants, acquisitions and divestitures, prepaid model) and "
              "the Trigger Agent (DSCR T2, when CapEx is above 1.5x depreciation; DSCR T3, when cash taxes paid differ "
-             "from current tax expense by more than 5%% of CFADS; DSCR T1, when DSCR scores 9 or more; ICR T2, when ICR's interest is from a net or operating tag; ICR T3, when ICR's EBIT is operating income; ICR T1, when ICR scores 8.5 or more) on the configured live provider (model cost). "
+             "from current tax expense by more than 5%% of CFADS; DSCR T1, when DSCR scores 9 or more; ICR T2, when ICR's interest is from a net or operating tag; ICR T3, when ICR's EBIT is operating income; ICR T1, when ICR scores 8.5 or more; Debt/EBITDAR T1, when net one-offs are above 5%% of EBITDAR or EBITDAR is zero or negative; Debt/EBITDAR T2, when the gross and net leverage scores are 2 or more apart) on the configured live provider (model cost). "
              "The agent is required: give --live or --responses.",
     )
     fo_agent.add_argument(
         "--responses", type=Path,
         help='Scripted agent responses (JSON) for an offline run: one going-concern response, or '
              '{"going_concern": ..., "covenants": ..., "acquisitions": ..., "prepaid": ..., "dscr_t1": ..., '
-             '"dscr_t2": ..., "dscr_t3": ..., "icr_t1": ..., "icr_t2": ..., "icr_t3": ...} ("dscr_t1" only needed when DSCR scores 9 or more, "dscr_t2" when '
+             '"dscr_t2": ..., "dscr_t3": ..., "icr_t1": ..., "icr_t2": ..., "icr_t3": ..., "leverage_t1": ..., "leverage_t2": ...} ("dscr_t1" only needed when DSCR scores 9 or more, "dscr_t2" when '
              'CapEx is above 1.5x depreciation, "dscr_t3" when the cash-tax gap is above 5%% of CFADS, '
              '"icr_t1" when ICR scores 8.5 or more, "icr_t2" when ICR\'s interest is from a net or operating '
-             'tag, "icr_t3" when ICR\'s EBIT is operating income)',
+             'tag, "icr_t3" when ICR\'s EBIT is operating income, "leverage_t1" when net one-offs are above 5%% of '
+             'EBITDAR or EBITDAR is zero or negative, "leverage_t2" when the gross and net leverage scores are 2 '
+             'or more apart)',
     )
     fo_run.add_argument(
         "--model",

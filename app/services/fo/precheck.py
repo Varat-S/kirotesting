@@ -42,6 +42,8 @@ from app.prompts.fo_prompts import (
     FO_GOING_CONCERN_PROMPT,
     FO_GOING_CONCERN_SCHEMA,
     FO_GOING_CONCERN_TEMPLATE,
+    FO_LEVERAGE_T1_PROMPT,
+    FO_LEVERAGE_T2_PROMPT,
     FO_PREPAID_PROMPT,
     GC_DECISIVE,
 )
@@ -410,7 +412,8 @@ CHECK_LABELS = {"going_concern": "going-concern", "covenants": "covenant",
                 "acquisitions": "acquisitions-and-divestitures", "prepaid": "prepaid-model",
                 "dscr_t1": "DSCR trigger T1", "dscr_t2": "DSCR trigger T2",
                 "dscr_t3": "DSCR trigger T3", "icr_t1": "ICR trigger T1",
-                "icr_t2": "ICR trigger T2", "icr_t3": "ICR trigger T3"}
+                "icr_t2": "ICR trigger T2", "icr_t3": "ICR trigger T3", "leverage_t1": "Debt/EBITDAR trigger T1",
+                "leverage_t2": "Debt/EBITDAR trigger T2"}
 
 
 def require_agent(backend, check: str, agent: str = "Pre-check Agent") -> None:
@@ -471,17 +474,21 @@ SCRIPTED_CHECKS = {"going_concern": FO_GOING_CONCERN_PROMPT, "covenants": FO_COV
                    "acquisitions": FO_ACQUISITIONS_PROMPT, "prepaid": FO_PREPAID_PROMPT,
                    "dscr_t1": FO_DSCR_T1_PROMPT, "dscr_t2": FO_DSCR_T2_PROMPT,
                    "dscr_t3": FO_DSCR_T3_PROMPT, "icr_t1": FO_ICR_T1_PROMPT,
-                   "icr_t2": FO_ICR_T2_PROMPT, "icr_t3": FO_ICR_T3_PROMPT}
+                   "icr_t2": FO_ICR_T2_PROMPT, "icr_t3": FO_ICR_T3_PROMPT, "leverage_t1": FO_LEVERAGE_T1_PROMPT,
+                   "leverage_t2": FO_LEVERAGE_T2_PROMPT}
 
 
 def scripted_backend(response: dict | str | Path):
     """An offline backend returning scripted agent responses (a dict, a JSON string or a JSON file).
 
     Either one going-concern response, or ``{"going_concern": ..., "covenants": ..., "acquisitions": ...,
-    "prepaid": ..., "dscr_t1": ..., "dscr_t2": ..., "dscr_t3": ..., "icr_t1": ..., "icr_t2": ..., "icr_t3": ...}`` with a response per check (``dscr_t1``: the DSCR Trigger
+    "prepaid": ..., "dscr_t1": ..., "dscr_t2": ..., "dscr_t3": ..., "icr_t1": ..., "icr_t2": ..., "icr_t3": ...,
+    "leverage_t1": ..., "leverage_t2": ...}`` with a response per check (``dscr_t1``: the DSCR Trigger
     Agent, needed only when DSCR scores 9 or more; ``dscr_t2``: needed only when CapEx is above 1.5× depreciation;
     ``dscr_t3``: only when the cash-tax gap is above 5% of CFADS; ``icr_t1``: only when ICR scores 8.5 or more; ``icr_t2``: only when ICR's interest is from a net or operating tag;
-    ``icr_t3``: only when ICR's EBIT is operating income). A check with passages to interpret and no scripted response refuses the run
+    ``icr_t3``: only when ICR's EBIT is operating income; ``leverage_t1``: only when |net one-offs| is above 5% of
+    EBITDAR or EBITDAR is zero or negative; ``leverage_t2``: only when the Debt / EBITDAR and Net debt / EBITDAR
+    scores differ by 2 or more). A check with passages to interpret and no scripted response refuses the run
     (``require_agent``)."""
     from app.services.llm.client import FakeLLMBackend
 

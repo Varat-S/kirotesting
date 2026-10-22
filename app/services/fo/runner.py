@@ -6,7 +6,8 @@ The FO counterpart of ``app.services.bo.runner``: load the filing from
 ``prepaid.py``), compute the measures (DSO and Debt/EBITDAR adjusted for the year's deals; DSO on
 billed revenue, or its weight factored, for a prepaid model), score them against the industry
 benchmark under the pre-checks' gate, run the trigger agents the measures set off (DSCR T2,
-``dscr_t2.py``, and T3, ``dscr_t3.py``, then DSCR T1, ``dscr_triggers.py``; ICR T2, ``icr_t2.py``, T3, ``icr_t3.py``, then ICR T1, ``icr_triggers.py``) and record one
+``dscr_t2.py``, and T3, ``dscr_t3.py``, then DSCR T1, ``dscr_triggers.py``; ICR T2, ``icr_t2.py``, T3, ``icr_t3.py``, then ICR T1, ``icr_triggers.py``;
+Debt/EBITDAR T1, ``leverage_triggers.py``, then T2, ``leverage_t2.py``) and record one
 ``financial_overview_runs`` row holding the scored overview exactly as produced (content-hashed).
 Every number is computed by deterministic code. The only model calls are the Pre-check Agent's and the Trigger Agent's, when a backend
 is given; their findings are verified before they count.
@@ -43,6 +44,8 @@ from .dscr_triggers import T1_ID, T1_THRESHOLD, apply_t1, dscr_t1_trigger
 from .icr_t2 import ICR_T2_ID, apply_icr_t2, icr_t2_trigger
 from .icr_t3 import ICR_T3_ID, apply_icr_t3, icr_t3_trigger
 from .icr_triggers import ICR_T1_ID, ICR_T1_THRESHOLD, apply_icr_t1, icr_t1_trigger
+from .leverage_t2 import LEVERAGE_T2_GAP, LEVERAGE_T2_ID, apply_leverage_t2, leverage_t2_trigger
+from .leverage_triggers import LEVERAGE_T1_ID, LEVERAGE_T1_SHARE, apply_leverage_t1, leverage_t1_trigger
 from .prepaid import apply_prepaid_adjustments, prepaid_precheck
 from .industry import classify_industry, reference_hash
 from .measures import build_financial_overview, credit_rating, risk_level
@@ -57,7 +60,7 @@ from .scoring import (
     scoring_settings,
 )
 
-ENGINE_VERSION = "fo-engine-1.12.0"
+ENGINE_VERSION = "fo-engine-1.13.0"
 AWAITING_REVIEW = "awaiting_review"
 NOT_SCORED = "Not scored: going-concern fail"
 LIQUIDITY_NAME = "Liquidity and debt maturity"
@@ -66,7 +69,8 @@ LIQUIDITY_NAME = "Liquidity and debt maturity"
 def gate_for(gc_status: str, covenant_status: str = "compliant", acquisitions: dict | None = None,
              prepaid: dict | None = None) -> dict:
     """What the pre-checks do to the rest of the run. ``agent_triggers`` is what every agent a measure triggers
-    (today DSCR T2, T3 and T1: ``dscr_t2.py``, ``dscr_t3.py``, ``dscr_triggers.py``; ICR T2, T3 and T1, ``icr_t2.py``, ``icr_t3.py``, ``icr_triggers.py``) honours: "skipped" on a going-concern fail."""
+    (today DSCR T2, T3 and T1: ``dscr_t2.py``, ``dscr_t3.py``, ``dscr_triggers.py``; ICR T2, T3 and T1, ``icr_t2.py``, ``icr_t3.py``, ``icr_triggers.py``; Debt/EBITDAR T1 and T2, ``leverage_triggers.py``, ``leverage_t2.py``) honours: "skipped" on a
+    going-concern fail."""
     ad, pp = acquisitions or {}, prepaid or {}
     adjusted = [k for k, v in (ad.get("adjustments") or {}).items() if v]
     return {"going_concern": gc_status,
@@ -93,7 +97,9 @@ def escalations_for(gc: dict, cov: dict, metrics: list[dict], ad: dict | None = 
     adjusts, for the analyst to accept the engine's score or override it: a covenant breach (outcome a) escalates
     liquidity and debt maturity; an unresolved acquisition or divestiture escalates DSO and/or Debt/EBITDAR. A
     trigger that fired escalates its measure only when unresolved: its agent and verified evidence disagree (DSCR
-    T2, T3 and T1: DSCR, one escalation for all; ICR T2, T3 and T1: ICR, also when T2 finds no gross interest or income, T3 no pre-tax income, or T1 nothing); otherwise its verified outcome stands. Where the agent read a check more severely than its verified
+    T2, T3 and T1: DSCR, one escalation for all; ICR T2, T3 and T1: ICR, also when T2 finds no gross interest or income, T3 no pre-tax income, or T1 nothing;
+    Debt/EBITDAR T1 and T2: Debt/EBITDAR, also when T1 is partly quantified with an unexplained remainder or nothing
+    explains it, or T2 finds earmarked or trapped cash it can't quantify); otherwise its verified outcome stands. Where the agent read a check more severely than its verified
     evidence supports (``disagreements``), that is escalated too."""
     if gc["status"] == "fail":
         return [{"id": "going_concern", "type": "run_decision", "check": "going_concern", "reason": gc["reason"]}]
@@ -159,6 +165,22 @@ def escalations_for(gc: dict, cov: dict, metrics: list[dict], ad: dict | None = 
                   detail, disagreement=bool(ti.get("disagreement")))
         e = next(e for e in out if e.get("measure") == "icr")
         e["calculated_score"] = e.get("calculated_score") or ti["score"]
+    # Debt/EBITDAR, in run order (T1, then T2): one escalation for both.
+    for key, title, detail in ((LEVERAGE_T1_ID, f"Debt/EBITDAR trigger T1 unresolved (net one-offs above "
+                                                f"{LEVERAGE_T1_SHARE:.0%} of EBITDAR, or EBITDAR ≤ 0)", LEVERAGE_T1_DETAIL),
+                               (LEVERAGE_T2_ID, f"Debt/EBITDAR trigger T2 unresolved (gross and net scores "
+                                                f"{LEVERAGE_T2_GAP} or more apart)", LEVERAGE_T2_DETAIL)):
+        tl = (triggers or {}).get(key)
+        if not (tl and tl.get("fired") and tl.get("unresolved", True)):
+            continue
+        said = str(((tl.get("agent") or {}).get("stated_status") or "none")).replace("_", " ")
+        _escalate(out, by_key, key, "leverage", title,
+                  f"Debt/EBITDAR in {tl['column']}, {tl['fired_by']}: "
+                  + (f"the agent read {said}; the verified evidence gives {tl['status'].replace('_', ' ')} "
+                     f"({tl['reason']})" if tl.get("disagreement") else tl["reason"]),
+                  detail, disagreement=bool(tl.get("disagreement")))
+        e = next(e for e in out if e.get("measure") == "leverage")
+        e["calculated_score"] = e.get("calculated_score") or tl["score"]
     for d in disagreements(gc, cov, ad, pp):  # the agent read it more severely than the verified evidence
         if d["measure"] == "run":
             out.insert(0, {"id": "going_concern:disagreement", "type": "run_decision", "check": "going_concern",
@@ -198,6 +220,16 @@ T3_DETAIL = ("The Trigger Agent's answer and its verified evidence disagree, so 
              "verified outcome (first match: a quantified one-off, backed out of cash taxes paid and DSCR recomputed; a "
              "structural gap, no adjustment; otherwise the score held with low data confidence). Read the agent's "
              "answer and the held-back evidence below: accept the engine's score, or override it with yours.")
+LEVERAGE_T1_DETAIL = ("One-offs may distort EBITDAR and Debt/EBITDAR trigger T1 is unresolved: the one-offs are partly "
+                      "quantified with an unexplained remainder, nothing explains them or the level of EBITDAR, a "
+                      "one-off isn't quantified and there aren't three years of EBITDAR to average, or the agent's "
+                      "answer and its verified evidence disagree. Read the agent's answer and the held-back evidence "
+                      "below: accept the engine's score, or override it with yours.")
+LEVERAGE_T2_DETAIL = ("The Debt / EBITDAR and Net debt / EBITDAR scores are 2 or more apart, so cash does much of the "
+                      "work, and Debt/EBITDAR trigger T2 is unresolved: an acquisition or payout earmark, or trapped "
+                      "cash, is described but not quantified, or the agent's answer and its verified evidence disagree. "
+                      "Read the agent's answer and the held-back evidence below: accept the engine's score, or override "
+                      "it with yours.")
 DISAGREEMENT_DETAIL = ("The engine scored this measure on the verified evidence only. Read the agent's answer and the "
                        "held-back quotes in the pre-check below: accept the engine's score, or override it with yours "
                        "(for example the score the agent's reading implies).")
@@ -238,7 +270,7 @@ def disagreements(gc: dict, cov: dict, ad: dict | None, pp: dict | None) -> list
       Debt/EBITDAR for a divestiture after the year-end);
     - prepaid model: the agent said unresolved, the evidence gives another outcome (DSO).
 
-    A trigger (DSCR T2, T3, T1; ICR T2, T3, T1) is escalated whenever its agent and verified evidence disagree, in either direction: that is
+    A trigger (DSCR T2, T3, T1; ICR T2, T3, T1; Debt/EBITDAR T1, T2) is escalated whenever its agent and verified evidence disagree, in either direction: that is
     what makes it unresolved (``escalations_for``)."""
     out = []
     said = _said(gc)
@@ -439,7 +471,9 @@ class FinancialOverviewRunner:
         triggers = {}
         for key, trigger, apply in ((T2_ID, dscr_t2_trigger, apply_t2), (T3_ID, dscr_t3_trigger, apply_t3),
                                     (T1_ID, dscr_t1_trigger, apply_t1), (ICR_T2_ID, icr_t2_trigger, apply_icr_t2),
-                                    (ICR_T3_ID, icr_t3_trigger, apply_icr_t3), (ICR_T1_ID, icr_t1_trigger, apply_icr_t1)):
+                                    (ICR_T3_ID, icr_t3_trigger, apply_icr_t3), (ICR_T1_ID, icr_t1_trigger, apply_icr_t1),
+                                    (LEVERAGE_T1_ID, leverage_t1_trigger, apply_leverage_t1),
+                                    (LEVERAGE_T2_ID, leverage_t2_trigger, apply_leverage_t2)):
             triggers[key] = trigger(data, metrics, gate, session=self.session, backend=self.agent_backend,
                                     mode=self.agent_mode, case_id=case_id)
             if triggers[key]["fired"]:
@@ -570,7 +604,9 @@ def transcript(agent: dict, check: str = "going_concern") -> dict:
                         T3_ID: (fo_prompts.FO_DSCR_T3_TEMPLATE, fo_prompts.FO_DSCR_T3_SCHEMA),
                         ICR_T1_ID: (fo_prompts.FO_ICR_T1_TEMPLATE, fo_prompts.FO_ICR_T1_SCHEMA),
                         ICR_T2_ID: (fo_prompts.FO_ICR_T2_TEMPLATE, fo_prompts.FO_ICR_T2_SCHEMA),
-                        ICR_T3_ID: (fo_prompts.FO_ICR_T3_TEMPLATE, fo_prompts.FO_ICR_T3_SCHEMA)}[check]
+                        ICR_T3_ID: (fo_prompts.FO_ICR_T3_TEMPLATE, fo_prompts.FO_ICR_T3_SCHEMA),
+                        LEVERAGE_T1_ID: (fo_prompts.FO_LEVERAGE_T1_TEMPLATE, fo_prompts.FO_LEVERAGE_T1_SCHEMA),
+                        LEVERAGE_T2_ID: (fo_prompts.FO_LEVERAGE_T2_TEMPLATE, fo_prompts.FO_LEVERAGE_T2_SCHEMA)}[check]
     return {
         "prompt_id": agent["prompt_id"], "prompt_hash": agent["prompt_hash"], "model_id": agent["model_id"],
         "model_run_id": agent["model_run_id"],
@@ -583,6 +619,7 @@ def transcript(agent: dict, check: str = "going_concern") -> dict:
            if check == "covenants" else {}),
         **({"accepted_deals": agent.get("accepted_deals"), "held_back_deals": agent.get("held_back_deals"),
             "held_back_evidence": agent.get("held_back_evidence")} if check == "acquisitions" else {}),
-        **({"held_back": agent.get("held_back")} if check in ("prepaid", T1_ID, T2_ID, T3_ID, ICR_T1_ID, ICR_T2_ID, ICR_T3_ID) else {}),
+        **({"held_back": agent.get("held_back")} if check in ("prepaid", T1_ID, T2_ID, T3_ID, ICR_T1_ID, ICR_T2_ID, ICR_T3_ID,
+                                                       LEVERAGE_T1_ID, LEVERAGE_T2_ID) else {}),
         "stated_status": agent.get("stated_status"), "derived_status": agent.get("derived_status"),
     }

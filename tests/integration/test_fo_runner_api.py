@@ -221,7 +221,8 @@ def test_going_concern_fail_waits_for_the_analyst_then_continues(db_session, aud
                                       "agent_triggers": "skipped",
                                       "triggers": {"dscr_t1": "skipped", "dscr_t2": "skipped", "dscr_t3": "skipped",
                                                    "icr_t1": "skipped", "icr_t2": "skipped",
-                                                   "icr_t3": "skipped"},
+                                                   "icr_t3": "skipped", "leverage_t1": "skipped",
+                                                   "leverage_t2": "skipped"},
                                       "requires_decision": True}
     assert [e["type"] for e in result.payload["escalations"]] == ["run_decision"]
     summary = result.summary()
@@ -492,7 +493,8 @@ def test_dscr_trigger_t1_resolved_completes_unresolved_escalates_dscr(db_session
     assert t1["principal"]["principal_basis"] in ("maturity_table", "current_portion")
     assert payload["gate"]["triggers"] == {"dscr_t1": "no_adjustment", "dscr_t2": "no_growth",
                                              "dscr_t3": "not_triggered", "icr_t1": "not_triggered",
-                                             "icr_t2": "not_triggered", "icr_t3": "not_triggered"} and t1["passages"]
+                                             "icr_t2": "not_triggered", "icr_t3": "not_triggered",
+                                             "leverage_t1": "not_triggered", "leverage_t2": "not_triggered"} and t1["passages"]
     assert payload["escalations"] == [] and result.summary()["run_status"] == "completed"
     dscr = next(m for m in payload["metrics"] if m["key"] == "dscr")
     assert not dscr["trigger_escalated"] and dscr["columns"][0]["score"] == t1["score"]

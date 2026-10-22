@@ -134,6 +134,37 @@ def composite_leverage(gross, net):
     return {"score": round(min(10, net + COMPOSITE_UPLIFT if uplift else net), 1), "uplift": uplift, "reason": None}
 
 
+def score_leverage(col, settings):
+    """Score one year's Debt / EBITDAR and Net debt / EBITDAR against their benchmarks, then the composite leverage
+    score. ``settings`` needs "values" (m, cap, p, delta), "benchmarks" and "sector": the scoring settings, or a scored
+    measure's ``scoring`` record (``leverage_settings``)."""
+    v = settings["values"]
+    for key, short, _, den in LEVERAGE_MEASURES:
+        mc, bench = col[key], settings["benchmarks"][key]
+        mc.update(score=None, g=None, note=None)
+        if mc["reason"]:
+            continue
+        if bench is None:
+            mc["reason"] = (f"No {short} benchmark for {settings['sector']} in {BENCHMARK_FILE_NAME}"
+                            if settings["sector"] else
+                            "No industry benchmark for this company's industry group")
+        elif mc["negative_ebitda"]:
+            mc["g"], mc["note"] = v["cap"], f"{den.upper()} ≤ 0: worst capped gap"
+        else:
+            mc["g"] = ratio_gap(mc["ratio"], bench, 1, v["m"], v["cap"])
+            mc["note"] = "Net cash: best capped gap" if mc["ratio"] <= 0 else None
+        if mc["g"] is not None:
+            mc["score"] = round(gap_score(mc["g"], v["p"], v["delta"]), 1)
+    col["composite"] = composite_leverage(col["debt_to_ebitdar"]["score"], col["net_debt_to_ebitdar"]["score"])
+
+
+def leverage_settings(m):
+    """The settings a scored leverage measure was scored with (its ``scoring`` record), to rescore a column."""
+    s = m["scoring"]
+    return {"values": {k: s[k] for k in ("p", "m", "delta", "cap")}, "benchmarks": s["benchmarks"],
+            "sector": s["sector"]}
+
+
 def score_cash_flow(col, settings):
     """Score one year's RCF / debt against the benchmark."""
     v, bench = settings["values"], settings["benchmarks"]["rcf_to_debt"]
@@ -198,23 +229,7 @@ def score_financial_overview(fo, settings, gc_status="pass", covenant_status="co
         if m["key"] == "leverage":
             m = copy.deepcopy(m)
             for col in m["columns"]:
-                for key, short, _, den in LEVERAGE_MEASURES:
-                    mc, bench = col[key], settings["benchmarks"][key]
-                    mc.update(score=None, g=None, note=None)
-                    if mc["reason"]:
-                        continue
-                    if bench is None:
-                        mc["reason"] = (f"No {short} benchmark for {settings['sector']} in {BENCHMARK_FILE_NAME}"
-                                        if settings["sector"] else
-                                        "No industry benchmark for this company's industry group")
-                    elif mc["negative_ebitda"]:
-                        mc["g"], mc["note"] = v["cap"], f"{den.upper()} ≤ 0: worst capped gap"
-                    else:
-                        mc["g"] = ratio_gap(mc["ratio"], bench, 1, v["m"], v["cap"])
-                        mc["note"] = "Net cash: best capped gap" if mc["ratio"] <= 0 else None
-                    if mc["g"] is not None:
-                        mc["score"] = round(gap_score(mc["g"], v["p"], v["delta"]), 1)
-                col["composite"] = composite_leverage(col["debt_to_ebitdar"]["score"], col["net_debt_to_ebitdar"]["score"])
+                score_leverage(col, settings)
         elif m["key"] == "rcf":
             m = copy.deepcopy(m)
             for col in m["columns"]:
@@ -397,7 +412,12 @@ def composite_risk(fo, settings, gc_status="pass", overrides=None, decisions=Non
                      "interest expense (else net + interest income); neither disclosed escalates ICR; net interest "
                      "income makes ICR n/a (not counted); an operating tag is flagged. ICR trigger T3 (EBIT from operating "
                      "income; after T2): EBIT = pre-tax income + interest expense when pre-tax income is found, "
-                     "otherwise operating income is kept and ICR escalated. "
+                     "otherwise operating income is kept and ICR escalated. Debt/EBITDAR trigger T1 (|net one-offs as "
+                     "tagged| above 5% of EBITDAR, or EBITDAR ≤ 0; first match): quantified non-recurring one-offs "
+                     "normalise EBITDAR (charges added back, gains removed) and Debt/EBITDAR is recomputed; an "
+                     "operational change with no one-offs gets no adjustment; a one-off identified but not quantified "
+                     "uses the 3-year average EBITDAR (2-year for a smaller reporting company); partly quantified with an unexplained remainder, or no "
+                     "explanation, escalates Debt/EBITDAR. Debt/EBITDAR trigger T2 (gross and net leverage scores 2 or more apart; after T1; first match): a quantified acquisition or payout earmark, or trapped cash, comes out of cash and Net debt / EBITDAR is recomputed; cash earmarked only for debt maturities, or freely available, gets no adjustment; an earmark or trapping described but not quantified escalates Debt/EBITDAR (a buyback authorisation isn't an earmark). "
                      "DSCR trigger T1 (a DSCR score of 9 or more, unless a "
                      "going-concern fail skips agent triggers): rollover debt with backstop capacity is removed from "
                      "year-1 principal and DSCR recomputed, an executed refinancing of year-1 maturities after the "

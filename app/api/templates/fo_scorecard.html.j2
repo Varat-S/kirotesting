@@ -45,7 +45,7 @@
 {% set forms = decision_base is defined and decision_base %}
 {% macro trigger_agent_result(t, name) %}
 {% set a = t.agent %}
-<h3 id="fo-dscr-{{ name|lower }}-agent">Trigger Agent result: DSCR {{ name }}</h3>
+<h3 id="fo-{{ (name if ' ' in name else 'dscr ' ~ name)|lower|replace('/', '-')|replace(' ', '-') }}-agent">Trigger Agent result: {{ name if ' ' in name else 'DSCR ' ~ name }}</h3>
 {% if a %}
 <dl>
 <dt>Agent's answer</dt><dd>{% if a.stated %}<span class="risk {{ a.stated.css }}">{{ a.stated.label }}</span>{% endif %}</dd>
@@ -105,12 +105,12 @@
 <p class="subtle">Command line: <code>python -m app.cli fo-override {{ rid }} --measure {{ e.measure }} --decision accept|override [--score N] --reviewer "&lt;name&gt;" --reason "&lt;why&gt;"</code></p>
 </div>
 {% elif key in hosts %}
-<p class="fo-gate"><strong>&#9888; This check is part of the {{ e.measure_name }} decision:</strong> <a href="#override-{{ e.measure }}">decide it in the {{ hosts[0]|replace('_', ' ')|replace('dscr t', 'DSCR T')|replace('icr t', 'ICR T') }} row</a>.</p>
+<p class="fo-gate"><strong>&#9888; This check is part of the {{ e.measure_name }} decision:</strong> <a href="#override-{{ e.measure }}">decide it in the {{ hosts[0]|replace('_', ' ')|replace('dscr t', 'DSCR T')|replace('icr t', 'ICR T')|replace('leverage t', 'Debt/EBITDAR T') }} row</a>.</p>
 {% endif %}
 {% endfor %}
 {% endif %}
 {% endmacro %}
-{% if pc or view.covenants or view.acquisitions or view.prepaid or view.dscr_t2 or view.dscr_t3 or view.dscr_t1 or view.icr_t2 or view.icr_t3 or view.icr_t1 %}<section id="fo-agents"><h2 class="fo-agents-head"><span>Agent checks</span> <span class="fo-agents-tools"><button type="button" data-fo-agents="open">Expand all</button> <button type="button" data-fo-agents="close">Collapse all</button></span></h2>{% endif %}
+{% if pc or view.covenants or view.acquisitions or view.prepaid or view.dscr_t2 or view.dscr_t3 or view.dscr_t1 or view.icr_t2 or view.icr_t3 or view.icr_t1 or view.leverage_t1 or view.leverage_t2 %}<section id="fo-agents"><h2 class="fo-agents-head"><span>Agent checks</span> <span class="fo-agents-tools"><button type="button" data-fo-agents="open">Expand all</button> <button type="button" data-fo-agents="close">Collapse all</button></span></h2>{% endif %}
 {% if pc %}
 <div id="fo-precheck" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Pre-check: going concern</span> <span class="risk {{ pc.css }}">{{ pc.label }}</span> <span class="fo-agent-reason">{{ pc.reason }}</span>{{ attention('going_concern') }}</summary>
 <div class="fo-agent-body">
@@ -527,7 +527,73 @@
 {% endif %}
 </div></details></div>
 {% endif %}
-{% if pc or view.covenants or view.acquisitions or view.prepaid or view.dscr_t2 or view.dscr_t3 or view.dscr_t1 or view.icr_t2 or view.icr_t3 or view.icr_t1 %}</section>{% endif %}
+{% set tl = view.leverage_t1 %}
+{% if tl %}
+<div id="fo-leverage-t1" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: Debt/EBITDAR T1 (one-offs above {{ tl.share_threshold }} of EBITDAR, or EBITDAR ≤ 0)</span> <span class="risk {{ tl.css }}">{{ tl.label }}</span> <span class="fo-agent-reason">{{ tl.reason }}</span>{{ attention('leverage_t1') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('leverage_t1') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tl.inputs %}EBITDAR {{ tl.inputs.ebitdar }} million · net one-offs as tagged {{ tl.inputs.net }} million (charges {{ tl.inputs.charges }} − gains {{ tl.inputs.gains }}){% if tl.inputs.share != '—' %}, {{ tl.inputs.share }} of EBITDAR{% endif %} · Debt / EBITDAR {{ tl.inputs.ratio }}, net {{ tl.inputs.net_ratio }} · {% endif %}{{ tl.column }} · composite leverage score <span class="risk {{ tl.score.css }}">{{ tl.score.text }}</span> · fires when |net one-offs| is above {{ tl.share_threshold }} of EBITDAR, or EBITDAR ≤ 0{% if not tl.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if tl.inputs %}<dt>One-off tags</dt><dd><span class="subtle">{{ tl.inputs.source }}</span></dd>{% endif %}
+{% if tl.fired_by %}<dt>Set off by</dt><dd>{{ tl.fired_by }}{% if tl.smaller_reporting_company %} · smaller reporting company (2-year average){% endif %}</dd>{% endif %}
+<dt>Decided by</dt><dd>{{ tl.decided_by }}{% if tl.agent %} · {{ tl.mode }} model <code>{{ tl.agent.model_id }}</code> · prompt <code>{{ tl.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tl.effect }}</dd>
+{% if tl.ebitdar_used %}<dt>EBITDAR used</dt><dd><strong>{{ tl.ebitdar_used }} million</strong> ({{ tl.ebitdar_basis }})</dd>{% endif %}
+{% if tl.average %}<dt>{{ tl.average.label }}</dt><dd>{{ tl.average.average }} million ({% for y in tl.average.years %}{{ y.heading }} {{ y.ebitdar }}{{ ', ' if not loop.last }}{% endfor %})</dd>{% endif %}
+{% if tl.resolution %}<dt>Resolution</dt><dd>{% if tl.unresolved %}<strong class="bad">{{ tl.resolution }}</strong>{% else %}<span class="ok">{{ tl.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'leverage_t1' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'leverage_t1' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tl.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tl.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}{% if q.amount %} · {{ q.amount }}{% endif %}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tl.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tl.fired %}
+{{ trigger_agent_result(tl, 'Debt/EBITDAR T1') }}
+<details><summary>Rules and passages read ({{ tl.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When |net one-offs| is above {{ tl.share_threshold }} of EBITDAR, or EBITDAR ≤ 0 (first match)</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tl.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tl.sections %}<p class="subtle">Sections: {% for s in tl.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tl.passages %}<ul>{% for p in tl.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">Net one-offs = one-off charges − one-off gains, as tagged: impairments, restructuring, litigation, acquisition and integration costs; gains on disposals and litigation settlements (the first tagged concept of each group). A one-off counts only with its amount in a verbatim quote that names it and is the year's (not a forecast): a charge is added back to EBITDAR, a gain removed. An item counts as recurring (not adjusted) only with a verbatim quote showing it recurs. The remainder is unexplained when the verified items fall short of the tagged net one-offs by more than {{ tl.share_threshold }} of EBITDAR, or a one-off is left unquantified beside quantified ones. The average is the latest three years' EBITDAR as the measure holds them, or two for a smaller reporting company (the cover page's box, <code>dei:EntitySmallBusiness</code>), which presents two years of income statements. Only Debt/EBITDAR changes (both ratios, rescored on the same benchmark curve); the EBITDAR margin and DSCR keep their EBITDAR. Only the headline column is recomputed.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set tm = view.leverage_t2 %}
+{% if tm %}
+<div id="fo-leverage-t2" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: Debt/EBITDAR T2 (gross and net scores {{ tm.gap_threshold }} or more apart)</span> <span class="risk {{ tm.css }}">{{ tm.label }}</span> <span class="fo-agent-reason">{{ tm.reason }}</span>{{ attention('leverage_t2') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('leverage_t2') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tm.inputs %}Debt / EBITDAR {{ tm.inputs.ratio }}, score <span class="risk {{ tm.inputs.gross_score.css }}">{{ tm.inputs.gross_score.text }}</span> · Net debt / EBITDAR {{ tm.inputs.net_ratio }}, score <span class="risk {{ tm.inputs.net_score.css }}">{{ tm.inputs.net_score.text }}</span> · gap {{ tm.inputs.gap }} · cash {{ tm.inputs.cash }} million · {% endif %}{{ tm.column }} · composite leverage score <span class="risk {{ tm.score.css }}">{{ tm.score.text }}</span> · fires when the two scores are {{ tm.gap_threshold }} or more apart{% if not tm.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if tm.inputs %}<dt>Cash source</dt><dd><span class="subtle">{{ tm.inputs.cash_source }}</span></dd>{% endif %}
+<dt>Decided by</dt><dd>{{ tm.decided_by }}{% if tm.agent %} · {{ tm.mode }} model <code>{{ tm.agent.model_id }}</code> · prompt <code>{{ tm.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tm.effect }}</dd>
+{% if tm.removed %}<dt>Cash used</dt><dd><strong>{{ tm.cash_after }} million</strong> (cash {{ tm.inputs.cash }} − earmarked or trapped {{ tm.removed }})</dd>{% endif %}
+{% if tm.resolution %}<dt>Resolution</dt><dd>{% if tm.unresolved %}<strong class="bad">{{ tm.resolution }}</strong>{% else %}<span class="ok">{{ tm.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'leverage_t2' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'leverage_t2' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tm.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tm.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}{% if q.amount %} · {{ q.amount }}{% endif %}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tm.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tm.fired %}
+{{ trigger_agent_result(tm, 'Debt/EBITDAR T2') }}
+<details><summary>Rules and passages read ({{ tm.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When the Debt / EBITDAR and Net debt / EBITDAR scores are {{ tm.gap_threshold }} or more apart (first match)</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tm.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tm.sections %}<p class="subtle">Sections: {% for s in tm.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tm.passages %}<ul>{% for p in tm.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">Net debt subtracts unrestricted cash and cash equivalents (restricted cash shown apart is already left out). An item counts only with a verbatim quote that names it and mentions cash: an acquisition earmark (a signed or pending deal), a payout earmark (a declared dividend or other distribution), trapped cash (held abroad with repatriation limits, by regulated, insurance or captive subsidiaries, joint ventures or VIEs, or under a minimum cash requirement), or cash set aside for debt maturities. A share repurchase (buyback) authorisation is not an earmark. A quantified acquisition, payout or trapped item comes out of cash (never below zero) and Net debt / EBITDAR is recomputed and rescored; cash earmarked only for debt maturities and freely available cash get no adjustment; an item described without a verified amount is unresolved, unless a quantified one comes first. Debt, EBITDAR and the gross ratio don't change. T2 runs after Debt/EBITDAR T1. Only the headline column is recomputed.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% if pc or view.covenants or view.acquisitions or view.prepaid or view.dscr_t2 or view.dscr_t3 or view.dscr_t1 or view.icr_t2 or view.icr_t3 or view.icr_t1 or view.leverage_t1 or view.leverage_t2 %}</section>{% endif %}
 {% set c = view.composite %}
 {% if gate.show_composite %}
 <section id="fo-composite"><h2>Composite risk score{% if gate.provisional %} <span class="warn">(provisional)</span>{% elif c.after_override %} <span class="subtle">(after the analyst's decision)</span>{% endif %}</h2>
@@ -540,7 +606,7 @@
 </div>
 {% if c.reason %}<p class="notice">{{ c.reason }}</p>{% endif %}
 {% if c.gc_status == 'fail' %}<p>{% for a in c.adjustments %}{{ a }}{{ ' · ' if not loop.last }}{% endfor %}. Going concern: fail. Agent triggers skipped.</p>
-{% else %}<p>Weighted average {{ c.average }} over {{ c.used }} measure(s){% for a in c.adjustments %} · {{ a }}{% endfor %}. Going concern: {{ c.gc_status }}{% if not pc %} (no pre-check recorded for this run){% endif %}{% if cv %} · Covenants: {{ cv.label|lower }} (outcome {{ cv.outcome }}){% endif %}{% if view.acquisitions %} · Acquisitions and divestitures: {{ view.acquisitions.label|lower }}{% endif %}{% if view.prepaid %} · Prepaid model: {{ view.prepaid.label|lower }}{% endif %}{% if view.dscr_t2 %} · DSCR trigger T2: {{ view.dscr_t2.label|lower }}{% endif %}{% if view.dscr_t3 %} · DSCR trigger T3: {{ view.dscr_t3.label|lower }}{% endif %}{% if view.dscr_t1 %} · DSCR trigger T1: {{ view.dscr_t1.label|lower }}{% endif %}{% if view.icr_t2 %} · ICR trigger T2: {{ view.icr_t2.label|lower }}{% endif %}{% if view.icr_t3 %} · ICR trigger T3: {{ view.icr_t3.label|lower }}{% endif %}{% if view.icr_t1 %} · ICR trigger T1: {{ view.icr_t1.label|lower }}{% endif %}.</p>{% endif %}
+{% else %}<p>Weighted average {{ c.average }} over {{ c.used }} measure(s){% for a in c.adjustments %} · {{ a }}{% endfor %}. Going concern: {{ c.gc_status }}{% if not pc %} (no pre-check recorded for this run){% endif %}{% if cv %} · Covenants: {{ cv.label|lower }} (outcome {{ cv.outcome }}){% endif %}{% if view.acquisitions %} · Acquisitions and divestitures: {{ view.acquisitions.label|lower }}{% endif %}{% if view.prepaid %} · Prepaid model: {{ view.prepaid.label|lower }}{% endif %}{% if view.dscr_t2 %} · DSCR trigger T2: {{ view.dscr_t2.label|lower }}{% endif %}{% if view.dscr_t3 %} · DSCR trigger T3: {{ view.dscr_t3.label|lower }}{% endif %}{% if view.dscr_t1 %} · DSCR trigger T1: {{ view.dscr_t1.label|lower }}{% endif %}{% if view.icr_t2 %} · ICR trigger T2: {{ view.icr_t2.label|lower }}{% endif %}{% if view.icr_t3 %} · ICR trigger T3: {{ view.icr_t3.label|lower }}{% endif %}{% if view.icr_t1 %} · ICR trigger T1: {{ view.icr_t1.label|lower }}{% endif %}{% if view.leverage_t1 %} · Debt/EBITDAR trigger T1: {{ view.leverage_t1.label|lower }}{% endif %}{% if view.leverage_t2 %} · Debt/EBITDAR trigger T2: {{ view.leverage_t2.label|lower }}{% endif %}.</p>{% endif %}
 <div class="table-wrap"><table><thead><tr><th>Measure</th><th>Score</th><th>Column</th><th class="num">Weight</th><th class="num">Share</th><th class="num">Adds</th><th>Notes</th></tr></thead><tbody>
 {% for r in c.rows %}<tr><td>{{ r.name }}</td><td><span class="risk {{ r.score.css }}">{{ r.score.text }}</span></td><td>{{ r.heading }}</td><td class="num">{{ r.weight }}</td><td class="num">{{ r.share }}</td><td class="num">{{ r.contribution }}</td><td>{{ r.notes }}</td></tr>{% endfor %}
 </tbody></table></div>
@@ -559,7 +625,7 @@
 {% if m.covenant_note %}<p class="fo-gate{% if 'breach' not in m.covenant_note %} watch{% endif %}">{{ m.covenant_note }}</p>{% endif %}
 {% if m.deal_note %}<p class="fo-gate{% if not m.deal_unresolved %} watch{% elif m.deal_tag != 'Unresolved' %} continued{% endif %}">{% if m.deal_tag %}<span class="risk {{ 'very-high' if m.deal_tag == 'Unresolved' else ('moderate' if m.deal_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.deal_tag }}</span> {% endif %}{{ m.deal_note }}</p>{% endif %}
 {% if m.prepaid_note %}<p class="fo-gate{% if not m.prepaid_tag %} watch{% elif m.prepaid_tag != 'Unresolved' %} continued{% endif %}">{% if m.prepaid_tag %}<span class="risk {{ 'very-high' if m.prepaid_tag == 'Unresolved' else ('moderate' if m.prepaid_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.prepaid_tag }}</span> {% endif %}{{ m.prepaid_note }}</p>{% endif %}
-{% if m.trigger_note %}<p class="fo-gate{% if not m.trigger_tag %} watch{% elif m.trigger_tag != 'Escalated' %} continued{% endif %}">{% if m.trigger_tag %}<span class="risk {{ 'very-high' if m.trigger_tag == 'Escalated' else ('moderate' if m.trigger_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.trigger_tag }}</span> {% endif %}{{ m.trigger_note }} {% for key, name in ([('dscr_t2', 'T2'), ('dscr_t3', 'T3'), ('dscr_t1', 'T1')] if m.key == 'dscr' else [('icr_t2', 'ICR T2'), ('icr_t3', 'ICR T3'), ('icr_t1', 'ICR T1')] if m.key == 'icr' else []) %}{% if view[key] and view[key].fired %}<a href="#fo-{{ key|replace('_', '-') }}">Trigger Agent result: {{ name }}</a> {% endif %}{% endfor %}</p>{% endif %}
+{% if m.trigger_note %}<p class="fo-gate{% if not m.trigger_tag %} watch{% elif m.trigger_tag != 'Escalated' %} continued{% endif %}">{% if m.trigger_tag %}<span class="risk {{ 'very-high' if m.trigger_tag == 'Escalated' else ('moderate' if m.trigger_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.trigger_tag }}</span> {% endif %}{{ m.trigger_note }} {% for key, name in ([('dscr_t2', 'T2'), ('dscr_t3', 'T3'), ('dscr_t1', 'T1')] if m.key == 'dscr' else [('icr_t2', 'ICR T2'), ('icr_t3', 'ICR T3'), ('icr_t1', 'ICR T1')] if m.key == 'icr' else [('leverage_t1', 'Debt/EBITDAR T1'), ('leverage_t2', 'Debt/EBITDAR T2')] if m.key == 'leverage' else []) %}{% if view[key] and view[key].fired %}<a href="#fo-{{ key|replace('_', '-') }}">Trigger Agent result: {{ name }}</a> {% endif %}{% endfor %}</p>{% endif %}
 {% for f in m.flag_notes %}<p class="fo-gate watch"><span class="warn">&#9888; {{ f }}</span> <a href="#fo-icr-t2">Trigger Agent result: ICR T2</a></p>{% endfor %}
 {% if m.data_confidence_note %}<p class="fo-gate watch"><span class="warn">&#9888; {{ m.data_confidence_note }}</span> <a href="#fo-dscr-t3">Trigger Agent result: T3</a></p>{% endif %}
 {% if m.override %}<p class="fo-gate continued"><strong>{{ m.override.text }}</strong> · counted in the composite: <span class="risk {{ m.override.score.css }}">{{ m.override.score.text }}</span></p>{% endif %}

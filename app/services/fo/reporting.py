@@ -28,6 +28,10 @@ from .icr_t3 import items_evidence as icr_t3_evidence
 from .icr_t2 import RULES as ICR_T2_RULES
 from .icr_triggers import ICR_T1_THRESHOLD
 from .icr_triggers import RULES as ICR_T1_RULES
+from .leverage_t2 import LEVERAGE_T2_GAP
+from .leverage_t2 import RULES as LEVERAGE_T2_RULES
+from .leverage_triggers import LEVERAGE_T1_SHARE
+from .leverage_triggers import RULES as LEVERAGE_T1_RULES
 from .prepaid import DECIDED_NOTE as PP_DECIDED_NOTE
 from .prepaid import UNRESOLVED_NOTE as PP_UNRESOLVED_NOTE
 from .measures import LIQUIDITY_BANDS, REFINANCING_BANDS, credit_rating, risk_level
@@ -134,7 +138,9 @@ REASONS = {
     "liquidity": lambda c: [r for r in (c.get("coverage_reason"), c.get("refinancing_reason"), c.get("reason")) if r],
 }
 NOTES = {
-    "leverage": lambda c: [n for n in (c["debt_to_ebitdar"].get("note"), c["net_debt_to_ebitdar"].get("note")) if n]
+    "leverage": lambda c: [n for n in (c.get("ebitdar_basis") and f"EBITDAR is the {c['ebitdar_basis']} (trigger "
+                                       "Debt/EBITDAR T1)",
+                                       c["debt_to_ebitdar"].get("note"), c["net_debt_to_ebitdar"].get("note")) if n]
     + (["Composite: net score + 1 (gross score is 2 or more worse)"] if (c.get("composite") or {}).get("uplift") else []),
     "rcf": lambda c: [n for n in (c["rcf_to_debt"].get("note"),
                                   c.get("ffo_basis") if c.get("ffo_basis") != "FFO" else None) if n],
@@ -149,7 +155,10 @@ BENCHMARKS = {
 DEAL_REPORTED_ROWS = {"dso": [("revenue_reported", "Net revenue as reported (before the deal adjustment)"),
                               ("revenue_total", "Total revenue (DSO uses billed revenue: prepaid-model pre-check)")],
                       "leverage": [("ebitdar_reported", "EBITDAR as reported (before the deal adjustment)"),
-                                   ("adj_debt_reported", "Debt + op. leases as reported (before the deal adjustment)")],
+                                   ("adj_debt_reported", "Debt + op. leases as reported (before the deal adjustment)"),
+                                   ("ebitdar_before_trigger", "EBITDAR as calculated (before trigger Debt/EBITDAR T1)"),
+                                   ("cash_before_trigger", "Unrestricted cash as counted (before trigger Debt/EBITDAR "
+                                                           "T2)")],
                       "dscr": [("capex_reported", "Total CapEx as tagged (before trigger T2)"),
                                ("cash_taxes_reported", "Cash taxes paid as tagged (before trigger T3)"),
                                ("cash_flow_reported", "Cash flow for debt service as tagged (before triggers T2 "
@@ -251,6 +260,25 @@ def measure_card(m: dict, override: dict | None = None) -> dict:
                 "cells": [score_cell((c.get(key) or {}).get("calculated")) for c in cols]})
         if applied:
             card["result_rows"][-1]["label"] = f"Risk score (after trigger {' and '.join(t for _, t, _ in applied)})"
+    if m["key"] == "leverage":  # the figures before each trigger that changed them, in run order: T1, then T2
+        applied, done = [], []
+        for key, t in (("ebitdar_adjustment", "Debt/EBITDAR T1"), ("cash_adjustment", "Debt/EBITDAR T2")):
+            if any(c.get(key) for c in cols):
+                applied.append((key, t, f"after trigger {done[-1]}, before trigger {t}" if done
+                                else f"as calculated (before trigger {t})"))
+                done.append(t)
+        rows = card["result_rows"]
+        for key, t, stage in applied:
+            if key == "ebitdar_adjustment":  # T2 changes cash only: the gross ratio is T1's alone
+                rows.insert(1, {"label": f"Debt / EBITDAR {stage}", "cells": [
+                    _text((c.get(key) or {}).get("ratio_calculated"), times) for c in cols]})
+            net_at = next(i for i, r in enumerate(rows) if r["label"] == "Net debt / EBITDAR score")
+            rows.insert(net_at, {"label": f"Net debt / EBITDAR {stage}", "cells": [
+                _text((c.get(key) or {}).get("net_ratio_calculated"), times) for c in cols]})
+            rows.insert(len(rows) - 1, {"label": f"Composite leverage score {stage}",
+                                        "cells": [score_cell((c.get(key) or {}).get("calculated")) for c in cols]})
+        if applied:
+            rows[-1]["label"] = f"Composite leverage score (after trigger {' and '.join(t for _, t, _ in applied)})"
     if m["key"] == "liquidity":
         if any(c.get("covenant_adjustment") for c in cols):
             card["result_rows"].insert(len(card["result_rows"]) - 1, {
@@ -938,6 +966,131 @@ def icr_t3_card(t: dict | None, overrides: list | None = None) -> dict | None:
     }
 
 
+LEVERAGE_T1_LABELS = {"normalised": "NORMALISED: RECOMPUTED", "operational": "OPERATIONAL: NO ADJUSTMENT",
+                      "average_ebitdar": "AVERAGE EBITDAR: RECOMPUTED", "unresolved": "UNRESOLVED",
+                      "not_triggered": "NOT TRIGGERED", "skipped": "SKIPPED"}
+LEVERAGE_T1_CSS = {"normalised": "moderate", "operational": "low", "average_ebitdar": "elevated",
+                   "unresolved": "very-high", "not_triggered": "low", "skipped": "none"}
+LEVERAGE_T1_DECIDED_BY = {"agent": "Trigger Agent (evidence verified against the filing)",
+                          "no_text": "Code: no MD&A or note passage mentions a one-off or an operating driver",
+                          "score": "Code: the Debt/EBITDAR score",
+                          "one_offs": "Code: EBITDAR and the one-offs as tagged", "gate": "Code: the going-concern gate"}
+
+
+def leverage_t1_card(t: dict | None, overrides: list | None = None) -> dict | None:
+    """The Debt/EBITDAR T1 trigger as the page shows it."""
+    if not t:
+        return None
+    agent = t.get("agent")
+    tag = trigger_status(t, overrides)
+    decided = tag in DECISION_TAG.values()
+    fx = t.get("inputs") or {}
+    average = t.get("average")
+    return {
+        "status": t["status"], "fired": t.get("fired"),
+        "label": tag.upper() if decided else (f"{average['n']}-YEAR AVERAGE: RECOMPUTED" if average and t["status"]
+                                              == "average_ebitdar" else LEVERAGE_T1_LABELS[t["status"]]),
+        "css": TAG_CSS[tag] if decided else LEVERAGE_T1_CSS[t["status"]], "share_threshold": pct(LEVERAGE_T1_SHARE),
+        "smaller_reporting_company": t.get("smaller_reporting_company"),
+        "score": score_cell(t.get("score")), "column": t.get("column") or DASH,
+        "decided_by": LEVERAGE_T1_DECIDED_BY.get(t["decided_by"], t["decided_by"]), "mode": t["mode"],
+        "reason": t["reason"], "effect": t["effect"], "notes": t.get("notes") or [], "fired_by": t.get("fired_by"),
+        "inputs": None if not fx else {
+            "ebitdar": money(fx.get("ebitdar")), "charges": money(fx.get("one_off_charges")),
+            "gains": money(fx.get("one_off_gains")), "net": money(fx.get("net_one_offs")),
+            "share": pct(fx.get("share")), "source": fx.get("net_one_offs_concept") or "none tagged",
+            "ratio": times(fx.get("debt_ratio")), "net_ratio": times(fx.get("net_debt_ratio"))},
+        "ebitdar_used": money(t.get("ebitdar_used")) if t.get("ebitdar_used") is not None else None,
+        "ebitdar_basis": None if t.get("ebitdar_used") is None else (
+            "normalised: reported + one-off charges − one-off gains" if t["status"] == "normalised"
+            else average["label"]),
+        "average": None if not average else {
+            "label": average["label"], "average": money(average["average"]),
+            "years": [{"heading": y["heading"], "ebitdar": money(y["ebitdar"])} for y in average["years"]]},
+        "resolution": None if not t.get("fired") else (
+            f"Unresolved: {t.get('unresolved_why')}, so Debt/EBITDAR is escalated to an analyst"
+            if t.get("unresolved", True) else
+            "Resolved: the agent and the verified evidence agree, so the verified outcome stands (no analyst "
+            "decision)"),
+        "unresolved": bool(t.get("fired") and t.get("unresolved", True)),
+        "evidence": [{"fact": f"One-off {e['kind']} ({e['category'].replace('_', ' ')}): {money(e['amount'])} million "
+                              + ("added back to" if e["kind"] == "charge" else "removed from") + " EBITDAR",
+                      **e["evidence"]} for e in t.get("one_offs") or []]
+        + [{"fact": f"Recurring {e['kind']} ({e['category'].replace('_', ' ')}): {money(e['amount'])} million, not "
+                    "adjusted", **e["evidence"]} for e in t.get("recurring") or []]
+        + [{"fact": "Recurs", **e["recurring_evidence"]} for e in t.get("recurring") or []]
+        + [{"fact": f"One-off identified, not quantified ({e['category'].replace('_', ' ')})", **e["evidence"]}
+           for e in t.get("unquantified") or []]
+        + [{"fact": "Operational explanation", **e} for e in t.get("operational") or []],
+        "rules": [{"when": w, "effect": e} for w, e in LEVERAGE_T1_RULES],
+        "sections": t.get("sections") or [], "passages": t.get("passages") or [],
+        "agent": _trigger_agent(agent, LEVERAGE_T1_LABELS, LEVERAGE_T1_CSS),
+        "agent_not_used": None if agent else (
+            "Not called: no MD&A or note passage mentions a one-off or an operating driver." if t.get("fired")
+            else "Not called: the trigger wasn't set off."),
+    }
+
+
+LEVERAGE_T2_LABELS = {"cash_reduced": "CASH REDUCED: RECOMPUTED", "debt_maturities": "DEBT MATURITIES: NO ADJUSTMENT",
+                      "freely_available": "FREELY AVAILABLE: NO ADJUSTMENT", "unresolved": "UNRESOLVED",
+                      "not_triggered": "NOT TRIGGERED", "skipped": "SKIPPED"}
+LEVERAGE_T2_CSS = {"cash_reduced": "moderate", "debt_maturities": "low", "freely_available": "low",
+                   "unresolved": "very-high", "not_triggered": "low", "skipped": "none"}
+LEVERAGE_T2_DECIDED_BY = {"agent": "Trigger Agent (evidence verified against the filing)",
+                          "no_text": "Code: no MD&A or note passage mentions trapped or earmarked cash",
+                          "score": "Code: the Debt/EBITDAR score",
+                          "scores": "Code: the Debt / EBITDAR and Net debt / EBITDAR scores",
+                          "gate": "Code: the going-concern gate"}
+LEVERAGE_T2_KIND_TEXT = {"acquisition": "Acquisition earmark", "payout": "Payout earmark", "trapped": "Trapped cash",
+                         "debt_maturity": "Earmarked for debt maturities"}
+
+
+def leverage_t2_card(t: dict | None, overrides: list | None = None) -> dict | None:
+    """The Debt/EBITDAR T2 trigger as the page shows it."""
+    if not t:
+        return None
+    agent = t.get("agent")
+    tag = trigger_status(t, overrides)
+    decided = tag in DECISION_TAG.values()
+    fx = t.get("inputs") or {}
+
+    def fact(e, tail):
+        return {"fact": f"{LEVERAGE_T2_KIND_TEXT[e['kind']]}{tail}", **e["evidence"]}
+
+    return {
+        "status": t["status"], "fired": t.get("fired"),
+        "label": tag.upper() if decided else LEVERAGE_T2_LABELS[t["status"]],
+        "css": TAG_CSS[tag] if decided else LEVERAGE_T2_CSS[t["status"]], "gap_threshold": _g(LEVERAGE_T2_GAP),
+        "score": score_cell(t.get("score")), "column": t.get("column") or DASH,
+        "decided_by": LEVERAGE_T2_DECIDED_BY.get(t["decided_by"], t["decided_by"]), "mode": t["mode"],
+        "reason": t["reason"], "effect": t["effect"], "notes": t.get("notes") or [], "fired_by": t.get("fired_by"),
+        "inputs": None if not fx else {
+            "gross_score": score_cell(fx.get("gross_score")), "net_score": score_cell(fx.get("net_score")),
+            "gap": _g(abs(fx["gap"])) if fx.get("gap") is not None else DASH,
+            "cash": money(fx.get("cash")), "cash_source": fx.get("cash_concept") or "not tagged",
+            "ratio": times(fx.get("debt_ratio")), "net_ratio": times(fx.get("net_debt_ratio"))},
+        "removed": money(t.get("removed")) if t.get("removed") else None,
+        "cash_after": money(fx["cash"] - t["removed"]) if t.get("removed") else None,
+        "resolution": None if not t.get("fired") else (
+            f"Unresolved: {t.get('unresolved_why')}, so Debt/EBITDAR is escalated to an analyst"
+            if t.get("unresolved", True) else
+            "Resolved: the agent and the verified evidence agree, so the verified outcome stands (no analyst "
+            "decision)"),
+        "unresolved": bool(t.get("fired") and t.get("unresolved", True)),
+        "evidence": [fact(e, f": {money(e['amount'])} million out of cash") for e in t.get("quantified") or []]
+        + [fact(e, ": described, not quantified") for e in t.get("unquantified") or []]
+        + [fact(e, f": {money(e['amount'])} million, no adjustment" if e.get("amount") is not None
+                else ": no adjustment") for e in t.get("maturities") or []]
+        + [{"fact": "Freely available", **e} for e in t.get("available") or []],
+        "rules": [{"when": w, "effect": e} for w, e in LEVERAGE_T2_RULES],
+        "sections": t.get("sections") or [], "passages": t.get("passages") or [],
+        "agent": _trigger_agent(agent, LEVERAGE_T2_LABELS, LEVERAGE_T2_CSS),
+        "agent_not_used": None if agent else (
+            "Not called: no MD&A or note passage mentions trapped or earmarked cash." if t.get("fired")
+            else "Not called: the trigger wasn't set off."),
+    }
+
+
 def agent_result(agent: dict, labels: dict, css: dict, names: dict | None = None) -> dict:
     """The Pre-check Agent's answer as recorded: its stated status, the verified status, and every finding it
     gave with the validator's verdict on it. ``labels`` maps passage ids (in document order) to their section."""
@@ -1057,6 +1210,8 @@ def overview_view(payload: dict[str, Any], *, run_status: str | None = None, rev
         "icr_t1": icr_t1_card((payload.get("triggers") or {}).get("icr_t1"), overrides),
         "icr_t2": icr_t2_card((payload.get("triggers") or {}).get("icr_t2"), overrides),
         "icr_t3": icr_t3_card((payload.get("triggers") or {}).get("icr_t3"), overrides),
+        "leverage_t1": leverage_t1_card((payload.get("triggers") or {}).get("leverage_t1"), overrides),
+        "leverage_t2": leverage_t2_card((payload.get("triggers") or {}).get("leverage_t2"), overrides),
         "escalations": escalations,
         "gate": gate_view(gc, run_status, review, escalations, overrides),
         "composite": {**composite_card(composite), "after_override": bool(overrides) or sided_with_agent},

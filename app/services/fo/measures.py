@@ -70,6 +70,23 @@ INTANGIBLE_AMORTISATION_CONCEPTS = ["us-gaap:AmortizationOfIntangibleAssets",
 CURRENT_TAX_CONCEPTS = ["us-gaap:CurrentIncomeTaxExpenseBenefit", "ifrs-full:CurrentTaxExpenseIncome"]
 CURRENT_TAX_PARTS = [["us-gaap:CurrentFederalTaxExpenseBenefit"], ["us-gaap:CurrentStateAndLocalTaxExpenseBenefit"],
                      ["us-gaap:CurrentForeignTaxExpenseBenefit"]]
+# One-offs in EBITDAR as tagged (Debt/EBITDAR trigger T1 compares their net with EBITDAR): the first tagged concept of
+# each group. Charges are positive when an expense; gains are signed (a gain positive, a loss negative). Impairments
+# are one group: filers' totals often include goodwill, so a second impairment tag could count it twice.
+ONE_OFF_CHARGE_GROUPS = [
+    ["us-gaap:GoodwillAndIntangibleAssetImpairment", "us-gaap:AssetImpairmentCharges", "us-gaap:GoodwillImpairmentLoss",
+     "us-gaap:ImpairmentOfLongLivedAssetsHeldForUse", "us-gaap:ImpairmentOfLongLivedAssetsToBeDisposedOf"],
+    ["us-gaap:RestructuringCharges", "us-gaap:RestructuringSettlementAndImpairmentProvisions",
+     "us-gaap:RestructuringCosts"],
+    ["us-gaap:LitigationSettlementExpense", "us-gaap:LossContingencyLossInPeriod"],
+    ["us-gaap:BusinessCombinationAcquisitionRelatedCosts"],
+    ["us-gaap:BusinessCombinationIntegrationRelatedCosts"],
+]
+ONE_OFF_GAIN_GROUPS = [
+    ["us-gaap:GainLossOnSaleOfBusiness", "us-gaap:DisposalGroupNotDiscontinuedOperationGainLossOnDisposal"],
+    ["us-gaap:GainLossOnSaleOfPropertyPlantEquipment", "us-gaap:GainLossOnDispositionOfAssets"],
+    ["us-gaap:GainLossRelatedToLitigationSettlement"],
+]
 
 # Risk-score bands, (minimum ratio, score, range shown): a ratio gets the first band it reaches; the last band
 # (floor None) catches everything below, including zero and negative ratios. 10 = highest risk. DSCR and ICR are
@@ -228,6 +245,18 @@ def current_tax_for(values, labels, period):
     if c:
         return concept_ref(labels, c), v
     return summed(values, labels, CURRENT_TAX_PARTS, period)
+
+
+def one_offs_for(values, labels, period):
+    """The year's one-offs as tagged: charges (impairments, restructuring, litigation, acquisition and integration
+    costs), gains (on disposals, litigation settlements; signed) and net one-offs = charges − gains. None tagged =
+    none (net 0)."""
+    charges = [(c, abs(v)) for c, v, _ in (pick(values, g, period) for g in ONE_OFF_CHARGE_GROUPS) if c]
+    gains = [(c, v) for c, v, _ in (pick(values, g, period) for g in ONE_OFF_GAIN_GROUPS) if c]
+    source = " − ".join(filter(None, [" + ".join(concept_ref(labels, c) for c, _ in charges),
+                                      " + ".join(concept_ref(labels, c) for c, _ in gains)])) or "none tagged (taken as 0)"
+    return {"one_off_charges": sum(v for _, v in charges), "one_off_gains": sum(v for _, v in gains),
+            "net_one_offs": sum(v for _, v in charges) - sum(v for _, v in gains), "net_one_offs_concept": source}
 
 
 def rent_for(values, period):
@@ -470,6 +499,7 @@ def debt_to_ebitdar(facts, labels, sections=(), n_periods=3):
         ebitda, as_at, adj_debt, cash = col["ebitda"], col["as_at"], col["adj_debt"], col["cash"]
         col["rent_concept"], col["rent"] = rent_for(values, p)
         col["ebitdar"] = ebitda + col["rent"] if ebitda is not None else None
+        col.update(one_offs_for(values, labels, p))
         col["adj_net_debt"] = adj_debt - cash if adj_debt is not None and cash is not None else None
         for key, _, numerator, denominator in LEVERAGE_MEASURES:
             missing = [name for k, name in (("ebit", "EBIT"), ("da", "D&A"), ("debt", "debt"),
@@ -481,7 +511,8 @@ def debt_to_ebitdar(facts, labels, sections=(), n_periods=3):
             col[key] = {"ratio": num / den if num is not None and den and den > 0 else None,
                         "negative_ebitda": den is not None and den <= 0, "reason": reason}
         cols.append(col)
-    return {"columns": cols, "sources": ratio_sources(cols, ("ebit", "da", "rent", "debt", "op_leases", "cash"), labels)}
+    return {"columns": cols, "sources": ratio_sources(cols, ("ebit", "da", "rent", "debt", "op_leases", "cash",
+                                                             "net_one_offs"), labels)}
 
 
 def rcf_to_debt(facts, labels, sections=(), wc_lines=None, n_periods=3):
@@ -863,9 +894,11 @@ def build_financial_overview(data):
             **debt_to_ebitdar(facts, labels, data["sections"]),
             "rows": [("ebit", "EBIT"), ("da", "D&A"), ("ebitda", "EBITDA"), ("rent", "Rent"), ("ebitdar", "EBITDAR"),
                      ("debt", "Total debt"), ("op_leases", "Operating lease liab."), ("adj_debt", "Debt + op. leases"),
-                     ("cash", "Unrestricted cash"), ("adj_net_debt", "Net debt + op. leases")],
+                     ("cash", "Unrestricted cash"), ("adj_net_debt", "Net debt + op. leases"),
+                     ("net_one_offs", "Net one-offs as tagged (trigger T1)")],
             "source_parts": [("ebit", "EBIT"), ("da", "D&A"), ("rent", "Rent"), ("debt", "Total debt"),
-                             ("op_leases", "Operating lease liabilities"), ("cash", "Cash")],
+                             ("op_leases", "Operating lease liabilities"), ("cash", "Cash"),
+                             ("net_one_offs", "Net one-offs (trigger T1)")],
             "empty": "No annual pre-tax income or operating income is tagged in this filing.",
             "notes": "EBITDAR is EBIT (as for ICR: pre-tax income + interest expense, else operating income) plus "
                      "depreciation and amortisation from the cash flow statement plus rent (the year's operating lease "
@@ -881,6 +914,10 @@ def build_financial_overview(data):
                      "c = L(p), k = L(p + Δ) − L(p) when g > 0 and L(p) − L(p − Δ) when g < 0, L(x) = ln((x − 1) / "
                      "(10 − x)). At the benchmark the score is p; m times worse scores p + Δ; m times better p − Δ. "
                      "Net cash (net debt ≤ 0) scores as the best capped gap; negative EBITDAR as the worst. "
+                     "Net one-offs as tagged (impairments, restructuring, litigation, acquisition and integration "
+                     "costs, less gains on disposals and litigation settlements) are shown for trigger T1: above 5% "
+                     "of EBITDAR, or with EBITDAR ≤ 0, the Trigger Agent checks them and EBITDAR may be normalised "
+                     "or replaced by the 3-year average (2-year for a smaller reporting company). When the Debt / EBITDAR and Net debt / EBITDAR scores are 2 or more apart, trigger T2 checks the cash for earmarks and trapping: quantified acquisition or payout earmarks and trapped cash come out of cash. "
                      "Composite risk score = net debt score + 1 if (debt score − net debt score) ≥ 2, else the "
                      "net debt score (capped at 10).",
             "gaps": "Finance leases inside other liabilities (not shown on the balance sheet) and failed sale-leaseback "

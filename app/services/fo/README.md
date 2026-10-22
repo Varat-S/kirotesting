@@ -11,7 +11,7 @@ and composite" (DSCR's bands, year-1 principal and interest incurred; ICR's band
 
 It is organised like the Business Overview (BO) module. It has two agents. The **Pre-check Agent** runs
 before the measures (going concern, covenants, acquisitions, prepaid model). The **Trigger Agent** runs after
-them, when a measure trips its trigger (today DSCR T2 and T3, then DSCR T1; ICR T2 and T3, then ICR T1). Every number is computed by code. The agents only
+them, when a measure trips its trigger (today DSCR T2 and T3, then DSCR T1; ICR T2 and T3, then ICR T1; then Debt/EBITDAR T1 and T2). Every number is computed by code. The agents only
 classify and quote the filing's passages; code verifies the quotes and re-derives the outcome.
 
 ## Run it
@@ -19,9 +19,9 @@ classify and quote the filing's passages; code verifies the quotes and re-derive
 | Where | How |
 |---|---|
 | Browser | `python -m app.preview`, then `/` → "Financial Overview runs" (`/fo`): pick a folder, then Run (needs a live provider: the Run button is disabled without one) |
-| CLI | `python -m app.cli run-fo-case [CASE_ID] --filing "HCA 10-K FY2025" --live` (or `--responses agent.json` offline, with `{"going_concern": ..., "covenants": ..., "acquisitions": ..., "prepaid": ..., "dscr_t1": ..., "dscr_t2": ..., "dscr_t3": ..., "icr_t1": ..., "icr_t2": ..., "icr_t3": ...}`; `dscr_t1` is needed only when DSCR scores 9 or more, `dscr_t2` only when CapEx is above 1.5× depreciation, `dscr_t3` only when the cash-tax gap is above 5% of CFADS, `icr_t1` only when ICR scores 8.5 or more, `icr_t2` only when ICR's interest is from a net or operating tag, `icr_t3` only when ICR's EBIT is operating income); one of the two is required |
+| CLI | `python -m app.cli run-fo-case [CASE_ID] --filing "HCA 10-K FY2025" --live` (or `--responses agent.json` offline, with `{"going_concern": ..., "covenants": ..., "acquisitions": ..., "prepaid": ..., "dscr_t1": ..., "dscr_t2": ..., "dscr_t3": ..., "icr_t1": ..., "icr_t2": ..., "icr_t3": ..., "leverage_t1": ..., "leverage_t2": ...}`; `dscr_t1` is needed only when DSCR scores 9 or more, `dscr_t2` only when CapEx is above 1.5× depreciation, `dscr_t3` only when the cash-tax gap is above 5% of CFADS, `icr_t1` only when ICR scores 8.5 or more, `icr_t2` only when ICR's interest is from a net or operating tag, `icr_t3` only when ICR's EBIT is operating income, `leverage_t1` only when net one-offs are above 5% of EBITDAR or EBITDAR is zero or negative, `leverage_t2` only when the gross and net leverage scores are 2 or more apart); one of the two is required |
 | Analyst decision | the run's page (browser), or `python -m app.cli fo-review RUN_ID --decision continue\|stop --reviewer "…" --reason "…"` (going-concern fail), or `fo-override RUN_ID --measure liquidity\|dso\|leverage\|dscr\|icr --decision accept\|override [--score N] …` (an escalated measure) |
-| Tests | `.venv\Scripts\python -m pytest tests/unit/test_fo_precheck.py tests/unit/test_fo_scoring.py tests/unit/test_fo_measures.py tests/unit/test_fo_covenants.py tests/unit/test_fo_acquisitions.py tests/unit/test_fo_prepaid.py tests/unit/test_fo_disagreements.py tests/unit/test_fo_dscr_trigger.py tests/unit/test_fo_dscr_t2.py tests/unit/test_fo_dscr_t3.py tests/unit/test_fo_icr_trigger.py tests/unit/test_fo_icr_t2.py tests/unit/test_fo_icr_t3.py tests/integration/test_fo_runner_api.py -q` |
+| Tests | `.venv\Scripts\python -m pytest tests/unit/test_fo_precheck.py tests/unit/test_fo_scoring.py tests/unit/test_fo_measures.py tests/unit/test_fo_covenants.py tests/unit/test_fo_acquisitions.py tests/unit/test_fo_prepaid.py tests/unit/test_fo_disagreements.py tests/unit/test_fo_dscr_trigger.py tests/unit/test_fo_dscr_t2.py tests/unit/test_fo_dscr_t3.py tests/unit/test_fo_icr_trigger.py tests/unit/test_fo_icr_t2.py tests/unit/test_fo_icr_t3.py tests/unit/test_fo_leverage_trigger.py tests/unit/test_fo_leverage_t2.py tests/integration/test_fo_runner_api.py -q` |
 
 **Picking the model.** The run form has a "Pre-check Agent model" dropdown, and the CLI has `--model` (with
 `--live`). `models.py` names the candidate Vertex models and offers only the text-analysis ones: no TTS,
@@ -409,6 +409,101 @@ be rebuilt and ICR is unresolved. Only ICR's EBIT changes: Debt/EBITDAR and DSCR
 `ebit_reported`, `ebit_concept_reported` and `ebit_adjustment` (`calculated`, `ratio_calculated`, `recomputed`,
 `ebit`, `score`).
 
+## Trigger Agent: Debt/EBITDAR T1
+
+`leverage_triggers.py`, prompt `fo_trigger_leverage_t1`. It runs on Debt/EBITDAR's headline column (the latest year),
+after the ICR triggers, only when `payload.gate.agent_triggers` is "enabled" and Debt/EBITDAR has a score.
+
+| Trigger | Why | What the agent checks |
+|---|---|---|
+| \|net one-offs\| > 5% × EBITDAR, or EBITDAR ≤ 0. Net one-offs = one-off charges − one-off gains | One-offs distort EBITDAR: charges make leverage look worse than it is, and gains make it look better | Impairments, litigation, acquisition costs, restructuring |
+
+**The inputs T1 works on** (the Debt/EBITDAR column, `measures.one_offs_for`): net one-offs as tagged, the first
+tagged concept of each group. Charges: impairments (one group, so goodwill isn't counted twice), restructuring,
+litigation, acquisition costs, integration costs. Gains (signed): on the sale of a business, on disposals of PP&E,
+on litigation settlements. None tagged = 0, so EBITDAR ≤ 0 alone can set it off. The column shows them as "Net
+one-offs as tagged (trigger T1)".
+
+The agent reads MD&A (without its critical-accounting and new-standards boilerplate) and every note: paragraphs and
+tables that mention a one-off item or an operating driver (operating income, EBITDA, volumes, admissions, payer mix,
+wages and labor costs) (L01…). Code checks every fact and re-derives the outcome, **first match wins**:
+
+| Finding (verified) | Adjustment |
+|---|---|
+| One-offs quantified and not recurring | Normalised EBITDAR = reported + one-off charges − one-off gains; Debt / EBITDAR recomputed |
+| The change in EBITDAR is operational, with no one-offs found | No adjustment |
+| One-off identified but not quantified | The 3-year average EBITDAR (2-year for a smaller reporting company), labelled on the column ("3-year average EBITDAR (FY2023–FY2025)"); Debt / EBITDAR recomputed |
+| Partly quantified with an unexplained remainder, or no explanation at all | Unresolved: Debt/EBITDAR escalated (`leverage_t1:leverage`) |
+
+What each needs:
+- A one-off: its amount in a verbatim quote that names it (impairment, restructuring, litigation, acquisition or
+  transaction costs, a gain or loss on a disposal…) and shows a charge or a gain, for the year (a forecast is held
+  back).
+- Recurring: an item counts as recurring (explained, not adjusted) only with a verbatim quote showing it recurs
+  ("each year", "recurring", "ongoing"…). A recurring claim that doesn't hold up leaves the item a one-off.
+- Unquantified: a verbatim quote naming the one-off.
+- Operational: a verbatim quote naming an operating driver (volumes, pricing, payer mix, wages, costs…).
+- An unexplained remainder: a one-off left unquantified beside quantified ones, or the verified items (one-offs and
+  recurring items) falling short of the tagged net one-offs by more than 5% of EBITDAR. Over-explaining is fine (the
+  tags miss items), so "operational" can't stand while tagged one-offs above the threshold are unexplained.
+- The average is the latest three columns' EBITDAR as the measure holds them (the latest after any deal
+  adjustment), or two for a smaller reporting company: the cover page's box, `dei:EntitySmallBusiness` (tagged as a
+  boolean, "true" or the ticked box ☒), since an SRC presents two years of income statements. With fewer years, an
+  unquantified one-off is unresolved. The status is `average_ebitdar`; the trigger records
+  `smaller_reporting_company` and `average_years`.
+
+Both ratios are recomputed on the new EBITDAR and rescored on the same benchmark curve (`scoring.score_leverage` with
+the measure's own `scoring` record). Only Debt/EBITDAR changes: the EBITDAR margin and DSCR keep their EBITDAR. The
+column keeps `ebitdar_before_trigger`, `ebitdar_basis` (the 3-year label) and `ebitdar_adjustment` (`calculated`,
+`ratio_calculated`, `net_ratio_calculated`, `ebitdar_calculated`, `recomputed`, `ebitdar`, `score`). As for every
+trigger, a disagreement between the agent's answer and its verified evidence escalates Debt/EBITDAR too; with an
+unresolved deal on leverage, Debt/EBITDAR gets one escalation for both. On the FY2025 filings, ACHC sets it off (EBITDAR
+−704.9 million, tagged one-offs +1,313.8 million); EHC and HCA don't.
+
+## Trigger Agent: Debt/EBITDAR T2
+
+`leverage_t2.py`, prompt `fo_trigger_leverage_t2`. It runs on Debt/EBITDAR's headline column after Debt/EBITDAR T1 (T1
+corrects EBITDAR, which moves both scores), only when `payload.gate.agent_triggers` is "enabled" and Debt/EBITDAR has a
+score.
+
+| Trigger | Why | What the agent checks |
+|---|---|---|
+| \|gross score − net score\| ≥ 2 (Debt / EBITDAR score against Net debt / EBITDAR score) | Cash does much of the work, and cash can be spent | Trapped cash and earmarked cash |
+
+The agent reads MD&A (without its boilerplate) and every note: paragraphs and tables that mention cash held abroad or
+by subsidiaries, repatriation, restrictions, regulatory or statutory capital, captive insurance, variable interest
+entities, minimum cash, pending acquisitions, declared dividends, cash set aside, or general corporate purposes (C01…).
+Code checks every fact and re-derives the outcome, **first match wins**:
+
+| Finding (verified) | Adjustment |
+|---|---|
+| Acquisition or payout earmark, or trapped cash, quantified | Subtracted from cash (never below zero); net debt and Net debt / EBITDAR recomputed and rescored |
+| Earmarked only for debt maturities | No adjustment: repaying debt with cash leaves net debt unchanged |
+| Cash freely available (or nothing earmarked or trapped) | No adjustment |
+| Earmark or trapping described but not quantified | Unresolved: Debt/EBITDAR escalated (`leverage_t2:leverage`) |
+
+What each needs:
+- An item: a verbatim quote that names it and mentions cash. Acquisition: an acquisition, merger or purchase price.
+  Payout: a dividend or other distribution. Trapped: restricted, held abroad or by a regulated, insurance or captive
+  subsidiary, a joint venture or VIE, or a minimum cash requirement. Debt maturity: a maturity, repayment or
+  redemption.
+- **A share repurchase (buyback) authorisation isn't an earmark**: a quote mentioning a repurchase or buyback is held
+  back as an acquisition, payout or trapped item.
+- Quantified: the amount in its quote. An amount that doesn't hold up leaves the item described but not quantified.
+  Earmarks are forward-looking by nature, so a future use (a deal closing next year, a dividend payable next quarter)
+  isn't held back as a forecast.
+- First match is literal: a quantified item comes out of cash even when another is described without an amount (noted
+  on the trigger, not subtracted). "Only for debt maturities" means no acquisition, payout or trapped item at all.
+- Freely available needs no quote: without any earmark or trapped item, the cash counts as it is. A quote saying the
+  cash is available for general corporate purposes is shown when given.
+- The agent is told not to report restricted cash shown apart from cash and cash equivalents (already excluded), and to
+  count the same cash once. Code caps the total at the cash counted.
+
+Only cash changes: debt, EBITDAR and the gross ratio stay as they are. The column keeps `cash_before_trigger` and
+`cash_adjustment` (`calculated`, `net_score_calculated`, `net_ratio_calculated`, `cash_calculated`, `removed`,
+`recomputed`, `cash`, `score`). Escalation works as for T1; T1 and T2 together give Debt/EBITDAR one escalation, which
+also merges with an unresolved deal.
+
 ## When the agent and the verified evidence disagree
 
 The verified outcome always drives the measures. But when the agent's own answer is **more severe** than the outcome
@@ -427,6 +522,8 @@ its verified evidence supports, the analyst decides (`runner.disagreements`):
 | ICR T1: any answer | A different outcome (either direction) | ICR (T1 is unresolved; so is "nothing found") |
 | ICR T2: any answer | A different outcome (either direction) | ICR (T2 is unresolved; so is "neither disclosed") |
 | ICR T3: any answer | A different outcome (either direction) | ICR (T3 is unresolved; so is "pre-tax income not found") |
+| Debt/EBITDAR T1: any answer | A different outcome (either direction) | Debt/EBITDAR (T1 is unresolved; so is a remainder or no explanation) |
+| Debt/EBITDAR T2: any answer | A different outcome (either direction) | Debt/EBITDAR (T2 is unresolved; so is an earmark or trapping not quantified) |
 
 A measure gets one decision even when several checks escalate it: the escalation merges their reasons (`checks`).
 When the engine is the more severe side it already escalates. The run completes once every escalation is decided.
@@ -434,7 +531,7 @@ The page lists the held-back quotes, so the analyst can see why the two differ. 
 the escalation ids.
 
 **Analyst overrides.** The run's `escalations` list holds what waits for an analyst. A `measure_override` (today:
-liquidity after a covenant breach; DSO or Debt/EBITDAR after an unresolved deal; DSCR after an unresolved trigger T2, T3 or T1; ICR after an unresolved ICR T2, T3 or T1) is decided
+liquidity after a covenant breach; DSO or Debt/EBITDAR after an unresolved deal; DSCR after an unresolved trigger T2, T3 or T1; ICR after an unresolved ICR T2, T3 or T1; Debt/EBITDAR after an unresolved Debt/EBITDAR T1 or T2) is decided
 with `fo-override RUN --measure liquidity|dso|leverage|dscr --decision accept|override [--score N]`, or with the form
 on the run's page.
 The decision goes in `financial_overview_overrides`: one per measure per run, never rewritten. The analyst's score
@@ -474,7 +571,17 @@ dscr_t3.dscr_t3_trigger          |cash taxes − current tax| > 5% of CFADS and 
 dscr_t3.apply_t3                 DSCR recomputed with one-offs backed out of cash taxes; low data confidence
 dscr_triggers.dscr_t1_trigger    DSCR score ≥ 9 (after T2 and T3) and triggers enabled -> passages -> agent (required) ->
                                  validation -> principal removed / −2 / held
-dscr_triggers.apply_t1           DSCR recomputed on the headline column; composite_risk again
+dscr_triggers.apply_t1           DSCR recomputed on the headline column
+icr_t2 / icr_t3 / icr_triggers   ICR T2, T3, then T1: ICR recomputed on its latest column
+leverage_triggers.leverage_t1_trigger  |net one-offs| > 5% of EBITDAR or EBITDAR ≤ 0 and triggers enabled ->
+                                 passages -> agent (required) -> validation -> normalised / operational /
+                                 3-year average / unresolved
+leverage_triggers.apply_leverage_t1  Debt/EBITDAR recomputed and rescored
+leverage_t2.leverage_t2_trigger  |gross score − net score| ≥ 2 and triggers enabled -> passages -> agent
+                                 (required) -> validation -> cash reduced / debt maturities / freely available /
+                                 unresolved
+leverage_t2.apply_leverage_t2   Net debt / EBITDAR recomputed on cash less earmarked and trapped cash;
+                                 composite_risk again
 runner.FinancialOverviewRunner   records one financial_overview_runs row (payload + content hash);
                                  anything in payload.escalations is recorded as awaiting_review
 review.review_run                the analyst's continue / stop decision (financial_overview_reviews)
@@ -500,6 +607,8 @@ review.override_measure          the analyst's score for an escalated measure (f
 | `icr_triggers.py` | Trigger Agent, ICR T1: MD&A / note passages, the agent call, evidence checks, EBIT one-off and swap mark-to-market corrections |
 | `icr_t2.py` | Trigger Agent, ICR T2: debt note / MD&A / note passages, the agent call, evidence checks, gross interest base, ICR n/a on net interest income, the operating-tag flag |
 | `icr_t3.py` | Trigger Agent, ICR T3: income statement / MD&A / note passages, the agent call, evidence checks, EBIT = pre-tax income + interest expense |
+| `leverage_triggers.py` | Trigger Agent, Debt/EBITDAR T1: MD&A / note passages, the agent call, evidence checks, normalised or 3-year average EBITDAR, Debt/EBITDAR rescored |
+| `leverage_t2.py` | Trigger Agent, Debt/EBITDAR T2: MD&A / note passages on cash, the agent call, evidence checks, earmarked and trapped cash out of net debt, Net debt / EBITDAR rescored |
 | `review.py` | The analyst's decisions: continue / stop (`review.json`), measure overrides (`overrides.json`) |
 | `runner.py` | `FinancialOverviewRunner` (`build`, `run_filing`), JSON-safe payload, case ids, run state |
 | `workbench.py` | Read-only views: `fo_runs`, `fo_view`, `fo_artifact` |
