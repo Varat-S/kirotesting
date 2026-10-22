@@ -1258,3 +1258,85 @@ class AcceptedBusinessOverviewRow(Base):
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, default=utcnow, nullable=False
     )
+
+
+# ===========================================================================
+# Financial Overview (FO) tables. Deterministic only (no agents): one row per
+# run of the FO engine over a filing folder in ``edgar_filings/``. Additive;
+# no existing table or payload is touched.
+# ===========================================================================
+
+
+class FinancialOverviewRunRow(Base):
+    """One Financial Overview run: the scored overview exactly as produced."""
+
+    __tablename__ = "financial_overview_runs"
+
+    run_id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    filing_folder: Mapped[str] = mapped_column(String, nullable=False)
+    folder_signature: Mapped[str] = mapped_column(String, nullable=False)
+    entity_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    ticker: Mapped[str | None] = mapped_column(String, nullable=True)
+    period_end: Mapped[str | None] = mapped_column(String, nullable=True)
+    engine_version: Mapped[str] = mapped_column(String, nullable=False)
+    reference_hash: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="completed")
+    composite_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    credit_rating: Mapped[str | None] = mapped_column(String, nullable=True)
+    human_review_status: Mapped[str] = mapped_column(
+        String, nullable=False, default="pending"
+    )
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, default=utcnow, nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+
+class FinancialOverviewReviewRow(Base):
+    """An analyst's decision on an escalated FO run (going-concern fail): continue or stop.
+
+    One decision per run, never rewritten. It is bound to the exact payload it was made on
+    (``run_content_hash``); the run's own payload is not changed by the decision.
+    """
+
+    __tablename__ = "financial_overview_reviews"
+
+    review_id: Mapped[str] = mapped_column(String, primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("financial_overview_runs.run_id"), nullable=False, unique=True
+    )
+    check: Mapped[str] = mapped_column(String, nullable=False)
+    decision: Mapped[str] = mapped_column(String, nullable=False)  # continue | stop
+    reviewer: Mapped[str] = mapped_column(String, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    run_content_hash: Mapped[str] = mapped_column(String, nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)
+
+
+class FinancialOverviewOverrideRow(Base):
+    """An analyst's risk score for one measure an FO run escalated (today: liquidity and debt
+    maturity after a covenant breach; later: measures that trigger an agent).
+
+    ``accept`` keeps the engine's score; ``override`` replaces it with the analyst's. One
+    decision per measure per run, never rewritten, bound to the payload it was made on.
+    """
+
+    __tablename__ = "financial_overview_overrides"
+    __table_args__ = (UniqueConstraint("run_id", "measure"),)
+
+    override_id: Mapped[str] = mapped_column(String, primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("financial_overview_runs.run_id"), nullable=False, index=True
+    )
+    measure: Mapped[str] = mapped_column(String, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False)  # what escalated it, e.g. "covenants"
+    decision: Mapped[str] = mapped_column(String, nullable=False)  # accept | override
+    engine_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    analyst_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reviewer: Mapped[str] = mapped_column(String, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    run_content_hash: Mapped[str] = mapped_column(String, nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, nullable=False)

@@ -185,6 +185,58 @@ def main(argv=None):
         "--acknowledge-unresolved", action="store_true",
         help="Accept although challenger findings remain open (they stay recorded)",
     )
+    fo_run = commands.add_parser(
+        "run-fo-case",
+        help="Run the deterministic Financial Overview over a filing folder in edgar_filings/",
+    )
+    fo_run.add_argument(
+        "case_id", nargs="?",
+        help="Case id (default: TICKER_FY<year> from the filing's cover page)",
+    )
+    fo_run.add_argument(
+        "--filing", required=True,
+        help='Folder in edgar_filings/, e.g. "HCA 10-K FY2025" (or "edgar_filings/HCA 10-K FY2025")',
+    )
+    fo_agent = fo_run.add_mutually_exclusive_group(required=True)
+    fo_agent.add_argument(
+        "--live", action="store_true",
+        help="Run the Pre-check Agent (going concern, covenants, acquisitions and divestitures, prepaid model) and "
+             "the Trigger Agent (DSCR T1, when DSCR scores 9 or more) on the configured live provider (model cost). "
+             "The agent is required: give --live or --responses.",
+    )
+    fo_agent.add_argument(
+        "--responses", type=Path,
+        help='Scripted agent responses (JSON) for an offline run: one going-concern response, or '
+             '{"going_concern": ..., "covenants": ..., "acquisitions": ..., "prepaid": ..., "dscr_t1": ...} '
+             '("dscr_t1" only needed when DSCR scores 9 or more)',
+    )
+    fo_run.add_argument(
+        "--model",
+        help="With --live: the Vertex text-analysis model for the Pre-check Agent, e.g. gemini-3.5-flash (default: "
+             "VERTEX_MODEL_NARROW). Must be one of app/services/fo/models.py's text-analysis candidates.",
+    )
+    fo_review = commands.add_parser(
+        "fo-review",
+        help="Record your continue / stop decision on an FO run escalated by a going-concern fail",
+    )
+    fo_review.add_argument("run_id")
+    fo_review.add_argument("--decision", required=True, choices=("continue", "stop", "use_verified"),
+                           help="continue / stop on a going-concern fail; use_verified keeps the verified result "
+                                "when the agent read FAIL but its evidence didn't hold up")
+    fo_review.add_argument("--reviewer", required=True)
+    fo_review.add_argument("--reason", required=True)
+    fo_override = commands.add_parser(
+        "fo-override",
+        help="Accept or override the score of a measure an FO run escalated (liquidity after a covenant breach; dso "
+             "or leverage after an unresolved acquisition or divestiture; dscr after its trigger T1 fired)",
+    )
+    fo_override.add_argument("run_id")
+    fo_override.add_argument("--measure", required=True,
+                             help='The escalated measure: "liquidity", "dso", "leverage" or "dscr"')
+    fo_override.add_argument("--decision", required=True, choices=("accept", "override"))
+    fo_override.add_argument("--score", type=float, help="Your score, 1-10 (required to override)")
+    fo_override.add_argument("--reviewer", required=True)
+    fo_override.add_argument("--reason", required=True)
     approve = commands.add_parser(
         "approve", help="Record your explicit approval of the exact draft content"
     )
@@ -223,6 +275,28 @@ def main(argv=None):
             )
             if args.command == "run-bo-case":
                 print(json.dumps(_run_bo_case(session, database, args), indent=2))
+                session.commit()
+                return
+            if args.command == "run-fo-case":
+                print(json.dumps(_run_fo_case(session, args), indent=2))
+                session.commit()
+                return
+            if args.command == "fo-review":
+                from app.services.fo.review import review_run
+
+                print(json.dumps(review_run(
+                    session, args.run_id, decision=args.decision, reviewer=args.reviewer,
+                    reason=args.reason, output_root=args.output,
+                ), indent=2))
+                session.commit()
+                return
+            if args.command == "fo-override":
+                from app.services.fo.review import override_measure
+
+                print(json.dumps(override_measure(
+                    session, args.run_id, measure=args.measure, decision=args.decision, score=args.score,
+                    reviewer=args.reviewer, reason=args.reason, output_root=args.output,
+                ), indent=2))
                 session.commit()
                 return
             if args.command == "run-bo-specialists":
@@ -465,6 +539,30 @@ def _run_bo_specialists(session, database, args):
         "tokens": metrics["tokens"],
         "outputs": {k: str(v) for k, v in result["paths"].items()},
     }
+
+
+def _run_fo_case(session, args):
+    """Run the Financial Overview (going-concern pre-check, then the measures) and summarise the recorded run."""
+    from app.services.fo import loader, precheck
+    from app.services.fo.runner import FinancialOverviewRunner
+
+    filing = Path(args.filing)
+    name = filing.name
+    if len(filing.parts) > 1 and filing.resolve().parent != Path(loader.FILINGS_ROOT).resolve():
+        raise ValueError(f"--filing must be a folder directly inside {loader.FILINGS_ROOT}.")
+    if getattr(args, "live", False):
+        backend, mode = precheck.live_backend(getattr(args, "model", None)), "live"
+    elif getattr(args, "model", None):
+        raise ValueError("--model applies to --live runs only.")
+    else:
+        backend, mode = precheck.scripted_backend(args.responses), "scripted"
+    try:
+        result = FinancialOverviewRunner(session, output_root=args.output, agent_backend=backend,
+                                         agent_mode=mode).run_filing(name, args.case_id)
+    except loader.FilingFolderError as exc:
+        available = [f["name"] for f in loader.list_filings()]
+        raise ValueError(f"{exc} Available folders: {available or 'none'}.") from exc
+    return result.summary()
 
 
 def _run_bo_case(session, database, args):

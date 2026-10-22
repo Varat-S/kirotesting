@@ -72,6 +72,9 @@ BUSINESS_OVERVIEW_TABLES = (
     "accepted_business_overviews",
 )
 
+# Financial Overview tables (deterministic FO runs over edgar_filings/ folders).
+FINANCIAL_OVERVIEW_TABLES = ("financial_overview_runs", "financial_overview_reviews", "financial_overview_overrides")
+
 
 def migrate(engine):
     # Which agentic tables are missing in the EXISTING schema (before init_db)?
@@ -79,7 +82,7 @@ def migrate(engine):
         before_tables = set(inspect(connection).get_table_names())
     new_agentic_tables = [
         t for t in (*AGENTIC_TABLES, *SECTOR_BENCHMARK_TABLES,
-                    *BUSINESS_OVERVIEW_TABLES)
+                    *BUSINESS_OVERVIEW_TABLES, *FINANCIAL_OVERVIEW_TABLES)
         if t not in before_tables
     ]
 

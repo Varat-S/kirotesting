@@ -1,0 +1,326 @@
+{# Financial Overview scorecard: the composite then one card per measure. Expects `view` from fo.reporting.overview_view. #}
+<style>
+  .risk { display: inline-block; min-width: 2.6rem; text-align: center; border-radius: 6px; padding: 1px 8px; font-weight: 700; color: #fff; }
+  .risk.very-low { background: #10B981; } .risk.low { background: #84CC16; } .risk.moderate { background: #EAB308; }
+  .risk.elevated { background: #F59E0B; } .risk.high { background: #F97316; } .risk.very-high { background: #EF4444; }
+  .risk.none { background: #c9d1da; color: #22334a; }
+  .fo-headline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; }
+  .fo-big { font-size: 2.2rem; font-weight: 700; } .fo-rating { font-size: 1.6rem; font-weight: 700; color: #22334a; }
+  .fo-card h3 { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  tr.result td { background: #f8fafd; font-weight: 600; }
+  .fo-formula { font-family: ui-monospace, monospace; font-size: .88rem; background: #f8fafd; padding: 8px 12px; border-radius: 6px; }
+  .fo-gate { border-left: 4px solid #EF4444; background: #fdf1f0; padding: 10px 14px; border-radius: 6px; }
+  .fo-gate.continued { border-color: #F97316; background: #fff6ee; } .fo-gate.watch { border-color: #F59E0B; background: #fff9ec; }
+  .fo-quote { border-left: 3px solid #c9d1da; margin: 6px 0; padding: 4px 12px; font-style: italic; }
+  .fo-superseded { opacity: .72; }
+  .ok { color: #2f6b45; font-weight: bold; } .bad { color: #9a3324; font-weight: bold; } .warn { color: #8a6d1c; font-weight: bold; }
+</style>
+{% set pc = view.precheck %}
+{% set gate = view.gate %}
+{% if pc %}
+<section id="fo-precheck"><h2>Pre-check: going concern</h2>
+<div class="fo-headline"><span class="fo-big"><span class="risk {{ pc.css }}">{{ pc.label }}</span></span><span>{{ pc.reason }}</span></div>
+<dl>
+<dt>Decided by</dt><dd>{{ pc.decided_by }}{% if pc.agent %} · {{ pc.mode }} model <code>{{ pc.agent.model_id }}</code> · prompt <code>{{ pc.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ pc.effect }}</dd>
+<dt>Keyword rules (cross-check only)</dt><dd>{{ pc.rules.status|upper }}: {{ pc.rules.reason }}{% if pc.rules.passage_id %} ({{ pc.rules.passage_id }}){% endif %}</dd>
+<dt>Auditor's report</dt><dd>{% if pc.audit_reports %}read in full ({{ pc.passages[0].entries|length }} paragraphs) in {% for i in pc.audit_reports %}{{ 'F-pages' if i == 'F' else ('Item ' ~ i if i else 'the document') }}{{ ', ' if not loop.last }}{% endfor %}{% else %}not located{% endif %}</dd>
+{% if pc.sections %}<dt>Sections searched</dt><dd>{% for s in pc.sections %}{{ s.label }}: {% if s.located %}located{% else %}<span class="subtle">no heading found</span>{% endif %}{% if s.mentions %}, {{ s.mentions }} mention(s){% endif %}{{ ' · ' if not loop.last }}{% endfor %}</dd>{% endif %}
+{% if pc.status == 'fail' %}<dt>Agent triggers</dt><dd>Skipped (going-concern fail)</dd>{% endif %}
+</dl>
+{% if gate.message and gate.state in ['stopped', 'continued', 'awaiting_review', 'awaiting_gc_decision'] %}<p class="fo-gate {{ gate.state }}"><strong>{{ gate.message }}</strong></p>{% elif pc.status == 'watch' %}<p class="fo-gate watch">{{ pc.effect }}</p>{% endif %}
+{% for b in pc.basis %}<p class="subtle">Basis {{ b.passage_id }} · {{ b.section or "Auditor's report" }} · {{ 'F-pages' if b.item == 'F' else ('Item ' ~ b.item if b.item else 'document') }} · {{ b.classification|replace('_', ' ') }}</p><blockquote class="fo-quote">{{ b.quote }}</blockquote>{% endfor %}
+{% for n in pc.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% set a = pc.agent %}
+<h3 id="fo-precheck-agent">Pre-check Agent result</h3>
+{% if a %}
+<dl>
+<dt>Agent's answer</dt><dd>{% if a.stated %}<span class="risk {{ a.stated.css }}">{{ a.stated.label }}</span>{% else %}<span class="subtle">none (output rejected)</span>{% endif %}</dd>
+<dt>Verified result</dt><dd>{% if a.verified %}<span class="risk {{ a.verified.css }}">{{ a.verified.label }}</span> {% if a.consistent %}<span class="subtle">matches the agent's answer</span>{% else %}<span class="warn">differs from the agent's answer: the verified findings decide</span>{% endif %}{% else %}<span class="subtle">not available (a run recorded before the agent was required: the keyword rules decided)</span>{% endif %}</dd>
+<dt>Model run</dt><dd><code>{{ a.model_id }}</code> · prompt <code>{{ a.prompt_id }}</code> (hash <code>{{ a.prompt_hash }}</code>) · run <code>{{ a.model_run_id }}</code> · {{ a.passages_sent }} passages sent · output {{ a.validation_outcome }}</dd>
+</dl>
+{% if a.validation_outcome != 'valid' %}<p class="notice">Agent output rejected: {{ a.validation_detail }}. (A run recorded before the agent was required: the keyword rules decided.)</p>{% endif %}
+{% if a.rationale %}<p><strong>Agent's rationale:</strong> {{ a.rationale }}</p>{% endif %}
+{% if a.validation_outcome == 'valid' %}
+{% if a.findings %}
+<div class="table-wrap"><table><thead><tr><th>Passage</th><th>Section</th><th>Classification</th><th>Quote</th><th>Check</th></tr></thead><tbody>
+{% for f in a.findings %}<tr><td><code>{{ f.passage_id }}</code></td><td>{{ f.section }}</td><td>{{ f.classification|replace('_', ' ') }}</td><td><span class="fo-quote" style="display:block">{{ f.quote }}</span></td><td>{% if f.verified %}<span class="ok">{{ f.verdict }}</span>{% else %}<span class="bad">{{ f.verdict }}</span>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p class="subtle">The agent reported no findings: nothing it read bears on going concern.</p>{% endif %}
+{% endif %}
+{% if a.missing_information %}<p class="subtle"><strong>Missing information:</strong> {{ a.missing_information|join('; ') }}</p>{% endif %}
+<p class="subtle">The full exchange (system prompt, inputs, raw response) is in <code>precheck_transcript.json</code> in the run's output folder.</p>
+{% else %}<p class="subtle">{{ pc.agent_not_used }}</p>{% endif %}
+<details><summary>Passages read ({% for p in pc.passages %}{{ p.entries|length }} {{ p.label|lower }}{{ ', ' if not loop.last }}{% endfor %}{% if pc.tagged %}, {{ pc.tagged|length }} tagged facts{% endif %})</summary>
+{% for p in pc.passages %}<h4>{{ p.label }}</h4>{% if p.entries %}<ul>{% for e in p.entries %}<li><code>{{ e.passage_id }}</code> <span class="subtle">{{ 'F-pages' if e.item == 'F' else ('Item ' ~ e.item if e.item else 'document') }}{% if e.section_label %} · {{ e.section_label }}{% endif %}</span> {{ e.text }}</li>{% endfor %}</ul>{% else %}<p class="subtle">None.</p>{% endif %}{% endfor %}
+{% if pc.tagged %}<h4>Tagged going-concern facts</h4><ul>{% for t in pc.tagged %}<li><code>{{ t.concept }}</code> {{ t.period }}: {{ t.value }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">The auditor's report is always read in full; the going-concern or liquidity note, basis of presentation, MD&amp;A liquidity and subsequent events (with the rest of Items 1, 1A, 7, 8 and the F-pages) are searched for "substantial doubt" and "going concern". Pass: no statement of substantial doubt; standard "prepared on a going-concern basis" wording, or risk-factor language with no doubt expressed, is a pass. Watch: management says substantial doubt was raised but is alleviated by its plans; the liquidity-and-maturity score is floored at 7 before weighting. Fail: the auditor's report has a going-concern paragraph, or management concludes substantial doubt exists (not alleviated); the pipeline pauses for an analyst to choose continue (overall score 10, measures shown as "superseded by going-concern fail" and not counted, agent triggers skipped) or stop ("Not scored: going-concern fail"). Going-concern doubt can also arise after the 10-K: check later 10-Qs and 8-Ks.</p>
+</details>
+</section>
+{% endif %}
+{% set cv = view.covenants %}
+{% if cv %}
+<section id="fo-covenants"><h2>Pre-check: covenants</h2>
+<div class="fo-headline"><span class="fo-big"><span class="risk {{ cv.css }}">{{ cv.label }}</span></span><span>Outcome ({{ cv.outcome }}): {{ cv.reason }}</span></div>
+<dl>
+<dt>Decided by</dt><dd>{{ cv.decided_by }}{% if cv.agent %} · {{ cv.mode }} model <code>{{ cv.agent.model_id }}</code> · prompt <code>{{ cv.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ cv.effect }}</dd>
+<dt>Keyword rules (cross-check only)</dt><dd>{{ cv.rules.label }}: {{ cv.rules.reason }}{% if cv.rules.findings %} ({{ cv.rules.findings|length }} classified sentence(s)){% endif %}</dd>
+{% if cv.sections %}<dt>Sections searched</dt><dd>{% for s in cv.sections %}{{ s.label }}: {% if s.located %}located{% else %}<span class="subtle">no heading found</span>{% endif %}{% if s.hits %}, {{ s.hits }} paragraph(s) with hits{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</dd>{% endif %}
+{% if cv.waivers %}<dt>Waivers</dt><dd>{% for w in cv.waivers %}<code>{{ w.passage_id }}</code> {% if w.months is not none %}runs {{ '%.0f'|format(w.months) }} months after the year-end{% else %}length not stated{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</dd>{% endif %}
+<dt>Covenant headroom</dt><dd>{% if cv.headroom %}{% for h in cv.headroom %}{{ h.covenant }}: required {{ h.required }}{% if h.actual %}, actual {{ h.actual }}{% endif %} <span class="subtle">({{ h.passage_id }}, {{ h.section }})</span>{{ ' · ' if not loop.last }}{% endfor %}{% else %}<span class="subtle">none disclosed{% if not cv.agent %} (headroom is read by the Pre-check Agent; the keyword rules don't extract it){% endif %}</span>{% endif %}</dd>
+</dl>
+{% if gate.state == 'awaiting_override' and 'covenants' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'covenants' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% elif cv.status == 'relief' %}<p class="fo-gate watch">{{ cv.effect }}</p>{% endif %}
+{% for f in cv.info_flags %}<p class="notice"><strong>Information flag:</strong> {{ f }}</p>{% endfor %}
+{% for b in cv.basis %}<p class="subtle">Basis {{ b.passage_id }} · {{ b.section }} · {{ 'F-pages' if b.item == 'F' else ('Item ' ~ b.item if b.item else 'document') }} · {{ b.classification|replace('_', ' ') }}{% if b.waiver_months is not none and b.waiver_months is defined %} · waiver {{ '%.0f'|format(b.waiver_months) }} months{% endif %}</p><blockquote class="fo-quote">{{ b.quote }}</blockquote>{% endfor %}
+{% for n in cv.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% set a = cv.agent %}
+<h3 id="fo-covenants-agent">Pre-check Agent result: covenants</h3>
+{% if a %}
+<dl>
+<dt>Agent's answer</dt><dd>{% if a.stated %}<span class="risk {{ a.stated.css }}">{{ a.stated.label }}</span>{% else %}<span class="subtle">none (output rejected)</span>{% endif %}</dd>
+<dt>Verified result</dt><dd>{% if a.verified %}<span class="risk {{ a.verified.css }}">{{ a.verified.label }}</span> {% if a.consistent %}<span class="subtle">matches the agent's answer</span>{% else %}<span class="warn">differs from the agent's answer: the verified findings decide</span>{% endif %}{% else %}<span class="subtle">not available (a run recorded before the agent was required: the keyword rules decided)</span>{% endif %}</dd>
+<dt>Model run</dt><dd><code>{{ a.model_id }}</code> · prompt <code>{{ a.prompt_id }}</code> (hash <code>{{ a.prompt_hash }}</code>) · run <code>{{ a.model_run_id }}</code> · {{ a.passages_sent }} passages sent · output {{ a.validation_outcome }}</dd>
+</dl>
+{% if a.validation_outcome != 'valid' %}<p class="notice">Agent output rejected: {{ a.validation_detail }}. (A run recorded before the agent was required: the keyword rules decided.)</p>{% endif %}
+{% if a.rationale %}<p><strong>Agent's rationale:</strong> {{ a.rationale }}</p>{% endif %}
+{% if a.validation_outcome == 'valid' %}
+{% if a.findings %}
+<div class="table-wrap"><table><thead><tr><th>Passage</th><th>Section</th><th>Classification</th><th>Waiver</th><th>Quote</th><th>Check</th></tr></thead><tbody>
+{% for f in a.findings %}<tr><td><code>{{ f.passage_id }}</code></td><td>{{ f.section }}</td><td>{{ f.classification|replace('_', ' ') }}</td><td>{% if f.waiver_until %}until {{ f.waiver_until }}{% elif f.waiver_months is not none and f.waiver_months is defined %}{{ '%.0f'|format(f.waiver_months) }} months{% else %}—{% endif %}</td><td><span class="fo-quote" style="display:block">{{ f.quote }}</span></td><td>{% if f.verified %}<span class="ok">{{ f.verdict }}</span>{% else %}<span class="bad">{{ f.verdict }}</span>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p class="subtle">The agent reported no findings: nothing it read bears on a breach, waiver or amendment.</p>{% endif %}
+{% if a.headroom or a.headroom_held_back %}
+<div class="table-wrap"><table><thead><tr><th>Passage</th><th>Covenant</th><th>Required</th><th>Actual</th><th>Quote</th><th>Check</th></tr></thead><tbody>
+{% for h in a.headroom %}<tr><td><code>{{ h.passage_id }}</code></td><td>{{ h.covenant }}</td><td>{{ h.required }}</td><td>{{ h.actual or '—' }}</td><td><span class="fo-quote" style="display:block">{{ h.quote }}</span></td><td><span class="ok">Verified</span></td></tr>{% endfor %}
+{% for h in a.headroom_held_back %}<tr><td><code>{{ h.passage_id }}</code></td><td>{{ h.covenant }}</td><td>{{ h.required }}</td><td>{{ h.actual or '—' }}</td><td><span class="fo-quote" style="display:block">{{ h.quote }}</span></td><td><span class="bad">Held back: {{ h.reason }}</span></td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% endif %}
+{% if a.missing_information %}<p class="subtle"><strong>Missing information:</strong> {{ a.missing_information|join('; ') }}</p>{% endif %}
+<p class="subtle">The full exchange (system prompt, inputs, raw response) is in <code>precheck_transcript.json</code> in the run's output folder.</p>
+{% else %}<p class="subtle">{{ cv.agent_not_used }}</p>{% endif %}
+<details><summary>Outcomes and passages read ({{ cv.passages|length }} paragraph(s) with search hits)</summary>
+<div class="table-wrap"><table><thead><tr><th>Outcome</th><th>When (first match)</th><th>Effect</th></tr></thead><tbody>
+{% for o in cv.outcomes %}<tr{% if o.current %} style="background:#eef3f8;font-weight:600"{% endif %}><td>({{ o.letter }})</td><td>{{ o.when }}</td><td>{{ o.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if cv.passages %}<ul>{% for p in cv.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }}{% if p.also_in %} (also in {{ p.also_in|join(', ') }}){% endif %} · hits: {{ p.hits|join(', ') }}</span> {{ p.text }}</li>{% endfor %}</ul>{% else %}<p class="subtle">No paragraph hit the search.</p>{% endif %}
+{% if cv.rules.findings %}<h4>Keyword rules</h4><ul>{% for f in cv.rules.findings %}<li><code>{{ f.passage_id }}</code> {{ f.classification|replace('_', ' ') }}{% if f.waiver_months is not none %} ({{ '%.0f'|format(f.waiver_months) }} months){% endif %}: <span class="subtle">{{ f.quote }}</span></li>{% endfor %}</ul>{% endif %}
+<p class="subtle">The debt note, MD&amp;A liquidity, the auditor's report and subsequent events are searched for "waiver", "forbearance", "covenant", "breach", "not in compliance", "event of default", "cross-default", "amendment" and "relief"; only the paragraphs where the search hits are read, and no hit means in compliance. Outside the debt note, "waiver", "amendment", "relief" and "breach" count only next to debt words (credit, facility, lender, loan, notes, borrowings…), so a Medicaid waiver or a data breach is not read as a covenant matter.</p>
+</details>
+</section>
+{% endif %}
+{% set ad = view.acquisitions %}
+{% if ad %}
+<section id="fo-acquisitions"><h2>Pre-check: acquisitions and divestitures</h2>
+<div class="fo-headline"><span class="fo-big"><span class="risk {{ ad.css }}">{{ ad.label }}</span></span><span>{{ ad.reason }}</span></div>
+<dl>
+<dt>Decided by</dt><dd>{{ ad.decided_by }}{% if ad.agent %} · {{ ad.mode }} model <code>{{ ad.agent.model_id }}</code> · prompt <code>{{ ad.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ ad.effect }}</dd>
+<dt>Measured against</dt><dd>{{ ad.reported.period or 'no fiscal year found' }} · revenue {{ ad.revenue_reported }} million ({{ ad.reported.revenue_concept or 'not tagged' }}) · total assets {{ ad.total_assets }} million</dd>
+{% if ad.dso %}<dt>DSO revenue</dt><dd>{{ ad.dso.reported }} as reported{% if ad.dso.added != '0.0' %} + {{ ad.dso.added }} pro forma{% endif %}{% if ad.dso.removed != '0.0' %} − {{ ad.dso.removed }} divested{% endif %} = <strong>{{ ad.dso.revenue }}</strong> million ({{ ad.dso.deals }})</dd>{% endif %}
+{% if ad.leverage %}<dt>Debt/EBITDAR</dt><dd>EBITDAR {{ ad.leverage.ebitdar }} million, debt {{ ad.leverage.debt }} million: {{ ad.leverage.how }}</dd>{% endif %}
+{% if ad.escalated %}<dt>Escalated to an analyst</dt><dd>{% for e in ad.escalated %}{{ e.measure }}: <span class="risk {{ e.css }}" style="font-weight:600">{{ e.tag }}</span>{% if e.score %} {{ e.score }}{% elif e.tag == 'Unresolved' %} <span class="subtle">(left as reported, awaiting the analyst)</span>{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</dd>{% endif %}
+{% if ad.sections %}<dt>Sections searched</dt><dd>{% for s in ad.sections %}{{ s.label }}: {% if s.located %}{{ s.passages }} passage(s){% else %}<span class="subtle">no heading found</span>{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'acquisitions' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'acquisitions' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% for f in ad.info_flags %}<p class="notice"><strong>Information flag:</strong> {{ f }}</p>{% endfor %}
+{% if ad.deals %}
+<div class="table-wrap"><table><thead><tr><th>Deal</th><th>Kind</th><th>Timing</th><th>Presentation</th><th>Materiality</th><th>Outcome (first match)</th><th>Effect on the measures</th></tr></thead><tbody>
+{% for d in ad.deals %}<tr><td><code>{{ d.deal_id }}</code> {{ d.description }}</td><td>{{ d.kind_label }}</td><td>{{ d.timing_label }} <span class="subtle">({{ d.timing_basis }})</span></td><td>{{ d.presentation_label }}</td><td>{{ d.materiality|replace('_', ' ') }} <span class="subtle">({{ d.materiality_basis }})</span></td><td><span class="risk {{ d.outcome_css }}" style="font-weight:600">{{ d.outcome_label }}</span><br><span class="subtle">{{ d.outcome_text }}</span></td><td>{{ d.effects_text }}</td></tr>{% endfor %}
+</tbody></table></div>
+<h3 id="fo-acquisitions-evidence">Verified evidence</h3>
+<div class="table-wrap"><table><thead><tr><th>Deal</th><th>Fact</th><th>Passage</th><th>Value</th><th>Quote</th></tr></thead><tbody>
+{% for d in ad.deals %}{% for f in d.facts %}<tr><td><code>{{ d.deal_id }}</code></td><td>{{ f.label }}</td><td><code>{{ f.passage_id }}</code> <span class="subtle">{{ f.section }}</span></td><td>{{ f.text or '—' }}</td><td><span class="fo-quote" style="display:block">{{ f.quote }}</span></td></tr>{% endfor %}{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% for n in ad.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% set a = ad.agent %}
+<h3 id="fo-acquisitions-agent">Pre-check Agent result: acquisitions and divestitures</h3>
+{% if a %}
+<dl>
+<dt>Agent's answer</dt><dd>{% if a.stated %}<span class="risk {{ a.stated.css }}">{{ a.stated.label }}</span>{% else %}<span class="subtle">none</span>{% endif %}</dd>
+<dt>Verified result</dt><dd><span class="risk {{ ad.css }}">{{ ad.label }}</span> {% if a.consistent %}<span class="subtle">matches the agent's answer</span>{% else %}<span class="warn">differs from the agent's answer: the verified evidence decides</span>{% endif %}</dd>
+<dt>Model run</dt><dd><code>{{ a.model_id }}</code> · prompt <code>{{ a.prompt_id }}</code> (hash <code>{{ a.prompt_hash }}</code>) · run <code>{{ a.model_run_id }}</code> · {{ a.passages_sent }} passages sent · output {{ a.validation_outcome }}</dd>
+</dl>
+{% if a.rationale %}<p><strong>Agent's rationale:</strong> {{ a.rationale }}</p>{% endif %}
+{% if not ad.deals %}<p class="subtle">The agent reported no deal for the year in the passages it read.</p>{% endif %}
+{% if a.held_back_deals or a.held_back_evidence %}
+<div class="table-wrap"><table><thead><tr><th>Deal</th><th>Fact</th><th>Passage</th><th>Quote</th><th>Check</th></tr></thead><tbody>
+{% for h in a.held_back_deals %}<tr><td><code>{{ h.deal_id }}</code> {{ h.description }}</td><td>whole deal</td><td>—</td><td>—</td><td><span class="bad">Held back: {{ h.reason }}</span></td></tr>{% endfor %}
+{% for h in a.held_back_evidence %}<tr><td><code>{{ h.deal_id }}</code></td><td>{{ h.fact }}{% if h.amount %} ({{ h.amount }}){% endif %}{% if h.date %} ({{ h.date }}){% endif %}</td><td><code>{{ h.passage_id }}</code></td><td><span class="fo-quote" style="display:block">{{ h.quote }}</span></td><td><span class="bad">Held back: {{ h.reason }}</span></td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% if a.missing_information %}<p class="subtle"><strong>Missing information:</strong> {{ a.missing_information|join('; ') }}</p>{% endif %}
+<p class="subtle">The full exchange (system prompt, inputs, raw response) is in <code>precheck_transcript.json</code> in the run's output folder.</p>
+{% else %}<p class="subtle">{{ ad.agent_not_used }}</p>{% endif %}
+<details><summary>Rules and passages read ({{ ad.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th></th><th>Per deal, first match</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in ad.rules_table %}<tr><td>{{ r.n }}</td><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if ad.passages %}<ul>{% for p in ad.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% else %}<p class="subtle">No passage collected.</p>{% endif %}
+{% if ad.signals %}<h4>Keyword rules (cross-check only)</h4><ul>{% for s in ad.signals %}<li><code>{{ s.passage_id }}</code> {{ s.signal }}: <span class="subtle">{{ s.quote }}</span></li>{% endfor %}</ul>{% endif %}
+<p class="subtle">The acquisitions or dispositions note, the discontinued-operations and held-for-sale notes are read in full (tables as rows), with subsequent events that mention a deal and deal mentions elsewhere in the notes ("pro forma", "discontinued operations", "held for sale", "divest…", "business combination"). Every amount and date the agent gives must be in its verbatim quote. A deal the filing doesn't call material or not is not material when its price or proceeds are under 5% of total assets; with no price, it is treated as material. ASC 805 pro forma gives revenue and earnings, not EBITDAR: an acquisition's missing months of EBITDAR are added only if the 10-K discloses them. Each deal is recorded once and shared by Debt/EBITDAR, DSO and the 25% key-input trigger.</p>
+</details>
+</section>
+{% endif %}
+{% set pq = view.prepaid %}
+{% if pq %}
+<section id="fo-prepaid"><h2>Pre-check: prepaid model</h2>
+<div class="fo-headline"><span class="fo-big"><span class="risk {{ pq.css }}">{{ pq.label }}</span></span><span>{{ pq.reason }}</span></div>
+<dl>
+<dt>Decided by</dt><dd>{{ pq.decided_by }}{% if pq.agent %} · {{ pq.mode }} model <code>{{ pq.agent.model_id }}</code> · prompt <code>{{ pq.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ pq.effect }}</dd>
+<dt>Business model (agent, from Item 1)</dt><dd>{% if pq.prepaid_model %}<strong>{{ pq.model }}</strong>{% else %}{{ pq.model }}{% endif %} <span class="subtle">({{ pq.model_basis }})</span>{% for q in pq.model_evidence %}<blockquote class="fo-quote"><code>{{ q.passage_id }}</code> {{ q.quote }}</blockquote>{% endfor %}</dd>
+<dt>Contract liabilities vs receivables</dt><dd>{{ pq.contract_liabilities }} vs {{ pq.receivables }} million{% if pq.cl_ge_receivables %} · <strong>contract liabilities ≥ receivables</strong>{% endif %} <span class="subtle">(contract liabilities: {{ pq.contract_liabilities_source }})</span></dd>
+<dt>Revenue by payer</dt><dd>{% if pq.payer_split %}disclosed · billed revenue {% for y, v in pq.billed.items() %}{{ y }} year {{ v }} million{{ ' · ' if not loop.last }}{% endfor %}{% else %}not disclosed{% endif %}</dd>
+{% if pq.factor is not none %}<dt>DSO weight</dt><dd>7.5% × {{ pq.factor }} = <strong>{{ pq.dso_weight }}</strong>; every other weight × (1 − DSO weight) ÷ (1 − 7.5%)</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'prepaid' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'prepaid' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if pq.payers %}
+<div class="table-wrap"><table><thead><tr><th>Payer</th><th>Basis</th><th>Year</th><th class="num">USD millions</th><th>Passage</th><th>Quote</th></tr></thead><tbody>
+{% for p in pq.payers %}<tr><td>{{ p.payer }}</td><td>{{ p.basis }}</td><td>{{ p.year }}</td><td class="num">{{ p.text }}</td><td><code>{{ p.passage_id }}</code></td><td><span class="fo-quote" style="display:block">{{ p.quote }}</span></td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% for n in pq.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% set a = pq.agent %}
+<h3 id="fo-prepaid-agent">Pre-check Agent result: prepaid model</h3>
+{% if a %}
+<dl>
+<dt>Agent's answer</dt><dd>{% if a.stated %}<span class="risk {{ a.stated.css }}">{{ a.stated.label }}</span>{% endif %} · model {{ a.stated_model }}</dd>
+<dt>Verified result</dt><dd><span class="risk {{ pq.css }}">{{ pq.label }}</span> {% if a.consistent %}<span class="subtle">matches the agent's answer</span>{% else %}<span class="warn">differs from the agent's answer: the verified evidence decides</span>{% endif %}</dd>
+<dt>Model run</dt><dd><code>{{ a.model_id }}</code> · prompt <code>{{ a.prompt_id }}</code> (hash <code>{{ a.prompt_hash }}</code>) · run <code>{{ a.model_run_id }}</code> · {{ a.passages_sent }} passages sent · output {{ a.validation_outcome }}</dd>
+</dl>
+{% if a.rationale %}<p><strong>Agent's rationale:</strong> {{ a.rationale }}</p>{% endif %}
+{% if a.held_back %}
+<div class="table-wrap"><table><thead><tr><th>Fact</th><th>Passage</th><th>Quote</th><th>Check</th></tr></thead><tbody>
+{% for h in a.held_back %}<tr><td>{{ h.fact|replace('_', ' ') }}{% if h.payer %} ({{ h.payer }}){% endif %}{% if h.amount %} {{ h.amount }}{% endif %}</td><td><code>{{ h.passage_id }}</code></td><td><span class="fo-quote" style="display:block">{{ h.quote }}</span></td><td><span class="bad">Held back: {{ h.reason }}</span></td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% if a.missing_information %}<p class="subtle"><strong>Missing information:</strong> {{ a.missing_information|join('; ') }}</p>{% endif %}
+<p class="subtle">The full exchange (system prompt, inputs, raw response) is in <code>precheck_transcript.json</code> in the run's output folder.</p>
+{% else %}<p class="subtle">{{ pq.agent_not_used }}</p>{% endif %}
+<details><summary>Rules and passages read ({{ pq.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>If a prepaid or mixed business model, or contract liabilities ≥ receivables (first match)</th><th>DSO</th></tr></thead><tbody>
+{% for r in pq.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if pq.passages %}<ul>{% for p in pq.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'Item 1 · business model' if p.kind == 'business_model' else 'Revenue note' }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">The agent reads only the business description (Item 1) and the revenue note (revenue by payer, contract liabilities), for every filing. Its reading of the business model counts only on a verbatim Item 1 quote saying customers pay in advance (a mixed model also needs one saying services are billed). Every amount must be in its verbatim quote; a payer line must name its payer. Billed revenue is the payer lines billed after the service (government programs, insurers, other third parties); DSO is recomputed on it for both years. Contract liabilities are the tagged figure, else the revenue note's.</p>
+</details>
+</section>
+{% endif %}
+{% set tq = view.dscr_t1 %}
+{% if tq %}
+<section id="fo-dscr-t1"><h2>Trigger Agent: DSCR T1 (score {{ tq.threshold }} or more)</h2>
+<div class="fo-headline"><span class="fo-big"><span class="risk {{ tq.css }}">{{ tq.label }}</span></span><span>{{ tq.reason }}</span></div>
+<dl>
+<dt>Trigger</dt><dd>DSCR risk score <span class="risk {{ tq.score.css }}">{{ tq.score.text }}</span> · {{ tq.column }}{% if tq.principal %} · DSCR {{ tq.principal.ratio }}{% endif %} · fires at {{ tq.threshold }} or more{% if not tq.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+<dt>Decided by</dt><dd>{{ tq.decided_by }}{% if tq.agent %} · {{ tq.mode }} model <code>{{ tq.agent.model_id }}</code> · prompt <code>{{ tq.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tq.effect }}</dd>
+{% if tq.resolution %}<dt>Resolution</dt><dd>{% if tq.unresolved %}<strong class="bad">{{ tq.resolution }}</strong>{% else %}<span class="ok">{{ tq.resolution }}</span>{% endif %}</dd>{% endif %}
+{% if tq.principal %}<dt>Year-1 principal (as tagged)</dt><dd>{{ tq.principal.amount }} million at {{ tq.principal.as_at }}: {{ tq.principal_basis }} <span class="subtle">({{ tq.principal.source }}; {% if tq.principal.short_term %}includes{% else %}doesn't include{% endif %} short-term borrowings such as commercial paper)</span></dd>
+<dt>T1a: rollover debt removed</dt><dd>{% if tq.principal.after %}<strong>{{ tq.principal.removed }} million</strong> → principal {{ tq.principal.after }} million, DSCR recomputed{% else %}none: no adjustment{% endif %}</dd>
+<dt>T1b: refinancing after the year-end</dt><dd>{% if tq.relief %}<strong>executed: −{{ tq.relief }} on the score</strong>{% else %}no executed refinancing of a year-1 maturity: no adjustment{% endif %}{% if tq.shared_with %} <span class="subtle">· recorded once, shared with {{ tq.shared_with|join(', ') }}</span>{% endif %}</dd>{% endif %}
+{% if tq.decision %}<dt>Analyst</dt><dd>{{ tq.decision }}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'dscr_t1' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'dscr_t1' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tq.rollover %}
+<h4>T1a: rollover debt in year-1 principal</h4>
+<div class="table-wrap"><table><thead><tr><th>Item</th><th>Kind</th><th class="num">Balance, USD millions</th><th>Rolled over</th><th>Backstop</th><th class="num">Removed</th><th>Outcome</th><th>Quotes</th></tr></thead><tbody>
+{% for e in tq.rollover %}<tr><td><code>{{ e.item_id }}</code> {{ e.description }}</td><td>{{ e.kind_label }}</td><td class="num">{{ e.balance_text }}</td><td>{{ 'yes' if e.rolled_over else 'not shown' }}</td><td>{{ e.backstop_text }}</td><td class="num">{{ e.removed_text }}</td><td><span class="risk {{ e.outcome_css }}">{{ e.outcome|replace('_', ' ') }}</span> <span class="subtle">{{ e.outcome_text }}</span></td><td>{% for q in e.quotes %}<span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code></span><blockquote class="fo-quote">{{ q.quote }}</blockquote>{% endfor %}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% if tq.refinancings %}
+<h4>T1b: refinancing of year-1 maturities after the year-end</h4>
+<div class="table-wrap"><table><thead><tr><th>Item</th><th>Kind</th><th>Date</th><th>Year-1 maturity</th><th class="num">Amount, USD millions</th><th class="num">Share of year-1 principal</th><th>Outcome</th><th>Quotes</th></tr></thead><tbody>
+{% for e in tq.refinancings %}<tr><td><code>{{ e.item_id }}</code> {{ e.description }}</td><td>{{ e.kind }}{% if e.stated_kind != e.kind %} <span class="subtle">(agent said {{ e.stated_kind }})</span>{% endif %}</td><td>{{ e.date or '—' }}</td><td>{{ e.maturity or 'not shown' }}</td><td class="num">{{ e.amount_text }}</td><td class="num">{{ e.share_text }}</td><td><span class="risk {{ e.outcome_css }}">{{ e.outcome|replace('_', ' ') }}</span> <span class="subtle">{{ e.outcome_text }}</span></td><td>{% for q in e.quotes %}<span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code></span><blockquote class="fo-quote">{{ q.quote }}</blockquote>{% endfor %}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% for n in tq.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tq.fired %}
+{% set a = tq.agent %}
+<h3 id="fo-dscr-t1-agent">Trigger Agent result: DSCR T1</h3>
+{% if a %}
+<dl>
+<dt>Agent's answer</dt><dd>{% if a.stated %}<span class="risk {{ a.stated.css }}">{{ a.stated.label }}</span>{% endif %}</dd>
+<dt>Verified result</dt><dd><span class="risk {{ tq.css }}">{{ tq.label }}</span> {% if a.consistent %}<span class="subtle">matches the agent's answer</span>{% else %}<span class="warn">differs from the agent's answer: the verified evidence decides</span>{% endif %}</dd>
+<dt>Model run</dt><dd><code>{{ a.model_id }}</code> · prompt <code>{{ a.prompt_id }}</code> (hash <code>{{ a.prompt_hash }}</code>) · run <code>{{ a.model_run_id }}</code> · {{ a.passages_sent }} passages sent · output {{ a.validation_outcome }}</dd>
+</dl>
+{% if a.rationale %}<p><strong>Agent's rationale:</strong> {{ a.rationale }}</p>{% endif %}
+{% if a.held_back %}
+<div class="table-wrap"><table><thead><tr><th>Item</th><th>Fact</th><th>Passage</th><th>Quote</th><th>Check</th></tr></thead><tbody>
+{% for h in a.held_back %}<tr><td><code>{{ h.item_id }}</code> {{ h.kind|replace('_', ' ') if h.kind }}</td><td>{{ h.fact }}{% if h.amount %} {{ h.amount }}{% endif %}{% if h.date %} {{ h.date }}{% endif %}</td><td><code>{{ h.passage_id }}</code></td><td><span class="fo-quote" style="display:block">{{ h.quote }}</span></td><td><span class="bad">Held back: {{ h.reason }}</span></td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% if a.missing_information %}<p class="subtle"><strong>Missing information:</strong> {{ a.missing_information|join('; ') }}</p>{% endif %}
+<p class="subtle">The full exchange (system prompt, inputs, raw response) is in <code>trigger_transcript.json</code> in the run's output folder.</p>
+{% else %}<p class="subtle">{{ tq.agent_not_used }}</p>{% endif %}
+<details><summary>Rules and passages read ({{ tq.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When DSCR scores {{ tq.threshold }} or more</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tq.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tq.sections %}<p class="subtle">Sections: {% for s in tq.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tq.passages %}<ul>{% for p in tq.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+{% if tq.signals %}<h4>Keyword rules (cross-check only)</h4><ul>{% for s in tq.signals %}<li><code>{{ s.passage_id }}</code> {{ s.signal }}: <span class="subtle">{{ s.quote }}</span></li>{% endfor %}</ul>{% endif %}
+<p class="subtle">Year-1 principal is the scheduled amortisation in year 1 of the debt maturity table plus the current finance-lease principal; without a tagged table, the current portion of debt. T1a: commercial paper, revolver, 364-day or securitisation borrowings come out of principal only when shown to be rolled over and backed by undrawn committed capacity at least as large that matures more than 12 months after the year-end; otherwise no adjustment. Each comes out whole or not at all, and items on the same backstop must fit within it together. Commercial paper is in principal only when principal includes short-term borrowings (Debt, Current). T1b, independent of T1a: debt already classified as long-term at the year-end (ASC 470-10-45-14) gets no adjustment; a refinancing counts only when its quote shows it completed after the year-end (no "intend", "plan", "expect"…) and a verified quote dates the refinanced debt within the 12 months after the year-end; a plan only gets no adjustment, with its passage cited. Every amount and date must be in its verbatim quote.</p>
+</details>
+{% endif %}
+</section>
+{% endif %}
+{% set c = view.composite %}
+{% if gate.show_composite %}
+<section id="fo-composite"><h2>Composite risk score{% if gate.provisional %} <span class="warn">(provisional)</span>{% elif c.after_override %} <span class="subtle">(after the analyst's decision)</span>{% endif %}</h2>
+{% if gate.provisional %}<p class="notice">Provisional: awaiting the analyst's decision on {% if gate.gc_decision %}going concern (keep the verified result or side with the agent's FAIL){{ ' and ' if gate.pending }}{% endif %}{% for e in gate.pending %}{{ e.measure_name }}{{ ', ' if not loop.last }}{% endfor %}{% if gate.pending %} (accept the engine's score or override it){% endif %}.</p>{% endif %}
+<div class="fo-headline">
+  <span class="fo-big"><span class="risk {{ c.css }}">{{ c.text }}</span>{% if c.label %} <span class="subtle">/ 10</span>{% endif %}</span>
+  {% if c.rating %}<span class="fo-rating">{{ c.rating }}</span>{% endif %}
+  {% if c.label %}<span>{{ c.label }} risk</span>{% endif %}
+  <span class="subtle">{{ c.heading }}</span>
+</div>
+{% if c.reason %}<p class="notice">{{ c.reason }}</p>{% endif %}
+{% if c.gc_status == 'fail' %}<p>{% for a in c.adjustments %}{{ a }}{{ ' · ' if not loop.last }}{% endfor %}. Going concern: fail. Agent triggers skipped.</p>
+{% else %}<p>Weighted average {{ c.average }} over {{ c.used }} measure(s){% for a in c.adjustments %} · {{ a }}{% endfor %}. Going concern: {{ c.gc_status }}{% if not pc %} (no pre-check recorded for this run){% endif %}{% if cv %} · Covenants: {{ cv.label|lower }} (outcome {{ cv.outcome }}){% endif %}{% if view.acquisitions %} · Acquisitions and divestitures: {{ view.acquisitions.label|lower }}{% endif %}{% if view.prepaid %} · Prepaid model: {{ view.prepaid.label|lower }}{% endif %}{% if view.dscr_t1 %} · DSCR trigger T1: {{ view.dscr_t1.label|lower }}{% endif %}.</p>{% endif %}
+<div class="table-wrap"><table><thead><tr><th>Measure</th><th>Score</th><th>Column</th><th class="num">Weight</th><th class="num">Share</th><th class="num">Adds</th><th>Notes</th></tr></thead><tbody>
+{% for r in c.rows %}<tr><td>{{ r.name }}</td><td><span class="risk {{ r.score.css }}">{{ r.score.text }}</span></td><td>{{ r.heading }}</td><td class="num">{{ r.weight }}</td><td class="num">{{ r.share }}</td><td class="num">{{ r.contribution }}</td><td>{{ r.notes }}</td></tr>{% endfor %}
+</tbody></table></div>
+<p class="subtle">Scale: 1 = lowest risk, 10 = highest. Rating AAA (1) … D (10); the first decimal notches it (+ below .5, − above .5).</p>
+<details><summary>Method and limitations</summary><p class="fo-formula">{{ c.formula }}</p><p>{{ c.notes }}</p><p class="subtle">{{ c.gaps }}</p></details>
+</section>
+{% else %}
+<section id="fo-composite"><h2>Composite risk score</h2>{% if gate.state == 'stopped' %}<p class="fo-big">Not scored: going-concern fail</p>{% else %}<p class="notice">Withheld: the going-concern fail is awaiting an analyst's decision (continue or stop).</p>{% endif %}</section>
+{% endif %}
+
+{% if gate.show_measures %}
+{% for m in view.measures %}
+<section id="fo-{{ m.key }}" class="fo-card{% if m.superseded %} fo-superseded{% endif %}"><h3><span>{{ m.title }}</span><span><span class="risk {{ m.headline.css }}">{{ m.headline.text }}</span>{% if m.headline.label %} {{ m.headline.label }}{% endif %}{% if m.headline.heading %} <span class="subtle">· {{ m.headline.heading }}</span>{% endif %}</span></h3>
+{% if m.superseded %}<p class="fo-gate"><strong>{{ m.superseded }}</strong></p>{% endif %}
+{% if m.gc_note %}<p class="fo-gate watch">{{ m.gc_note }}</p>{% endif %}
+{% if m.covenant_note %}<p class="fo-gate{% if 'breach' not in m.covenant_note %} watch{% endif %}">{{ m.covenant_note }}</p>{% endif %}
+{% if m.deal_note %}<p class="fo-gate{% if not m.deal_unresolved %} watch{% elif m.deal_tag != 'Unresolved' %} continued{% endif %}">{% if m.deal_tag %}<span class="risk {{ 'very-high' if m.deal_tag == 'Unresolved' else ('moderate' if m.deal_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.deal_tag }}</span> {% endif %}{{ m.deal_note }}</p>{% endif %}
+{% if m.prepaid_note %}<p class="fo-gate{% if not m.prepaid_tag %} watch{% elif m.prepaid_tag != 'Unresolved' %} continued{% endif %}">{% if m.prepaid_tag %}<span class="risk {{ 'very-high' if m.prepaid_tag == 'Unresolved' else ('moderate' if m.prepaid_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.prepaid_tag }}</span> {% endif %}{{ m.prepaid_note }}</p>{% endif %}
+{% if m.trigger_note %}<p class="fo-gate{% if not m.trigger_tag %} watch{% elif m.trigger_tag != 'Escalated' %} continued{% endif %}">{% if m.trigger_tag %}<span class="risk {{ 'very-high' if m.trigger_tag == 'Escalated' else ('moderate' if m.trigger_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.trigger_tag }}</span> {% endif %}{{ m.trigger_note }} <a href="#fo-dscr-t1">Trigger Agent result</a></p>{% endif %}
+{% if m.override %}<p class="fo-gate continued"><strong>{{ m.override.text }}</strong> · counted in the composite: <span class="risk {{ m.override.score.css }}">{{ m.override.score.text }}</span></p>{% endif %}
+<p class="fo-formula">{{ m.formula }}</p>
+{% if m.empty %}<p class="notice">{{ m.empty }}</p>{% else %}
+<div class="table-wrap"><table><thead><tr><th>{{ m.unit }} millions</th>{% for h in m.headings %}<th class="num">{{ h }}</th>{% endfor %}</tr></thead><tbody>
+{% for row in m.value_rows %}<tr><td>{{ row.label }}</td>{% for v in row.cells %}<td class="num">{{ v }}</td>{% endfor %}</tr>{% endfor %}
+{% for row in m.result_rows %}<tr class="result"><td>{{ row.label }}</td>{% for v in row.cells %}<td class="num">{% if v.css %}<span class="risk {{ v.css }}">{{ v.text }}</span>{% else %}{{ v.text }}{% endif %}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% for r in m.reasons %}<p class="subtle"><strong>{{ r.heading }}:</strong> {{ r.entries|join('; ') }}</p>{% endfor %}
+{% for n in m.column_notes %}<p class="subtle"><strong>{{ n.heading }}:</strong> {{ n.entries|join('; ') }}</p>{% endfor %}
+{% if m.benchmarks %}<p>Benchmark{% for b in m.benchmarks %} · {{ b.label }}: <strong>{{ b.text }}</strong>{% endfor %}</p><p class="subtle">{{ m.curve }}</p>{% endif %}
+{% for b in m.bands %}<p class="subtle"><strong>{{ b.label }}:</strong> {{ b.text }}</p>{% endfor %}
+<details><summary>Workings, sources and notes</summary>
+{% if m.details %}<dl>{% for d in m.details %}<dt>{{ d.label }}</dt><dd>{{ d.text }}</dd>{% endfor %}</dl>{% endif %}
+<div class="table-wrap"><table><thead><tr><th>Input</th><th>Source (concept used)</th></tr></thead><tbody>
+{% for s in m.sources %}<tr><td>{{ s.label }}</td><td>{% if s.entries %}{{ s.entries|join('<br>'|safe) }}{% else %}<span class="subtle">not tagged</span>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+<p>{{ m.notes }}</p><p class="subtle">{{ m.gaps }}</p>
+</details>
+</section>
+{% endfor %}
+{% else %}
+<section><p class="subtle">The measures were computed and are kept in the recorded payload (overview JSON), but are not shown: the analysis was stopped.</p></section>
+{% endif %}
