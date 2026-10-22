@@ -265,7 +265,10 @@ def score_financial_overview(fo, settings, gc_status="pass", covenant_status="co
 
 
 def headline_score(m):
-    """(score, column heading) a measure contributes: its first scored column (the forward or latest year)."""
+    """(score, column heading) a measure contributes: its first scored column (the forward or latest year). A
+    measure marked not applicable (ICR when net interest is income) contributes nothing."""
+    if m.get("not_applicable"):
+        return None, None
     get = {"leverage": lambda c: (c.get("composite") or {}).get("score"),
            "rcf": lambda c: c["rcf_to_debt"].get("score")}.get(m["key"], lambda c: c.get("score"))
     return next(((get(c), c["heading"]) for c in m["columns"] if get(c) is not None), (None, None))
@@ -380,7 +383,22 @@ def composite_risk(fo, settings, gc_status="pass", overrides=None, decisions=Non
                      "it. Prepaid-model pre-check: DSO weight = 7.5% × factor (1 with billed revenue from a payer "
                      "split, 0 when contract liabilities ≥ receivables, 0.5 for a mixed model) and every other weight "
                      "× (1 − DSO weight) ÷ (1 − 7.5%); that factor replaces the half-weight rule for DSO under "
-                     f"{DSO_LOW_RELEVANCE_DAYS} days. DSCR trigger T1 (a DSCR score of 9 or more, unless a "
+                     f"{DSO_LOW_RELEVANCE_DAYS} days. DSCR trigger T2 (CapEx above 1.5× depreciation, unless a "
+                     "going-concern fail skips agent triggers; it runs first): committed growth projects get no "
+                     "adjustment, a disclosed maintenance/growth split recomputes DSCR with the disclosed maintenance "
+                     "CapEx, growth described but not quantified recomputes it with depreciation as maintenance CapEx, "
+                     "and no growth holds the score. DSCR trigger T3 (|cash taxes paid − current tax expense| above 5% of "
+                     "CFADS; after T2): a quantified one-off (a settlement only if paid in cash) is backed out of "
+                     "cash taxes paid and DSCR recomputed, a structural gap gets no adjustment, and otherwise the "
+                     "score is held with low data confidence. ICR trigger T1 (an ICR score of 8.5 or more): quantified "
+                     "one-offs in EBIT are corrected (charges added back, gains removed) and an undesignated swap's "
+                     "mark-to-market is removed from interest incurred, ICR recomputed; nothing found escalates ICR. ICR "
+                     "trigger T2 (interest from a net or operating tag; before ICR T1): ICR is recomputed on gross "
+                     "interest expense (else net + interest income); neither disclosed escalates ICR; net interest "
+                     "income makes ICR n/a (not counted); an operating tag is flagged. ICR trigger T3 (EBIT from operating "
+                     "income; after T2): EBIT = pre-tax income + interest expense when pre-tax income is found, "
+                     "otherwise operating income is kept and ICR escalated. "
+                     "DSCR trigger T1 (a DSCR score of 9 or more, unless a "
                      "going-concern fail skips agent triggers): rollover debt with backstop capacity is removed from "
                      "year-1 principal and DSCR recomputed, an executed refinancing of year-1 maturities after the "
                      "year-end takes 2 off the score, and DSCR is escalated. An analyst's override of an escalated "

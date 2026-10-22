@@ -32,6 +32,11 @@ def _summary(row: FinancialOverviewRunRow, overrides: list | None = None) -> dic
         "acquisitions": acquisitions_status(checks.get("acquisitions"), overrides),
         "prepaid": prepaid_status(checks.get("prepaid"), overrides),
         "dscr_t1": trigger_status(((row.payload or {}).get("triggers") or {}).get("dscr_t1"), overrides),
+        "dscr_t2": trigger_status(((row.payload or {}).get("triggers") or {}).get("dscr_t2"), overrides),
+        "dscr_t3": trigger_status(((row.payload or {}).get("triggers") or {}).get("dscr_t3"), overrides),
+        "icr_t1": trigger_status(((row.payload or {}).get("triggers") or {}).get("icr_t1"), overrides),
+        "icr_t2": trigger_status(((row.payload or {}).get("triggers") or {}).get("icr_t2"), overrides),
+        "icr_t3": trigger_status(((row.payload or {}).get("triggers") or {}).get("icr_t3"), overrides),
         # The model the Pre-check Agent ran on; older runs have it only on each check's agent record.
         "agent_model": (row.payload or {}).get("agent_model") or next(
             ((c.get("agent") or {}).get("model_id") for c in checks.values() if (c.get("agent") or {}).get("model_id")),

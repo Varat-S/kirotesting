@@ -42,6 +42,7 @@ INTEREST_CONCEPTS = [
 ]
 NET_INTEREST_CONCEPTS = {"us-gaap:InterestIncomeExpenseNonoperatingNet", "us-gaap:InterestIncomeExpenseNet"}  # used only when net expense (< 0)
 INTEREST_EXPENSE_CONCEPTS = [c for c in INTEREST_CONCEPTS if "InterestPaid" not in c]  # accrual, not cash paid
+OPERATING_INTEREST_CONCEPTS = {"us-gaap:InterestExpenseOperating"}  # often a captive finance arm (ICR trigger T2)
 # Interest incurred (expensed + capitalised): the tagged total, else expense + capitalised interest.
 INTEREST_INCURRED_CONCEPTS = ["us-gaap:InterestCostsIncurred"]
 CAPITALISED_INTEREST_CONCEPTS = ["us-gaap:InterestCostsCapitalized", "us-gaap:InterestPaidCapitalized"]
@@ -58,6 +59,17 @@ CAPEX_CONCEPTS = ["us-gaap:PaymentsToAcquirePropertyPlantAndEquipment", "us-gaap
                   "us-gaap:PaymentsToAcquireOtherPropertyPlantAndEquipment",
                   "ifrs-full:PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities",
                   "us-gaap:PaymentsForProceedsFromProductiveAssets"]  # last: net of disposal proceeds
+# Depreciation alone (DSCR trigger T2 compares CapEx with it): the tagged figure, else D&A less the amortisation of
+# acquired intangibles.
+DEPRECIATION_CONCEPTS = ["us-gaap:Depreciation", "us-gaap:DepreciationNonproduction",
+                         "ifrs-full:DepreciationPropertyPlantAndEquipment"]
+INTANGIBLE_AMORTISATION_CONCEPTS = ["us-gaap:AmortizationOfIntangibleAssets",
+                                    "ifrs-full:AmortisationIntangibleAssetsOtherThanGoodwill"]
+# Current tax expense (DSCR trigger T3 compares cash taxes paid with it): the tagged total, else federal + state and
+# local + foreign.
+CURRENT_TAX_CONCEPTS = ["us-gaap:CurrentIncomeTaxExpenseBenefit", "ifrs-full:CurrentTaxExpenseIncome"]
+CURRENT_TAX_PARTS = [["us-gaap:CurrentFederalTaxExpenseBenefit"], ["us-gaap:CurrentStateAndLocalTaxExpenseBenefit"],
+                     ["us-gaap:CurrentForeignTaxExpenseBenefit"]]
 
 # Risk-score bands, (minimum ratio, score, range shown): a ratio gets the first band it reaches; the last band
 # (floor None) catches everything below, including zero and negative ratios. 10 = highest risk. DSCR and ICR are
@@ -195,6 +207,29 @@ def finish_column(col, parts, numerator, denominator, bands, nothing_to_cover):
     return col
 
 
+def depreciation_for(values, labels, period):
+    """(source, depreciation): the tagged depreciation, else D&A less the amortisation of acquired intangibles (none
+    tagged = none); (None, None) without either."""
+    c, v, _ = pick(values, DEPRECIATION_CONCEPTS, period)
+    if c:
+        return concept_ref(labels, c), abs(v)
+    da_c, da, _ = pick(values, DA_CONCEPTS, period)
+    if da_c is None:
+        return None, None
+    am_c, am, _ = pick(values, INTANGIBLE_AMORTISATION_CONCEPTS, period)
+    return (f"{concept_ref(labels, da_c)} − amortisation of intangibles: "
+            + (concept_ref(labels, am_c) if am_c else "none tagged (taken as 0)")), abs(da) - abs(am or 0.0)
+
+
+def current_tax_for(values, labels, period):
+    """(source, current tax expense): the tagged total, else its federal, state and local, and foreign parts;
+    (None, None) without any."""
+    c, v, _ = pick(values, CURRENT_TAX_CONCEPTS, period)
+    if c:
+        return concept_ref(labels, c), v
+    return summed(values, labels, CURRENT_TAX_PARTS, period)
+
+
 def rent_for(values, period):
     """(source, rent): the year's operating lease cost (else cash paid for operating leases); none tagged = none."""
     c, v, _ = pick(values, RENT_CONCEPTS, period)
@@ -262,6 +297,8 @@ def debt_service_coverage(facts, labels, sections=(), n_periods=3):
         tax_c, cash_taxes, _ = pick(values, CASH_TAX_CONCEPTS, period)  # signed: a net refund adds to cash flow
         capex_c, capex, _ = pick(values, CAPEX_CONCEPTS, period)
         capex = abs(capex) if capex is not None else None
+        dep_c, dep = depreciation_for(values, labels, period)
+        cur_c, current_tax = current_tax_for(values, labels, period)
         nci_c, nci, _ = pick(values, NCI_DISTRIBUTION_CONCEPTS, period)
         nci = abs(nci) if nci is not None else 0.0
         cash_flow = (ebitdar - cash_taxes - capex - nci if None not in (ebitdar, cash_taxes, capex) else None)
@@ -272,7 +309,9 @@ def debt_service_coverage(facts, labels, sections=(), n_periods=3):
         service = interest + principal + rent if interest is not None and principal is not None else None
         col.update({"heading": heading, "period": period, "basis": basis, "rent": rent, "rent_concept": rent_c,
                     "ebitdar": ebitdar, "cash_taxes": cash_taxes, "cash_taxes_concept": tax_c, "capex": capex,
-                    "capex_concept": capex_c, "nci_distributions": nci,
+                    "capex_concept": capex_c, "depreciation": dep, "depreciation_concept": dep_c,
+                    "current_tax": current_tax, "current_tax_concept": cur_c,
+                    "nci_distributions": nci,
                     "nci_distributions_concept": nci_c or "none tagged (taken as 0)", "cash_flow": cash_flow,
                     "interest": interest, "interest_concept": int_c, "interest_capitalised": capitalised,
                     "principal": principal, "principal_concept": prin["source"],
@@ -287,7 +326,8 @@ def debt_service_coverage(facts, labels, sections=(), n_periods=3):
     if periods:  # latest year's cash flow and interest against principal and rent due in the next 12 months
         end = periods[0].split("--")[1]
         cols.insert(0, column(f"Next 12M from {end}", periods[0], date.fromisoformat(end), "forward"))
-    return {"columns": cols, "sources": ratio_sources(cols, [k for k, _ in parts] + ["rent", "nci_distributions"],
+    return {"columns": cols, "sources": ratio_sources(cols, [k for k, _ in parts] + ["rent", "nci_distributions",
+                                                                                     "depreciation", "current_tax"],
                                                       labels)}
 
 
@@ -299,13 +339,23 @@ def interest_coverage(facts, labels, n_periods=3):
     parts = (("ebit", "EBIT"), ("interest", "interest incurred"))
     cols = []
     for p in periods[:n_periods]:
-        int_c, interest, _ = interest_incurred(values, labels, p)
+        int_c, interest, capitalised = interest_incurred(values, labels, p)
+        # The expense tag behind interest incurred (none when the total is tagged), for ICR trigger T2: a net or an
+        # operating tag; and a net interest figure that is income (no expense to cover).
+        total_c = pick(values, INTEREST_INCURRED_CONCEPTS, p)[0]
+        exp_c, expense = interest_expense(values, p, INTEREST_EXPENSE_CONCEPTS)
+        net_income = next((values[(c, p)][0] for c in sorted(NET_INTEREST_CONCEPTS)
+                           if (c, p) in values and values[(c, p)][0] > 0), None) if exp_c is None else None
         ebit_c, ebit_v, unit = ebit_for(values, p)
         rent_c, rent = rent_for(values, p)
         cols.append(finish_column({"heading": period_label(p), "period": p, "basis": "historical", "unit": unit,
                                    "ebit": ebit_v, "ebit_concept": ebit_c, "rent": rent, "rent_concept": rent_c,
                                    "ebitr": ebit_v + rent if ebit_v is not None else None,
                                    "interest": interest, "interest_concept": int_c,
+                                   "interest_capitalised": capitalised,
+                                   "interest_expense": None if total_c else expense,
+                                   "interest_expense_concept": None if total_c else exp_c,
+                                   "net_interest_income": net_income,
                                    "fixed_charges": interest + rent if interest is not None else None},
                                   parts, "ebitr", "fixed_charges", ICR_BANDS, "No interest expense to cover"))
     return {"columns": cols, "sources": ratio_sources(cols, ("ebit", "interest", "rent"), labels)}
@@ -754,14 +804,17 @@ def build_financial_overview(data):
             "extra_rows": [("principal_as_at", "Principal due as at", "not tagged")],
             "source_parts": [("ebit", "EBIT"), ("da", "D&A"), ("rent", "Rent"), ("cash_taxes", "Cash taxes"),
                              ("capex", "Maintenance CapEx"), ("nci_distributions", "Distributions to NCI"),
-                             ("interest", "Interest incurred"), ("principal", "Principal due")],
+                             ("interest", "Interest incurred"), ("principal", "Principal due"),
+                             ("depreciation", "Depreciation (trigger T2)"),
+                             ("current_tax", "Current tax expense (trigger T3)")],
             "empty": "No annual pre-tax income or operating income is tagged in this filing.",
             "notes": "A fixed-charge DSCR: rent is treated as a fixed obligation alongside debt service. Cash flow for "
                      "debt service is EBITDAR (EBIT + D&A + rent) less income taxes paid (net of refunds, from the cash "
                      "flow statement), maintenance CapEx and distributions to noncontrolling interests (none tagged = "
                      "none). Rent is the operating lease cost (else cash paid for operating leases); none tagged = none. "
                      "Filers don't tag maintenance CapEx, so total CapEx (purchases of PP&E) is used, which understates "
-                     "DSCR for a company investing for growth. "
+                     "DSCR for a company investing for growth (DSCR trigger T2 checks this when CapEx is above 1.5× "
+                     "depreciation). "
                      "Interest is interest incurred (expensed + capitalised), the same figure as ICR. Year-1 principal "
                      "is the scheduled amortisation in year 1 of the debt maturity table plus the current finance-lease "
                      "principal (unless the table already includes finance leases). 364-day and securitisation "

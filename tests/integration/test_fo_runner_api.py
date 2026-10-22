@@ -64,15 +64,21 @@ GROQ_DEAL = {"deal_id": "D1", "kind": "acquisition", "description": "Groq techno
                           {"fact": "not_material", "passage_id": "P04", "quote": GROQ_NOT_MATERIAL}]}
 
 
-def responses(gc=None, cov=None, ad=None, pp=None):
+def responses(gc=None, cov=None, ad=None, pp=None, t2=None):
     """Scripted Pre-check Agent responses for NVIDIA: a clean auditor's report, the debt note's (C01) statement
     that it complied with its covenants, the Groq deal (P04), not material, and a billed (not prepaid) business
-    model."""
+    model. NVIDIA's CapEx is above 1.5× depreciation, so DSCR trigger T2 fires: by default the Trigger Agent finds no
+    growth spending described (the score is held)."""
     return {"going_concern": gc or _agent_says("pass"),
             "covenants": cov or _covenants_say("compliant", {"passage_id": "C01", "classification": "in_compliance",
                                                              "quote": COMPLIED}),
             "acquisitions": ad or _deals_say("no_adjustment", GROQ_DEAL),
-            "prepaid": pp or _model_says("not_applicable", "billed")}
+            "prepaid": pp or _model_says("not_applicable", "billed"),
+            "dscr_t2": t2 or T2_NO_GROWTH}
+
+
+T2_NO_GROWTH = {"status": "no_growth", "growth": [], "committed": [], "maintenance_capex": None,
+                "growth_capex": None, "rationale": "Scripted.", "missing_information": []}
 
 
 def _model_says(status, model, *evidence):
@@ -212,7 +218,10 @@ def test_going_concern_fail_waits_for_the_analyst_then_continues(db_session, aud
                                       "liquidity_adjustment": None, "acquisitions": "no_adjustment",
                                       "deal_adjustments": [], "deal_unresolved": [], "prepaid": "not_applicable",
                                       "dso_weight_factor": None, "disagreements": [], "measures_counted": False,
-                                      "agent_triggers": "skipped", "triggers": {"dscr_t1": "skipped"},
+                                      "agent_triggers": "skipped",
+                                      "triggers": {"dscr_t1": "skipped", "dscr_t2": "skipped", "dscr_t3": "skipped",
+                                                   "icr_t1": "skipped", "icr_t2": "skipped",
+                                                   "icr_t3": "skipped"},
                                       "requires_decision": True}
     assert [e["type"] for e in result.payload["escalations"]] == ["run_decision"]
     summary = result.summary()
@@ -481,11 +490,13 @@ def test_dscr_trigger_t1_resolved_completes_unresolved_escalates_dscr(db_session
     t1 = payload["triggers"]["dscr_t1"]
     assert (t1["fired"], t1["status"], t1["decided_by"], t1["unresolved"]) == (True, "no_adjustment", "agent", False)
     assert t1["principal"]["principal_basis"] in ("maturity_table", "current_portion")
-    assert payload["gate"]["triggers"] == {"dscr_t1": "no_adjustment"} and t1["passages"]
+    assert payload["gate"]["triggers"] == {"dscr_t1": "no_adjustment", "dscr_t2": "no_growth",
+                                             "dscr_t3": "not_triggered", "icr_t1": "not_triggered",
+                                             "icr_t2": "not_triggered", "icr_t3": "not_triggered"} and t1["passages"]
     assert payload["escalations"] == [] and result.summary()["run_status"] == "completed"
     dscr = next(m for m in payload["metrics"] if m["key"] == "dscr")
     assert not dscr["trigger_escalated"] and dscr["columns"][0]["score"] == t1["score"]
-    assert set(json.loads(result.paths["trigger_transcript.json"].read_text(encoding="utf-8"))) == {"dscr_t1"}
+    assert set(json.loads(result.paths["trigger_transcript.json"].read_text(encoding="utf-8"))) == {"dscr_t1", "dscr_t2"}
     html = result.paths["financial_overview.html"].read_text(encoding="utf-8")
     assert "Trigger Agent: DSCR T1" in html and "Trigger Agent result: DSCR T1" in html
     assert "Resolved: the agent and the verified evidence agree" in html and "trigger T1: no adjustment" in html
@@ -507,6 +518,41 @@ def test_dscr_trigger_t1_resolved_completes_unresolved_escalates_dscr(db_session
     assert (decided["run_status"], decided["human_review_status"]) == ("completed", "accepted")
     html = result.paths["financial_overview.html"].read_text(encoding="utf-8")
     assert "ENGINE SCORE" in html and "The analyst has decided this measure&#39;s score." in html
+
+
+NVDA_GROWTH = "to support the future growth of our business"
+
+
+def test_dscr_trigger_t2_recomputes_with_depreciation_or_escalates_when_unresolved(db_session, nvda_as_hospital,
+                                                                                    tmp_path):
+    # NVIDIA's CapEx ($6,042 million) is 2.5× its depreciation ($2,400 million; D&A of $2,843 million less
+    # amortisation): T2 fires whatever DSCR scored. The agent reads the MD&A's growth sentence (K02), no amount.
+    t2_says = {**T2_NO_GROWTH, "status": "growth_not_quantified",
+               "growth": [{"passage_id": "K02", "quote": NVDA_GROWTH}]}
+    result = runner(db_session, agent(t2=t2_says), output_root=tmp_path / "out").run_filing(FOLDER, "NVDA_T2")
+    t2 = result.payload["triggers"]["dscr_t2"]
+    assert (t2["fired"], t2["status"], t2["unresolved"], t2["maintenance_capex"]) == (
+        True, "growth_not_quantified", False, 2_400e6)
+    assert (t2["capex"]["capex"], t2["capex"]["depreciation"]) == (6_042e6, 2_400e6)
+    assert {s["key"]: s["located"] for s in t2["sections"]} == {"mdna_capex": True, "segment_note": True}
+    col = next(m for m in result.payload["metrics"] if m["key"] == "dscr")["columns"][0]
+    assert (col["capex_reported"], col["capex"]) == (6_042e6, 2_400e6)
+    assert col["cash_flow"] == pytest.approx(col["cash_flow_reported"] + 3_642e6)
+    assert result.payload["escalations"] == [] and result.summary()["run_status"] == "completed"
+    html = result.paths["financial_overview.html"].read_text(encoding="utf-8")
+    assert "Trigger Agent: DSCR T2" in html and "INPUT CORRECTION: RECOMPUTED" in html
+    assert "Total CapEx as tagged (before trigger T2)" in html and "trigger T2: recomputed" in html
+
+    # Unresolved: the agent says committed growth, with no evidence. DSCR waits for the analyst, score held.
+    t2_says = {**T2_NO_GROWTH, "status": "committed_growth"}
+    result = runner(db_session, agent(t2=t2_says), output_root=tmp_path / "out").run_filing(FOLDER, "NVDA_T2_OPEN")
+    t2 = result.payload["triggers"]["dscr_t2"]
+    assert (t2["status"], t2["unresolved"]) == ("no_growth", True)
+    [e] = result.payload["escalations"]
+    assert (e["id"], e["measure"], e["disagreement"]) == ("dscr_t2:dscr", "dscr", True)
+    assert result.summary()["run_status"] == "awaiting_review"
+    html = result.paths["financial_overview.html"].read_text(encoding="utf-8")
+    assert "trigger T2: no adjustment, unresolved, escalated" in html
 
 
 def test_browser_and_cli_record_the_analysts_score(client, covenant_breach, tmp_path, capsys, monkeypatch):
@@ -551,7 +597,8 @@ def test_only_an_escalated_run_can_be_reviewed(db_session):
 def test_runner_writes_outputs_like_bo(db_session, tmp_path):
     result = runner(db_session, output_root=tmp_path / "out").run_filing(FOLDER, "NVDA_FILES")
     folder = tmp_path / "out" / "fo" / "NVDA_FILES" / result.run_id
-    assert set(result.paths) == {"financial_overview.json", "financial_overview.html", "precheck_transcript.json"}
+    assert set(result.paths) == {"financial_overview.json", "financial_overview.html", "precheck_transcript.json",
+                                 "trigger_transcript.json"}  # DSCR trigger T2 fires on NVIDIA's CapEx
     assert all(p.parent == folder and p.is_file() for p in result.paths.values())
     saved = json.loads((folder / "financial_overview.json").read_text(encoding="utf-8"))
     assert content_hash(saved) == result.content_hash  # the file is exactly the recorded payload

@@ -38,7 +38,7 @@ from datetime import date, timedelta
 from app.prompts.fo_prompts import FO_DSCR_T1_PROMPT, FO_DSCR_T1_SCHEMA, FO_DSCR_T1_TEMPLATE
 
 from .acquisitions import SCALE, SCALES, _date_in_quote, _verbatim, amount_in, parse_amount
-from .covenants import NOTE_HEADING, PAGE_HEADER, SECTION_LABELS, _section_after
+from .covenants import NOTE_HEADING, PAGE_HEADER, _section_after
 from .measures import DSCR_BANDS, SENTENCE_SPLIT, risk_score
 from .parsing import AUDIT_REPORT_LINE
 from .precheck import AUDIT_REPORT_END, DATA_NOTICE, PrecheckAgentError, _clip, _heading, call_agent, require_agent
@@ -138,16 +138,25 @@ def _sentences(text):
 def t1_passages(data: dict) -> dict:
     """The debt note's and MD&A liquidity's paragraphs and tables (rows joined with " | ", with the scale in force)
     that mention a T1 term, and every subsequent-events paragraph; ids D01… in document order."""
+    return collect_passages(data, "D", LIMITS, SECTIONS, T1_TERMS, _section_after, read_whole=("subsequent_events",))
+
+
+def collect_passages(data: dict, prefix: str, limits: dict, sections: list, terms, section_after,
+                     read_whole=()) -> dict:
+    """A trigger's passages: the paragraphs and tables (rows joined with " | ", with the scale in force) of the
+    sections ``section_after`` opens that mention one of ``terms`` (every paragraph of a ``read_whole`` section), up
+    to ``limits`` per section; ids ``prefix``01… in document order."""
+    labels = dict(sections)
     passages, seen, found = [], set(), set()
-    counts = dict.fromkeys(LIMITS, 0)
+    counts = dict.fromkeys(limits, 0)
 
     def add(item, section, kind, text, scale):
         key = re.sub(r"\W+", "", text.lower())[:150]
-        if not key or key in seen or counts[section] >= LIMITS[section]:
+        if not key or key in seen or counts[section] >= limits[section]:
             return
         seen.add(key)
         counts[section] += 1
-        passages.append({"item": item, "section": section, "section_label": SECTION_LABELS[section], "kind": kind,
+        passages.append({"item": item, "section": section, "section_label": labels[section], "kind": kind,
                          "text": text, "scale": scale})
 
     for sec in (s for s in data["document"] if s["item"] in ITEMS):
@@ -159,7 +168,7 @@ def t1_passages(data: dict) -> dict:
         def flush():
             cells, state["cells"] = state["cells"], []
             text = " | ".join(cells)
-            if state["section"] and len(cells) >= 2 and re.search(r"\d", text) and T1_TERMS.search(text):
+            if state["section"] and len(cells) >= 2 and re.search(r"\d", text) and terms.search(text):
                 add(item, state["section"], "table", _clip(text, TABLE_MAX_CHARS), state["scale"])
 
         for line in lines:
@@ -174,12 +183,12 @@ def t1_passages(data: dict) -> dict:
             if not s or re.fullmatch(r"F-\d{1,3}", s) or (_heading(s) and PAGE_HEADER.search(s)):
                 continue
             if _heading(s):
-                section = _section_after(item, s, state["section"], numbered)
+                section = section_after(item, s, state["section"], numbered)
                 if section and section == state["section"]:
                     state["cells"].append(s)  # a sub-heading, or a table's header cell
                     continue
                 flush()
-                state.update(section=section if section in LIMITS else None, scale=None)
+                state.update(section=section if section in limits else None, scale=None)
                 if state["section"]:
                     found.add(state["section"])
                 continue
@@ -191,17 +200,18 @@ def t1_passages(data: dict) -> dict:
                 state["cells"].append(s)
                 continue
             flush()
-            if state["section"] != "subsequent_events" and not T1_TERMS.search(s):
+            whole = state["section"] in read_whole
+            if not whole and not terms.search(s):
                 continue
             text = s if len(s) <= PASSAGE_MAX_CHARS else " ".join(
-                t for t in _sentences(s) if state["section"] == "subsequent_events" or T1_TERMS.search(t))
+                t for t in _sentences(s) if whole or terms.search(t))
             add(item, state["section"], "text", _clip(text, PASSAGE_MAX_CHARS), state["scale"])
         flush()
     for i, p in enumerate(passages, 1):
-        p["passage_id"] = f"D{i:02d}"
+        p["passage_id"] = f"{prefix}{i:02d}"
     return {"passages": passages,
             "sections": [{"key": k, "label": label, "located": k in found,
-                          "passages": sum(1 for p in passages if p["section"] == k)} for k, label in SECTIONS]}
+                          "passages": sum(1 for p in passages if p["section"] == k)} for k, label in sections]}
 
 
 def t1_signals(passages: list[dict]) -> list[dict]:
@@ -639,12 +649,22 @@ def apply_t1(fo: list[dict], t1: dict | None) -> list[dict]:
         adj["score"] = col["score"]
         col["trigger_adjustment"] = adj
         unresolved = t1.get("unresolved", True)  # runs recorded before 2026-10-22 always escalated
-        m["trigger_escalated"] = unresolved
-        m["trigger_note"] = (f"DSCR trigger T1 (score {adj['calculated']:g} ≥ {T1_THRESHOLD}, {col['heading']}): "
-                             + ("; ".join(done) if done else t1["reason"][:1].lower() + t1["reason"][1:])
-                             + (f". Unresolved: the agent's answer and the verified evidence disagree. {ESCALATED_NOTE}"
-                                if unresolved else ". Resolved: the agent and the verified evidence agree."))
-        m["trigger_summary"] = ("trigger T1: " + ("adjusted" if done else "no adjustment")
-                                + (", unresolved, escalated" if unresolved else ""))
+        add_trigger_note(m, (f"DSCR trigger T1 (score {adj['calculated']:g} ≥ {T1_THRESHOLD}, {col['heading']}): "
+                             + ("; ".join(done) if done else t1["reason"][:1].lower() + t1["reason"][1:])),
+                         "trigger T1: " + ("adjusted" if done else "no adjustment"), unresolved)
         out.append(m)
     return out
+
+
+def add_trigger_note(m: dict, note: str, summary: str, unresolved: bool,
+                     why: str = "the agent's answer and the verified evidence disagree") -> None:
+    """Add one trigger's note to its measure, after any earlier trigger's (DSCR: T2, T3, then T1). The measure is
+    escalated when any of its triggers is unresolved; ``why`` says why this one is."""
+    note += (f". Unresolved: {why}." if unresolved else ". Resolved: the agent and the verified evidence agree.")
+    summary += ", unresolved, escalated" if unresolved else ""
+    if m.get("trigger_note"):
+        note = f"{m['trigger_note'].replace(f' {ESCALATED_NOTE}', '')} {note}"
+        summary = f"{m['trigger_summary']}; {summary}"
+    m["trigger_escalated"] = bool(m.get("trigger_escalated")) or unresolved
+    m["trigger_note"] = f"{note} {ESCALATED_NOTE}" if m["trigger_escalated"] else note  # once, at the end
+    m["trigger_summary"] = summary

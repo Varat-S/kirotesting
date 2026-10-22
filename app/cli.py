@@ -201,14 +201,18 @@ def main(argv=None):
     fo_agent.add_argument(
         "--live", action="store_true",
         help="Run the Pre-check Agent (going concern, covenants, acquisitions and divestitures, prepaid model) and "
-             "the Trigger Agent (DSCR T1, when DSCR scores 9 or more) on the configured live provider (model cost). "
+             "the Trigger Agent (DSCR T2, when CapEx is above 1.5x depreciation; DSCR T3, when cash taxes paid differ "
+             "from current tax expense by more than 5%% of CFADS; DSCR T1, when DSCR scores 9 or more; ICR T2, when ICR's interest is from a net or operating tag; ICR T3, when ICR's EBIT is operating income; ICR T1, when ICR scores 8.5 or more) on the configured live provider (model cost). "
              "The agent is required: give --live or --responses.",
     )
     fo_agent.add_argument(
         "--responses", type=Path,
         help='Scripted agent responses (JSON) for an offline run: one going-concern response, or '
-             '{"going_concern": ..., "covenants": ..., "acquisitions": ..., "prepaid": ..., "dscr_t1": ...} '
-             '("dscr_t1" only needed when DSCR scores 9 or more)',
+             '{"going_concern": ..., "covenants": ..., "acquisitions": ..., "prepaid": ..., "dscr_t1": ..., '
+             '"dscr_t2": ..., "dscr_t3": ..., "icr_t1": ..., "icr_t2": ..., "icr_t3": ...} ("dscr_t1" only needed when DSCR scores 9 or more, "dscr_t2" when '
+             'CapEx is above 1.5x depreciation, "dscr_t3" when the cash-tax gap is above 5%% of CFADS, '
+             '"icr_t1" when ICR scores 8.5 or more, "icr_t2" when ICR\'s interest is from a net or operating '
+             'tag, "icr_t3" when ICR\'s EBIT is operating income)',
     )
     fo_run.add_argument(
         "--model",
@@ -228,11 +232,11 @@ def main(argv=None):
     fo_override = commands.add_parser(
         "fo-override",
         help="Accept or override the score of a measure an FO run escalated (liquidity after a covenant breach; dso "
-             "or leverage after an unresolved acquisition or divestiture; dscr after its trigger T1 fired)",
+             "or leverage after an unresolved acquisition or divestiture; dscr after its trigger T1, T2 or T3 was unresolved; icr after ICR T1, T2 or T3 was unresolved)",
     )
     fo_override.add_argument("run_id")
     fo_override.add_argument("--measure", required=True,
-                             help='The escalated measure: "liquidity", "dso", "leverage" or "dscr"')
+                             help='The escalated measure: "liquidity", "dso", "leverage", "dscr" or "icr"')
     fo_override.add_argument("--decision", required=True, choices=("accept", "override"))
     fo_override.add_argument("--score", type=float, help="Your score, 1-10 (required to override)")
     fo_override.add_argument("--reviewer", required=True)

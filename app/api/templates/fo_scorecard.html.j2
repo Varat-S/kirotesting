@@ -15,12 +15,106 @@
   .fo-quote { border-left: 3px solid #c9d1da; margin: 6px 0; padding: 4px 12px; font-style: italic; }
   .fo-superseded { opacity: .72; }
   .ok { color: #2f6b45; font-weight: bold; } .bad { color: #9a3324; font-weight: bold; } .warn { color: #8a6d1c; font-weight: bold; }
+  .fo-agents-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-top: 0; }
+  .fo-agents-tools button { font-size: .85rem; padding: 4px 10px; }
+  .fo-agent { border-top: 1px solid #e7ecf2; scroll-margin-top: 20px; }
+  .fo-agent > details.fo-agent-box { margin: 0; }
+  .fo-agent summary { display: flex; align-items: center; gap: 6px 12px; padding: 9px 2px; color: inherit; list-style: none; }
+  .fo-agent summary::-webkit-details-marker { display: none; }
+  .fo-agent summary::before { content: "▸"; color: #155cb7; transition: transform .15s; }
+  .fo-agent details[open] > summary::before { transform: rotate(90deg); }
+  .fo-agent summary:hover { background: #f8fafd; }
+  .fo-agent-title { font-weight: 600; flex: 0 0 28rem; }
+  .fo-agent summary .risk { flex: 0 0 auto; font-size: .82rem; }
+  .fo-agent-reason { flex: 1; min-width: 0; color: #5b6c80; font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fo-agent details[open] > summary { flex-wrap: wrap; }
+  .fo-agent details[open] > summary .fo-agent-reason { white-space: normal; flex-basis: 100%; order: 10; padding-left: 22px; }
+  .fo-agent-body { padding: 4px 4px 18px 22px; }
+  .fo-attn { flex: 0 0 auto; color: #9a3324; background: #fdf1f0; border: 1px solid #EF4444; border-radius: 6px; padding: 1px 8px; font-size: .82rem; font-weight: 700; }
+  .fo-decision { margin: 6px 0 16px; } .fo-decision h3 { margin-top: 0; }
+  .fo-agent-body h3 { font-size: 1.05rem; margin-top: 18px; }
+  @media (max-width: 800px) { .fo-agent summary { flex-wrap: wrap; } .fo-agent-title { flex-basis: auto; } .fo-agent-reason { flex-basis: 100%; } }
 </style>
 {% set pc = view.precheck %}
 {% set gate = view.gate %}
+{# What waits for an analyst, by agent check: each decision is shown in the row of the check that raised it (an
+   escalation merged from several checks is shown in its first check's row; the others point to it). The forms are
+   rendered only on the workbench (`decision_base`); the standalone page gives the command line. #}
+{% set needs = (gate.checks or []) if gate.state in ('awaiting_override', 'awaiting_gc_decision') else (['going_concern'] if gate.state == 'awaiting_review' else []) %}
+{% set rid = decision_run_id if decision_run_id is defined else ((run.run_id if run else none) or 'RUN_ID') %}
+{% set forms = decision_base is defined and decision_base %}
+{% macro trigger_agent_result(t, name) %}
+{% set a = t.agent %}
+<h3 id="fo-dscr-{{ name|lower }}-agent">Trigger Agent result: DSCR {{ name }}</h3>
+{% if a %}
+<dl>
+<dt>Agent's answer</dt><dd>{% if a.stated %}<span class="risk {{ a.stated.css }}">{{ a.stated.label }}</span>{% endif %}</dd>
+<dt>Verified result</dt><dd><span class="risk {{ t.css }}">{{ t.label }}</span> {% if a.consistent %}<span class="subtle">matches the agent's answer</span>{% else %}<span class="warn">differs from the agent's answer: the verified evidence decides</span>{% endif %}</dd>
+<dt>Model run</dt><dd><code>{{ a.model_id }}</code> · prompt <code>{{ a.prompt_id }}</code> (hash <code>{{ a.prompt_hash }}</code>) · run <code>{{ a.model_run_id }}</code> · {{ a.passages_sent }} passages sent · output {{ a.validation_outcome }}</dd>
+</dl>
+{% if a.rationale %}<p><strong>Agent's rationale:</strong> {{ a.rationale }}</p>{% endif %}
+{% if a.held_back %}
+<div class="table-wrap"><table><thead><tr><th>Item</th><th>Fact</th><th>Passage</th><th>Quote</th><th>Check</th></tr></thead><tbody>
+{% for h in a.held_back %}<tr><td><code>{{ h.item_id }}</code></td><td>{{ h.fact }}{% if h.amount %} {{ h.amount }}{% endif %}</td><td><code>{{ h.passage_id }}</code></td><td><span class="fo-quote" style="display:block">{{ h.quote }}</span></td><td><span class="bad">Held back: {{ h.reason }}</span></td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% if a.missing_information %}<p class="subtle"><strong>Missing information:</strong> {{ a.missing_information|join('; ') }}</p>{% endif %}
+<p class="subtle">The full exchange (system prompt, inputs, raw response) is in <code>trigger_transcript.json</code> in the run's output folder.</p>
+{% else %}<p class="subtle">{{ t.agent_not_used }}</p>{% endif %}
+{% endmacro %}
+{% macro attention(key) %}{% if key in needs %}<span class="fo-attn" title="An analyst must check this and decide">&#9888; Analyst decision required</span>{% endif %}{% endmacro %}
+{% macro decision_panel(key) %}
+{% if key == 'going_concern' and gate.state == 'awaiting_gc_decision' %}
+<div id="review" class="fo-gate fo-decision">
+<h3>Analyst decision required: going concern (agent and verified evidence disagree)</h3>
+<p>{{ gate.gc_decision.reason }}. The agent's FAIL quote did not hold up against the filing (see "Held back" below), so the engine scored the run on the verified result. Read the agent's answer and the passages, then decide. <strong>Use the verified result</strong>: the run is scored as calculated (any measure still escalated waits for its own decision). <strong>Continue</strong> or <strong>Stop</strong>: side with the agent's FAIL (continue: overall score 10, measures superseded; stop: "Not scored: going-concern fail"). The decision is recorded once and cannot be changed.</p>
+{% if forms %}<form class="review" method="post" action="{{ decision_base }}/review">
+<div><label for="reviewer">Reviewer</label><input id="reviewer" name="reviewer" required></div>
+<div><label for="reason">Reason</label><input id="reason" name="reason" required placeholder="Why"></div>
+<div class="buttons"><button class="primary-button" type="submit" name="decision" value="use_verified">Use the verified result ({{ gate.gc_decision.verified|upper }})</button><button type="submit" name="decision" value="continue">Fail: continue at score 10</button><button type="submit" name="decision" value="stop">Fail: stop the analysis</button></div>
+</form>{% endif %}
+<p class="subtle">Command line: <code>python -m app.cli fo-review {{ rid }} --decision use_verified|continue|stop --reviewer "&lt;name&gt;" --reason "&lt;why&gt;"</code></p>
+</div>
+{% endif %}
+{% if key == 'going_concern' and gate.state == 'awaiting_review' %}
+<div id="review" class="fo-gate fo-decision">
+<h3>Analyst decision required: going-concern FAIL</h3>
+<p>{{ pc.reason }}. Read the basis and the passages below, then decide. <strong>Continue</strong>: overall score 10, the measures are shown as "superseded by going-concern fail" and not counted, and agent triggers are skipped. <strong>Stop</strong>: "Not scored: going-concern fail". The decision is recorded once and cannot be changed.</p>
+{% if forms %}<form class="review" method="post" action="{{ decision_base }}/review">
+<div><label for="reviewer">Reviewer</label><input id="reviewer" name="reviewer" required></div>
+<div><label for="reason">Reason</label><input id="reason" name="reason" required placeholder="Why the analysis should continue or stop"></div>
+<div class="buttons"><button class="primary-button" type="submit" name="decision" value="continue">Continue the analysis</button><button type="submit" name="decision" value="stop">Stop the analysis</button></div>
+</form>{% endif %}
+<p class="subtle">Command line: <code>python -m app.cli fo-review {{ rid }} --decision continue|stop --reviewer "&lt;name&gt;" --reason "&lt;why&gt;"</code></p>
+</div>
+{% endif %}
+{% if gate.state in ('awaiting_override', 'awaiting_gc_decision') %}
+{% for e in gate.pending or [] %}
+{% set hosts = e.checks or [e.check] %}
+{% if hosts[0] == key %}
+<div id="override-{{ e.measure }}" class="fo-gate fo-decision">
+<h3>Analyst decision required: {{ e.measure_name }} ({{ e.title or 'covenant breach' }})</h3>
+<p>{{ e.reason }}. {{ e.detail or 'The engine set revolver availability to 0 and the score to 10.' }} Engine score: <strong>{{ e.engine_score if e.engine_score is not none else 'none' }}</strong>{% if e.calculated_score is not none %} (calculated before the adjustment: {{ e.calculated_score }}){% endif %}. Read this check below, then accept the engine's score or enter your own (1–10). The composite is re-weighted on the score you record. The decision is recorded once and cannot be changed.</p>
+{% if forms %}<form class="review" method="post" action="{{ decision_base }}/override">
+<input type="hidden" name="measure" value="{{ e.measure }}">
+<div><label for="reviewer-{{ e.measure }}">Reviewer</label><input id="reviewer-{{ e.measure }}" name="reviewer" required></div>
+<div><label for="reason-{{ e.measure }}">Reason</label><input id="reason-{{ e.measure }}" name="reason" required placeholder="Why this score"></div>
+<div><label for="score-{{ e.measure }}">Your score (1–10, for an override)</label><input id="score-{{ e.measure }}" name="score" type="number" min="1" max="10" step="0.1"></div>
+<div class="buttons"><button class="primary-button" type="submit" name="decision" value="accept">Accept the engine's score ({{ e.engine_score }})</button><button type="submit" name="decision" value="override">Override with my score</button></div>
+</form>{% endif %}
+<p class="subtle">Command line: <code>python -m app.cli fo-override {{ rid }} --measure {{ e.measure }} --decision accept|override [--score N] --reviewer "&lt;name&gt;" --reason "&lt;why&gt;"</code></p>
+</div>
+{% elif key in hosts %}
+<p class="fo-gate"><strong>&#9888; This check is part of the {{ e.measure_name }} decision:</strong> <a href="#override-{{ e.measure }}">decide it in the {{ hosts[0]|replace('_', ' ')|replace('dscr t', 'DSCR T')|replace('icr t', 'ICR T') }} row</a>.</p>
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endmacro %}
+{% if pc or view.covenants or view.acquisitions or view.prepaid or view.dscr_t2 or view.dscr_t3 or view.dscr_t1 or view.icr_t2 or view.icr_t3 or view.icr_t1 %}<section id="fo-agents"><h2 class="fo-agents-head"><span>Agent checks</span> <span class="fo-agents-tools"><button type="button" data-fo-agents="open">Expand all</button> <button type="button" data-fo-agents="close">Collapse all</button></span></h2>{% endif %}
 {% if pc %}
-<section id="fo-precheck"><h2>Pre-check: going concern</h2>
-<div class="fo-headline"><span class="fo-big"><span class="risk {{ pc.css }}">{{ pc.label }}</span></span><span>{{ pc.reason }}</span></div>
+<div id="fo-precheck" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Pre-check: going concern</span> <span class="risk {{ pc.css }}">{{ pc.label }}</span> <span class="fo-agent-reason">{{ pc.reason }}</span>{{ attention('going_concern') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('going_concern') }}
 <dl>
 <dt>Decided by</dt><dd>{{ pc.decided_by }}{% if pc.agent %} · {{ pc.mode }} model <code>{{ pc.agent.model_id }}</code> · prompt <code>{{ pc.agent.prompt_id }}</code>{% endif %}</dd>
 <dt>Effect</dt><dd>{{ pc.effect }}</dd>
@@ -57,12 +151,13 @@
 {% if pc.tagged %}<h4>Tagged going-concern facts</h4><ul>{% for t in pc.tagged %}<li><code>{{ t.concept }}</code> {{ t.period }}: {{ t.value }}</li>{% endfor %}</ul>{% endif %}
 <p class="subtle">The auditor's report is always read in full; the going-concern or liquidity note, basis of presentation, MD&amp;A liquidity and subsequent events (with the rest of Items 1, 1A, 7, 8 and the F-pages) are searched for "substantial doubt" and "going concern". Pass: no statement of substantial doubt; standard "prepared on a going-concern basis" wording, or risk-factor language with no doubt expressed, is a pass. Watch: management says substantial doubt was raised but is alleviated by its plans; the liquidity-and-maturity score is floored at 7 before weighting. Fail: the auditor's report has a going-concern paragraph, or management concludes substantial doubt exists (not alleviated); the pipeline pauses for an analyst to choose continue (overall score 10, measures shown as "superseded by going-concern fail" and not counted, agent triggers skipped) or stop ("Not scored: going-concern fail"). Going-concern doubt can also arise after the 10-K: check later 10-Qs and 8-Ks.</p>
 </details>
-</section>
+</div></details></div>
 {% endif %}
 {% set cv = view.covenants %}
 {% if cv %}
-<section id="fo-covenants"><h2>Pre-check: covenants</h2>
-<div class="fo-headline"><span class="fo-big"><span class="risk {{ cv.css }}">{{ cv.label }}</span></span><span>Outcome ({{ cv.outcome }}): {{ cv.reason }}</span></div>
+<div id="fo-covenants" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Pre-check: covenants</span> <span class="risk {{ cv.css }}">{{ cv.label }}</span> <span class="fo-agent-reason">Outcome ({{ cv.outcome }}): {{ cv.reason }}</span>{{ attention('covenants') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('covenants') }}
 <dl>
 <dt>Decided by</dt><dd>{{ cv.decided_by }}{% if cv.agent %} · {{ cv.mode }} model <code>{{ cv.agent.model_id }}</code> · prompt <code>{{ cv.agent.prompt_id }}</code>{% endif %}</dd>
 <dt>Effect</dt><dd>{{ cv.effect }}</dd>
@@ -109,12 +204,13 @@
 {% if cv.rules.findings %}<h4>Keyword rules</h4><ul>{% for f in cv.rules.findings %}<li><code>{{ f.passage_id }}</code> {{ f.classification|replace('_', ' ') }}{% if f.waiver_months is not none %} ({{ '%.0f'|format(f.waiver_months) }} months){% endif %}: <span class="subtle">{{ f.quote }}</span></li>{% endfor %}</ul>{% endif %}
 <p class="subtle">The debt note, MD&amp;A liquidity, the auditor's report and subsequent events are searched for "waiver", "forbearance", "covenant", "breach", "not in compliance", "event of default", "cross-default", "amendment" and "relief"; only the paragraphs where the search hits are read, and no hit means in compliance. Outside the debt note, "waiver", "amendment", "relief" and "breach" count only next to debt words (credit, facility, lender, loan, notes, borrowings…), so a Medicaid waiver or a data breach is not read as a covenant matter.</p>
 </details>
-</section>
+</div></details></div>
 {% endif %}
 {% set ad = view.acquisitions %}
 {% if ad %}
-<section id="fo-acquisitions"><h2>Pre-check: acquisitions and divestitures</h2>
-<div class="fo-headline"><span class="fo-big"><span class="risk {{ ad.css }}">{{ ad.label }}</span></span><span>{{ ad.reason }}</span></div>
+<div id="fo-acquisitions" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Pre-check: acquisitions and divestitures</span> <span class="risk {{ ad.css }}">{{ ad.label }}</span> <span class="fo-agent-reason">{{ ad.reason }}</span>{{ attention('acquisitions') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('acquisitions') }}
 <dl>
 <dt>Decided by</dt><dd>{{ ad.decided_by }}{% if ad.agent %} · {{ ad.mode }} model <code>{{ ad.agent.model_id }}</code> · prompt <code>{{ ad.agent.prompt_id }}</code>{% endif %}</dd>
 <dt>Effect</dt><dd>{{ ad.effect }}</dd>
@@ -163,12 +259,13 @@
 {% if ad.signals %}<h4>Keyword rules (cross-check only)</h4><ul>{% for s in ad.signals %}<li><code>{{ s.passage_id }}</code> {{ s.signal }}: <span class="subtle">{{ s.quote }}</span></li>{% endfor %}</ul>{% endif %}
 <p class="subtle">The acquisitions or dispositions note, the discontinued-operations and held-for-sale notes are read in full (tables as rows), with subsequent events that mention a deal and deal mentions elsewhere in the notes ("pro forma", "discontinued operations", "held for sale", "divest…", "business combination"). Every amount and date the agent gives must be in its verbatim quote. A deal the filing doesn't call material or not is not material when its price or proceeds are under 5% of total assets; with no price, it is treated as material. ASC 805 pro forma gives revenue and earnings, not EBITDAR: an acquisition's missing months of EBITDAR are added only if the 10-K discloses them. Each deal is recorded once and shared by Debt/EBITDAR, DSO and the 25% key-input trigger.</p>
 </details>
-</section>
+</div></details></div>
 {% endif %}
 {% set pq = view.prepaid %}
 {% if pq %}
-<section id="fo-prepaid"><h2>Pre-check: prepaid model</h2>
-<div class="fo-headline"><span class="fo-big"><span class="risk {{ pq.css }}">{{ pq.label }}</span></span><span>{{ pq.reason }}</span></div>
+<div id="fo-prepaid" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Pre-check: prepaid model</span> <span class="risk {{ pq.css }}">{{ pq.label }}</span> <span class="fo-agent-reason">{{ pq.reason }}</span>{{ attention('prepaid') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('prepaid') }}
 <dl>
 <dt>Decided by</dt><dd>{{ pq.decided_by }}{% if pq.agent %} · {{ pq.mode }} model <code>{{ pq.agent.model_id }}</code> · prompt <code>{{ pq.agent.prompt_id }}</code>{% endif %}</dd>
 <dt>Effect</dt><dd>{{ pq.effect }}</dd>
@@ -208,12 +305,78 @@
 {% if pq.passages %}<ul>{% for p in pq.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'Item 1 · business model' if p.kind == 'business_model' else 'Revenue note' }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
 <p class="subtle">The agent reads only the business description (Item 1) and the revenue note (revenue by payer, contract liabilities), for every filing. Its reading of the business model counts only on a verbatim Item 1 quote saying customers pay in advance (a mixed model also needs one saying services are billed). Every amount must be in its verbatim quote; a payer line must name its payer. Billed revenue is the payer lines billed after the service (government programs, insurers, other third parties); DSO is recomputed on it for both years. Contract liabilities are the tagged figure, else the revenue note's.</p>
 </details>
-</section>
+</div></details></div>
+{% endif %}
+{% set tc = view.dscr_t2 %}
+{% if tc %}
+<div id="fo-dscr-t2" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: DSCR T2 (CapEx above {{ '%g' % tc.multiple_threshold }}× depreciation)</span> <span class="risk {{ tc.css }}">{{ tc.label }}</span> <span class="fo-agent-reason">{{ tc.reason }}</span>{{ attention('dscr_t2') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('dscr_t2') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tc.capex %}CapEx {{ tc.capex.capex }} million is {{ tc.capex.multiple }} depreciation of {{ tc.capex.depreciation }} million{% else %}CapEx against depreciation{% endif %} · {{ tc.column }} · DSCR risk score <span class="risk {{ tc.score.css }}">{{ tc.score.text }}</span> · fires above {{ '%g' % tc.multiple_threshold }}×{% if not tc.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if tc.capex %}<dt>Sources</dt><dd><span class="subtle">CapEx: {{ tc.capex.capex_source }} · depreciation (excluding amortisation of acquired intangibles): {{ tc.capex.depreciation_source }}</span></dd>{% endif %}
+<dt>Decided by</dt><dd>{{ tc.decided_by }}{% if tc.agent %} · {{ tc.mode }} model <code>{{ tc.agent.model_id }}</code> · prompt <code>{{ tc.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tc.effect }}</dd>
+{% if tc.maintenance %}<dt>Maintenance CapEx used</dt><dd><strong>{{ tc.maintenance }} million</strong>: {{ tc.maintenance_basis }}</dd>{% endif %}
+{% if tc.resolution %}<dt>Resolution</dt><dd>{% if tc.unresolved %}<strong class="bad">{{ tc.resolution }}</strong>{% else %}<span class="ok">{{ tc.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'dscr_t2' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'dscr_t2' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tc.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tc.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}{% if q.amount %} · {{ q.amount }}{% endif %}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tc.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tc.fired %}
+{{ trigger_agent_result(tc, 'T2') }}
+<details><summary>Rules and passages read ({{ tc.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When CapEx is above {{ '%g' % tc.multiple_threshold }}× depreciation (first match)</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tc.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tc.sections %}<p class="subtle">Sections: {% for s in tc.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tc.passages %}<ul>{% for p in tc.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">Depreciation is depreciation only: the tagged figure, else D&amp;A less the amortisation of acquired intangibles. T2 runs before T1, whatever DSCR scored, so T1 judges the corrected DSCR. A committed project counts only when one verbatim quote names a growth project and says it is committed or under construction. A disclosed maintenance (or growth) CapEx amount must be in its verbatim quote, be the year's spending (not a forecast) and be no more than total CapEx; with only growth CapEx disclosed, maintenance CapEx is total CapEx less it. Growth described without an amount: depreciation stands in for maintenance CapEx. Only the headline column is recomputed.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set tx = view.dscr_t3 %}
+{% if tx %}
+<div id="fo-dscr-t3" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: DSCR T3 (cash taxes vs current tax expense)</span> <span class="risk {{ tx.css }}">{{ tx.label }}</span> <span class="fo-agent-reason">{{ tx.reason }}</span>{{ attention('dscr_t3') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('dscr_t3') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tx.taxes %}Cash taxes paid {{ tx.taxes.cash_taxes }} million vs current tax expense {{ tx.taxes.current_tax }} million: gap {{ tx.taxes.gap }} million, {{ tx.taxes.gap_share }} of CFADS ({{ tx.taxes.cfads }} million){% else %}Cash taxes paid against current tax expense{% endif %} · {{ tx.column }} · DSCR risk score <span class="risk {{ tx.score.css }}">{{ tx.score.text }}</span> · fires above {{ tx.share_threshold }} of CFADS{% if not tx.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if tx.taxes %}<dt>Sources</dt><dd><span class="subtle">Cash taxes paid (net of refunds): {{ tx.taxes.cash_taxes_source }} · current tax expense: {{ tx.taxes.current_tax_source }}</span></dd>{% endif %}
+<dt>Decided by</dt><dd>{{ tx.decided_by }}{% if tx.agent %} · {{ tx.mode }} model <code>{{ tx.agent.model_id }}</code> · prompt <code>{{ tx.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tx.effect }}</dd>
+{% if tx.backed_out %}<dt>Backed out of cash taxes</dt><dd><strong>{{ tx.backed_out }} million</strong> → cash taxes paid {{ tx.cash_taxes_after }} million</dd>{% endif %}
+{% if tx.data_confidence == 'low' %}<dt>Data confidence</dt><dd><span class="warn">Low: the filing doesn't quantify why cash taxes differ from current tax expense</span></dd>{% endif %}
+{% if tx.resolution %}<dt>Resolution</dt><dd>{% if tx.unresolved %}<strong class="bad">{{ tx.resolution }}</strong>{% else %}<span class="ok">{{ tx.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'dscr_t3' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'dscr_t3' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tx.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tx.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}{% if q.amount %} · {{ q.amount }}{% endif %}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tx.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tx.fired %}
+{{ trigger_agent_result(tx, 'T3') }}
+<details><summary>Rules and passages read ({{ tx.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When |cash taxes paid − current tax expense| is above {{ tx.share_threshold }} of CFADS (first match)</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tx.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tx.sections %}<p class="subtle">Sections: {% for s in tx.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tx.passages %}<ul>{% for p in tx.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">CFADS is the DSCR numerator after trigger T2. Cash taxes paid are net of refunds; current tax expense is the tagged total, else federal + state and local + foreign. T3 runs after T2 and before T1, whatever DSCR scored. A one-off counts only with its amount in a verbatim quote that names it (refund, settlement, one-time payment) and is the year's (not a forecast); a settlement only if the filing says it was paid in cash. A payment is added back to cash flow, a refund taken out. A structural reason counts only on a verbatim quote naming it. Otherwise the score is held with low data confidence. Only the headline column is recomputed.</p>
+</details>
+{% endif %}
+</div></details></div>
 {% endif %}
 {% set tq = view.dscr_t1 %}
 {% if tq %}
-<section id="fo-dscr-t1"><h2>Trigger Agent: DSCR T1 (score {{ tq.threshold }} or more)</h2>
-<div class="fo-headline"><span class="fo-big"><span class="risk {{ tq.css }}">{{ tq.label }}</span></span><span>{{ tq.reason }}</span></div>
+<div id="fo-dscr-t1" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: DSCR T1 (score {{ tq.threshold }} or more)</span> <span class="risk {{ tq.css }}">{{ tq.label }}</span> <span class="fo-agent-reason">{{ tq.reason }}</span>{{ attention('dscr_t1') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('dscr_t1') }}
 <dl>
 <dt>Trigger</dt><dd>DSCR risk score <span class="risk {{ tq.score.css }}">{{ tq.score.text }}</span> · {{ tq.column }}{% if tq.principal %} · DSCR {{ tq.principal.ratio }}{% endif %} · fires at {{ tq.threshold }} or more{% if not tq.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
 <dt>Decided by</dt><dd>{{ tq.decided_by }}{% if tq.agent %} · {{ tq.mode }} model <code>{{ tq.agent.model_id }}</code> · prompt <code>{{ tq.agent.prompt_id }}</code>{% endif %}</dd>
@@ -266,8 +429,105 @@
 <p class="subtle">Year-1 principal is the scheduled amortisation in year 1 of the debt maturity table plus the current finance-lease principal; without a tagged table, the current portion of debt. T1a: commercial paper, revolver, 364-day or securitisation borrowings come out of principal only when shown to be rolled over and backed by undrawn committed capacity at least as large that matures more than 12 months after the year-end; otherwise no adjustment. Each comes out whole or not at all, and items on the same backstop must fit within it together. Commercial paper is in principal only when principal includes short-term borrowings (Debt, Current). T1b, independent of T1a: debt already classified as long-term at the year-end (ASC 470-10-45-14) gets no adjustment; a refinancing counts only when its quote shows it completed after the year-end (no "intend", "plan", "expect"…) and a verified quote dates the refinanced debt within the 12 months after the year-end; a plan only gets no adjustment, with its passage cited. Every amount and date must be in its verbatim quote.</p>
 </details>
 {% endif %}
-</section>
+</div></details></div>
 {% endif %}
+{% set tj = view.icr_t2 %}
+{% if tj %}
+<div id="fo-icr-t2" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: ICR T2 (net or operating interest tag)</span> <span class="risk {{ tj.css }}">{{ tj.label }}</span> <span class="fo-agent-reason">{{ tj.reason }}</span>{{ attention('icr_t2') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('icr_t2') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tj.inputs %}Interest is from {{ tj.inputs.kind }} (<code>{{ tj.inputs.concept }}</code>, {{ tj.inputs.tagged }} million; capitalised {{ tj.inputs.capitalised }} million) · {% endif %}{{ tj.column }} · ICR risk score <span class="risk {{ tj.score.css }}">{{ tj.score.text }}</span>{% if tj.inputs %} · ICR {{ tj.inputs.ratio }}{% endif %} · fires on a net-interest or operating-interest tag{% if not tj.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+<dt>Decided by</dt><dd>{{ tj.decided_by }}{% if tj.agent %} · {{ tj.mode }} model <code>{{ tj.agent.model_id }}</code> · prompt <code>{{ tj.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tj.effect }}</dd>
+{% if tj.gross_used %}<dt>Gross interest used</dt><dd><strong>{{ tj.gross_used }} million</strong> (+ capitalised interest as tagged)</dd>{% endif %}
+{% for f in tj.flags %}<dt>Flag</dt><dd><span class="warn">&#9888; {{ f }}</span></dd>{% endfor %}
+{% if tj.resolution %}<dt>Resolution</dt><dd>{% if tj.unresolved %}<strong class="bad">{{ tj.resolution }}</strong>{% else %}<span class="ok">{{ tj.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'icr_t2' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'icr_t2' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tj.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tj.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}{% if q.amount %} · {{ q.amount }}{% endif %}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tj.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tj.fired %}
+{{ trigger_agent_result(tj, 'ICR T2') }}
+<details><summary>Rules and passages read ({{ tj.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When ICR's interest is from a net-interest or operating-interest tag (first match)</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tj.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tj.sections %}<p class="subtle">Sections: {% for s in tj.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tj.passages %}<ul>{% for p in tj.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">ICR's denominator is interest incurred + rent, built on gross interest expense. A net tag nets interest income against interest expense; when the net figure is income, ICR is n/a and not counted as weak cover. A gross figure counts only with its amount in a verbatim quote that names interest expense and doesn't describe a net figure (and isn't below the net expense tagged); otherwise gross = net + verified interest income. An operating tag keeps its figure when only interest income is disclosed, and is flagged as making ICR less meaningful. Swap effects stay in interest expense, except an undesignated swap's mark-to-market, which is removed (ICR T1 doesn't remove it again). EBIT is not changed. T2 runs before ICR T1, whatever ICR scored. Only the latest column is recomputed.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set tk = view.icr_t3 %}
+{% if tk %}
+<div id="fo-icr-t3" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: ICR T3 (EBIT from operating income)</span> <span class="risk {{ tk.css }}">{{ tk.label }}</span> <span class="fo-agent-reason">{{ tk.reason }}</span>{{ attention('icr_t3') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('icr_t3') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tk.inputs %}EBIT {{ tk.inputs.ebit }} million from <code>{{ tk.inputs.source }}</code> · ICR {{ tk.inputs.ratio }} · {% endif %}{{ tk.column }} · ICR risk score <span class="risk {{ tk.score.css }}">{{ tk.score.text }}</span> · fires when EBIT is operating income{% if not tk.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+<dt>Decided by</dt><dd>{{ tk.decided_by }}{% if tk.agent %} · {{ tk.mode }} model <code>{{ tk.agent.model_id }}</code> · prompt <code>{{ tk.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tk.effect }}</dd>
+{% if tk.ebit %}<dt>EBIT used</dt><dd><strong>{{ tk.ebit }} million</strong> = pre-tax income + interest expense</dd>{% endif %}
+{% if tk.resolution %}<dt>Resolution</dt><dd>{% if tk.unresolved %}<strong class="bad">{{ tk.resolution }}</strong>{% else %}<span class="ok">{{ tk.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'icr_t3' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'icr_t3' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tk.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tk.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}{% if q.amount %} · {{ q.amount }}{% endif %}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tk.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tk.fired %}
+{{ trigger_agent_result(tk, 'ICR T3') }}
+<details><summary>Rules and passages read ({{ tk.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When ICR's EBIT is operating income (first match)</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tk.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tk.sections %}<p class="subtle">Sections: {% for s in tk.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tk.passages %}<ul>{% for p in tk.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">The standard EBIT is pre-tax income from continuing operations (the "income before income taxes" line every 10-K has: Regulation S-X 5-03) plus the interest expense deducted in arriving at it. Operating income leaves out non-operating items (other income and expense, non-service pension cost, investment gains and losses, FX). Pre-tax income counts only with its amount in a verbatim quote that says income (or loss) before income taxes, for continuing operations, with a loss shown as one. Interest expense is the agent's verified figure, else the tagged expense. Only ICR's EBIT changes. T3 runs after ICR T2 and before ICR T1, whatever ICR scored. Only the latest column is recomputed.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set ti = view.icr_t1 %}
+{% if ti %}
+<div id="fo-icr-t1" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: ICR T1 (score {{ ti.threshold }} or more)</span> <span class="risk {{ ti.css }}">{{ ti.label }}</span> <span class="fo-agent-reason">{{ ti.reason }}</span>{{ attention('icr_t1') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('icr_t1') }}
+<dl>
+<dt>Trigger</dt><dd>ICR risk score <span class="risk {{ ti.score.css }}">{{ ti.score.text }}</span> · {{ ti.column }}{% if ti.inputs %} · ICR {{ ti.inputs.ratio }} = (EBIT {{ ti.inputs.ebit }} + rent {{ ti.inputs.rent }}) / (interest incurred {{ ti.inputs.interest }} + rent), USD millions{% endif %} · fires at {{ ti.threshold }} or more{% if not ti.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if ti.inputs %}<dt>Interest source</dt><dd><span class="subtle">{{ ti.inputs.interest_source }}</span></dd>{% endif %}
+<dt>Decided by</dt><dd>{{ ti.decided_by }}{% if ti.agent %} · {{ ti.mode }} model <code>{{ ti.agent.model_id }}</code> · prompt <code>{{ ti.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ ti.effect }}</dd>
+{% if ti.ebit_change %}<dt>EBIT one-offs</dt><dd><strong>{{ ti.ebit_change }} million</strong> (charges added back, gains removed)</dd>{% endif %}
+{% if ti.interest_change %}<dt>Swap mark-to-market</dt><dd><strong>{{ ti.interest_change }} million</strong> on interest incurred</dd>{% endif %}
+{% if ti.resolution %}<dt>Resolution</dt><dd>{% if ti.unresolved %}<strong class="bad">{{ ti.resolution }}</strong>{% else %}<span class="ok">{{ ti.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'icr_t1' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'icr_t1' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if ti.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in ti.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}{% if q.amount %} · {{ q.amount }}{% endif %}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in ti.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if ti.fired %}
+{{ trigger_agent_result(ti, 'ICR T1') }}
+<details><summary>Rules and passages read ({{ ti.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When ICR scores {{ ti.threshold }} or more</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in ti.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if ti.sections %}<p class="subtle">Sections: {% for s in ti.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if ti.passages %}<ul>{% for p in ti.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">ICR = (EBIT + rent) / (interest incurred + rent); EBIT is pre-tax income plus interest expense. A one-off counts only with its amount in a verbatim quote that names it (impairment, restructuring, litigation, a gain or loss on a sale, transaction costs, a write-down, an insurance recovery…) and is the year's (not a forecast): a charge is added back to EBIT, a gain removed. A swap mark-to-market counts only when verified quotes say the swaps are not designated as hedges and it is in interest expense: a loss comes out of interest incurred, a gain goes back in (EBIT already excludes it). Both adjustments apply together. Nothing found: ICR is unresolved and escalated. Capitalised interest is a cross-check only. Only the headline column is recomputed.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% if pc or view.covenants or view.acquisitions or view.prepaid or view.dscr_t2 or view.dscr_t3 or view.dscr_t1 or view.icr_t2 or view.icr_t3 or view.icr_t1 %}</section>{% endif %}
 {% set c = view.composite %}
 {% if gate.show_composite %}
 <section id="fo-composite"><h2>Composite risk score{% if gate.provisional %} <span class="warn">(provisional)</span>{% elif c.after_override %} <span class="subtle">(after the analyst's decision)</span>{% endif %}</h2>
@@ -280,7 +540,7 @@
 </div>
 {% if c.reason %}<p class="notice">{{ c.reason }}</p>{% endif %}
 {% if c.gc_status == 'fail' %}<p>{% for a in c.adjustments %}{{ a }}{{ ' · ' if not loop.last }}{% endfor %}. Going concern: fail. Agent triggers skipped.</p>
-{% else %}<p>Weighted average {{ c.average }} over {{ c.used }} measure(s){% for a in c.adjustments %} · {{ a }}{% endfor %}. Going concern: {{ c.gc_status }}{% if not pc %} (no pre-check recorded for this run){% endif %}{% if cv %} · Covenants: {{ cv.label|lower }} (outcome {{ cv.outcome }}){% endif %}{% if view.acquisitions %} · Acquisitions and divestitures: {{ view.acquisitions.label|lower }}{% endif %}{% if view.prepaid %} · Prepaid model: {{ view.prepaid.label|lower }}{% endif %}{% if view.dscr_t1 %} · DSCR trigger T1: {{ view.dscr_t1.label|lower }}{% endif %}.</p>{% endif %}
+{% else %}<p>Weighted average {{ c.average }} over {{ c.used }} measure(s){% for a in c.adjustments %} · {{ a }}{% endfor %}. Going concern: {{ c.gc_status }}{% if not pc %} (no pre-check recorded for this run){% endif %}{% if cv %} · Covenants: {{ cv.label|lower }} (outcome {{ cv.outcome }}){% endif %}{% if view.acquisitions %} · Acquisitions and divestitures: {{ view.acquisitions.label|lower }}{% endif %}{% if view.prepaid %} · Prepaid model: {{ view.prepaid.label|lower }}{% endif %}{% if view.dscr_t2 %} · DSCR trigger T2: {{ view.dscr_t2.label|lower }}{% endif %}{% if view.dscr_t3 %} · DSCR trigger T3: {{ view.dscr_t3.label|lower }}{% endif %}{% if view.dscr_t1 %} · DSCR trigger T1: {{ view.dscr_t1.label|lower }}{% endif %}{% if view.icr_t2 %} · ICR trigger T2: {{ view.icr_t2.label|lower }}{% endif %}{% if view.icr_t3 %} · ICR trigger T3: {{ view.icr_t3.label|lower }}{% endif %}{% if view.icr_t1 %} · ICR trigger T1: {{ view.icr_t1.label|lower }}{% endif %}.</p>{% endif %}
 <div class="table-wrap"><table><thead><tr><th>Measure</th><th>Score</th><th>Column</th><th class="num">Weight</th><th class="num">Share</th><th class="num">Adds</th><th>Notes</th></tr></thead><tbody>
 {% for r in c.rows %}<tr><td>{{ r.name }}</td><td><span class="risk {{ r.score.css }}">{{ r.score.text }}</span></td><td>{{ r.heading }}</td><td class="num">{{ r.weight }}</td><td class="num">{{ r.share }}</td><td class="num">{{ r.contribution }}</td><td>{{ r.notes }}</td></tr>{% endfor %}
 </tbody></table></div>
@@ -299,7 +559,9 @@
 {% if m.covenant_note %}<p class="fo-gate{% if 'breach' not in m.covenant_note %} watch{% endif %}">{{ m.covenant_note }}</p>{% endif %}
 {% if m.deal_note %}<p class="fo-gate{% if not m.deal_unresolved %} watch{% elif m.deal_tag != 'Unresolved' %} continued{% endif %}">{% if m.deal_tag %}<span class="risk {{ 'very-high' if m.deal_tag == 'Unresolved' else ('moderate' if m.deal_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.deal_tag }}</span> {% endif %}{{ m.deal_note }}</p>{% endif %}
 {% if m.prepaid_note %}<p class="fo-gate{% if not m.prepaid_tag %} watch{% elif m.prepaid_tag != 'Unresolved' %} continued{% endif %}">{% if m.prepaid_tag %}<span class="risk {{ 'very-high' if m.prepaid_tag == 'Unresolved' else ('moderate' if m.prepaid_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.prepaid_tag }}</span> {% endif %}{{ m.prepaid_note }}</p>{% endif %}
-{% if m.trigger_note %}<p class="fo-gate{% if not m.trigger_tag %} watch{% elif m.trigger_tag != 'Escalated' %} continued{% endif %}">{% if m.trigger_tag %}<span class="risk {{ 'very-high' if m.trigger_tag == 'Escalated' else ('moderate' if m.trigger_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.trigger_tag }}</span> {% endif %}{{ m.trigger_note }} <a href="#fo-dscr-t1">Trigger Agent result</a></p>{% endif %}
+{% if m.trigger_note %}<p class="fo-gate{% if not m.trigger_tag %} watch{% elif m.trigger_tag != 'Escalated' %} continued{% endif %}">{% if m.trigger_tag %}<span class="risk {{ 'very-high' if m.trigger_tag == 'Escalated' else ('moderate' if m.trigger_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.trigger_tag }}</span> {% endif %}{{ m.trigger_note }} {% for key, name in ([('dscr_t2', 'T2'), ('dscr_t3', 'T3'), ('dscr_t1', 'T1')] if m.key == 'dscr' else [('icr_t2', 'ICR T2'), ('icr_t3', 'ICR T3'), ('icr_t1', 'ICR T1')] if m.key == 'icr' else []) %}{% if view[key] and view[key].fired %}<a href="#fo-{{ key|replace('_', '-') }}">Trigger Agent result: {{ name }}</a> {% endif %}{% endfor %}</p>{% endif %}
+{% for f in m.flag_notes %}<p class="fo-gate watch"><span class="warn">&#9888; {{ f }}</span> <a href="#fo-icr-t2">Trigger Agent result: ICR T2</a></p>{% endfor %}
+{% if m.data_confidence_note %}<p class="fo-gate watch"><span class="warn">&#9888; {{ m.data_confidence_note }}</span> <a href="#fo-dscr-t3">Trigger Agent result: T3</a></p>{% endif %}
 {% if m.override %}<p class="fo-gate continued"><strong>{{ m.override.text }}</strong> · counted in the composite: <span class="risk {{ m.override.score.css }}">{{ m.override.score.text }}</span></p>{% endif %}
 <p class="fo-formula">{{ m.formula }}</p>
 {% if m.empty %}<p class="notice">{{ m.empty }}</p>{% else %}
@@ -324,3 +586,21 @@
 {% else %}
 <section><p class="subtle">The measures were computed and are kept in the recorded payload (overview JSON), but are not shown: the analysis was stopped.</p></section>
 {% endif %}
+
+<script>
+(function () {
+  function reveal(id) {
+    var el = id && document.getElementById(id);
+    var box = el && (el.closest("details.fo-agent-box") || el.querySelector("details.fo-agent-box"));
+    if (box && !box.open) { box.open = true; el.scrollIntoView(); }
+  }
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (a) reveal(decodeURIComponent(a.hash.slice(1)));
+    var b = e.target.closest && e.target.closest("[data-fo-agents]");
+    if (b) document.querySelectorAll("details.fo-agent-box").forEach(function (d) { d.open = b.dataset.foAgents === "open"; });
+  });
+  window.addEventListener("hashchange", function () { reveal(decodeURIComponent(location.hash.slice(1))); });
+  reveal(decodeURIComponent(location.hash.slice(1)));
+})();
+</script>

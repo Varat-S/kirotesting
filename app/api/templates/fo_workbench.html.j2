@@ -109,49 +109,17 @@
 <dt>Human review</dt><dd>{{ st(view.human_review_status) }}{% if view.review %} · {{ view.review.decision }} by {{ view.review.reviewer }} on {{ view.review.decided_at[:16]|replace('T', ' ') }}: {{ view.review.reason }}{% endif %}{% for ov in view.overrides %} · {{ ov.measure }}: {{ 'override to ' ~ ov.analyst_score if ov.decision == 'override' else 'engine score accepted' }} by {{ ov.reviewer }} on {{ ov.decided_at[:16]|replace('T', ' ') }}: {{ ov.reason }}{% endfor %}{% if view.human_review_status == 'pending' %} <span class="subtle">(nothing was escalated: no going-concern fail, no covenant breach and no unresolved deal)</span>{% endif %}</dd>
 </dl>
 {% set pending_override = o.gate.pending if o.gate.state in ['awaiting_override', 'awaiting_gc_decision'] else [] %}
-{% if o.gate.state == 'awaiting_gc_decision' %}
-<div id="review" class="fo-gate" style="border-left:4px solid #EF4444;background:#fdf1f0;padding:12px 16px;border-radius:6px">
-<h3>Analyst decision required: going concern (agent and verified evidence disagree)</h3>
-<p>{{ o.gate.gc_decision.reason }}. The agent's FAIL quote did not hold up against the filing (see "Held back" in the going-concern pre-check below), so the engine scored the run on the verified result. Read the agent's answer and the passages, then decide. <strong>Use the verified result</strong>: the run is scored as calculated (any measure still escalated below waits for its own decision). <strong>Continue</strong> or <strong>Stop</strong>: side with the agent's FAIL (continue: overall score 10, measures superseded; stop: "Not scored: going-concern fail"). The decision is recorded once and cannot be changed.</p>
-<form class="review" method="post" action="{{ base }}/review">
-<div><label for="reviewer">Reviewer</label><input id="reviewer" name="reviewer" required></div>
-<div><label for="reason">Reason</label><input id="reason" name="reason" required placeholder="Why"></div>
-<div class="buttons"><button class="primary-button" type="submit" name="decision" value="use_verified">Use the verified result ({{ o.gate.gc_decision.verified|upper }})</button><button type="submit" name="decision" value="continue">Fail: continue at score 10</button><button type="submit" name="decision" value="stop">Fail: stop the analysis</button></div>
-</form>
-<p class="subtle">Command line: <code>python -m app.cli fo-review {{ view.run_id }} --decision use_verified|continue|stop --reviewer "&lt;name&gt;" --reason "&lt;why&gt;"</code></p>
-</div>
-{% endif %}
-{% for e in pending_override %}
-<div id="override-{{ e.measure }}" class="fo-gate" style="border-left:4px solid #EF4444;background:#fdf1f0;padding:12px 16px;border-radius:6px">
-<h3>Analyst decision required: {{ e.measure_name }} ({{ e.title or 'covenant breach' }})</h3>
-<p>{{ e.reason }}. {{ e.detail or 'The engine set revolver availability to 0 and the score to 10.' }} Engine score: <strong>{{ e.engine_score if e.engine_score is not none else 'none' }}</strong>{% if e.calculated_score is not none %} (calculated before the adjustment: {{ e.calculated_score }}){% endif %}. Read the {{ {'acquisitions': 'acquisitions-and-divestitures', 'prepaid': 'prepaid-model'}.get(e.check, 'covenant') }} pre-check below, then accept the engine's score or enter your own (1–10). The composite is re-weighted on the score you record. The decision is recorded once and cannot be changed.</p>
-<form class="review" method="post" action="{{ base }}/override">
-<input type="hidden" name="measure" value="{{ e.measure }}">
-<div><label for="reviewer-{{ e.measure }}">Reviewer</label><input id="reviewer-{{ e.measure }}" name="reviewer" required></div>
-<div><label for="reason-{{ e.measure }}">Reason</label><input id="reason-{{ e.measure }}" name="reason" required placeholder="Why this score"></div>
-<div><label for="score-{{ e.measure }}">Your score (1–10, for an override)</label><input id="score-{{ e.measure }}" name="score" type="number" min="1" max="10" step="0.1"></div>
-<div class="buttons"><button class="primary-button" type="submit" name="decision" value="accept">Accept the engine's score ({{ e.engine_score }})</button><button type="submit" name="decision" value="override">Override with my score</button></div>
-</form>
-<p class="subtle">Command line: <code>python -m app.cli fo-override {{ view.run_id }} --measure {{ e.measure }} --decision accept|override [--score N] --reviewer "&lt;name&gt;" --reason "&lt;why&gt;"</code></p>
-</div>
-{% endfor %}
-{% if o.gate.state == 'awaiting_review' %}
-<div id="review" class="fo-gate" style="border-left:4px solid #EF4444;background:#fdf1f0;padding:12px 16px;border-radius:6px">
-<h3>Analyst decision required: going-concern FAIL</h3>
-<p>{{ o.precheck.reason }}. Read the basis and the passages in the pre-check below, then decide. <strong>Continue</strong>: overall score 10, the measures are shown as "superseded by going-concern fail" and not counted, and agent triggers are skipped. <strong>Stop</strong>: "Not scored: going-concern fail". The decision is recorded once and cannot be changed.</p>
-<form class="review" method="post" action="{{ base }}/review">
-<div><label for="reviewer">Reviewer</label><input id="reviewer" name="reviewer" required></div>
-<div><label for="reason">Reason</label><input id="reason" name="reason" required placeholder="Why the analysis should continue or stop"></div>
-<div class="buttons"><button class="primary-button" type="submit" name="decision" value="continue">Continue the analysis</button><button type="submit" name="decision" value="stop">Stop the analysis</button></div>
-</form>
-<p class="subtle">Command line: <code>python -m app.cli fo-review {{ view.run_id }} --decision continue|stop --reviewer "&lt;name&gt;" --reason "&lt;why&gt;"</code></p>
+{% if o.gate.state in ['awaiting_gc_decision', 'awaiting_review'] or pending_override %}
+<div class="fo-gate" style="border-left:4px solid #EF4444;background:#fdf1f0;padding:12px 16px;border-radius:6px">
+<strong>&#9888; Waiting for an analyst.</strong> Each decision is in the agent check that raised it (marked &#9888; below):
+<ul style="margin:6px 0 0">{% if o.gate.state == 'awaiting_gc_decision' %}<li><a href="#review">Going concern: agent and verified evidence disagree</a></li>{% elif o.gate.state == 'awaiting_review' %}<li><a href="#review">Going concern: FAIL, continue or stop</a></li>{% endif %}{% for e in pending_override %}<li><a href="#override-{{ e.measure }}">{{ e.measure_name }}: {{ e.title or 'covenant breach' }}</a> · engine score {{ e.engine_score if e.engine_score is not none else 'none' }}</li>{% endfor %}</ul>
 </div>
 {% endif %}
 {% if o.settings.errors %}<p class="notice">{{ o.settings.errors|join(' ') }}</p>{% endif %}
-<div class="actions">{% if o.precheck %}<a href="#fo-precheck">Going concern</a>{% endif %}{% if o.covenants %}<a href="#fo-covenants">Covenants</a>{% endif %}{% if o.acquisitions %}<a href="#fo-acquisitions">Acquisitions</a>{% endif %}{% if o.prepaid %}<a href="#fo-prepaid">Prepaid model</a>{% endif %}{% if o.dscr_t1 %}<a href="#fo-dscr-t1">DSCR trigger T1</a>{% endif %}<a href="#fo-composite">Composite</a>{% for m in o.measures %}<a href="#fo-{{ m.key }}">{{ m.short }}</a>{% endfor %}</div>
+<div class="actions">{% if o.precheck %}<a href="#fo-precheck">Going concern</a>{% endif %}{% if o.covenants %}<a href="#fo-covenants">Covenants</a>{% endif %}{% if o.acquisitions %}<a href="#fo-acquisitions">Acquisitions</a>{% endif %}{% if o.prepaid %}<a href="#fo-prepaid">Prepaid model</a>{% endif %}{% if o.dscr_t2 %}<a href="#fo-dscr-t2">DSCR trigger T2</a>{% endif %}{% if o.dscr_t3 %}<a href="#fo-dscr-t3">DSCR trigger T3</a>{% endif %}{% if o.dscr_t1 %}<a href="#fo-dscr-t1">DSCR trigger T1</a>{% endif %}{% if o.icr_t2 %}<a href="#fo-icr-t2">ICR trigger T2</a>{% endif %}{% if o.icr_t3 %}<a href="#fo-icr-t3">ICR trigger T3</a>{% endif %}{% if o.icr_t1 %}<a href="#fo-icr-t1">ICR trigger T1</a>{% endif %}<a href="#fo-composite">Composite</a>{% for m in o.measures %}<a href="#fo-{{ m.key }}">{{ m.short }}</a>{% endfor %}</div>
 <p class="subtle">Downloads: <a href="{{ base }}/overview.json">overview JSON</a> · <a href="{{ base }}/overview.html">standalone scorecard HTML</a></p>
 <p class="subtle">{% if view.output_folder %}Saved files: <code>{{ view.output_folder }}</code> (financial_overview.json, financial_overview.html{% if (o.precheck and o.precheck.agent) or (o.covenants and o.covenants.agent) or (o.acquisitions and o.acquisitions.agent) or (o.prepaid and o.prepaid.agent) %}, precheck_transcript.json{% endif %}{% if view.review %}, review.json{% endif %}{% if view.overrides %}, overrides.json{% endif %}){% else %}No saved files for this run in this server's output folder (it may have been run with a different <code>--output</code>).{% endif %}</p>
 </section>
-{% with view = o %}{% include 'fo_scorecard.html.j2' %}{% endwith %}
+{% set decision_run_id = view.run_id %}{% with view = o, decision_base = base %}{% include 'fo_scorecard.html.j2' %}{% endwith %}
 {% endif %}
 </main></body></html>

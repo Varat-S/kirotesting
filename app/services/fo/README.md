@@ -11,7 +11,7 @@ and composite" (DSCR's bands, year-1 principal and interest incurred; ICR's band
 
 It is organised like the Business Overview (BO) module. It has two agents. The **Pre-check Agent** runs
 before the measures (going concern, covenants, acquisitions, prepaid model). The **Trigger Agent** runs after
-them, when a measure trips its trigger (today DSCR T1). Every number is computed by code. The agents only
+them, when a measure trips its trigger (today DSCR T2 and T3, then DSCR T1; ICR T2 and T3, then ICR T1). Every number is computed by code. The agents only
 classify and quote the filing's passages; code verifies the quotes and re-derives the outcome.
 
 ## Run it
@@ -19,9 +19,9 @@ classify and quote the filing's passages; code verifies the quotes and re-derive
 | Where | How |
 |---|---|
 | Browser | `python -m app.preview`, then `/` → "Financial Overview runs" (`/fo`): pick a folder, then Run (needs a live provider: the Run button is disabled without one) |
-| CLI | `python -m app.cli run-fo-case [CASE_ID] --filing "HCA 10-K FY2025" --live` (or `--responses agent.json` offline, with `{"going_concern": ..., "covenants": ..., "acquisitions": ..., "prepaid": ..., "dscr_t1": ...}`; `dscr_t1` is needed only when DSCR scores 9 or more); one of the two is required |
-| Analyst decision | the run's page (browser), or `python -m app.cli fo-review RUN_ID --decision continue\|stop --reviewer "…" --reason "…"` (going-concern fail), or `fo-override RUN_ID --measure liquidity\|dso\|leverage\|dscr --decision accept\|override [--score N] …` (an escalated measure) |
-| Tests | `.venv\Scripts\python -m pytest tests/unit/test_fo_precheck.py tests/unit/test_fo_scoring.py tests/unit/test_fo_measures.py tests/unit/test_fo_covenants.py tests/unit/test_fo_acquisitions.py tests/unit/test_fo_prepaid.py tests/unit/test_fo_disagreements.py tests/unit/test_fo_dscr_trigger.py tests/integration/test_fo_runner_api.py -q` |
+| CLI | `python -m app.cli run-fo-case [CASE_ID] --filing "HCA 10-K FY2025" --live` (or `--responses agent.json` offline, with `{"going_concern": ..., "covenants": ..., "acquisitions": ..., "prepaid": ..., "dscr_t1": ..., "dscr_t2": ..., "dscr_t3": ..., "icr_t1": ..., "icr_t2": ..., "icr_t3": ...}`; `dscr_t1` is needed only when DSCR scores 9 or more, `dscr_t2` only when CapEx is above 1.5× depreciation, `dscr_t3` only when the cash-tax gap is above 5% of CFADS, `icr_t1` only when ICR scores 8.5 or more, `icr_t2` only when ICR's interest is from a net or operating tag, `icr_t3` only when ICR's EBIT is operating income); one of the two is required |
+| Analyst decision | the run's page (browser), or `python -m app.cli fo-review RUN_ID --decision continue\|stop --reviewer "…" --reason "…"` (going-concern fail), or `fo-override RUN_ID --measure liquidity\|dso\|leverage\|dscr\|icr --decision accept\|override [--score N] …` (an escalated measure) |
+| Tests | `.venv\Scripts\python -m pytest tests/unit/test_fo_precheck.py tests/unit/test_fo_scoring.py tests/unit/test_fo_measures.py tests/unit/test_fo_covenants.py tests/unit/test_fo_acquisitions.py tests/unit/test_fo_prepaid.py tests/unit/test_fo_disagreements.py tests/unit/test_fo_dscr_trigger.py tests/unit/test_fo_dscr_t2.py tests/unit/test_fo_dscr_t3.py tests/unit/test_fo_icr_trigger.py tests/unit/test_fo_icr_t2.py tests/unit/test_fo_icr_t3.py tests/integration/test_fo_runner_api.py -q` |
 
 **Picking the model.** The run form has a "Pre-check Agent model" dropdown, and the CLI has `--model` (with
 `--live`). `models.py` names the candidate Vertex models and offers only the text-analysis ones: no TTS,
@@ -244,6 +244,171 @@ nothing is unresolved. The DSCR column keeps `principal_reported`, `debt_service
 (`calculated`, `recomputed`, `refinancing`, `score`), and the composite is recomputed on the adjusted score. The keyword cross-check (commercial paper, backstop, a refinancing in subsequent events) only
 adds notes. The agent's exchange is written to `trigger_transcript.json`.
 
+## Trigger Agent: DSCR T2
+
+`dscr_t2.py`, prompt `fo_trigger_dscr_t2`. Like T1 it runs only when `payload.gate.agent_triggers` is "enabled". It
+runs **before T1**, whatever DSCR scored: it corrects an input to cash flow, so T1 then judges the corrected DSCR
+(a T2 recompute can lift DSCR below T1's trigger).
+
+| Trigger | Why | What the agent checks |
+|---|---|---|
+| CapEx above 1.5× depreciation (the DSCR headline column's year) | Growth CapEx counted as maintenance understates DSCR | Does the MD&A or segment note split maintenance from growth CapEx? Are the growth projects committed or under construction? |
+
+**The inputs T2 works on** (the DSCR column, `measures.py`): CapEx is total CapEx (purchases of PP&E), which DSCR
+deducts as maintenance CapEx because filers don't tag maintenance CapEx. Depreciation is depreciation only, excluding
+amortisation of acquired intangibles: the tagged `Depreciation`, else D&A less `AmortizationOfIntangibleAssets` (none
+tagged = none). Without CapEx or depreciation the trigger isn't set off.
+
+The agent reads MD&A liquidity and capital resources (with its capital-expenditure sub-sections) and the segment note:
+paragraphs and tables that mention capital expenditures, maintenance, growth, expansion, new facilities,
+construction, projects or commitments (K01…). Code checks every fact and re-derives the outcome, **first match wins**:
+
+| Finding (verified) | Adjustment |
+|---|---|
+| Growth projects committed or under construction | No adjustment |
+| Maintenance/growth split disclosed | Recompute DSCR with the disclosed maintenance CapEx (or total CapEx less the disclosed growth CapEx) |
+| Growth described but not quantified | Input correction: depreciation used as maintenance CapEx, DSCR recomputed |
+| No growth spending described | Hold the score |
+
+What each needs:
+- Committed: one verbatim quote that names a growth project (expansion, new capacity, development, construction…) and
+  says it is committed or under construction.
+- Split: the year's maintenance (or growth) CapEx, with the amount in a verbatim quote that says maintenance
+  (sustaining, replacement, routine) or growth. A forecast or budget for a later year is held back ("expect",
+  "budgeted", "guidance"…), and so is an amount above total CapEx.
+- Growth described: a verbatim quote describing growth spending.
+
+The recompute replaces total CapEx with maintenance CapEx in cash flow for debt service on the headline column only.
+The column keeps `capex_reported`, `cash_flow_reported` and `capex_adjustment` (`calculated`, `ratio_calculated`,
+`recomputed`, `maintenance_capex`, `score`). Escalation works as for T1: only when unresolved (`dscr_t2:dscr`). When
+T2 and T1 are both unresolved, DSCR gets one escalation carrying both (`checks`), and its calculated score is DSCR's
+before either trigger.
+
+## Trigger Agent: DSCR T3
+
+`dscr_t3.py`, prompt `fo_trigger_dscr_t3`. Like T1 and T2 it runs only when `payload.gate.agent_triggers` is
+"enabled". It runs after T2 and before T1, whatever DSCR scored: it corrects cash taxes in cash flow, so T1 judges the
+corrected DSCR.
+
+| Trigger | Why | What the agent checks |
+|---|---|---|
+| \|cash taxes paid − current tax expense\| > 5% × CFADS (CFADS = the DSCR numerator, after T2) | Refunds or one-off payments distort cash flow | Refunds received; settlements paid in cash to tax authorities; scheduled one-off payments; the stated reasons for the gap between current tax expense and cash taxes paid |
+
+**The inputs T3 works on** (the DSCR column, `measures.py`): cash taxes paid are `IncomeTaxesPaidNet` (net of
+refunds), the figure DSCR deducts. Current tax expense is `CurrentIncomeTaxExpenseBenefit`, else federal + state and
+local + foreign current tax. Without either the trigger isn't set off.
+
+The agent reads the income tax note and MD&A (income taxes, liquidity, cash flows): paragraphs and tables that mention
+taxes paid, refunds, settlements, the IRS or tax authorities, one-time payments, NOLs, bonus depreciation, R&D
+expensing, tax credits or the CAMT (X01…). Code checks every fact and re-derives the outcome, **first match wins**:
+
+| Finding (verified) | Adjustment |
+|---|---|
+| One-off quantified | Input correction: backed out of cash taxes paid (a payment added back, a refund subtracted), DSCR recomputed |
+| The gap is structural (NOLs, bonus depreciation, R&D expensing, purchased tax credits, CAMT) | No adjustment |
+| A one-off mentioned but not quantified, or no explanation given | Hold the score; DSCR flagged as low data confidence |
+
+What each needs:
+- A one-off: its amount in a verbatim quote that names it (refund; settlement with a tax authority; one-time,
+  transition-tax or installment payment), for the year (a forecast or budget is held back). A settlement counts only
+  if the filing says it was paid in cash (in its quote, or a second `paid_in_cash` quote).
+- Structural: a verbatim quote naming the reason. EHC's FY2025 10-K is an example: bonus depreciation and R&D
+  expensing under the OBBBA lowered 2025 cash taxes (cash taxes $124.0 million vs current tax expense $170.6 million).
+- Several one-offs are netted (payments − refunds) and backed out together.
+
+The column keeps `cash_taxes_reported`, `cash_flow_reported` (as tagged, before T2 and T3) and `tax_adjustment`
+(`calculated`, `ratio_calculated`, `recomputed`, `backed_out`, `score`). Low data confidence sets the DSCR measure's
+`data_confidence = "low"`, shown on its card. Escalation works as for T1 and T2: only when unresolved (`dscr_t3:dscr`),
+merged into one DSCR escalation with any other unresolved DSCR trigger.
+
+## Trigger Agent: ICR T1
+
+`icr_triggers.py`, prompt `fo_trigger_icr_t1`. It runs after the DSCR triggers, only when `payload.gate.agent_triggers`
+is "enabled".
+
+| Trigger | Why | What the agent checks |
+|---|---|---|
+| ICR headline score ≥ 8.5 (the latest year: ICR below 1.5x) | Weak cover | One-offs in EBIT; undesignated swap mark-to-market in interest expense; capitalised interest |
+
+ICR = (EBIT + rent) / (interest incurred + rent); EBIT is pre-tax income plus interest expense. The agent reads MD&A
+(without its critical-accounting and new-standards boilerplate) and every note: paragraphs and tables that mention a
+one-off item, a swap or derivative, or capitalised interest (I01…). Code checks every fact; the two adjustments apply
+together:
+
+| Finding (verified) | Adjustment |
+|---|---|
+| Quantified one-offs in EBIT | Input correction: charges added back, gains removed, ICR recomputed |
+| An undesignated swap's mark-to-market in interest expense | Removed from interest incurred (a loss out, a gain back in), ICR recomputed; EBIT already excludes it |
+| Nothing found | Unresolved: ICR escalated to an analyst |
+| Capitalised interest | Cross-check only: a disclosed amount the tagged figures missed is noted, not added |
+
+What each needs:
+- A one-off: its amount in a verbatim quote that names it (impairment, restructuring, litigation, a gain or loss on a
+  sale or extinguishment, transaction costs, a write-down, an insurance recovery…) and shows a charge or a gain, for
+  the year (a forecast is held back).
+- A swap: its amount in a verbatim quote naming the swap or derivative and a change in fair value, and verified quotes
+  saying the swaps are not designated as hedges and the change is in interest expense. A loss can't exceed interest
+  incurred.
+
+Unlike the DSCR triggers, **nothing found escalates ICR** (`icr_t1:icr`). As for every trigger, a disagreement between
+the agent's answer and its verified evidence escalates it too, even when an adjustment holds. The column keeps
+`ebit_reported`, `interest_reported` and `trigger_adjustment` (`calculated`, `ratio_calculated`, `recomputed`,
+`ebit_change`, `interest_change`, `score`).
+
+## Trigger Agent: ICR T2
+
+`icr_t2.py`, prompt `fo_trigger_icr_t2`. It runs on ICR's latest year, whatever ICR scored, after the DSCR triggers
+and before ICR T1 (it corrects the interest base, so T1 judges the corrected ICR), only when
+`payload.gate.agent_triggers` is "enabled".
+
+| Trigger | Why | What the agent checks |
+|---|---|---|
+| Interest from a net-interest tag (`InterestIncomeExpenseNet`, or its nonoperating variant) or the operating-interest tag (`InterestExpenseOperating`) | May be net of interest income, or classified unusually | Gross interest expense in the debt note (and interest income, swaps) |
+
+The ICR column records the interest tag behind interest incurred (`interest_expense_concept`, none when
+`InterestCostsIncurred` is tagged) and, when the only interest figure is net income, `net_interest_income`.
+
+| Finding | Outcome |
+|---|---|
+| Net interest is income (code, no agent) | ICR n/a: flagged, no score, not counted in the composite (the prior year doesn't stand in) |
+| Gross interest expense disclosed | ICR recomputed: interest incurred = gross + capitalised interest as tagged |
+| Only net interest given, interest income disclosed | Gross = net + interest income, ICR recomputed |
+| Operating tag, only interest income disclosed | Kept as tagged |
+| Neither gross interest nor interest income disclosed | Unresolved: ICR escalated to an analyst (`icr_t2:icr`) |
+| An undesignated swap's mark-to-market in interest expense | Removed; other swap effects stay. ICR T1 then doesn't remove it again |
+| An operating-interest tag (often a captive finance arm) | Flagged on the ICR card: ICR less meaningful |
+
+EBIT is not changed (pre-tax income + the interest expense tagged), so interest income is never counted as cover. A
+gross figure counts only with its amount in a verbatim quote that names interest expense, doesn't describe a net figure
+("interest expense, net", "net of interest income") and isn't below the net expense tagged. The column keeps
+`interest_reported` and `interest_adjustment` (`calculated`, `ratio_calculated`, `recomputed`, `interest_change`,
+`gross_used`, `score`); the measure keeps `flag_notes` and, when n/a, `not_applicable`. As for every trigger, a
+disagreement between the agent's answer and its verified evidence escalates ICR; with ICR T1 also unresolved, ICR gets
+one escalation for both.
+
+## Trigger Agent: ICR T3
+
+`icr_t3.py`, prompt `fo_trigger_icr_t3`. It runs on ICR's latest year, whatever ICR scored, after ICR T2 and before
+ICR T1, only when `payload.gate.agent_triggers` is "enabled" and ICR isn't n/a.
+
+| Trigger | Why | What the agent checks |
+|---|---|---|
+| EBIT source is operating income, not pre-tax income + interest expense (the engine's fallback when pre-tax income, or the interest to add back, isn't tagged) | Operating income leaves out non-operating items (other income and expense, the non-service part of pension cost, investment gains and losses, FX), so EBIT can be too high or too low against the standard definition and companies aren't compared on the same basis | Pre-tax income: the "income before income taxes" line for continuing operations (every 10-K has it: Regulation S-X 5-03). Interest expense: the expensed amount deducted in arriving at pre-tax income |
+
+The agent reads the income statement, MD&A and the notes (K01…). Code checks every fact; first match wins:
+
+| Finding (verified) | Outcome |
+|---|---|
+| Pre-tax income found | EBIT = pre-tax income + interest expense, ICR recomputed (resolved) |
+| Pre-tax income not found | EBIT stays operating income: unresolved, ICR escalated (`icr_t3:icr`); the items the agent found between operating income and pre-tax income are recorded |
+
+Pre-tax income counts only with its amount in a verbatim quote that says income (or loss) before income taxes and
+isn't for discontinued operations; a loss must be called one (`is_loss`) and shown as one, since amounts are parsed
+without their sign. Interest expense is the agent's verified figure, else the tagged expense; with neither, EBIT can't
+be rebuilt and ICR is unresolved. Only ICR's EBIT changes: Debt/EBITDAR and DSCR keep theirs. The column keeps
+`ebit_reported`, `ebit_concept_reported` and `ebit_adjustment` (`calculated`, `ratio_calculated`, `recomputed`,
+`ebit`, `score`).
+
 ## When the agent and the verified evidence disagree
 
 The verified outcome always drives the measures. But when the agent's own answer is **more severe** than the outcome
@@ -257,6 +422,11 @@ its verified evidence supports, the analyst decides (`runner.disagreements`):
 | A deal unresolved | Resolved, or the deal held back | DSO, and Debt/EBITDAR for a divestiture after the year-end |
 | Prepaid model unresolved | Another outcome | DSO |
 | DSCR T1: any answer | A different outcome (either direction) | DSCR (T1 is unresolved) |
+| DSCR T2: any answer | A different outcome (either direction) | DSCR (T2 is unresolved) |
+| DSCR T3: any answer | A different outcome (either direction) | DSCR (T3 is unresolved) |
+| ICR T1: any answer | A different outcome (either direction) | ICR (T1 is unresolved; so is "nothing found") |
+| ICR T2: any answer | A different outcome (either direction) | ICR (T2 is unresolved; so is "neither disclosed") |
+| ICR T3: any answer | A different outcome (either direction) | ICR (T3 is unresolved; so is "pre-tax income not found") |
 
 A measure gets one decision even when several checks escalate it: the escalation merges their reasons (`checks`).
 When the engine is the more severe side it already escalates. The run completes once every escalation is decided.
@@ -264,7 +434,7 @@ The page lists the held-back quotes, so the analyst can see why the two differ. 
 the escalation ids.
 
 **Analyst overrides.** The run's `escalations` list holds what waits for an analyst. A `measure_override` (today:
-liquidity after a covenant breach; DSO or Debt/EBITDAR after an unresolved deal; DSCR after an unresolved trigger T1) is decided
+liquidity after a covenant breach; DSO or Debt/EBITDAR after an unresolved deal; DSCR after an unresolved trigger T2, T3 or T1; ICR after an unresolved ICR T2, T3 or T1) is decided
 with `fo-override RUN --measure liquidity|dso|leverage|dscr --decision accept|override [--score N]`, or with the form
 on the run's page.
 The decision goes in `financial_overview_overrides`: one per measure per run, never rewritten. The analyst's score
@@ -296,7 +466,13 @@ industry.classify_industry       ticker / company name -> industry group (config
 scoring.scoring_settings         that group's benchmarks and p; defaults for m, Δ, cap, D, weights
 scoring.score_financial_overview benchmark curve + fixed bands; covenant adjustment on liquidity;
                                  composite_risk (with the going-concern gate) first
-dscr_triggers.dscr_t1_trigger    DSCR score ≥ 9 and triggers enabled -> passages -> agent (required) ->
+dscr_t2.dscr_t2_trigger          CapEx > 1.5× depreciation and triggers enabled -> passages -> agent
+                                 (required) -> validation -> committed / split / depreciation / held
+dscr_t2.apply_t2                 DSCR recomputed with maintenance CapEx on the headline column
+dscr_t3.dscr_t3_trigger          |cash taxes − current tax| > 5% of CFADS and triggers enabled -> passages ->
+                                 agent (required) -> validation -> backed out / structural / low confidence
+dscr_t3.apply_t3                 DSCR recomputed with one-offs backed out of cash taxes; low data confidence
+dscr_triggers.dscr_t1_trigger    DSCR score ≥ 9 (after T2 and T3) and triggers enabled -> passages -> agent (required) ->
                                  validation -> principal removed / −2 / held
 dscr_triggers.apply_t1           DSCR recomputed on the headline column; composite_risk again
 runner.FinancialOverviewRunner   records one financial_overview_runs row (payload + content hash);
@@ -319,6 +495,11 @@ review.override_measure          the analyst's score for an escalated measure (f
 | `acquisitions.py` | Deal passages, keyword signals, the Pre-check Agent call, evidence checks, per-deal rules, DSO and Debt/EBITDAR adjustments |
 | `prepaid.py` | Item 1 and revenue-note passages, the business-model check, the Pre-check Agent call, evidence checks, billed-revenue DSO and the DSO weight factor |
 | `dscr_triggers.py` | Trigger Agent, DSCR T1: debt-note / MD&A / subsequent-events passages, the agent call, evidence checks, principal correction and the −2 refinancing relief |
+| `dscr_t2.py` | Trigger Agent, DSCR T2: MD&A capital-resources / segment-note passages, the agent call, evidence checks, maintenance CapEx correction |
+| `dscr_t3.py` | Trigger Agent, DSCR T3: income tax note / MD&A passages, the agent call, evidence checks, cash-tax one-off correction, low data confidence |
+| `icr_triggers.py` | Trigger Agent, ICR T1: MD&A / note passages, the agent call, evidence checks, EBIT one-off and swap mark-to-market corrections |
+| `icr_t2.py` | Trigger Agent, ICR T2: debt note / MD&A / note passages, the agent call, evidence checks, gross interest base, ICR n/a on net interest income, the operating-tag flag |
+| `icr_t3.py` | Trigger Agent, ICR T3: income statement / MD&A / note passages, the agent call, evidence checks, EBIT = pre-tax income + interest expense |
 | `review.py` | The analyst's decisions: continue / stop (`review.json`), measure overrides (`overrides.json`) |
 | `runner.py` | `FinancialOverviewRunner` (`build`, `run_filing`), JSON-safe payload, case ids, run state |
 | `workbench.py` | Read-only views: `fo_runs`, `fo_view`, `fo_artifact` |
