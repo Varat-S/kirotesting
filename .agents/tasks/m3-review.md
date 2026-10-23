@@ -1,77 +1,99 @@
-# M3 Corporate Structure & Senior Management — Deterministic Diagram + Three-Section Output
+# Module 3 — Analytical Quality, Validator 7 & Real-Model Readiness — Review
 
-A single commit on `feat/m3-corporate-mgmt` adds Deliverable A (the corporate-structure diagram pipeline) and the three-section Module 3 output, additively, on top of the existing narrative M3 pipeline. It introduces a versioned structure schema, a company-agnostic single-company JSON adapter with Validator-7 structural checks, a deterministic byte-stable SVG renderer, and a Section A/B/C assembler, then wires the result into `_module_conclusions["M3"]` through the completion seam. The existing roster, Validator 7, narrative contract, scoring, and module boundaries are left untouched. Watch for: nothing blocking — the fail-closed no-JSON path, case-association-by-metadata, single-company enforcement, deterministic rendering, and partial-completion routing are all implemented and tested (confirmed).
+Meaningful consolidated conclusion, four-state Validator 7, and an opt-in real-model pathway for the existing standalone Module 3 specialist (`m3_corporate_management`).
+
+This is a targeted enhancement of the existing Module 3 on branch `feat/m3-analytical-quality` (one commit `aa0afde` on top of base `feat/m3-structural-credit`). It rewrites the consolidated conclusion assembler in `m3_output.py`, strengthens Validator 7 numeric/evidence verification in `m3_validation.py`, and adds a default-off live-model path in `m3_standalone.py`/`cli.py`. No module was rebuilt; no new specialist/validator agent was introduced; the schema is unchanged. The five offline demos were regenerated and are byte-stable.
+
+Watch for: nothing blocking. The conclusion is now materially differentiated across scenarios, traces to validated finding ids, excludes rejected findings, and preserves the HCA simulation disclaimer (confirmed). The live path is wired but **was not executed** — no paid call was made, and live analytical capability is honestly reported as UNVERIFIED (confirmed). The canonical-financial checks are surface/token + resolved-value based and cannot prove semantic entailment or causation; causal/legal claims are correctly capped at human review (confirmed).
 
 **Verdict**: APPROVED
 
-## High-level view
-
-The change is purely additive. Nine production files on the base (roster_v3.py, m3_validation.py, bo_prompts.py, reporting.py, bo.py, scoring) are not in the diff; the only modified production file is `completion.py`, and its `_module_conclusions` signature change is a backward-compatible keyword (`case_id=None`). The one M3 specialist `m3_corporate_management` is retained and still carries `validator_id="validator_7"`; `V3_SPECS` still lists exactly nine agents. No scoring weights, rating rubric, or Module 4 scope appear anywhere in the diff.
-
-The no-JSON rule fails closed. `build_corporate_structure_artifact(None, ...)` returns `status="unavailable"` with the mandated message verbatim and no nodes; wrong case-association, wrong current case, malformed payload, multi-company, unsupported schema, out-of-range percentage, bad node reference and cycles all return `status="rejected"` with the precise reason and no diagram. Case association is decided solely by trusted metadata (`registered_case_id == expected_case_id` and `source.case_id == expected_case_id`); filename and company key never enter selection. The examples/ fixture is never auto-loaded by production code — the completion seam only reads a source from the M3 agent call's `inputs["corporate_structure_source"]`.
-
-The renderer draws strictly from validated values and is deterministic: sorted parent iteration, canonical float formatting, no timestamps or random ids. Ownership percentages come only from `ownership_links`; guarantor shields are emitted only where `is_guarantor` is true. Single-child connectors are one perfectly straight vertical line (child snapped to the parent centreline); multiple children use one horizontal bus with vertical drops. `negative_requirements` are honoured (no extra header disclaimer line, no legend note beyond listed entries).
-
-Credit signals keep direction, verification, and availability in separate fields, and the module completes PARTIALLY (not silently complete) when the structure is unavailable but the management assessment proceeds — the completion wiring only downgrades `complete`→`partial` and never promotes an already-incomplete module.
-
 <details>
-<summary>Issues (0)</summary>
+<summary>Issues (0 blocking)</summary>
 
-No blocking or non-blocking findings. All acceptance criteria verified.
+No blocking findings. Informational notes (not action items):
+
+1. **Canonical accounting-basis/currency fields carried but not fully populated** (confirmed, informational) — `_canonical_metrics_from_prep` sets `accounting_basis` and `currency` to `None` because the current indicator layer does not expose them; basis/currency mismatches therefore remain a human-review responsibility rather than a deterministic check. The report discloses this (section 13). Acceptable for this task; not a regression.
+2. **Live path unverified against a real provider** (confirmed, expected by brief) — exercised only with `FakeLLMBackend`. This is the mandated posture (no paid calls); recorded as `real_llm_analytical_consistency: not_yet_evaluated`.
 
 </details>
 
 <details>
 <summary>Details</summary>
 
-## What I checked
+## Consolidated conclusion made meaningful (Pillar A + Pillar B)
 
-- Commit log and diff stat: one commit, nine files (`git log --oneline daniels-module-3..feat/m3-corporate-mgmt`).
-- Full diff of all new modules (`bo_m3_structure.py`, `corporate_structure.py`, `corporate_structure_render.py`, `m3_output.py`) and the `completion.py` change.
-- Roster integrity: `roster_v3.py` is not in the diff; `V3_SPECS` lists exactly nine agents; `m3_corporate_management` retained with `validator_id="validator_7"` (roster_v3.py:145-165, 205).
-- Scoring/boundary scan of the production diff for weight/rubric/refinancing/debt-service/maturity/creditor-ranking terms — only matches are SVG `font-weight` attributes.
-- The HCA fixture: 14 nodes, 13 links, 5 guarantors; `hca_regional`→`hca_atlantic` is a single-child edge with both center_x_px == 145.
-- Base branch cleanliness: no commits on `daniels-module-3` since divergence; worktree on `feat/m3-corporate-mgmt`.
-- Spot-run of the new unit + integration suites offline: 28 passed in 0.39s (matches the report's 22+6).
+`m3_output.py::_section_c` was rewritten from a generic two/three-bullet availability summary into a deterministic, schema-driven assembler. It imports the single-source `_is_admitted` gate from `m3_artifacts.py` (no duplicated logic) and admits only material (`high`/`medium`) findings that survive Validator 7; rejected, material-unverified, and insufficient-evidence findings never contribute. For each admitted finding `_finding_statement` emits a structured object carrying `source_id`, `core_observation`, `credit_direction`, `credit_risk_mechanism`, `materiality`, `supporting_evidence_ids`, `qualifications`, `unresolved_information_gaps`, and a `why_it_matters_to_a_lender` sentence keyed on `(analytical_dimension, credit_direction)`. No LLM call was added; ordering is sorted by id, so re-assembly is byte-stable (`test_groupA_identical_governed_findings_reassemble_byte_identically`).
 
-## No-JSON / rejection path (fail-closed)
+Reading the three regenerated `m3_analysis.json` demos confirms the conclusions now differ materially rather than being generic:
 
-`corporate_structure.py:95-200`. With `source is None` the adapter records a `recorded_gap` issue and returns `_unavailable(NO_JSON_MESSAGE, ...)` — `status="unavailable"`, empty nodes/links. `NO_JSON_MESSAGE` in `bo_m3_structure.py:46-49` is the exact mandated string. Every other failure (case mismatch, non-dict payload, unsupported schema_version/artifact_type, zero or >1 companies, non-dict company, missing nodes, bad coordinates, duplicate/missing node id, unknown/self link reference, out-of-range percentage, contradictory edge, cycle, multi-parent, unreachable node) returns `status="rejected"` with a specific `rule_id` in `validation_issues` and withholds the diagram. The source payload is deep-copied before inspection, so the original JSON is never mutated.
+- **fictional_positive**: Pillar A emits a `[positive]` guarantor-coverage statement — "A guarantee from this entity may improve the lender's recourse ... subject to the guarantee's enforceability, ranking, caps ...".
+- **fictional_negative**: Pillar A emits a `[negative]` cash-flow-access statement — "A restriction on upstream distributions may reduce the borrower's financial flexibility and constrain the cash resources available to service the proposed facility ...".
+- **fictional_mixed**: BOTH the negative and positive statements are retained side by side, with the pillar summary stating "Supportive and adverse factors are preserved separately and are not netted into a single score." No numeric netting occurs.
 
-Case association is decided only by trusted metadata: `registered_case_id` must equal `expected_case_id` AND `source.case_id` must equal `expected_case_id` (lines 118-135). The single-company key is extracted dynamically via `next(iter(companies))` and plays no part in selection. Integration tests confirm a 10-K / Exhibit-21-only call and an empty-inputs call both yield `unavailable` with no SVG, and that the examples/ fixture is not auto-loaded.
+`test_groupA_five_scenarios_are_materially_distinct` asserts the five commentaries are unique prose (`len(set(...)) == len(...)`), each >200 chars, and carries direction-specific mechanism language ("recourse" for positive, "restrict"/"constrain" for negative) — not merely finding-id lists or counts. The conclusion sets `is_lending_recommendation: false`, `requires_human_review: true`, `forced_outcome: false`.
 
-## Deterministic renderer drawn from validated values
+Insufficient evidence is kept distinct from neutral: both `hca_simulated` and `fictional_unsupported_guarantee` render "a validated ownership hierarchy is available ... but no debt, guarantee or cash-distribution finding is sufficiently supported ... (insufficient evidence is not a neutral finding)", and `test_groupA_insufficient_evidence_is_not_neutral` guards it.
 
-`corporate_structure_render.py`. `render_corporate_structure_svg` raises if the artifact is not `available`, so no diagram is ever drawn from an unvalidated structure. Percentages are read from `pct_by_edge` built from `artifact.links` only; guarantor shields are emitted only inside `_render_node` when `node.is_guarantor`, tagged `data-guarantor="true"`. Byte-stability comes from `sorted(by_parent)` iteration, `_fmt` canonical float formatting, and the absence of timestamps/random ids — verified by `test_hca_rendering_is_byte_stable` and the synthetic equivalent.
+## Rejected-finding exclusion with audit retention
 
-Connector rules (lines 118-168): a single child draws one `<line>` with `x1==x2==parent_cx` from the parent bottom to the child top, with the child on the parent centreline — confirmed by the fixture (both nodes at cx=145) and `test_hca_regional_to_atlantic_connector_is_perfectly_vertical`. Multiple children draw one parent drop, one horizontal bus, and per-child vertical drops. `negative_requirements` are honoured: `_render_header` emits no extra disclaimer line and `_render_legend` emits only the listed entries.
+The `fictional_unsupported_guarantee` scenario's `SCF-BAD-GUARANTEE` does not appear in `consolidated_conclusion.conclusion_trace.pillar_a_source_ids` (empty), confirming it is excluded from the authoritative conclusion. It is retained for audit under `evidence_verification.excluded_from_conclusion_ids: ["SCF-BAD-GUARANTEE"]`. `test_groupA_rejected_finding_excluded_from_authoritative_conclusion` covers this. A qualified hypothetical is never promoted to an established fact.
 
-## Credit-signal separation and partial completion
+## Simulation distinction preserved
 
-`bo_m3_structure.py:60-92` keeps `credit_direction` (reused `Direction`), `assessment_availability` (`sufficient` | `insufficient_evidence`), `materiality`, and `confidence` in separate fields; it reuses `Direction`/`Materiality`/`Confidence` from the existing schemas rather than inventing a scoring system. `_derive_structural_signals` emits neutral-but-sufficient observations (complexity, borrower position) distinctly from insufficient-evidence ones (distribution dependency), verified by `test_structural_signals_keep_direction_and_availability_separate`.
+Every Pillar-A statement derived from a simulated hierarchy sets `hypothetical_simulated_basis: true`, is prefixed with a hypothetical qualification, and the pillar summary appends "NOTE: the hierarchy is SIMULATED; every structural finding below is hypothetical and does not assert a real arrangement." The HCA demo commentary never asserts real 10-K debts/guarantees/restrictions; `test_groupA_simulated_scenario_retains_hypothetical_qualifications` and `test_t11_simulation_isolation` guard this.
 
-`m3_output.py:_completion_status` marks the module `complete` only when A is available and B is supported; when B proceeds but A is unavailable it is `partial`; otherwise `incomplete`. The completion wiring in `completion.py` only downgrades an already-`complete` M3 to `partial` and never promotes an incomplete module, so missing narrative agents still dominate. Section B survives when the diagram is withheld (`test_senior_management_proceeds_when_structure_absent`).
+## Validator 7: absence is no longer contradiction
 
-## Grouping nodes kept out of the governed legal-entity graph
+The central Priority-2 correctness fix is in `m3_validation.py::_deterministic_claim_checks`. Previously a claimed token merely absent from the cited corpus was emitted with `contradiction=True`, which `_govern_finding` mapped to `rejected`. Now a claimed number/period that is absent with no conflicting token of the same class present yields `contradiction=False` → the caller downgrades to `unverified` (UNSUPPORTED); a conflicting value/period of the same class yields `contradiction=True` → `rejected` (CONTRADICTED).
 
-`corporate_structure.py:_is_grouping` flags aggregate labels (Other / JV / minority) by role and name hints; those ids go into `grouping_node_ids` and a limitation is recorded, but they are still drawable. `test_hca_grouping_nodes_flagged_not_treated_as_legal_entities` confirms `{hca_other, hca_jv}` are flagged.
+The four verification states reuse the existing `Disposition` enum (no competing enum): VERIFIED→supported/qualified, UNSUPPORTED→unverified, CONTRADICTED→rejected, REQUIRES_HUMAN_REVIEW→qualified/unverified plus a recorded `m3.requires_human_review` reason. `test_unsupported_numeric_assertion_is_unverified_not_rejected`, `test_directly_contradicted_value_is_rejected`, `test_wrong_fiscal_period_is_contradicted_when_a_period_is_present`, and `test_absent_fiscal_period_with_no_period_present_is_unsupported` encode the mandated semantics directly. Two pre-existing senior-management assertions that encoded the old "absence=contradiction" bug were corrected.
 
-## Test coverage
+## Canonical-financial verification, gated on availability
 
-22 unit + 6 integration tests, all offline, spot-run green (28 passed). They cover the 14/13/5 HCA assertions, exact-name matching, percentages-only-from-links, guarantor-shield count, byte-stability, grouping flags, simulation treatment, the synthetic single-company generalisation with no code change, all rejection paths, the verbatim no-JSON message, partial completion, and the completion-seam integration (fixture not auto-loaded, 10-K does not trigger a replacement). The report's full-suite result (1351 passed, 131 env skips, 12 pre-existing errors in `test_bo_recorded_completion.py` requiring an untracked local R5 artifact) was not re-run per instructions; the coder verified the 12 errors reproduce on the clean base, so they are environmental, not regressions.
+`_canonical_financial_checks` reuses the repo's resolved canonical values. `_canonical_metrics_from_prep` (in `m3_standalone.py`) builds the map from `prep.indicators.traces` (`ParameterResult` + `ResolvedMetricDefinition`) and never recomputes a metric — it exposes `value`/`raw_value`/`units`/`period` and a percentage view for ratio metrics so a "12%" claim reconciles with a stored 0.12. A conservative `_METRIC_ALIASES` map resolves claim phrasing to a canonical `metric_definition_id`; an unmapped or ambiguous phrase returns `None` and the check is skipped (falls back to the corrected textual gate, never fabricating). Checks cover metric identity, fiscal period, numeric value within tolerance, and pp-vs-% confusion, and guard dollars-vs-millions, quarterly-vs-annual, consolidated-vs-subsidiary, and revenue-vs-EBITDA-growth. `canonical_metrics` is threaded through `validate_m3_assessment` and `_govern_finding` as an optional parameter defaulting to `None`, so existing callers are unaffected. Group B (`test_dollars_vs_millions_do_not_spuriously_match`, `test_quarterly_vs_annual_period_distinguished`, `test_consolidated_vs_subsidiary_value_contradiction`, `test_revenue_growth_vs_ebitda_growth_not_conflated`, `test_rounding_and_tolerance_allows_close_values`, `test_missing_canonical_data_falls_back_without_fabrication`) covers these.
 
-Not tested: real font-metric text wrapping (uses a fixed glyph estimate by design for determinism) and PNG rasterisation (optional no-op without cairosvg) — both documented limitations, neither a blocking concern.
+## Causal/legal claims capped at human review
 
-## File map
+A still-`supported` claim carrying causal (`because`, `due to`, `driven by`, ...) or legal (`enforceable`, `guarantees the`, `covenant`, ...) markers is downgraded to `qualified` with an `m3.requires_human_review` reason, even when the numbers agree — deterministic matching is not treated as proof of semantic entailment or causation. `test_numerically_correct_outcome_with_unsupported_causal_attribution` asserts a figure that matches canonical `revenue_growth` but attributes it to management is NOT promoted to `supported`. The `credit_direction` vs `credibility_vs_direction_note` separation is preserved (the `_MANAGEMENT_LENDER_RELEVANCE["negative"]` text states a credible explanation does not reverse an adverse direction).
 
-- `app/schemas/bo_m3_structure.py` — new versioned structure contract, provenance, and separated-field credit signal.
-- `app/services/bo/corporate_structure.py` — generic single-company adapter + Validator-7 structural checks + signal derivation.
-- `app/services/bo/corporate_structure_render.py` — deterministic SVG renderer, optional PNG no-op.
-- `app/services/bo/m3_output.py` — Section A/B/C assembly and completion status.
-- `app/services/bo/completion.py` — wires the artifact into `_module_conclusions["M3"]`; backward-compatible `case_id` keyword; `complete`→`partial` downgrade only.
-- `examples/bo_m3/Refined HCA Corp Structure.json` — dev fixture (test-only).
-- `tests/unit/test_bo_m3_corporate_structure.py`, `tests/integration/test_bo_m3_corporate_structure_integration.py` — 28 offline tests.
+## Opt-in real-model pathway (not executed)
 
-Full diff: `git -C <worktree> diff daniels-module-3...feat/m3-corporate-mgmt`.
+`run_m3` gains optional `live_backend`/`live_config`; when `live_backend` is set it calls `run_single_pass(session, prep, backend=live_backend)` (the seam already existed in `comparison.py`), otherwise it drives the scripted `FakeLLMBackend`. The CLI `run-m3 --live` replaces the former hard `ValueError` with `_live_backend()` (pre-existing helper that constructs the configured Vertex/Real provider through `app/services/llm/providers*` and calls `check_configuration()`), reading model id/timeout/token limits from `Settings`; with no provider configured it raises a clear, credential-free blocker rather than inventing a run. Default remains offline (`--responses`).
+
+Safeguards verified: disabled by default; bounded to one specialist pass (`max_retries` default 0 in `live_config`); timeout/token limits sourced from `Settings`; `run_single_pass` catches provider errors and returns a failed arm with no `parsed` output (fail-safe, no fabrication); there is NO silent fallback to scripted on live failure; the manifest records `execution_mode`, `real_model_invoked`, `model_called`, `specialist_pass_count`, `max_retries_configured`, and `cross_module_or_downstream_invoked: false`; credentials rely on `SecretStr` and are not logged/persisted. `_is_offline_call` treats a `fake`-prefixed model id as non-real so a fake backend never counts as a live invocation. Group C (`test_live_path_invokes_only_m3_corporate_management`, `test_schema_invalid_live_response_fails_safely`, `test_provider_error_fails_safely_without_fabrication`, `test_manifest_distinguishes_simulation_from_real_execution`) exercises the path with a fake backend only. No paid/live call was made in this task; the report states NONE were made.
+
+## Outputs, schema, and senior-management framework preserved
+
+`app/schemas/bo_m3.py` is byte-unchanged in the diff — the four states ride existing dispositions + validation issues, so the change is additive and backward compatible. Output A (`m3_corporate_structure.json`) remains the de-wrapped v2.0 presentation artifact: top-level keys are `artifact_type`/`companies`/`how_to_use`/`purpose`/`schema_version`/`simulation_disclaimer`/`visual_spec`, with no `integrated_commentary`, no `ai_structural_credit_findings`, and `purpose` explicitly "no debt tables or lender commentary" (the incidental "guarantor markings"/"shield"/"no lender commentary" strings are presentation instructions, not AI credit commentary). Output B keeps Sections A/B/C with stable finding ids. The senior-management framework (claims assessed from admitted disclosures, credit-direction-vs-credibility distinction, management-proxy/ICFR gates) is unchanged; Group D (`test_bo_m3_senior_management.py`, 36-line extension) passes with the two bug-encoding assertions corrected to the mandated semantics.
+
+## Demos and scorecard
+
+All five scenarios regenerate via `DEBUG=false PYTHONPATH=. .venv/bin/python examples/bo_m3/structural_credit/generate_demo.py`; a re-run leaves `git status --porcelain demo_output/` empty (byte-stable), confirmed in this review. The evaluation scorecard adds `conclusion_integration_accuracy` (with explicit numerator/denominator/population, `no_excluded_finding_promoted`, `traced_ids_are_all_admitted`), `numerical_verification_quality` (unsupported vs contradicted kept distinct, requires-human-review count), and `real_llm_analytical_consistency: not_yet_evaluated`. Each carries a caveat that it measures deterministic trace/token quality, not real-model semantic accuracy — i.e. software correctness is not represented as credit-analytical correctness.
+
+## Test and git state
+
+Targeted Group A/B/C/D suites: `tests/unit/test_bo_m3_validation_numeric.py tests/integration/test_bo_m3_live_readiness.py tests/integration/test_bo_m3_structural_credit.py tests/unit/test_bo_m3_senior_management.py` → **62 passed** (re-run in this review). Full offline suite `DEBUG=false .venv/bin/python -m pytest -q` → **1459 passed, 131 skipped, 12 errors** (re-run in this review), matching the report. The 12 errors are confirmed to be the known pre-existing env issue: every one is a setup `RecordedCompletionError: Recorded specialists artifact not found: output/bo/HCA_M3_REFINEMENT_LIVE_20261018_R5/.../specialists_run.json` in `test_bo_recorded_completion.py`, absent on base too — NOT regressions, NOT counted as passing. Versus base (1426/131/12): +33 passed, same skips, same 12 env errors, zero new failures.
+
+Git: single commit `aa0afde` on `feat/m3-analytical-quality`; working tree clean; no remote branch exists (not pushed, no PR); worktree left in place.
+
+</details>
+
+<details>
+<summary>File map</summary>
+
+- `app/services/bo/m3_output.py` — Priority 1: deterministic `_section_c` conclusion assembler + `_finding_statement`/`_pillar_summary`/lender-relevance maps.
+- `app/services/bo/m3_validation.py` — Priority 2: absence≠contradiction fix, four-state mapping, `_canonical_financial_checks`, causal/legal cap, optional `canonical_metrics` thread-through.
+- `app/services/bo/m3_standalone.py` — Priority 3: opt-in `live_backend`/`live_config`, `_canonical_metrics_from_prep`, manifest execution_mode/real_model_invoked/bounded-pass.
+- `app/cli.py` — `run-m3 --live` constructs the provider via existing `_live_backend()`; offline `--responses` default; surfaces execution_mode/real_model_invoked.
+- `app/services/bo/m3_demo.py` — scorecard extended (conclusion_integration_accuracy, numerical_verification_quality, real_llm_analytical_consistency=not_yet_evaluated).
+- `examples/bo_m3/structural_credit/README.md` — offline reproduce command + separate NOT-run live example.
+- `examples/bo_m3/structural_credit/demo_output/**` — regenerated five-scenario artifacts (byte-stable).
+- `tests/unit/test_bo_m3_validation_numeric.py` (new) — Group B numeric verification.
+- `tests/integration/test_bo_m3_live_readiness.py` (new) — Group C real-model readiness (fake backend only).
+- `tests/integration/test_bo_m3_structural_credit.py`, `tests/integration/test_bo_m3_standalone.py`, `tests/unit/test_bo_m3_senior_management.py` — Group A/D/E extensions.
+- `app/schemas/bo_m3.py` — unchanged (verified no diff).
+
+Full diff: `git -C .worktrees/m3-analytical-quality diff feat/m3-structural-credit...feat/m3-analytical-quality`
 
 </details>
