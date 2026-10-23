@@ -198,7 +198,10 @@ def main(argv=None):
         help="Scripted offline M3 responses (JSON with a 'single_pass' key)")
     m3_backend.add_argument(
         "--live", action="store_true",
-        help="Guarded live provider path (not supported in the offline standalone)")
+        help=("Opt-in real-model path: run ONLY m3_corporate_management against the "
+              "configured provider (LLM_PROVIDER/LLM_MODEL/credentials). Disabled by "
+              "default; incurs model cost; fails safely with a clear blocker when no "
+              "provider is configured. No downstream agent/renderer runs."))
     m3_run.add_argument(
         "--transaction-borrower-entity-id",
         help="Validated case-spec entity id for the proposed facility obligor; "
@@ -512,10 +515,27 @@ def _run_m3(session, database, args):
     from app.services.bo.m3_standalone import run_m3
     from app.services.pipeline.runner import CreditMemoPipeline
 
+    # OPT-IN, default-off real-model pathway. Offline (scripted --responses) is
+    # the default and is clearly separated from the live path. --live constructs
+    # the configured provider backend through the existing provider abstraction
+    # and reads model id / timeout / token limits / credentials from Settings
+    # (SecretStr, never logged). If no provider/credentials are configured this
+    # raises a clear, credential-free error REPORTING the blocker; it NEVER
+    # invents or simulates a successful live run, and there is NO silent fallback
+    # to the scripted path.
+    live_backend = None
+    live_config = None
     if args.live:
-        raise ValueError(
-            "run-m3 is an offline standalone path; --live is guarded and not "
-            "supported here. Supply --responses with a scripted single_pass.")
+        live_backend = _live_backend()  # raises ProviderNotConfiguredError if unset
+        settings = get_settings()
+        live_config = {
+            "provider": settings.llm_provider,
+            "model_id": settings.llm_model,
+            "timeout_seconds": settings.llm_timeout_seconds,
+            "max_output_tokens": settings.llm_max_output_tokens,
+            "max_input_bytes": settings.llm_max_input_bytes,
+            "max_retries": 0,
+        }
 
     if args.bundle:
         if args.cutoff is None:
@@ -539,13 +559,15 @@ def _run_m3(session, database, args):
         simplified_document = corporate_structure_document
         corporate_structure_path = str(args.corporate_structure)
 
-    m3_responses = json.loads(args.responses.read_text(encoding="utf-8"))
+    m3_responses = (json.loads(args.responses.read_text(encoding="utf-8"))
+                    if args.responses else None)
 
     result = run_m3(
         session, case_id=args.case_id, evidence=prepared.evidence_snapshot,
         metrics=prepared.metrics, m3_responses=m3_responses,
         corporate_structure_document=corporate_structure_document,
-        transaction_borrower_entity_id=args.transaction_borrower_entity_id)
+        transaction_borrower_entity_id=args.transaction_borrower_entity_id,
+        live_backend=live_backend, live_config=live_config)
 
     reference_output = None
     reference_path = Path("examples/bo_m3/Sample HCA Corp Structure Final Output.json")
@@ -556,7 +578,7 @@ def _run_m3(session, database, args):
         result, args.output, simplified_document=simplified_document,
         reference_output=reference_output,
         corporate_structure_path=corporate_structure_path,
-        responses_path=str(args.responses))
+        responses_path=(str(args.responses) if args.responses else None))
 
     return {
         "case_id": result.case_id,
@@ -564,7 +586,10 @@ def _run_m3(session, database, args):
         "scope": "business_overview_module_3_only",
         "specialist": "m3_corporate_management",
         "validator_id": "validator_7",
-        "execution_mode": "offline_simulation",
+        "execution_mode": result.run_manifest.get("execution", {}).get(
+            "execution_mode", "offline_simulation"),
+        "real_model_invoked": result.run_manifest.get("execution", {}).get(
+            "real_model_invoked", False),
         "model_called": result.model_called,
         "specialist_validated": result.specialist_validated,
         "corporate_structure_status": result.corporate_structure_status,

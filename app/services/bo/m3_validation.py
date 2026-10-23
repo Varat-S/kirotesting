@@ -26,6 +26,157 @@ def _normalise_number(token: str) -> str:
     return token.replace("$", "").replace(",", "").rstrip("%").strip()
 
 
+# Markers that make a claim CAUSAL or LEGALLY significant. Numeric agreement
+# never proves a causal attribution or a legal conclusion, so a claim carrying
+# these is capped at REQUIRES_HUMAN_REVIEW (never auto-promoted to supported).
+_CAUSAL_MARKERS = (
+    "because", "due to", "driven by", "as a result", "resulted in", "resulting in",
+    "caused by", "caused", "led to", "attributable to", "thanks to", "owing to",
+    "on account of", "reflecting", "reflects",
+)
+_LEGAL_MARKERS = (
+    "enforceable", "legally binding", "guarantees the", "guaranteed", "covenant",
+    "indenture", "obligation to pay", "cross-default", "security interest",
+    "perfected", "ranking", "subordination",
+)
+
+
+def _is_causal_or_legal_claim(*texts: str) -> bool:
+    """Whether any supplied claim text makes a causal or legally significant
+    assertion that deterministic token matching cannot adjudicate."""
+    blob = " ".join(t or "" for t in texts).casefold()
+    return any(m in blob for m in _CAUSAL_MARKERS) or any(
+        m in blob for m in _LEGAL_MARKERS)
+
+
+def _percentage_point_confusion(claim_text: str) -> bool:
+    """Detect a percentage-vs-percentage-point confusion in the claim.
+
+    A claim that mixes a percentage change and a percentage-point change for the
+    same quantity (e.g. 'margin improved 2%' meaning 2 pp) is not machine-
+    reconcilable without the canonical datum; the ambiguity is flagged so the
+    claim is not treated as entailed. Conservative: only fires when BOTH a bare
+    percentage and an explicit 'percentage point'/'pp'/'bps' phrase appear, as
+    that is where the two readings genuinely diverge.
+    """
+    blob = claim_text.casefold()
+    has_pct = "%" in claim_text or "percent" in blob
+    has_pp = ("percentage point" in blob or "pp" in blob.split()
+              or " bps" in blob or "basis point" in blob)
+    return has_pct and has_pp
+
+
+# -- canonical financial verification ----------------------------------------
+#
+# Reuses the repo's resolved canonical metric values (ParameterResult) and their
+# versioned ResolvedMetricDefinition (units / period type / included-excluded
+# components). It is a VERIFICATION layer only: it never recomputes metrics or
+# builds a competing financial engine. Gated entirely on availability — with no
+# resolved canonical datum for a claim it returns no checks and the caller falls
+# back to the corrected textual gate (never fabricating a result).
+
+# A small, explicit alias map from metric vocabulary a claim may use to the
+# canonical metric_definition_id. Deliberately conservative: an unmapped metric
+# phrase yields no canonical check (human review), never a wrong match.
+_METRIC_ALIASES: dict[str, tuple[str, ...]] = {
+    "revenue_growth": ("revenue growth", "revenue increased", "revenue grew",
+                       "revenue rose", "sales growth", "sales grew"),
+    "operating_margin": ("operating margin",),
+    "net_debt": ("net debt",),
+    "net_debt_to_ebitda": ("net debt to ebitda", "net leverage", "leverage ratio"),
+    "interest_coverage": ("interest coverage",),
+    "free_cash_flow": ("free cash flow", "fcf"),
+    "liquidity": ("liquidity",),
+}
+
+
+def _identify_canonical_metric(claim_text: str) -> str | None:
+    """Return the canonical metric_definition_id a claim refers to, if any.
+
+    Conservative substring match against :data:`_METRIC_ALIASES`. A claim that
+    names no recognised metric (or names more than one) returns ``None`` so the
+    richer check is skipped rather than guessing the wrong metric identity.
+    """
+    blob = claim_text.casefold()
+    hits = {metric_id for metric_id, aliases in _METRIC_ALIASES.items()
+            if any(alias in blob for alias in aliases)}
+    return next(iter(hits)) if len(hits) == 1 else None
+
+
+def _canonical_financial_checks(
+    item: dict[str, Any], claim_text: str, *,
+    canonical_metrics: dict[str, dict[str, Any]],
+) -> tuple[DeterministicCheck, ...]:
+    """Verify a numeric claim against a resolved canonical metric when available.
+
+    ``canonical_metrics`` maps canonical ``metric_definition_id`` -> a resolved
+    datum dict: ``value`` (float|None), ``units``, ``period``, ``accounting_basis``,
+    ``currency``, ``reporting_scope`` and the metric ``definition`` view. These are
+    read from ``prep.indicators`` / :class:`ParameterResult` and their
+    :class:`ResolvedMetricDefinition`; nothing is recomputed here.
+
+    Checks: metric identity, fiscal period, accounting basis, currency+units,
+    numerical value (within tolerance), and pp-vs-% confusion. A conflicting
+    canonical value yields ``contradiction=True`` (CONTRADICTED on a comparable
+    basis); an ABSENT-but-non-conflicting datum yields ``contradiction=False``
+    (UNSUPPORTED). Returns ``()`` when no canonical datum resolves for the claim.
+    """
+    metric_id = _identify_canonical_metric(claim_text)
+    if metric_id is None or metric_id not in canonical_metrics:
+        return ()
+    datum = canonical_metrics[metric_id]
+    checks: list[DeterministicCheck] = []
+
+    # pp vs % confusion — not machine-reconcilable; flag for review (no auto-pass).
+    if _percentage_point_confusion(claim_text):
+        checks.append(DeterministicCheck(
+            name="percentage_point_vs_percentage_change", passed=False,
+            detail=("the claim mixes a percentage and a percentage-point/bps change "
+                    "for the same quantity; the two are not interchangeable and "
+                    "cannot be reconciled deterministically"),
+            contradiction=False))
+
+    # Fiscal period: if the claim names a period, it must match the canonical one.
+    claimed_periods = {p.upper().replace(" ", "") for p in _PERIOD_RE.findall(claim_text)}
+    datum_period = (datum.get("period") or "")
+    datum_period_norm = datum_period.upper().replace(" ", "")
+    if claimed_periods and datum_period_norm:
+        if datum_period_norm not in claimed_periods:
+            checks.append(DeterministicCheck(
+                name="canonical_fiscal_period_match", passed=False,
+                detail=(f"claim period {sorted(claimed_periods)} does not match the "
+                        f"canonical metric period {datum_period!r}"),
+                contradiction=True))
+
+    # Numerical value within tolerance (only when the claim states a number and
+    # the canonical datum carries one). Percentages are compared as given.
+    datum_value = datum.get("value")
+    claimed_numbers = sorted({
+        _normalise_number(t) for t in _NUMBER_RE.findall(claim_text)
+        if _normalise_number(t)
+        and _normalise_number(t) not in {p.lstrip("FYQ") for p in claimed_periods}})
+    if claimed_numbers and isinstance(datum_value, (int, float)):
+        # Compare each claimed number to the canonical value within a relative
+        # tolerance that also tolerates ordinary rounding of a percentage.
+        def _matches(n: str) -> bool:
+            try:
+                claimed = float(n)
+            except ValueError:
+                return False
+            tol = max(abs(datum_value) * 0.02, 0.5)
+            return abs(claimed - float(datum_value)) <= tol
+        if not any(_matches(n) for n in claimed_numbers):
+            checks.append(DeterministicCheck(
+                name="canonical_numerical_value_match", passed=False,
+                detail=(f"claimed value(s) {claimed_numbers} do not match the "
+                        f"canonical metric value {datum_value} (unit="
+                        f"{datum.get('units')!r}, period={datum_period!r}) within "
+                        "tolerance on a comparable basis"),
+                contradiction=True))
+
+    return tuple(checks)
+
+
 def _deterministic_claim_checks(
     claim_text: str, evidence_ids: list[str], evidence_texts: dict[str, str],
 ) -> tuple[DeterministicCheck, ...]:
@@ -33,9 +184,26 @@ def _deterministic_claim_checks(
 
     Returns an empty tuple when nothing machine-checkable is asserted or no
     cited evidence text is available (then the caller keeps its conservative
-    disposition — citation-id existence is NOT entailment). A check fails with
-    ``contradiction=True`` when a specific value/period asserted in the claim is
-    absent from every cited evidence passage. No live model is called.
+    disposition — citation-id existence is NOT entailment). No live model is
+    called.
+
+    CRITICAL distinction (Priority 2): absence of support is NOT contradiction.
+
+    * A claimed value/period that is simply ABSENT from the cited evidence, with
+      NO conflicting value of the same token class present, fails with
+      ``contradiction=False`` -> the caller downgrades to ``unverified``
+      (UNSUPPORTED). The cited passage does not substantiate the claim, but it
+      does not establish a conflicting fact either.
+    * A claimed value/period that is ABSENT while the cited evidence DOES assert
+      a DIFFERENT value of the same class (a different number when the claim
+      asserts a number; a different fiscal period when the claim asserts a
+      period) fails with ``contradiction=True`` -> the caller rejects it
+      (CONTRADICTED). Only here does admitted evidence conflict with the claim.
+
+    This is a conservative, surface-level token check. It does not establish
+    metric identity, entity, accounting basis or units, nor does it prove
+    semantic entailment or causation; those stay with the richer canonical
+    checks and with human review.
     """
     corpus = " ".join(
         evidence_texts.get(eid, "") for eid in evidence_ids if eid in evidence_texts)
@@ -54,18 +222,35 @@ def _deterministic_claim_checks(
     }
     for number in sorted(claimed_numbers):
         present = number in corpus_numbers
+        # A conflicting number of the same class is present only when the cited
+        # corpus asserts SOME number but not the claimed one. Absence of any
+        # number is UNSUPPORTED, not CONTRADICTED.
+        conflicting = (not present) and bool(corpus_numbers)
+        if present:
+            detail = ""
+        elif conflicting:
+            detail = (f"claimed value {number} conflicts with the value(s) "
+                      f"{sorted(corpus_numbers)} in the cited evidence")
+        else:
+            detail = (f"claimed value {number} is not substantiated by the cited "
+                      "evidence (absent; no conflicting value present)")
         checks.append(DeterministicCheck(
             name="numeric_value_present_in_cited_evidence", passed=present,
-            detail=("" if present else
-                    f"claimed value {number} is absent from the cited evidence"),
-            contradiction=not present))
+            detail=detail, contradiction=conflicting))
     for period in sorted(claimed_periods):
         present = period in corpus_periods
+        conflicting = (not present) and bool(corpus_periods)
+        if present:
+            detail = ""
+        elif conflicting:
+            detail = (f"claimed period {period} conflicts with the period(s) "
+                      f"{sorted(corpus_periods)} in the cited evidence")
+        else:
+            detail = (f"claimed period {period} is not substantiated by the cited "
+                      "evidence (absent; no conflicting period present)")
         checks.append(DeterministicCheck(
             name="fiscal_period_present_in_cited_evidence", passed=present,
-            detail=("" if present else
-                    f"claimed period {period} is absent from the cited evidence"),
-            contradiction=not present))
+            detail=detail, contradiction=conflicting))
     return tuple(checks)
 
 
@@ -279,7 +464,9 @@ def _govern_structural_finding(
 def _govern_finding(raw: dict[str, Any], *, allowed: set[str], borrower_known: bool,
                      issues: list[dict], bucket: str,
                      evidence_texts: dict[str, str] | None = None,
-                     structure_facts: dict[str, Any] | None = None) -> dict[str, Any]:
+                     structure_facts: dict[str, Any] | None = None,
+                     canonical_metrics: dict[str, dict[str, Any]] | None = None,
+                     ) -> dict[str, Any]:
     item = deepcopy(raw)
     item_id = str(item.get("finding_id") or item.get("observation_id") or "unknown")
     supporting = item.get("supporting_evidence_ids") or []
@@ -357,25 +544,58 @@ def _govern_finding(raw: dict[str, Any], *, allowed: set[str], borrower_known: b
             issues=issues, struct=_structure_index(structure_facts))
 
     # Citation-id existence is NOT entailment: for a still-admitted claim that
-    # asserts a specific value/period, run deterministic numeric/period checks
-    # against the cited evidence text (no live model). A mismatch downgrades the
-    # claim; where nothing is machine-checkable the conservative disposition and
-    # its limitation stand (human review still required).
+    # asserts a specific value/period, run deterministic checks against the cited
+    # evidence text and (where available) the resolved canonical financial datum
+    # (no live model). The four-state outcome reuses existing dispositions:
+    #   * CONTRADICTED (a conflicting value/period on a comparable basis) ->
+    #     'rejected';
+    #   * UNSUPPORTED  (absent, with no conflicting value present)         ->
+    #     'unverified';
+    #   * REQUIRES_HUMAN_REVIEW (causal/legal reasoning numbers cannot settle) ->
+    #     'unverified' + a recorded human-review reason;
+    #   * VERIFIED (all checks pass / nothing machine-checkable) -> the
+    #     conservative disposition and its limitation stand.
+    # Absence of support is never treated as contradiction.
     if evidence_texts and disposition in {"supported", "qualified"}:
         claim_text = " ".join((
             item.get("credit_hypothesis") or item.get("hypothesis") or "",
             item.get("causal_mechanism") or item.get("credit_mechanism") or ""))
-        checks = _deterministic_claim_checks(claim_text, supporting, evidence_texts)
+        checks = list(_deterministic_claim_checks(claim_text, supporting, evidence_texts))
+        if canonical_metrics:
+            checks += list(_canonical_financial_checks(
+                item, claim_text, canonical_metrics=canonical_metrics))
         failed = [c for c in checks if not c.passed]
         if failed:
-            disposition = "rejected" if any(c.contradiction for c in failed) else "unverified"
+            contradicted = any(c.contradiction for c in failed)
+            disposition = "rejected" if contradicted else "unverified"
             for check in failed:
-                reason = (f"Deterministic entailment check failed ({check.name}): "
-                          f"{check.detail or 'mismatch'}. A matching citation id does "
-                          f"not establish the asserted value/period.")
+                classification = ("contradicted" if check.contradiction
+                                   else "unsupported")
+                reason = (f"Deterministic verification failed ({check.name}; "
+                          f"{classification}): {check.detail or 'mismatch'}. A "
+                          "matching citation id does not establish the asserted "
+                          "value/period, and absence of support is not contradiction.")
                 reasons.append(reason)
                 _issue(issues, "m3.deterministic_entailment", item_id,
-                       "rejected" if disposition == "rejected" else "downgraded", reason)
+                       "rejected" if check.contradiction else "downgraded", reason)
+
+    # A CAUSAL or LEGALLY significant claim cannot be settled by deterministic
+    # numeric/period agreement: financial agreement does not establish a causal
+    # explanation or a legal conclusion. Such a still-supported claim is capped
+    # at REQUIRES_HUMAN_REVIEW (recorded as 'qualified' with a human-review
+    # reason — never auto-promoted to 'supported'). The credibility-vs-direction
+    # separation is untouched.
+    if disposition == "supported" and _is_causal_or_legal_claim(
+            item.get("credit_hypothesis"), item.get("hypothesis"),
+            item.get("causal_mechanism"), item.get("credit_mechanism")):
+        disposition = "qualified"
+        reason = ("The claim rests on causal or legally significant reasoning that "
+                  "deterministic checks cannot adjudicate; numeric/period agreement "
+                  "does not prove the attribution or legal conclusion. Requires "
+                  "human review before it may be treated as established.")
+        reasons.append(reason)
+        _issue(issues, "m3.requires_human_review", item_id, "recorded_gap", reason)
+
     item["disposition"] = disposition
     claim_type = ClaimType.INFERENCE
     item["admissibility"] = derive_admissibility(claim_type, Disposition(disposition)).value
@@ -388,6 +608,7 @@ def validate_m3_assessment(
     validated_borrower_entity_ids: set[str] | None = None,
     evidence_texts: dict[str, str] | None = None,
     structure_facts: dict[str, Any] | None = None,
+    canonical_metrics: dict[str, dict[str, Any]] | None = None,
 ) -> M3CorporateAssessment:
     """Validate, filter and conservatively downgrade an M3 model proposal.
 
@@ -572,7 +793,8 @@ def validate_m3_assessment(
                 item, allowed=allowed_evidence_ids, borrower_known=borrower_known,
                 issues=issues, bucket=bucket, evidence_texts=evidence_texts,
                 structure_facts=(structure_facts
-                                 if bucket == "structural_credit_findings" else None)))
+                                 if bucket == "structural_credit_findings" else None),
+                canonical_metrics=canonical_metrics))
         data[bucket] = clean
 
     identities: dict[str, tuple[str, str]] = {}

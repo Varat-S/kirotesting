@@ -51,6 +51,39 @@ from app.services.bo.roster_v3 import ROSTER_V3_VERSION, V3_SPEC_BY_CODE
 M3_STANDALONE_POLICY_VERSION = "bo-m3-standalone-1.0"
 
 
+def _canonical_metrics_from_prep(prep) -> dict[str, dict[str, Any]]:
+    """Build Validator 7's canonical-metric verification map from the prepared
+    deterministic indicators (ParameterResult + their CalculationTrace).
+
+    Reuses the repo's canonical calculation layer; it never recomputes a metric.
+    Keyed by the canonical ``metric_definition_id`` (the indicator parameter_id).
+    A ratio-unit value is ALSO exposed as a percentage so a claim phrased in per
+    cent ("12%") can be compared to a stored ratio (0.12) within tolerance. Only
+    usable numeric indicators are included; nothing is fabricated.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for trace in prep.indicators.traces:
+        value = trace.value
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            continue
+        units = trace.units
+        # Expose a percentage view for ratio metrics so per-cent claims verify.
+        display_value = value * 100 if units == "ratio" else value
+        out[trace.parameter_id] = {
+            "value": display_value,
+            "raw_value": value,
+            "units": units,
+            "period": trace.period,
+            "accounting_basis": None,
+            "currency": None,
+            "reporting_scope": "consolidated",
+            "formula_id": trace.formula_id,
+            "definition_version": trace.definition_version,
+            "calculation_state": trace.calculation_state,
+        }
+    return out
+
+
 @dataclass
 class M3StandaloneResult:
     """The governed, inspectable output of a standalone Module 3 run."""
@@ -84,11 +117,13 @@ def run_m3(
     case_id: str,
     evidence,
     metrics,
-    m3_responses: dict[str, Any],
+    m3_responses: dict[str, Any] | None = None,
     corporate_structure_document: dict[str, Any] | None = None,
     corporate_structure_source_document_id: str = "corp-onboarding-1",
     transaction_borrower_entity_id: str | None = None,
     sector: str = "auto",
+    live_backend=None,
+    live_config: dict[str, Any] | None = None,
 ) -> M3StandaloneResult:
     """Run ONLY Module 3 (specialist + Validator 7) and build the governed JSON.
 
@@ -101,7 +136,35 @@ def run_m3(
     content hash) and attached to the specialist call inputs under
     ``corporate_structure_source`` so the deterministic structure builder can
     read it; otherwise Deliverable A fails closed to the unavailable artifact.
+
+    OPT-IN REAL-MODEL PATHWAY (Priority 3). The standalone path is OFFLINE by
+    default (``live_backend=None`` -> scripted ``m3_responses``). Passing a
+    provider ``live_backend`` (an :class:`~app.services.llm.client.LLMBackend`)
+    switches to a bounded, single-execution LIVE run of ONLY the
+    ``m3_corporate_management`` specialist:
+
+    * the SAME admitted evidence packet and VALIDATED structural facts are built
+      and injected into the specialist context BEFORE it reasons (ordering
+      preserved), and the canonical financial map reaches Validator 7;
+    * exactly one specialist execution is made (no retries unless an explicitly
+      bounded ``live_config['max_retries']`` is configured); timeout + token
+      limits come from the provider's own ``Settings`` (never hardcoded);
+    * the response is schema-validated by :class:`LLMClient` before use; an
+      invalid response fails SAFELY (``partially_failed``) with NO fabricated
+      findings and NO silent fallback to the scripted path;
+    * the run manifest records ``execution_mode`` and ``model_called`` from the
+      ACTUAL (non-fake) call, plus model id + prompt version + source-snapshot
+      metadata; credentials are never logged or persisted (``SecretStr``).
+
+    No OTHER module/agent (Modules 1/2/4, synthesizer, challenger, scoring,
+    renderer) is ever invoked on either path. This function does not itself make
+    a paid call; the caller supplies a configured provider backend.
     """
+    live_mode = live_backend is not None
+    if not live_mode and m3_responses is None:
+        raise ValueError(
+            "run_m3 requires either a scripted m3_responses map (offline) or a "
+            "live_backend (opt-in real-model path); neither was supplied.")
     spec = V3_SPEC_BY_CODE["M3"]
     prep = prepare_specialist(
         session, case_id=case_id, evidence=evidence, metrics=metrics, spec=spec,
@@ -119,9 +182,10 @@ def run_m3(
     if scoring is None:
         raise RuntimeError("Scoring configuration was not bootstrapped.")
 
+    execution_mode = "live" if live_mode else "offline_simulation"
     model_configuration = {
         "scope": "M3_only",
-        "execution_mode": "offline_simulation",
+        "execution_mode": execution_mode,
         "runner_policy_version": M3_STANDALONE_POLICY_VERSION,
         "roster_version": ROSTER_V3_VERSION,
         "transform_version": CORP_STRUCTURE_TRANSFORM_VERSION,
@@ -177,17 +241,31 @@ def run_m3(
     structural_facts = build_structural_facts(structure_artifact)
     prep = replace(prep, structural_facts=structural_facts)
 
-    # --- The ONE specialist call (single pass; scripted offline) -------------
-    # The specialist now genuinely has the validated structure in its input
-    # context (via prep.structural_facts -> _single_pass_inputs) when reasoning.
-    arm = run_single_pass(session, prep, dict(m3_responses["single_pass"]))
+    # --- The ONE specialist call (single pass) -------------------------------
+    # The specialist genuinely has the validated structure in its input context
+    # (via prep.structural_facts -> _single_pass_inputs) when reasoning. Offline:
+    # a scripted response drives a deterministic FakeLLMBackend inside
+    # run_single_pass. Live (opt-in): the configured provider backend is used
+    # exactly ONCE; there is NO silent fallback to the scripted path on failure.
+    if live_mode:
+        arm = run_single_pass(session, prep, backend=live_backend)
+    else:
+        arm = run_single_pass(session, prep, dict(m3_responses["single_pass"]))
 
     def _is_offline_call(call: dict[str, Any]) -> bool:
         config = call.get("model_config") or {}
-        return bool(config.get("simulation")) or config.get("backend") == "fake"
+        if bool(config.get("simulation")) or config.get("backend") == "fake":
+            return True
+        # A FakeLLMBackend that raised (no model_config) still is not a real
+        # model; a recorded call with no model_id (the backend raised before
+        # returning) or a fake model id is never a real invocation.
+        model_id = str(call.get("model_id") or "fake")
+        return model_id.startswith("fake")
 
     # A model was called only if some recorded call did not come from an offline
-    # fake/scripted backend. The standalone path is offline by design.
+    # fake/scripted backend. The offline path is scripted by design; the live
+    # path records the actual provider identity on each call. A real model is
+    # counted ONLY when a genuine (non-fake) provider answered.
     model_called = any(not _is_offline_call(c) for c in arm.calls)
     specialist_validated = bool(arm.validation and arm.validation.valid)
     if arm.validation is not None:
@@ -200,6 +278,7 @@ def run_m3(
     governed_assessment: dict[str, Any] | None = None
     validation_issues: list[dict[str, Any]] = []
     rejected_items: list[dict[str, Any]] = []
+    canonical_metrics = _canonical_metrics_from_prep(prep)
     proposal = (arm.parsed or {}).get("m3_assessment")
     if isinstance(proposal, dict):
         governed = validate_m3_assessment(
@@ -208,10 +287,13 @@ def run_m3(
                 {transaction_borrower_entity_id}
                 if transaction_borrower_entity_id else set()),
             evidence_texts=evidence_texts,
-            structure_facts=structural_facts)
+            structure_facts=structural_facts,
+            canonical_metrics=canonical_metrics)
         governed_assessment = governed.model_dump(mode="json")
         governed_assessment["replay_provenance"] = {
-            "kind": "offline_deterministic_standalone_validation",
+            "kind": ("live_standalone_validation" if live_mode
+                     else "offline_deterministic_standalone_validation"),
+            "execution_mode": execution_mode,
             "model_called": model_called,
             "source_analysis_run_id": prep.analysis_run_id,
             "transaction_borrower_entity_ids": (
@@ -277,14 +359,22 @@ def run_m3(
             "prompt_agent_id": spec.agent_id,
         },
         "execution": {
-            "execution_mode": "offline_simulation",
+            # The manifest MUST state whether a real model was invoked.
+            "execution_mode": execution_mode,
+            "real_model_invoked": live_mode and model_called,
             "model_called": model_called,
             "model_id": (arm.calls[-1].get("model_id") if arm.calls else None),
+            "prompt_agent_id": spec.agent_id,
             "specialist_validated": specialist_validated,
             "specialist_failure": arm.failure,
+            # Bounded execution: exactly one specialist pass unless explicitly
+            # configured, bounded retries are requested (none by default).
+            "specialist_pass_count": len(arm.calls),
+            "max_retries_configured": int((live_config or {}).get("max_retries", 0)),
             # Auditability: whether the validated corporate structure was present
             # in the specialist's ACTUAL input context before the pass ran.
             "structure_in_specialist_context": structural_facts is not None,
+            "canonical_metrics_available": sorted(canonical_metrics),
         },
         "validation": {
             "specialist_valid": specialist_validated,

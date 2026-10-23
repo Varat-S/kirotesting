@@ -114,6 +114,28 @@ def test_numerical_discrepancy_downgrades_even_with_valid_citation():
     assert obs.disposition.value != "supported"
 
 
+def test_absent_numeric_value_is_unsupported_not_contradicted():
+    # The cited evidence contains NO number, so a claimed figure is UNSUPPORTED
+    # (absence of support), NOT contradicted. It is downgraded to 'unverified',
+    # never 'rejected' — absence is not conflict.
+    governed = _govern(_management(hypothesis="Revenue grew 77% in FY2024."),
+                       evidence_texts={"ev-1": "The CFO reduced net leverage as planned."})
+    obs = governed.management_assessments[0]
+    assert obs.disposition.value == "unverified"
+    assert obs.disposition.value != "rejected"
+    assert any("unsupported" in r.casefold() for r in obs.validation_reasons)
+
+
+def test_conflicting_numeric_value_is_contradicted_and_rejected():
+    # The cited evidence asserts a DIFFERENT figure for the same class, so the
+    # claim is CONTRADICTED -> rejected (distinct from the unsupported case).
+    governed = _govern(_management(hypothesis="Revenue grew 77% in FY2024."),
+                       evidence_texts={"ev-1": "Revenue grew 12% in FY2024."})
+    obs = governed.management_assessments[0]
+    assert obs.disposition.value == "rejected"
+    assert any("contradicted" in r.casefold() for r in obs.validation_reasons)
+
+
 def test_neutral_finding_is_distinct_from_insufficient_evidence():
     # A genuinely assessed neutral finding is 'assessed'; an empty assessment is
     # 'insufficient_evidence'. The two are reported in separate states.
@@ -209,10 +231,13 @@ def test_validator_outcomes_accepted_qualified_rejected_human_review():
                     hypothesis="The CEO is well qualified.",
                     credit_mechanism="Reported qualifications over a long career."),  # qualified
         _management(observation_id="C", management_id="m-c",
-                    hypothesis="Revenue was 99% in FY2024."),  # rejected (numeric)
+                    hypothesis="Revenue was 99% in FY2024."),  # rejected (contradicted)
         _management(observation_id="D", management_id="m-d",
                     supporting_evidence_ids=["ev-unknown"]),  # unverified / invalid ref
-        evidence_texts={"ev-1": "The CFO reduced net leverage as planned."})
+        # The cited evidence asserts a DIFFERENT value for C (a genuine
+        # contradiction, not mere absence), so C is rejected; A/B/D unchanged.
+        evidence_texts={"ev-1": "Revenue was 12% in FY2024; the CFO reduced net "
+                                "leverage as planned."})
     by_id = {m.observation_id: m.disposition.value
              for m in governed.management_assessments}
     assert by_id["A"] == "supported"
@@ -233,8 +258,11 @@ def test_rejected_material_finding_excluded_from_conclusion_but_kept_in_audit():
         _management(observation_id="GOOD", management_id="m-good",
                     materiality="high", credit_direction="neutral"),
         _management(observation_id="BAD", management_id="m-bad", materiality="high",
-                    hypothesis="Revenue grew 77% in FY2024."),  # rejected numeric
-        evidence_texts={"ev-1": "The CFO reduced net leverage; revenue grew modestly."})
+                    hypothesis="Revenue grew 77% in FY2024."),  # rejected (contradicted)
+        # The cited evidence asserts a conflicting figure (12%), so BAD is a
+        # genuine contradiction rather than mere absence of support.
+        evidence_texts={"ev-1": "The CFO reduced net leverage; revenue grew 12% "
+                                "in FY2024."})
     bad = next(m for m in governed.management_assessments
                if m.observation_id == "BAD")
     assert bad.disposition.value == "rejected"

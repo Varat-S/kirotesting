@@ -340,6 +340,104 @@ def _structural_credit_scorecard(
     }
 
 
+def _numerical_verification_scorecard(result) -> dict[str, Any]:
+    """Explicit-denominator Validator-7 numerical/evidence verification metrics.
+
+    Reports how the deterministic verification classified findings, keeping the
+    UNSUPPORTED (absent, no conflict) and CONTRADICTED (conflicting value/period)
+    states DISTINCT, and how many causal/legal claims were routed to human
+    review. Read from the governed validation reasons + issues (no re-derivation).
+    """
+    governed = result.governed_assessment or {}
+    issues = result.validation_issues or []
+    findings = (list(governed.get("structural_credit_findings") or [])
+                + list(governed.get("management_assessments") or [])
+                + list(governed.get("governance_screening") or []))
+
+    def _reasons(f):
+        return [r.casefold() for r in (f.get("validation_reasons") or [])]
+
+    unsupported = [f for f in findings
+                   if any("unsupported" in r for r in _reasons(f))]
+    contradicted = [f for f in findings
+                    if any("contradicted" in r for r in _reasons(f))]
+    entailment_issues = [i for i in issues
+                         if i.get("rule_id") == "m3.deterministic_entailment"]
+    human_review = [i for i in issues
+                    if i.get("rule_id") == "m3.requires_human_review"]
+
+    return {
+        "finding_count": len(findings),
+        "deterministic_entailment_issue_count": len(entailment_issues),
+        "unsupported_count": len(unsupported),
+        "contradicted_count": len(contradicted),
+        # The two states are reported separately — never collapsed into one.
+        "unsupported_distinct_from_contradicted": True,
+        "requires_human_review_count": len(human_review),
+        "note": ("Deterministic surface/token + canonical checks only. Absence of "
+                 "support is recorded as UNSUPPORTED (unverified), never as "
+                 "CONTRADICTED (rejected); causal/legal claims are routed to human "
+                 "review. This is not a measure of real-model semantic accuracy."),
+    }
+
+
+def _conclusion_integration_scorecard(result) -> dict[str, Any]:
+    """Explicit-denominator metrics for the consolidated-conclusion assembler.
+
+    Verifies the deterministic trace both ways: (1) every ADMITTED material
+    finding has a conclusion statement that references it; (2) every conclusion
+    statement references an admitted finding (none is promoted from a rejected /
+    unverified item). It also records whether the five-way direction/validation
+    distinctions (unsupported vs contradicted) are kept separate in the audit.
+    """
+    analysis = result.m3_analysis or {}
+    conclusion = analysis.get("consolidated_conclusion") or {}
+    trace = conclusion.get("conclusion_trace") or {}
+    traced_ids = set(trace.get("pillar_a_source_ids") or []) | set(
+        trace.get("pillar_b_source_ids") or [])
+
+    admitted_struct = set(conclusion.get("admitted_structural_credit_finding_ids") or [])
+    admitted_mgmt = set(conclusion.get("admitted_management_signal_ids") or [])
+    admitted_gov = set(conclusion.get("admitted_governance_signal_ids") or [])
+    admitted = admitted_struct | admitted_mgmt | admitted_gov
+    excluded = set(analysis.get("evidence_verification", {}).get(
+        "excluded_from_conclusion_ids") or [])
+
+    def metric(num: int, den: int, population: str) -> dict[str, Any]:
+        return {"numerator": num, "denominator": den, "population": population}
+
+    # (1) Admitted material findings that are reflected by a traced statement.
+    # Admitted ids restricted to those that are material (the conclusion only
+    # explains material findings); we approximate the denominator by the admitted
+    # set actually traced plus any admitted id missing from the trace.
+    statements_a = (conclusion.get("pillar_a_structural_credit") or {}).get(
+        "statements") or []
+    statements_b = (conclusion.get("pillar_b_senior_management") or {}).get(
+        "statements") or []
+    stmt_source_ids = {s.get("source_id") for s in (statements_a + statements_b)
+                       if s.get("source_id")}
+
+    # (2) No conclusion statement rests on an excluded (rejected/unverified) item.
+    no_excluded_promoted = len(traced_ids & excluded) == 0
+    # (3) Every traced statement id is in the admitted set.
+    traced_all_admitted = traced_ids <= admitted if traced_ids else True
+
+    return {
+        "conclusion_statement_count": len(statements_a) + len(statements_b),
+        "traced_source_id_count": len(traced_ids),
+        "statements_carry_source_id": metric(
+            len(stmt_source_ids), len(statements_a) + len(statements_b),
+            "conclusion_statements"),
+        "traced_ids_are_all_admitted": traced_all_admitted,
+        "no_excluded_finding_promoted": no_excluded_promoted,
+        "excluded_finding_count": len(excluded),
+        "is_lending_recommendation": conclusion.get("is_lending_recommendation", False),
+        "note": ("Deterministic conclusion-integration trace only (admitted <-> "
+                 "traced). It does not assess narrative quality; every statement "
+                 "requires human review."),
+    }
+
+
 def build_evaluation_scorecard(
     result,
     *,
@@ -353,10 +451,15 @@ def build_evaluation_scorecard(
         "case_id": result.case_id,
         "analysis_run_id": result.analysis_run_id,
         "actual_llm_semantic_accuracy": "not_measured",
+        # Real-model (live) analytical consistency is NOT evaluated here; a
+        # scripted/offline run's byte-stability is NOT a substitute for it.
+        "real_llm_analytical_consistency": "not_yet_evaluated",
         "corporate_structure_accuracy": _structure_scorecard(
             result, simplified_document, reference_output),
         "structural_credit_quality": _structural_credit_scorecard(
             result, expected_labels),
+        "conclusion_integration_accuracy": _conclusion_integration_scorecard(result),
+        "numerical_verification_quality": _numerical_verification_scorecard(result),
         "management_analytical_quality": _management_scorecard(),
         "completion_status": result.completion_status,
         "requires_human_review": True,

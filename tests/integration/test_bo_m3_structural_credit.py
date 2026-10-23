@@ -451,6 +451,117 @@ def test_t12_senior_management_unchanged():
         "admitted_management_signal_ids"]
 
 
+# -- Group A: the consolidated conclusion is MEANINGFUL + differentiated ------
+
+
+def _conclusion(result) -> dict:
+    return result.m3_analysis["consolidated_conclusion"]
+
+
+def _commentary_text(result) -> str:
+    return " ".join(_conclusion(result)["integrated_commentary"]).casefold()
+
+
+def test_groupA_positive_scenario_yields_positive_recourse_commentary():
+    result = _run_fictional(_fresh_session(), "fictional_positive")
+    conclusion = _conclusion(result)
+    text = _commentary_text(result)
+    # The positive guarantor finding drives recourse-improvement language ...
+    assert "recourse" in text
+    assert "enforceab" in text  # subject to enforceability/limitations
+    # ... and the admitted finding is traced into the conclusion.
+    assert "SCF-POS-GUARANTOR" in conclusion["conclusion_trace"]["pillar_a_source_ids"]
+    assert "SCF-POS-GUARANTOR" in conclusion["admitted_structural_credit_finding_ids"]
+    assert conclusion["is_lending_recommendation"] is False
+
+
+def test_groupA_negative_scenario_yields_constrained_repayment_commentary():
+    result = _run_fictional(_fresh_session(), "fictional_negative")
+    conclusion = _conclusion(result)
+    text = _commentary_text(result)
+    assert "restriction" in text or "restricted" in text
+    assert "flexibility" in text or "constrain" in text
+    assert "SCF-NEG-CASHFLOW" in conclusion["conclusion_trace"]["pillar_a_source_ids"]
+
+
+def test_groupA_mixed_preserves_both_without_netting():
+    result = _run_fictional(_fresh_session(), "fictional_mixed")
+    conclusion = _conclusion(result)
+    statements = conclusion["pillar_a_structural_credit"]["statements"]
+    directions = {s["credit_direction"] for s in statements}
+    # Both a positive and a negative finding are retained side by side.
+    assert {"positive", "negative"} <= directions
+    source_ids = set(conclusion["conclusion_trace"]["pillar_a_source_ids"])
+    assert {"SCF-MIX-POS", "SCF-MIX-NEG"} <= source_ids
+    # They are preserved, not netted into a single score.
+    summary = conclusion["pillar_a_structural_credit"]["summary"].casefold()
+    assert "not netted" in summary or "preserved separately" in summary
+
+
+def test_groupA_rejected_finding_excluded_from_authoritative_conclusion():
+    result = _run_fictional(_fresh_session(), "fictional_unsupported_guarantee")
+    conclusion = _conclusion(result)
+    assert "SCF-BAD-GUARANTEE" not in conclusion[
+        "admitted_structural_credit_finding_ids"]
+    assert "SCF-BAD-GUARANTEE" not in conclusion["conclusion_trace"][
+        "pillar_a_source_ids"]
+    # Retained in the audit trail (excluded, not dropped).
+    assert "SCF-BAD-GUARANTEE" in result.m3_analysis["evidence_verification"][
+        "excluded_from_conclusion_ids"]
+
+
+def test_groupA_simulated_scenario_retains_hypothetical_qualifications():
+    result = _run_fictional(_fresh_session(), "fictional_mixed")
+    statements = _conclusion(result)["pillar_a_structural_credit"]["statements"]
+    assert statements
+    for statement in statements:
+        assert statement["hypothetical_simulated_basis"] is True
+        assert any("simulat" in q.casefold() or "hypothetical" in q.casefold()
+                   for q in statement["qualifications"])
+
+
+def test_groupA_insufficient_evidence_is_not_neutral():
+    # HCA: hierarchy available but no supported debt/guarantee/cash finding.
+    result = _run_hca(_fresh_session())
+    summary = _conclusion(result)["pillar_a_structural_credit"]["summary"].casefold()
+    assert "insufficient evidence is not a neutral finding" in summary
+    assert "what can" in summary and "what cannot" in summary
+    assert _conclusion(result)["admitted_structural_credit_finding_ids"] == []
+
+
+def test_groupA_five_scenarios_are_materially_distinct():
+    cases = {
+        "hca_simulated": _run_hca(_fresh_session()),
+        "fictional_positive": _run_fictional(_fresh_session(), "fictional_positive"),
+        "fictional_negative": _run_fictional(_fresh_session(), "fictional_negative"),
+        "fictional_mixed": _run_fictional(_fresh_session(), "fictional_mixed"),
+        "fictional_unsupported_guarantee": _run_fictional(
+            _fresh_session(), "fictional_unsupported_guarantee"),
+    }
+    commentaries = {name: _commentary_text(r) for name, r in cases.items()}
+    # Each scenario's commentary is unique prose (NOT a shared generic template,
+    # NOT merely a list of finding ids).
+    assert len(set(commentaries.values())) == len(commentaries)
+    # None of the commentaries is a bare id list: each carries substantial
+    # explanatory prose (full sentences, not just finding ids/counts).
+    for text in commentaries.values():
+        assert len(text) > 200
+        assert "lender" in text or "recourse" in text or "repayment" in text \
+            or "established" in text
+    # Positive and negative differ in direction language.
+    assert "recourse" in commentaries["fictional_positive"]
+    assert ("restrict" in commentaries["fictional_negative"]
+            or "constrain" in commentaries["fictional_negative"])
+
+
+def test_groupA_identical_governed_findings_reassemble_byte_identically():
+    from app.core.hashing import canonical_json
+
+    first = _run_fictional(_fresh_session(), "fictional_mixed")
+    second = _run_fictional(_fresh_session(), "fictional_mixed")
+    assert canonical_json(_conclusion(first)) == canonical_json(_conclusion(second))
+
+
 # -- T-demo: six files + the new structural_credit_quality scorecard ----------
 
 

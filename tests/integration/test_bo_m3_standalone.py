@@ -283,8 +283,11 @@ def test_repeated_identical_runs_are_materially_identical():
 
 def test_materially_different_proposal_is_reported_not_reconciled():
     # First run: a supported board observation. Second run: the SAME observation
-    # id now asserts a specific revenue figure absent from the cited evidence, so
-    # Validator 7 governs it to 'rejected' (citation id != entailment).
+    # id now asserts a specific revenue figure that is ABSENT from the cited
+    # evidence (which carries no number), so Validator 7 governs it to
+    # 'unverified' — UNSUPPORTED, not contradicted: absence of support is not
+    # contradiction (Priority 2). The material claim is still kept OUT of the
+    # authoritative conclusion and retained in the audit trail.
     stable = _run(_fresh_session())
     unstable = _run(
         _fresh_session(),
@@ -299,10 +302,11 @@ def test_materially_different_proposal_is_reported_not_reconciled():
     assert first_fp != second_fp
     differing = [k for k in first_fp if first_fp[k] != second_fp[k]]
     assert "management" in differing
-    # The materially different claim is governed to rejected (contradicted numeric)
-    # and is excluded from the authoritative conclusion, yet retained for audit.
+    # The materially different claim is governed to UNSUPPORTED (unverified),
+    # NOT contradicted/rejected, and is excluded from the authoritative
+    # conclusion, yet retained for audit.
     unstable_obs = unstable.governed_assessment["management_assessments"][0]
-    assert unstable_obs["disposition"] == "rejected"
+    assert unstable_obs["disposition"] == "unverified"
     assert "MO1" not in unstable.m3_analysis["consolidated_conclusion"][
         "admitted_management_signal_ids"]
     assert "MO1" in unstable.m3_analysis["evidence_verification"][
