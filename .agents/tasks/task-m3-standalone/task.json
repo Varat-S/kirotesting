@@ -1,0 +1,7 @@
+{
+  "task_id": "task-m3-standalone",
+  "task_description": "Targeted improvement of Business Overview Module 3 (Corporate Structure & Senior Management) as a self-contained, standalone analytical unit on branch feat/m3-standalone. Fix the exported m3_corporate_structure.json v2.0 output contract (de-wrap from refined_structure + provenance sidecar), harden Validator 7 and the senior-management reasoning (credibility-vs-credit-direction distinction; rejected findings excluded from authoritative conclusion; completion-status consistency; citation-id != entailment), add a minimal standalone run_m3 execution pathway + CLI + inspectable demo dir (two deliverables, validation_report, evaluation_scorecard, run_manifest) built from a real-admitted-HCA-10-K management benchmark, and prove it all with offline tests. Preserve the single specialist m3_corporate_management, Validator 7 interfaces, narrative contract, evidence-admission/provenance, missing-JSON safeguards and the credit-signal vocabulary. Additive/versioned/backward-compatible schema changes only. No downstream/out-of-scope work. Offline only; no paid model calls.",
+  "status": "completed",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}
