@@ -39,6 +39,7 @@ from app.services.bo.corporate_structure import (
 )
 from app.services.bo.corporate_structure_render import render_corporate_structure_svg
 from app.services.bo.indicators import IndicatorSet
+from app.services.bo.m3_artifacts import build_m3_deliverables
 from app.services.bo.m3_output import assemble_m3_output
 from app.services.bo.m3_validation import validate_m3_assessment
 from app.services.bo.reconcile import reconcile
@@ -398,10 +399,39 @@ def build_m3_corporate_structure(
     artifact = build_corporate_structure_artifact(
         source, expected_case_id=case_id or "")
     svg = None
-    if artifact.status == "available" and source is not None:
-        svg = render_corporate_structure_svg(
-            artifact, (source.payload or {}).get("visual_spec") or {})
+    if artifact.status == "available":
+        # Render the optional SVG preview from the REFINED (validated / generated)
+        # v2.0 structure, not the raw source — for a transformed v1.0 onboarding
+        # document the source has no visual_spec.
+        visual_spec = (artifact.refined_structure or {}).get("visual_spec") or {}
+        svg = render_corporate_structure_svg(artifact, visual_spec)
     return artifact, svg
+
+
+def admit_corporate_structure_source(
+    document: dict[str, Any], *, case_id: str, source_document_id: str,
+) -> dict[str, Any]:
+    """Build a case-associated corporate-structure source context for M3.
+
+    This is the smallest correct, auditable admission seam: a caller (a run
+    driver or CLI) that has a corporate-structure onboarding JSON for a SPECIFIC
+    case uses this to attach it to the M3 agent call inputs under
+    ``corporate_structure_source``. Case association is recorded explicitly via
+    ``registered_case_id`` and ``case_id`` (never inferred from filename or
+    company name), and a content hash is computed for provenance. The resulting
+    dict is what :func:`build_m3_corporate_structure` reads.
+
+    It does NOT auto-load any fixture and does NOT select a case; the caller must
+    supply the trusted case id. Accepts either the simplified v1.0 onboarding
+    document or a legacy rich v2.0 document.
+    """
+    return {
+        "case_id": case_id,
+        "registered_case_id": case_id,
+        "source_document_id": source_document_id,
+        "document_hash": content_hash(document),
+        "payload": deepcopy(document),
+    }
 
 
 def _module_conclusions(agents, hypotheses, governed_m3, *, case_id=None):
@@ -438,6 +468,13 @@ def _module_conclusions(agents, hypotheses, governed_m3, *, case_id=None):
         structure_svg=structure_svg)
     out["M3"]["m3_output"] = m3_output
     out["M3"]["corporate_structure_status"] = structure_artifact.status
+    # Architecture V6 two-output deliverables: A (m3_corporate_structure, the
+    # refined presentation-ready JSON; None when unavailable) and B (m3_analysis,
+    # the governed analytical record referencing A). These are also written as
+    # standalone files by write_completion_artifacts.
+    deliverables = build_m3_deliverables(structure_artifact, governed_m3, m3_output)
+    out["M3"]["m3_corporate_structure"] = deliverables["m3_corporate_structure"]
+    out["M3"]["m3_analysis"] = deliverables["m3_analysis"]
     # Reflect partial completion (A unavailable, B assessed) without silently
     # marking the module fully complete, but never weaken an already-incomplete
     # module (missing/failed narrative agents still dominate).
@@ -922,6 +959,23 @@ def write_completion_artifacts(packet: dict[str, Any], output_dir: str | Path) -
     }
     paths["packet"].write_text(canonical_json(packet) + "\n", encoding="utf-8")
     paths["handoff"].write_text(canonical_json(packet["handoff"]) + "\n", encoding="utf-8")
+
+    # Module 3 Architecture V6 standalone deliverables. Deliverable A
+    # (m3_corporate_structure.json) is written ONLY when a validated corporate
+    # structure is available (fail-closed: no diagram is fabricated when the
+    # onboarding JSON is absent). Deliverable B (m3_analysis.json) is always
+    # written and references A by stable artifact id.
+    m3 = ((packet.get("handoff") or {}).get("module_conclusions") or {}).get("M3") or {}
+    m3_structure = m3.get("m3_corporate_structure")
+    m3_analysis = m3.get("m3_analysis")
+    if m3_structure is not None:
+        paths["m3_corporate_structure"] = folder / "m3_corporate_structure.json"
+        paths["m3_corporate_structure"].write_text(
+            canonical_json(m3_structure) + "\n", encoding="utf-8")
+    if m3_analysis is not None:
+        paths["m3_analysis"] = folder / "m3_analysis.json"
+        paths["m3_analysis"].write_text(
+            canonical_json(m3_analysis) + "\n", encoding="utf-8")
     source = packet["source"]["summary"]
     usage = packet["incremental_usage"]
     findings = packet["challenge"]["findings"]

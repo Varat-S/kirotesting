@@ -1,10 +1,22 @@
 """Generic single-company corporate-structure JSON adapter + Validator 7 checks.
 
-This module turns an *explicitly case-associated* onboarding corporate-structure
-JSON into a validated, render-ready :class:`CorporateStructureArtifact`. It is
-company-agnostic: no company key, entity name, count, percentage, role,
-guarantor flag or coordinate is hardcoded. The bundled development fixture is
-never auto-loaded.
+This module turns an *explicitly case-associated* corporate-structure JSON into a
+validated, render-ready :class:`CorporateStructureArtifact`. Two input contracts
+are accepted:
+
+* the **simplified v1.0 onboarding** document (``schema_version`` "1.0",
+  ``document_type`` "corporate_structure_onboarding") — a nested corporate tree
+  with no presentation. It is parsed into a canonical graph, validated and
+  deterministically transformed to the rich v2.0 contract (see
+  :mod:`app.services.bo.corporate_structure_onboarding`), then reconciled back to
+  the input for round-trip fidelity; and
+* the **rich v2.0 presentation-ready** document (``schema_version`` "2.0") — the
+  legacy direct contract, handled unchanged for backward compatibility.
+
+Either way the result is a validated v2.0 artifact (``refined_structure`` is the
+primary ``m3_corporate_structure.json`` payload). The adapter is company-
+agnostic: no company key, entity name, count, percentage, role, guarantor flag
+or coordinate is hardcoded. The bundled development fixture is never auto-loaded.
 
 Mandatory rule — *no JSON, no diagram*. A diagram is produced only when the
 current case has an explicitly ingested, valid, case-associated corporate-
@@ -30,15 +42,23 @@ from app.schemas.bo import Confidence, Direction
 from app.schemas.bo_m3_structure import (
     CORP_STRUCTURE_ADAPTER_VERSION,
     CORP_STRUCTURE_RENDERER_VERSION,
+    CORP_STRUCTURE_TRANSFORM_VERSION,
     CORP_STRUCTURE_VALIDATOR_VERSION,
     NO_JSON_MESSAGE,
     SUPPORTED_ARTIFACT_TYPES,
+    SUPPORTED_ONBOARDING_DOCUMENT_TYPES,
+    SUPPORTED_ONBOARDING_SCHEMA_VERSIONS,
     SUPPORTED_SCHEMA_VERSIONS,
     CorporateStructureArtifact,
     CorporateStructureProvenance,
     StructuralCreditSignal,
     StructureLink,
     StructureNode,
+)
+from app.services.bo.corporate_structure_onboarding import (
+    build_onboarding_graph,
+    reconcile_roundtrip,
+    transform_to_refined_v2,
 )
 
 
@@ -133,12 +153,57 @@ def build_corporate_structure_artifact(
         return _unavailable(NO_JSON_MESSAGE, issues, status="rejected",
                             limitations=["Source case id mismatch; diagram withheld."])
 
+    original_payload = deepcopy(source.payload)
     payload = deepcopy(source.payload)
     if not isinstance(payload, dict):
         _issue(issues, "m3.corp_structure_malformed", source.source_document_id,
                "rejected", "Corporate-structure source is not a JSON object.")
         return _unavailable(NO_JSON_MESSAGE, issues, status="rejected",
                             limitations=["Malformed corporate-structure JSON; diagram withheld."])
+
+    # --- Simplified v1.0 onboarding input -> deterministic v2.0 transform ----
+    # When the supplied document is a simplified onboarding corporate tree, build
+    # the canonical graph, validate it structurally, and deterministically
+    # transform it to the rich v2.0 contract that the downstream validator and
+    # renderer already consume. A legacy v2.0 document is handled directly below
+    # (backward compatible).
+    onboarding_meta: dict[str, Any] | None = None
+    roundtrip: dict[str, Any] | None = None
+    refined_payload: dict[str, Any] | None = None
+    if payload.get("document_type") in SUPPORTED_ONBOARDING_DOCUMENT_TYPES \
+            or payload.get("schema_version") in SUPPORTED_ONBOARDING_SCHEMA_VERSIONS:
+        graph, onboarding_issues = build_onboarding_graph(payload)
+        issues.extend(onboarding_issues)
+        if graph is None:
+            return CorporateStructureArtifact(
+                status="rejected", message=NO_JSON_MESSAGE,
+                validation_issues=issues,
+                limitations=["Simplified onboarding corporate-structure JSON "
+                             "failed validation; diagram withheld."])
+        refined_payload = transform_to_refined_v2(graph)
+        roundtrip = reconcile_roundtrip(graph, refined_payload)
+        if not roundtrip["consistent"]:
+            # The deterministic transform must round-trip exactly; a mismatch is
+            # a programmer error, not a data problem. Fail closed rather than
+            # emit an unreconciled diagram.
+            _issue(issues, "m3.onboarding_roundtrip", None, "rejected",
+                   "Transformed v2.0 output does not reconcile to the validated "
+                   f"v1.0 input: {roundtrip['discrepancies']}")
+            return CorporateStructureArtifact(
+                status="rejected", message=NO_JSON_MESSAGE,
+                validation_issues=issues,
+                roundtrip_reconciliation=roundtrip,
+                limitations=["Transform round-trip reconciliation failed; diagram "
+                             "withheld."])
+        onboarding_meta = {
+            "onboarding_schema_version": str(payload.get("schema_version")),
+            "onboarding_document_type": str(payload.get("document_type")),
+            "onboarding_document_hash": (source.document_hash
+                                         or content_hash(original_payload)),
+            "transform_version": CORP_STRUCTURE_TRANSFORM_VERSION,
+        }
+        # Continue the existing v2.0 validation against the generated payload.
+        payload = refined_payload
 
     schema_version = payload.get("schema_version")
     artifact_type = payload.get("artifact_type")
@@ -300,7 +365,10 @@ def build_corporate_structure_artifact(
             limitations=["Corporate-structure JSON failed validation; diagram withheld."])
 
     # --- Provenance (never mutate the source) --------------------------------
-    document_hash = source.document_hash or content_hash(source.payload)
+    # The document hash is over the ORIGINAL ingested source so an auditor can
+    # tie the diagram to exactly what was onboarded (the v1.0 doc when a
+    # transform ran, or the v2.0 doc for a direct source).
+    document_hash = source.document_hash or content_hash(original_payload)
     visual_spec = payload.get("visual_spec") or {}
     footer = (visual_spec.get("footer") or {}).get("text")
     provenance = CorporateStructureProvenance(
@@ -325,6 +393,7 @@ def build_corporate_structure_artifact(
         adapter_version=CORP_STRUCTURE_ADAPTER_VERSION,
         validator_version=CORP_STRUCTURE_VALIDATOR_VERSION,
         renderer_version=CORP_STRUCTURE_RENDERER_VERSION,
+        **(onboarding_meta or {}),
     )
 
     is_simulated = bool(payload.get("simulation_disclaimer")
@@ -359,6 +428,11 @@ def build_corporate_structure_artifact(
         validation_issues=issues,
         limitations=limitations,
         is_simulated=is_simulated,
+        # Deliverable A: the refined, presentation-ready v2.0 JSON. For a
+        # transformed onboarding document this is the generated output; for a
+        # direct v2.0 source it is the validated payload itself.
+        refined_structure=refined_payload if refined_payload is not None else payload,
+        roundtrip_reconciliation=roundtrip,
     )
 
 

@@ -40,9 +40,18 @@ from app.schemas.agentic import Materiality
 CORP_STRUCTURE_ADAPTER_VERSION = "bo-m3-corp-structure-adapter-1.0.0"
 CORP_STRUCTURE_VALIDATOR_VERSION = "validator-7-corp-structure-1.0.0"
 CORP_STRUCTURE_RENDERER_VERSION = "bo-m3-corp-structure-svg-1.0.0"
+# The deterministic v1.0 onboarding -> v2.0 refined-output transformer. Bumped
+# independently of the downstream v2.0 adapter/renderer.
+CORP_STRUCTURE_TRANSFORM_VERSION = "bo-m3-corp-structure-transform-1.0.0"
 
+# The downstream presentation-ready contract (what the renderer/memo consume).
 SUPPORTED_SCHEMA_VERSIONS = ("2.0",)
 SUPPORTED_ARTIFACT_TYPES = ("llm_reproducible_corporate_structure_diagrams",)
+
+# The simplified onboarding contract that a company supplies at ingestion. It is
+# a nested corporate_tree with NO presentation (no colours/coordinates/canvas).
+SUPPORTED_ONBOARDING_SCHEMA_VERSIONS = ("1.0",)
+SUPPORTED_ONBOARDING_DOCUMENT_TYPES = ("corporate_structure_onboarding",)
 
 # The exact, mandated message when no valid case-associated corporate-structure
 # JSON is available. Must be displayed verbatim.
@@ -130,6 +139,12 @@ class CorporateStructureProvenance(_Strict):
     adapter_version: str = CORP_STRUCTURE_ADAPTER_VERSION
     validator_version: str = CORP_STRUCTURE_VALIDATOR_VERSION
     renderer_version: str = CORP_STRUCTURE_RENDERER_VERSION
+    # Set only when the artifact originated from a simplified v1.0 onboarding
+    # document that was deterministically transformed to the v2.0 contract.
+    onboarding_schema_version: str | None = None
+    onboarding_document_type: str | None = None
+    onboarding_document_hash: str | None = None
+    transform_version: str | None = None
 
 
 class CorporateStructureArtifact(_Strict):
@@ -151,3 +166,13 @@ class CorporateStructureArtifact(_Strict):
     validation_issues: list[dict] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
     is_simulated: bool = False
+    # The refined, presentation-ready v2.0 JSON (Deliverable A,
+    # ``m3_corporate_structure.json``). Populated when the artifact was produced
+    # by transforming a simplified v1.0 onboarding document; empty for a direct
+    # v2.0 source. This is the primary corporate-structure output and is never
+    # replaced by an SVG/PNG.
+    refined_structure: dict | None = None
+    # Deterministic round-trip reconciliation of the refined v2.0 output against
+    # the validated v1.0 input (entities, links, guarantors). Present only for a
+    # transformed onboarding document.
+    roundtrip_reconciliation: dict | None = None
