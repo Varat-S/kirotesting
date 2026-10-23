@@ -25,7 +25,7 @@ backend is used; the manifest records whether a model was called.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -43,6 +43,7 @@ from app.services.bo.completion import (
 )
 from app.services.bo.m3_artifacts import build_m3_deliverables
 from app.services.bo.m3_output import assemble_m3_output
+from app.services.bo.m3_structure_context import build_structural_facts
 from app.services.bo.m3_validation import validate_m3_assessment
 from app.services.bo.roster_v3 import ROSTER_V3_VERSION, V3_SPEC_BY_CODE
 
@@ -152,7 +153,33 @@ def run_m3(
         evidence_ids=list(prep.packet.evidence_ids)))
     session.flush()
 
+    # --- CRITICAL ORDERING FIX: build + validate the corporate structure and
+    #     inject it into the specialist's input context BEFORE the pass runs. --
+    # The structure is built from the admitted, case-associated source (not from
+    # a synthetic record created after the fact). Its `status` is set to
+    # "validated" provisionally only so the structure builder reads the admitted
+    # source; structure validity is independent of the specialist's own
+    # validation (re-derived below) and never feeds the structure graph.
+    structure_calls = [{"inputs": (
+        {"corporate_structure_source": structure_source}
+        if structure_source is not None else {})}]
+    pre_structure_agent_calls = [{
+        "agent_id": "m3_corporate_management", "code": "M3",
+        "status": "validated", "coverage": [], "calls": structure_calls,
+    }]
+    structure_artifact, structure_svg = build_m3_corporate_structure(
+        pre_structure_agent_calls, case_id=case_id)
+
+    # Compact, provenance-preserving representation (validated nodes + links with
+    # stable ids, borrower, guarantor indicators, grouping classifications,
+    # source doc id/hash, simulation status, deterministic observations). None
+    # when no structure is available -> no invented facts enter the context.
+    structural_facts = build_structural_facts(structure_artifact)
+    prep = replace(prep, structural_facts=structural_facts)
+
     # --- The ONE specialist call (single pass; scripted offline) -------------
+    # The specialist now genuinely has the validated structure in its input
+    # context (via prep.structural_facts -> _single_pass_inputs) when reasoning.
     arm = run_single_pass(session, prep, dict(m3_responses["single_pass"]))
 
     def _is_offline_call(call: dict[str, Any]) -> bool:
@@ -180,7 +207,8 @@ def run_m3(
             validated_borrower_entity_ids=(
                 {transaction_borrower_entity_id}
                 if transaction_borrower_entity_id else set()),
-            evidence_texts=evidence_texts)
+            evidence_texts=evidence_texts,
+            structure_facts=structural_facts)
         governed_assessment = governed.model_dump(mode="json")
         governed_assessment["replay_provenance"] = {
             "kind": "offline_deterministic_standalone_validation",
@@ -193,20 +221,10 @@ def run_m3(
         validation_issues = list(governed_assessment.get("validation_issues") or [])
         rejected_items = list(governed_assessment.get("rejected_items") or [])
 
-    # --- Deterministic corporate-structure processing (Deliverable A) --------
-    # Reuse the trusted, case-associated admission path: build the structure from
-    # the admitted source attached to the specialist call inputs. No JSON for
-    # this case -> mandated unavailable artifact (fail closed).
-    structure_calls = [{"inputs": (
-        {"corporate_structure_source": structure_source}
-        if structure_source is not None else {})}]
-    m3_agent_calls = [{
-        "agent_id": "m3_corporate_management", "code": "M3",
-        "status": "validated" if specialist_validated else "rejected",
-        "coverage": [], "calls": structure_calls,
-    }]
-    structure_artifact, structure_svg = build_m3_corporate_structure(
-        m3_agent_calls, case_id=case_id)
+    # NOTE: the corporate-structure artifact + SVG were already built ABOVE,
+    # before the specialist pass, and injected into prep.structural_facts. The
+    # structure graph is independent of the specialist's own validation status,
+    # so it is NOT rebuilt here.
 
     # --- Assemble sections + build the two linked deliverables ---------------
     m3_output = assemble_m3_output(
@@ -264,6 +282,9 @@ def run_m3(
             "model_id": (arm.calls[-1].get("model_id") if arm.calls else None),
             "specialist_validated": specialist_validated,
             "specialist_failure": arm.failure,
+            # Auditability: whether the validated corporate structure was present
+            # in the specialist's ACTUAL input context before the pass ran.
+            "structure_in_specialist_context": structural_facts is not None,
         },
         "validation": {
             "specialist_valid": specialist_validated,

@@ -32,8 +32,15 @@ M3_OUTPUT_VERSION = "bo-m3-output-1.0"
 
 
 def _section_a(structure: CorporateStructureArtifact,
-               svg: str | None) -> dict[str, Any]:
+               svg: str | None,
+               governed_m3: dict[str, Any] | None = None) -> dict[str, Any]:
     available = structure.status == "available"
+    # Validated AI structural credit findings (Layer 2) are kept VISIBLY SEPARATE
+    # from the deterministic observations so factual structural facts and
+    # analytical conclusions are never conflated. The full governed set is
+    # carried (dispositions/qualifications retained); the authoritative
+    # conclusion downstream admits only accepted / appropriately-qualified items.
+    ai_findings = ((governed_m3 or {}).get("structural_credit_findings") or [])
     section: dict[str, Any] = {
         "title": "Corporate Structure",
         "corporate_structure_status": structure.status,
@@ -42,6 +49,7 @@ def _section_a(structure: CorporateStructureArtifact,
         section["display_message"] = structure.message or NO_JSON_MESSAGE
         section["diagram"] = None
         section["structural_observations"] = []
+        section["ai_structural_credit_findings"] = ai_findings
         section["material_credit_implications"] = []
         section["source_json_metadata"] = None
         section["limitations"] = structure.limitations or [
@@ -65,6 +73,7 @@ def _section_a(structure: CorporateStructureArtifact,
     section["source_json_metadata"] = prov.model_dump(mode="json") if prov else None
     section["structural_observations"] = [
         s.model_dump(mode="json") for s in structure.structural_signals]
+    section["ai_structural_credit_findings"] = ai_findings
     # Material implications = signals with sufficient evidence and non-low
     # materiality, carried with their qualifications (never promoted to fact).
     section["material_credit_implications"] = [
@@ -189,7 +198,7 @@ def assemble_m3_output(
     structure_svg: str | None = None,
 ) -> dict[str, Any]:
     """Assemble the Module 3 three-section output and completion status."""
-    section_a = _section_a(structure, structure_svg)
+    section_a = _section_a(structure, structure_svg, governed_m3)
     section_b = _section_b(governed_m3)
     completion = _completion_status(section_a, section_b)
     section_c = _section_c(section_a, section_b, completion)

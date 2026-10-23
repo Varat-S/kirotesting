@@ -92,9 +92,194 @@ def _evidence_ok(ids: list[str], allowed: set[str]) -> bool:
     return bool(ids) and set(ids) <= allowed
 
 
+def _structure_index(structure_facts: dict[str, Any] | None) -> dict[str, Any]:
+    """Build the lookup sets Validator 7 uses to cross-check structural findings.
+
+    Returns empty sets when no structure was supplied (the structural checks
+    then no-op and existing callers are unaffected).
+    """
+    facts = structure_facts or {}
+    nodes = facts.get("nodes") or []
+    links = facts.get("links") or []
+    source = facts.get("source") or {}
+    borrower = facts.get("borrower") or {}
+    pct_by_link = {
+        l.get("link_id"): l.get("ownership_percent") for l in links
+        if l.get("link_id")}
+    return {
+        "present": bool(structure_facts),
+        "known_node_ids": {n.get("node_id") for n in nodes if n.get("node_id")},
+        "known_link_ids": set(pct_by_link),
+        "node_pct_by_link": pct_by_link,
+        "guarantor_node_ids": set(facts.get("guarantor_node_ids") or []),
+        "grouping_node_ids": set(facts.get("grouping_node_ids") or []),
+        "borrower_node_id": borrower.get("node_id"),
+        "is_simulated": bool(source.get("is_simulated")),
+    }
+
+
+def _govern_structural_finding(
+    item: dict[str, Any], *, item_id: str, disposition: str | None,
+    reasons: list[str], issues: list[dict], struct: dict[str, Any],
+) -> str | None:
+    """Cross-check a structural credit finding against the admitted structure.
+
+    Applies the factual / guarantor / cash-flow / simulation-isolation /
+    minority-JV / complexity rules from the Layer-2 spec. Returns the (possibly
+    downgraded) disposition. No-op when no structure was supplied.
+    """
+    if not struct["present"]:
+        return disposition
+
+    node_refs = item.get("referenced_node_ids") or []
+    link_refs = item.get("referenced_link_ids") or []
+    supporting = item.get("supporting_evidence_ids") or []
+    dimension = item.get("analytical_dimension")
+    direction = item.get("credit_direction")
+    mechanism = (item.get("causal_mechanism") or "").strip()
+    text = " ".join((
+        item.get("credit_hypothesis") or "", item.get("structural_observation") or "",
+        item.get("causal_mechanism") or "")).casefold()
+
+    # (a) FACTUAL referential integrity.
+    unknown_nodes = [n for n in node_refs if n not in struct["known_node_ids"]]
+    unknown_links = [l for l in link_refs if l not in struct["known_link_ids"]]
+    if unknown_nodes or unknown_links:
+        if disposition in {"supported", "qualified"}:
+            disposition = "unverified"
+        reason = ("Referenced corporate facts are not in the admitted structure: "
+                  f"nodes={unknown_nodes} links={unknown_links}. A finding may only "
+                  "reference validated node/link ids.")
+        reasons.append(reason)
+        _issue(issues, "m3.structural_reference_integrity", item_id, "downgraded", reason)
+    # A referenced grouping node is not a verified legal person.
+    grouping_refs = [n for n in node_refs if n in struct["grouping_node_ids"]]
+    if grouping_refs and disposition in {"supported", "qualified"}:
+        disposition = "qualified"
+        reason = ("Referenced aggregate-grouping node(s) are drawn for context and "
+                  f"are not independently established legal persons: {grouping_refs}.")
+        reasons.append(reason)
+        _issue(issues, "m3.grouping_node_not_legal_entity", item_id, "downgraded", reason)
+    # A borrower-role assertion must match the admitted borrower.
+    if item.get("borrower_specific") and struct["borrower_node_id"] and node_refs:
+        if struct["borrower_node_id"] not in node_refs and (
+                "borrower" in text) and disposition in {"supported", "qualified"}:
+            disposition = "unverified"
+            reason = ("A borrower-specific finding does not reference the admitted "
+                      f"borrower node ({struct['borrower_node_id']}); a borrower role "
+                      "may not be invented.")
+            reasons.append(reason)
+            _issue(issues, "m3.structural_borrower_invented", item_id, "downgraded", reason)
+    # An ownership-percentage assertion must match the admitted link value.
+    claimed_numbers = {_normalise_number(t) for t in _NUMBER_RE.findall(text)}
+    for link_id in link_refs:
+        pct = struct["node_pct_by_link"].get(link_id)
+        if pct is None:
+            continue
+        pct_token = _normalise_number(f"{pct:g}")
+        pct_pct_token = _normalise_number(f"{pct:g}%")
+        # Only act when the finding asserts SOME percentage that is not the
+        # admitted one (a bare percent like "35%" that disagrees).
+        asserted_pcts = {n for n in claimed_numbers
+                         if n and n not in {pct_token, pct_pct_token}
+                         and f"{n}%" in text.replace(" ", "")}
+        if asserted_pcts and disposition in {"supported", "qualified"}:
+            disposition = "rejected"
+            reason = (f"Ownership percentage asserted ({sorted(asserted_pcts)}) does "
+                      f"not match the admitted link {link_id} value ({pct}).")
+            reasons.append(reason)
+            _issue(issues, "m3.structural_percentage_mismatch", item_id, "rejected", reason)
+
+    has_admitted_support = bool(supporting)
+
+    # (b) GUARANTOR coverage.
+    if dimension == "guarantor_coverage" and direction == "positive":
+        if not has_admitted_support and disposition in {"supported", "qualified"}:
+            # Support rests only on a guarantor flag / ownership, no legal/debt doc.
+            enforceable = any(w in text for w in (
+                "enforceable", "legally binding", "guarantees the", "guaranteed"))
+            disposition = "rejected" if enforceable and disposition == "supported" else "qualified"
+            reason = ("A guarantor flag or ownership does not prove the entity "
+                      "guarantees the proposed borrowing or that any guarantee is "
+                      "enforceable; admitted legal/debt evidence is required.")
+            reasons.append(reason)
+            _issue(issues, "m3.guarantee_not_proven_by_flag", item_id, "downgraded", reason)
+    if dimension == "guarantor_coverage" and struct["is_simulated"]:
+        qualified_sim = any("simul" in q.casefold()
+                            for q in (item.get("qualifications") or []))
+        if not qualified_sim:
+            if disposition in {"supported"}:
+                disposition = "qualified"
+            reason = ("The structure is simulated; a simulated guarantor marking is "
+                      "not verified legal protection and must be qualified as such.")
+            reasons.append(reason)
+            _issue(issues, "m3.simulated_guarantor_not_verified", item_id, "downgraded", reason)
+
+    # (c) CASH-FLOW access.
+    if dimension == "cash_flow_access":
+        unrestricted = any(w in text for w in (
+            "unrestricted", "full access", "freely", "unimpeded"))
+        if unrestricted and not has_admitted_support and disposition in {"supported", "qualified"}:
+            disposition = "unverified"
+            reason = ("Ownership percentage alone does not establish unrestricted "
+                      "upstream cash access; dividend/covenant/statutory restriction "
+                      "evidence is required.")
+            reasons.append(reason)
+            _issue(issues, "m3.cash_access_not_proven_by_ownership", item_id, "downgraded", reason)
+        restriction_unknown = (
+            item.get("assessment_availability") == "insufficient_evidence"
+            or item.get("missing_information"))
+        if not has_admitted_support and not restriction_unknown and disposition in {"supported", "qualified"}:
+            reason = ("Distribution-restriction status is not established by admitted "
+                      "evidence; the limitation must be reported (insufficient "
+                      "evidence or missing_information).")
+            reasons.append(reason)
+            _issue(issues, "m3.cash_restriction_unknown", item_id, "recorded_gap", reason)
+
+    # (d) SIMULATION ISOLATION.
+    if struct["is_simulated"] and has_admitted_support and direction in {"positive", "negative"}:
+        qualified_sim = any(("simul" in q.casefold() or "hypothetical" in q.casefold())
+                            for q in (item.get("qualifications") or []))
+        asserts_real = any(w in text for w in (
+            "actual", "real", "confirmed", "established", "enforceable")) or (
+            disposition == "supported")
+        if asserts_real and not qualified_sim:
+            if disposition in {"supported"}:
+                disposition = "qualified"
+            reason = ("The structure is simulated; combining the fictional hierarchy "
+                      "with external (e.g. 10-K) evidence to assert real "
+                      "debts/guarantees/restrictions must stay hypothetical and "
+                      "qualified unless entity identity and legal applicability are "
+                      "explicitly established.")
+            reasons.append(reason)
+            _issue(issues, "m3.simulation_isolation", item_id, "downgraded", reason)
+
+    # (e) MINORITY / JV + COMPLEXITY must not be auto-negative.
+    if direction == "negative" and not has_admitted_support and len(mechanism) < 15:
+        if dimension == "minority_or_jv":
+            if disposition in {"supported", "qualified"}:
+                disposition = "unverified"
+            reason = ("Minority ownership or a joint venture is not credit-negative "
+                      "in itself; a defensible credit mechanism and supporting "
+                      "evidence are required.")
+            reasons.append(reason)
+            _issue(issues, "m3.minority_not_auto_negative", item_id, "downgraded", reason)
+        elif dimension == "structural_complexity":
+            if disposition in {"supported", "qualified"}:
+                disposition = "unverified"
+            reason = ("Entity count or holding-company depth is not credit-negative "
+                      "in itself; a defensible credit mechanism and supporting "
+                      "evidence are required.")
+            reasons.append(reason)
+            _issue(issues, "m3.complexity_not_auto_negative", item_id, "downgraded", reason)
+
+    return disposition
+
+
 def _govern_finding(raw: dict[str, Any], *, allowed: set[str], borrower_known: bool,
                      issues: list[dict], bucket: str,
-                     evidence_texts: dict[str, str] | None = None) -> dict[str, Any]:
+                     evidence_texts: dict[str, str] | None = None,
+                     structure_facts: dict[str, Any] | None = None) -> dict[str, Any]:
     item = deepcopy(raw)
     item_id = str(item.get("finding_id") or item.get("observation_id") or "unknown")
     supporting = item.get("supporting_evidence_ids") or []
@@ -163,6 +348,14 @@ def _govern_finding(raw: dict[str, Any], *, allowed: set[str], borrower_known: b
             disposition = "qualified"
             reasons.append("Auditor assurance over internal control over financial reporting is date- and scope-specific and does not establish broader operational, clinical or strategic governance effectiveness.")
             _issue(issues, "m3.icfr_scope", item_id, "downgraded", reasons[-1])
+    # Layer 2: structural credit findings are cross-checked against the admitted
+    # corporate structure graph (referential integrity, guarantor/cash-flow/
+    # simulation isolation, minority-JV and complexity safeguards).
+    if bucket == "structural_credit_findings" and structure_facts is not None:
+        disposition = _govern_structural_finding(
+            item, item_id=item_id, disposition=disposition, reasons=reasons,
+            issues=issues, struct=_structure_index(structure_facts))
+
     # Citation-id existence is NOT entailment: for a still-admitted claim that
     # asserts a specific value/period, run deterministic numeric/period checks
     # against the cited evidence text (no live model). A mismatch downgrades the
@@ -194,6 +387,7 @@ def validate_m3_assessment(
     proposal: dict[str, Any], *, allowed_evidence_ids: set[str],
     validated_borrower_entity_ids: set[str] | None = None,
     evidence_texts: dict[str, str] | None = None,
+    structure_facts: dict[str, Any] | None = None,
 ) -> M3CorporateAssessment:
     """Validate, filter and conservatively downgrade an M3 model proposal.
 
@@ -376,7 +570,9 @@ def validate_m3_assessment(
             seen_ids.add(item_id)
             clean.append(_govern_finding(
                 item, allowed=allowed_evidence_ids, borrower_known=borrower_known,
-                issues=issues, bucket=bucket, evidence_texts=evidence_texts))
+                issues=issues, bucket=bucket, evidence_texts=evidence_texts,
+                structure_facts=(structure_facts
+                                 if bucket == "structural_credit_findings" else None)))
         data[bucket] = clean
 
     identities: dict[str, tuple[str, str]] = {}

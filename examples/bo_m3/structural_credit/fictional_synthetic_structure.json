@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "document_type": "corporate_structure_onboarding",
+  "company_name": "Larkspur Logistics Group (fictional)",
+  "data_status": "simulated_educational_example",
+  "corporate_tree": {
+    "id": "lk_parent",
+    "name": "Larkspur Holdings, Inc.",
+    "role": "Parent Co",
+    "is_guarantor": false,
+    "children": [
+      {
+        "id": "lk_borrower",
+        "name": "Larkspur Logistics, Inc.",
+        "role": "Borrower",
+        "is_guarantor": false,
+        "ownership_percent_from_parent": 100,
+        "children": [
+          {
+            "id": "lk_opco_a",
+            "name": "Larkspur Freight Operations LLC",
+            "role": "OpCo",
+            "is_guarantor": true,
+            "ownership_percent_from_parent": 100
+          },
+          {
+            "id": "lk_opco_b",
+            "name": "Larkspur Warehousing LLC",
+            "role": "OpCo",
+            "is_guarantor": false,
+            "ownership_percent_from_parent": 100
+          },
+          {
+            "id": "lk_jv",
+            "name": "Coastal Intermodal JV LLC",
+            "role": "JV",
+            "is_guarantor": false,
+            "ownership_percent_from_parent": 40
+          }
+        ]
+      }
+    ]
+  }
+}

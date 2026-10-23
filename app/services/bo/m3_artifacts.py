@@ -167,10 +167,15 @@ def build_m3_analysis_artifact(
     governance_signals = section_b.get("governance_signals", []) or []
     structural_observations = section_a.get("structural_observations", []) or []
     material_implications = section_a.get("material_credit_implications", []) or []
+    # Layer 2: validated AI structural credit findings, kept SEPARATE from the
+    # deterministic observations. The full governed set is retained (with
+    # dispositions/qualifications); only admitted findings inform the conclusion.
+    ai_structural_findings = section_a.get("ai_structural_credit_findings", []) or []
 
     admitted_management = [s for s in management_signals if _is_admitted(s)]
     admitted_governance = [s for s in governance_signals if _is_admitted(s)]
     admitted_structural = [s for s in material_implications if _is_admitted(s)]
+    admitted_ai_structural = [f for f in ai_structural_findings if _is_admitted(f)]
 
     available = structure.status == "available"
     structure_reference: dict[str, Any] = {
@@ -198,6 +203,14 @@ def build_m3_analysis_artifact(
         # descriptive observation set stays available for context.
         "structural_observations": structural_observations,
         "material_credit_implications": admitted_structural,
+        # Validated AI structural credit findings (full governed set, analytical
+        # conclusions distinct from the deterministic facts above). Rejected /
+        # material-unverified items are retained here and under
+        # evidence_verification, but are excluded from the conclusion below.
+        "ai_structural_credit_findings": ai_structural_findings,
+        "admitted_structural_credit_finding_ids": sorted(
+            str(f.get("finding_id")) for f in admitted_ai_structural
+            if f.get("finding_id")),
         "structural_limitations": section_a.get("limitations", []),
         # Senior-management assessment (unchanged, source-grounded): the full
         # signal sets are retained here for transparency, including qualified and
@@ -218,7 +231,8 @@ def build_m3_analysis_artifact(
             "rejected_items": (governed_m3 or {}).get("rejected_items", []),
             "excluded_from_conclusion_ids": sorted(
                 str(s.get("observation_id") or s.get("finding_id") or s.get("signal_id"))
-                for s in (management_signals + governance_signals + material_implications)
+                for s in (management_signals + governance_signals
+                          + material_implications + ai_structural_findings)
                 if not _is_admitted(s)),
             "replay_provenance": (governed_m3 or {}).get("replay_provenance"),
         },
@@ -240,6 +254,9 @@ def build_m3_analysis_artifact(
             "admitted_structural_signal_ids": sorted(
                 str(s.get("signal_id")) for s in admitted_structural
                 if s.get("signal_id")),
+            "admitted_structural_credit_finding_ids": sorted(
+                str(f.get("finding_id")) for f in admitted_ai_structural
+                if f.get("finding_id")),
             "disposition": "human_review_required",
         },
         "completion": completion,

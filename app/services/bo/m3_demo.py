@@ -194,11 +194,158 @@ def _management_scorecard() -> dict[str, Any]:
     return report
 
 
+# -- Layer 2 structural-credit quality ---------------------------------------
+
+
+_UNSUPPORTED_INFERENCE_DIMENSIONS = {
+    "guarantor_coverage", "cash_flow_access", "minority_or_jv",
+    "structural_complexity",
+}
+# Validator 7 rules that evidence a correctly-handled unsupported inference.
+_UNSUPPORTED_INFERENCE_RULES = {
+    "m3.guarantee_not_proven_by_flag", "m3.simulated_guarantor_not_verified",
+    "m3.cash_access_not_proven_by_ownership", "m3.cash_restriction_unknown",
+    "m3.minority_not_auto_negative", "m3.complexity_not_auto_negative",
+    "m3.simulation_isolation", "m3.structural_reference_integrity",
+    "m3.structural_percentage_mismatch", "m3.grouping_node_not_legal_entity",
+    "m3.structural_borrower_invented",
+}
+
+
+def _structural_credit_scorecard(
+    result, expected_labels: dict[str, str] | None,
+) -> dict[str, Any]:
+    """Explicit-denominator Layer-2 structural-credit metrics.
+
+    Reads the governed structural_credit_findings and the Validator-7 issues.
+    ``expected_labels`` maps finding_id -> the developer-authored expected
+    disposition for the validator rejection/qualification-accuracy denominator.
+    """
+    governed = result.governed_assessment or {}
+    findings = governed.get("structural_credit_findings") or []
+    issues = result.validation_issues or []
+    struct = (result.run_manifest or {}).get("execution", {}).get(
+        "structure_in_specialist_context")
+
+    def metric(num: int, den: int, population: str) -> dict[str, Any]:
+        return {"numerator": num, "denominator": den, "population": population}
+
+    with_refs = [f for f in findings
+                 if f.get("referenced_node_ids") or f.get("referenced_link_ids")]
+    # Structural-fact accuracy: findings whose referenced ids were NOT flagged
+    # by the reference-integrity / percentage-mismatch rules.
+    bad_ref_ids = {i.get("item_id") for i in issues if i.get("rule_id") in {
+        "m3.structural_reference_integrity", "m3.structural_percentage_mismatch",
+        "m3.structural_borrower_invented"}}
+    fact_ok = [f for f in with_refs if f.get("finding_id") not in bad_ref_ids]
+
+    material = [f for f in findings if f.get("materiality") in {"high", "medium"}]
+    with_support = [f for f in material if f.get("supporting_evidence_ids")]
+
+    unsupported_candidates = [
+        f for f in findings
+        if f.get("analytical_dimension") in _UNSUPPORTED_INFERENCE_DIMENSIONS
+        and not f.get("supporting_evidence_ids")]
+    handled_ids = {i.get("item_id") for i in issues
+                   if i.get("rule_id") in _UNSUPPORTED_INFERENCE_RULES}
+    unsupported_handled = [
+        f for f in unsupported_candidates
+        if f.get("finding_id") in handled_ids
+        or f.get("disposition") in {"rejected", "unverified"}
+        or f.get("assessment_availability") == "insufficient_evidence"]
+
+    directed = [f for f in findings
+                if f.get("credit_direction") in {"positive", "negative", "mixed"}]
+    directed_justified = [
+        f for f in directed
+        if len((f.get("causal_mechanism") or "").strip()) >= 15]
+
+    material_with_mechanism = [
+        f for f in material
+        if len((f.get("causal_mechanism") or "").strip()) >= 15]
+
+    contradiction_findings = [f for f in findings if f.get("contradicting_evidence_ids")]
+    contradiction_handled = [
+        f for f in contradiction_findings
+        if f.get("qualifications") or f.get("disposition") in {"qualified", "unverified", "rejected"}]
+
+    sim_findings: list = []
+    # Simulation/case-isolation: when the structure is simulated, every finding
+    # must carry a simulation/hypothetical qualification OR be unverified.
+    is_simulated = False
+    # Derive simulation status from the finding qualifications footprint only if
+    # the governed assessment references it; otherwise rely on validator rules.
+    sim_rule_fired = any(i.get("rule_id") in {
+        "m3.simulation_isolation", "m3.simulated_guarantor_not_verified"}
+        for i in issues)
+    if sim_rule_fired or any(
+            any("simul" in (q or "").casefold() or "hypothetical" in (q or "").casefold()
+                for q in (f.get("qualifications") or [])) for f in findings):
+        is_simulated = True
+    if is_simulated:
+        sim_findings = list(findings)
+        sim_ok = [f for f in sim_findings
+                  if any("simul" in (q or "").casefold()
+                         or "hypothetical" in (q or "").casefold()
+                         for q in (f.get("qualifications") or []))
+                  or f.get("disposition") in {"unverified", "rejected"}]
+    else:
+        sim_ok = []
+
+    # Validator rejection/qualification accuracy against developer-authored labels.
+    expected = expected_labels or {}
+    label_den = [f for f in findings if f.get("finding_id") in expected]
+    label_ok = [f for f in label_den
+                if f.get("disposition") == expected.get(f.get("finding_id"))]
+
+    return {
+        "structure_in_specialist_context": struct,
+        "finding_count": len(findings),
+        "structural_fact_accuracy": metric(
+            len(fact_ok), len(with_refs), "findings_with_node_or_link_references"),
+        "source_reference_validity": metric(
+            len(with_refs) - len(bad_ref_ids & {f.get("finding_id") for f in with_refs}),
+            len(with_refs), "findings_with_references"),
+        "evidence_to_claim_consistency": metric(
+            len(with_support), len(material), "material_findings"),
+        "unsupported_inference_handling": metric(
+            len(unsupported_handled), len(unsupported_candidates),
+            "unsupported_guarantee_cash_minority_complexity_findings"),
+        "credit_direction_justification": metric(
+            len(directed_justified), len(directed),
+            "findings_with_positive_negative_or_mixed_direction"),
+        "materiality_justification": metric(
+            len(material_with_mechanism), len(material),
+            "material_findings_with_credit_mechanism"),
+        "contradictory_evidence_handling": metric(
+            len(contradiction_handled), len(contradiction_findings),
+            "findings_citing_contradictory_evidence"),
+        "simulation_case_isolation_compliance": metric(
+            len(sim_ok), len(sim_findings),
+            "simulated_structure_findings"),
+        "analytical_consistency": {
+            "note": ("Repeated standalone runs over identical evidence are "
+                     "byte-stable (see run determinism_hash); any material "
+                     "instability is reported, not reconciled."),
+            "determinism_hash": content_hash(
+                [f.get("finding_id") for f in findings]
+                + [f.get("disposition") for f in findings]),
+        },
+        "validator_rejection_qualification_accuracy": metric(
+            len(label_ok), len(label_den),
+            "findings_with_developer_authored_expected_disposition"),
+        "note": ("Deterministic Layer-2 checks only; a valid citation id is not "
+                 "substantive proof and this does not assess live model semantic "
+                 "quality."),
+    }
+
+
 def build_evaluation_scorecard(
     result,
     *,
     simplified_document: dict[str, Any] | None = None,
     reference_output: dict[str, Any] | None = None,
+    expected_labels: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Explicit-denominator scorecard with a completeness caveat."""
     return {
@@ -208,6 +355,8 @@ def build_evaluation_scorecard(
         "actual_llm_semantic_accuracy": "not_measured",
         "corporate_structure_accuracy": _structure_scorecard(
             result, simplified_document, reference_output),
+        "structural_credit_quality": _structural_credit_scorecard(
+            result, expected_labels),
         "management_analytical_quality": _management_scorecard(),
         "completion_status": result.completion_status,
         "requires_human_review": True,
@@ -288,6 +437,7 @@ def write_m3_demo(
     reference_output: dict[str, Any] | None = None,
     corporate_structure_path: str | None = None,
     responses_path: str | None = None,
+    expected_labels: dict[str, str] | None = None,
 ) -> dict[str, Path]:
     """Write the six inspectable standalone Module 3 files; return their paths.
 
@@ -314,7 +464,7 @@ def write_m3_demo(
     paths["evaluation_scorecard"] = folder / "evaluation_scorecard.json"
     _write(paths["evaluation_scorecard"], build_evaluation_scorecard(
         result, simplified_document=simplified_document,
-        reference_output=reference_output))
+        reference_output=reference_output, expected_labels=expected_labels))
 
     reproduce = _reproduce_command(
         result, corporate_structure_path=corporate_structure_path,

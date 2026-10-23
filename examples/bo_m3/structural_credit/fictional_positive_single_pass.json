@@ -1,0 +1,95 @@
+{
+  "_scripted_offline": true,
+  "_label": "Fictional company with synthetic admitted legal evidence (a guaranty agreement) establishing operating-subsidiary guarantor support -> a QUALIFIED positive guarantor_coverage finding referencing real node/link ids. Validator 7 confirms the referenced facts and the admitted supporting evidence.",
+  "parameters": [],
+  "hypotheses": [
+    {
+      "hypothesis_id": "M3-H001",
+      "claim": "The board oversees governance and succession planning.",
+      "claim_type": "fact",
+      "direction": "neutral",
+      "disposition": "supported",
+      "confidence": "medium",
+      "materiality": "medium",
+      "display_priority": "display",
+      "supporting_evidence_ids": [{"$evidence": "board of directors"}],
+      "contradicting_evidence_ids": [],
+      "evidence_quotes": [
+        {"evidence_id": {"$evidence": "board of directors"},
+         "quote": "The board of directors oversees governance"}
+      ]
+    }
+  ],
+  "m3_assessment": {
+    "schema_version": "bo-m3-corporate-assessment-1.1",
+    "borrower_identification": {
+      "status": "unavailable",
+      "entity_id": null,
+      "evidence_ids": [],
+      "limitation": "No proposed borrowing entity is identified from transaction evidence."
+    },
+    "legal_entities": [],
+    "ownership_relationships": [],
+    "cash_flow_locations": [],
+    "cash_transfer_relationships": [],
+    "structural_credit_findings": [
+      {
+        "finding_id": "SCF-POS-GUARANTOR",
+        "hypothesis_id": null,
+        "credit_hypothesis": "A material operating subsidiary provides a guarantee of the proposed facility per an admitted guaranty agreement, mitigating structural subordination.",
+        "causal_mechanism": "A guarantee from the operating subsidiary that holds operations gives the lender a direct claim at the operating level, reducing structural subordination relative to the holding-company borrower.",
+        "structural_observation": "The freight operating subsidiary carries a guarantor marking.",
+        "analytical_dimension": "guarantor_coverage",
+        "referenced_node_ids": ["lk_opco_a", "lk_borrower"],
+        "referenced_link_ids": ["link:lk_borrower->lk_opco_a"],
+        "onboarding_source_reference": "corp-onboarding-1",
+        "credit_direction": "positive",
+        "assessment_availability": "sufficient",
+        "supporting_evidence_ids": [{"$evidence": "guaranty agreement"}],
+        "contradicting_evidence_ids": [],
+        "supporting_evidence_investigated": true,
+        "contradictory_evidence_investigated": true,
+        "disposition": "qualified",
+        "admissibility": "qualified_narrative",
+        "confidence": "medium",
+        "materiality": "high",
+        "borrower_specific": false,
+        "downstream_verification_requirements": ["SO to confirm enforceability, ranking and any caps in the guaranty agreement."],
+        "qualifications": [
+          "The structure is simulated/illustrative; the guaranty is treated as a qualified, hypothetical example and enforceability is for SO legal review.",
+          "Coverage limits, exclusions and ranking are confirmed only to the extent the admitted agreement states them."
+        ],
+        "missing_information": ["Guarantee caps, ranking versus secured creditors, and any release provisions."]
+      }
+    ],
+    "management_assessments": [
+      {
+        "observation_id": "MO1",
+        "management_id": "board",
+        "legal_name": "Board of Directors",
+        "role": "Board",
+        "effective_from": null,
+        "effective_to": null,
+        "dimension": "competence",
+        "evidence_basis": "reported_experience",
+        "attribution": "company_reported",
+        "assurance_scope": null,
+        "assurance_date": null,
+        "hypothesis": "The board oversees governance and succession planning.",
+        "credit_mechanism": "Board oversight of succession may reduce leadership continuity risk.",
+        "supporting_evidence_ids": [{"$evidence": "board of directors"}],
+        "contradicting_evidence_ids": [],
+        "supporting_evidence_investigated": true,
+        "contradictory_evidence_investigated": true,
+        "disposition": "qualified",
+        "admissibility": "qualified_narrative",
+        "confidence": "medium",
+        "materiality": "medium",
+        "missing_information": []
+      }
+    ],
+    "governance_screening": [],
+    "information_gaps": ["Guarantee coverage limits and ranking are not fully disclosed."],
+    "downstream_dependencies": []
+  }
+}
