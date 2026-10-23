@@ -173,6 +173,36 @@ def main(argv=None):
         "--transaction-borrower-entity-id",
         help="Validated case-spec entity id for the proposed facility obligor; "
              "omit when transaction identity is unavailable")
+    m3_run = commands.add_parser(
+        "run-m3",
+        help=("Run ONLY Business Overview Module 3 (Corporate Structure & Senior "
+              "Management) + Validator 7 offline; write the inspectable demo files"),
+    )
+    m3_run.add_argument("case_id")
+    m3_source = m3_run.add_mutually_exclusive_group(required=True)
+    m3_source.add_argument("--package", type=Path)
+    m3_source.add_argument("--bundle", type=Path,
+                           help="A local SEC bundle manifest (bundle.json)")
+    m3_run.add_argument(
+        "--cutoff", type=lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")),
+        help="Evidence cut-off (required with --bundle)")
+    m3_run.add_argument("--entity-id")
+    m3_run.add_argument("--entity-name")
+    m3_run.add_argument(
+        "--corporate-structure", type=Path,
+        help=("Path to the simplified v1.0 corporate-structure onboarding JSON for "
+              "THIS case (optional). Absent -> Deliverable A fails closed."))
+    m3_backend = m3_run.add_mutually_exclusive_group(required=True)
+    m3_backend.add_argument(
+        "--responses", type=Path,
+        help="Scripted offline M3 responses (JSON with a 'single_pass' key)")
+    m3_backend.add_argument(
+        "--live", action="store_true",
+        help="Guarded live provider path (not supported in the offline standalone)")
+    m3_run.add_argument(
+        "--transaction-borrower-entity-id",
+        help="Validated case-spec entity id for the proposed facility obligor; "
+             "omit when transaction identity is unavailable")
     bo_review = commands.add_parser(
         "bo-review",
         help="Record your explicit decision on a pending Business Overview handoff",
@@ -227,6 +257,10 @@ def main(argv=None):
                 return
             if args.command == "run-bo-specialists":
                 print(json.dumps(_run_bo_specialists(session, database, args), indent=2))
+                session.commit()
+                return
+            if args.command == "run-m3":
+                print(json.dumps(_run_m3(session, database, args), indent=2))
                 session.commit()
                 return
             if args.command == "bo-review":
@@ -464,6 +498,80 @@ def _run_bo_specialists(session, database, args):
                        "held_back": metrics["parameters_held_back"]},
         "tokens": metrics["tokens"],
         "outputs": {k: str(v) for k, v in result["paths"].items()},
+    }
+
+
+def _run_m3(session, database, args):
+    """Standalone Module 3: one specialist + Validator 7 + the demo files.
+
+    Offline only. Invokes ONLY ``m3_corporate_management`` and its applicable
+    validation; no other BO specialist, no Agent 6, orchestrator, challenger,
+    synthesis, scoring, memo, handoff or downstream agent runs.
+    """
+    from app.services.bo.m3_demo import write_m3_demo
+    from app.services.bo.m3_standalone import run_m3
+    from app.services.pipeline.runner import CreditMemoPipeline
+
+    if args.live:
+        raise ValueError(
+            "run-m3 is an offline standalone path; --live is guarded and not "
+            "supported here. Supply --responses with a scripted single_pass.")
+
+    if args.bundle:
+        if args.cutoff is None:
+            raise ValueError("--bundle requires --cutoff.")
+        package = sec_source_package(
+            SecFilingBundle.load(args.bundle), cutoff=args.cutoff,
+            entity_id=args.entity_id, legal_name=args.entity_name)
+    else:
+        package = SourcePackage.load(args.package)
+
+    prepared = CreditMemoPipeline(
+        session, data_root=database.parent, output_root=args.output,
+    ).prepare_case(args.case_id, package=package)
+
+    corporate_structure_document = None
+    simplified_document = None
+    corporate_structure_path = None
+    if args.corporate_structure:
+        corporate_structure_document = json.loads(
+            args.corporate_structure.read_text(encoding="utf-8"))
+        simplified_document = corporate_structure_document
+        corporate_structure_path = str(args.corporate_structure)
+
+    m3_responses = json.loads(args.responses.read_text(encoding="utf-8"))
+
+    result = run_m3(
+        session, case_id=args.case_id, evidence=prepared.evidence_snapshot,
+        metrics=prepared.metrics, m3_responses=m3_responses,
+        corporate_structure_document=corporate_structure_document,
+        transaction_borrower_entity_id=args.transaction_borrower_entity_id)
+
+    reference_output = None
+    reference_path = Path("examples/bo_m3/Sample HCA Corp Structure Final Output.json")
+    if simplified_document is not None and reference_path.is_file():
+        reference_output = json.loads(reference_path.read_text(encoding="utf-8"))
+
+    paths = write_m3_demo(
+        result, args.output, simplified_document=simplified_document,
+        reference_output=reference_output,
+        corporate_structure_path=corporate_structure_path,
+        responses_path=str(args.responses))
+
+    return {
+        "case_id": result.case_id,
+        "analysis_run_id": result.analysis_run_id,
+        "scope": "business_overview_module_3_only",
+        "specialist": "m3_corporate_management",
+        "validator_id": "validator_7",
+        "execution_mode": "offline_simulation",
+        "model_called": result.model_called,
+        "specialist_validated": result.specialist_validated,
+        "corporate_structure_status": result.corporate_structure_status,
+        "completion_status": result.completion_status,
+        "validation_issue_count": len(result.validation_issues),
+        "rejected_item_count": len(result.rejected_items),
+        "outputs": {k: str(v) for k, v in paths.items()},
     }
 
 
