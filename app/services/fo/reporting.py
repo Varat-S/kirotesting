@@ -30,9 +30,40 @@ from .icr_triggers import ICR_T1_THRESHOLD
 from .icr_triggers import RULES as ICR_T1_RULES
 from .leverage_t2 import LEVERAGE_T2_GAP
 from .leverage_t2 import RULES as LEVERAGE_T2_RULES
+from .leverage_t3 import KIND_TEXT as LEVERAGE_T3_KIND_TEXT
+from .leverage_t3 import LEVERAGE_T3_GAP, LEVERAGE_T3_UPLIFT
+from .leverage_t3 import RULES as LEVERAGE_T3_RULES
+from .leverage_t4 import KIND_TEXT as LEVERAGE_T4_KIND_TEXT
+from .leverage_t4 import RULES as LEVERAGE_T4_RULES
+from .leverage_t4 import TIE_SHARE as LEVERAGE_T4_TIE
 from .leverage_triggers import LEVERAGE_T1_SHARE
 from .leverage_triggers import RULES as LEVERAGE_T1_RULES
 from .prepaid import DECIDED_NOTE as PP_DECIDED_NOTE
+from .rcf_t2 import KIND_TEXT as RCF_T2_KIND_TEXT
+from .rcf_t2 import RCF_T2_EXCESS, RCF_T2_GROWTH, RCF_T2_SHARE
+from .rcf_t2 import RULES as RCF_T2_RULES
+from .rcf_t3 import RCF_T3_SHARE
+from .rcf_t3 import RULES as RCF_T3_RULES
+from .rcf_t4 import RULES as RCF_T4_RULES
+from .margin_triggers import LOCATION_TEXT as MARGIN_LOCATION_TEXT
+from .margin_triggers import RULES as MARGIN_T1_RULES
+from .margin_t2 import DIRECTION_TEXT as MARGIN_T2_DIRECTION_TEXT
+from .margin_t2 import RULES as MARGIN_T2_RULES
+from .rcf_triggers import RCF_T1_THRESHOLD
+from .dso_triggers import DSO_T1_DAYS, DSO_T1_RELIEF
+from .dso_triggers import KIND_TEXT as DSO_T1_KIND_TEXT
+from .dso_triggers import RULES as DSO_T1_RULES
+from .liquidity_triggers import FIGURE_TEXT as LIQUIDITY_T1_FIGURE_TEXT
+from .liquidity_triggers import ROUTE_TEXT as LIQUIDITY_T1_ROUTE_TEXT
+from .liquidity_triggers import RULES as LIQUIDITY_T1_RULES
+from .liquidity_t2 import BUCKET_TEXT as LIQUIDITY_T2_BUCKET_TEXT
+from .liquidity_t2 import KIND_TEXT as LIQUIDITY_T2_KIND_TEXT
+from .liquidity_t2 import LIQUIDITY_T2_THRESHOLD
+from .liquidity_t2 import ROUTE_TEXT as LIQUIDITY_T2_ROUTE_TEXT
+from .liquidity_t2 import RULES as LIQUIDITY_T2_RULES
+from .liquidity_t3 import KIND_TEXT as LIQUIDITY_T3_KIND_TEXT
+from .liquidity_t3 import RULES as LIQUIDITY_T3_RULES
+from .rcf_triggers import RULES as RCF_T1_RULES
 from .prepaid import UNRESOLVED_NOTE as PP_UNRESOLVED_NOTE
 from .measures import LIQUIDITY_BANDS, REFINANCING_BANDS, credit_rating, risk_level
 from .scoring import GC_SUPERSEDED, SCORING_DEFAULTS, headline_score
@@ -102,9 +133,9 @@ RESULTS = {
     "dscr": [("DSCR", "x", lambda c: c.get("ratio")), ("Risk score", "score", lambda c: c.get("score"))],
     "icr": [("ICR", "x", lambda c: c.get("ratio")), ("Risk score", "score", lambda c: c.get("score"))],
     "leverage": [
-        ("Debt / EBITDAR", "x", lambda c: c["debt_to_ebitdar"]["ratio"]),
+        ("Debt / EBITDAR", "lev", lambda c: c["debt_to_ebitdar"]),
         ("Debt / EBITDAR score", "score", lambda c: c["debt_to_ebitdar"].get("score")),
-        ("Net debt / EBITDAR", "x", lambda c: c["net_debt_to_ebitdar"]["ratio"]),
+        ("Net debt / EBITDAR", "lev", lambda c: c["net_debt_to_ebitdar"]),
         ("Net debt / EBITDAR score", "score", lambda c: c["net_debt_to_ebitdar"].get("score")),
         ("Composite leverage score", "score", lambda c: (c.get("composite") or {}).get("score")),
     ],
@@ -128,7 +159,17 @@ RESULTS = {
         ("Risk score", "score", lambda c: c.get("score")),
     ],
 }
-FORMATS = {"x": times, "pct": pct, "days": days, "days+": lambda v: days(v, signed=True)}
+def leverage_ratio(mc: dict) -> str:
+    """A Debt/EBITDAR ratio cell: no ratio is computed for EBITDAR ≤ 0 or debt ≤ 0 (they still score); "—" only when
+    an input is missing."""
+    if mc.get("flag"):
+        return f"n/m: {mc['flag']}"
+    if mc.get("net_cash"):
+        return "n/m: net cash"
+    return times(mc.get("ratio"))
+
+
+FORMATS = {"x": times, "pct": pct, "days": days, "days+": lambda v: days(v, signed=True), "lev": leverage_ratio}
 
 # Why a column has no result, and any scoring note.
 REASONS = {
@@ -141,8 +182,13 @@ NOTES = {
     "leverage": lambda c: [n for n in (c.get("ebitdar_basis") and f"EBITDAR is the {c['ebitdar_basis']} (trigger "
                                        "Debt/EBITDAR T1)",
                                        c["debt_to_ebitdar"].get("note"), c["net_debt_to_ebitdar"].get("note")) if n]
-    + (["Composite: net score + 1 (gross score is 2 or more worse)"] if (c.get("composite") or {}).get("uplift") else []),
+    + (["Composite: net score + 1 (gross score is 2 or more worse)"] if (c.get("composite") or {}).get("uplift") else [])
+    + ([f"Composite: + {LEVERAGE_T3_UPLIFT} for a master lease, cross-default or parent guarantee (trigger Debt/EBITDAR "
+        "T3)"] if (c.get("composite") or {}).get("lease_uplift") else []),
+    "margin": lambda c: [n for n in (c.get("rent_basis") and f"Rent: {c['rent_basis']}",) if n],
     "rcf": lambda c: [n for n in (c["rcf_to_debt"].get("note"),
+                                  c.get("nci_distributions_basis") and
+                                  f"Distributions to NCI: {c['nci_distributions_basis']}",
                                   c.get("ffo_basis") if c.get("ffo_basis") != "FFO" else None) if n],
 }
 # The benchmark each benchmark-scored measure is compared with: (label, key, formatter).
@@ -153,12 +199,23 @@ BENCHMARKS = {
     "dso": [("Change in DSO", "days_sales_outstanding", lambda v: days(v, signed=True))],
 }
 DEAL_REPORTED_ROWS = {"dso": [("revenue_reported", "Net revenue as reported (before the deal adjustment)"),
-                              ("revenue_total", "Total revenue (DSO uses billed revenue: prepaid-model pre-check)")],
+                              ("revenue_total", "Total revenue (DSO uses billed revenue: prepaid-model pre-check)"),
+                              ("receivables_before_trigger", "Net receivables as reported (before trigger DSO T1)")],
                       "leverage": [("ebitdar_reported", "EBITDAR as reported (before the deal adjustment)"),
                                    ("adj_debt_reported", "Debt + op. leases as reported (before the deal adjustment)"),
+                                   ("debt_before_trigger", "Total debt as calculated (before trigger Debt/EBITDAR T4)"),
                                    ("ebitdar_before_trigger", "EBITDAR as calculated (before trigger Debt/EBITDAR T1)"),
                                    ("cash_before_trigger", "Unrestricted cash as counted (before trigger Debt/EBITDAR "
                                                            "T2)")],
+                      "margin": [("ebitdar_before_trigger", "EBITDAR as calculated (before trigger EBITDAR Margin T1)"),
+                                 ("revenue_before_trigger", "Net operating revenue as reported (before trigger EBITDAR "
+                                                            "Margin T1)")],
+                      "rcf": [("cfo_before_trigger", "Operating cash flow as tagged (before trigger RCF/Debt T2)"),
+                              ("ffo_before_trigger", "FFO as calculated (before the RCF/Debt triggers)"),
+                              ("dividends_before_trigger", "Dividends paid as tagged (before trigger RCF/Debt T1)"),
+                              ("nci_distributions_before_trigger",
+                               "Distributions to NCI as tagged (before trigger RCF/Debt T3 or T4)"),
+                              ("rcf_before_trigger", "RCF as calculated (before the RCF/Debt triggers)")],
                       "dscr": [("capex_reported", "Total CapEx as tagged (before trigger T2)"),
                                ("cash_taxes_reported", "Cash taxes paid as tagged (before trigger T3)"),
                                ("cash_flow_reported", "Cash flow for debt service as tagged (before triggers T2 "
@@ -173,6 +230,56 @@ LADDER = [("y1", "Year 1"), ("y2", "Year 2"), ("y3", "Year 3"), ("y4", "Year 4")
 
 def _unit(m):
     return next((c.get("unit") for c in m["columns"] if c.get("unit")), None) or "USD"
+
+
+def _changed(a, b) -> bool:
+    if a is None or b is None:
+        return (a is None) != (b is None)
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return abs(a - b) > 1e-9 * max(1.0, abs(a), abs(b))
+    return a != b
+
+
+def _result_text(kind, value):
+    return score_cell(value)["text"] if kind == "score" else _text(value, FORMATS[kind])["text"]
+
+
+def recomputation(before: list[dict], after: list[dict], step: str, by: str) -> list[dict]:
+    """What one step (a pre-check or a trigger) changed: for each measure and column it touched, every input row that
+    changed (before → after) and every result row (ratios and scores) that changed, as the page shows them. ``step``
+    is the check's key, ``by`` its name. The composite risk score is compared too."""
+    out = []
+    old = {m["key"]: m for m in before}
+    for m in after:
+        mb = old.get(m["key"])
+        if mb is None:
+            continue
+        if m["key"] == "overall":
+            sb, sa = mb["columns"][0].get("score"), m["columns"][0].get("score")
+            if _changed(sb, sa):
+                out.append({"step": step, "by": by, "measure": "overall", "measure_name": "Composite risk score",
+                            "column": m["columns"][0].get("heading") or "", "inputs": [],
+                            "results": [{"label": "Composite risk score", "before": score_cell(sb)["text"],
+                                         "after": score_cell(sa)["text"], "score": True}]})
+            continue
+        for col in m["columns"]:
+            cb = next((c for c in mb["columns"] if c.get("heading") == col.get("heading")), None)
+            if cb is None:
+                continue
+            inputs = [{"label": label, "before": money(cb.get(k)), "after": money(col.get(k))}
+                      for k, label in m.get("rows", []) if _changed(cb.get(k), col.get(k))]
+            results, scores = [], []
+            for label, kind, get in RESULTS.get(m["key"], []):
+                tb, ta = _result_text(kind, get(cb)), _result_text(kind, get(col))
+                if kind == "score":  # the revised score is always shown, changed or not
+                    scores.append({"label": label, "before": tb, "after": ta, "score": True, "unchanged": tb == ta})
+                elif tb != ta:
+                    results.append({"label": label, "before": tb, "after": ta, "score": False})
+            if inputs or results or any(not x["unchanged"] for x in scores):
+                results += [x for x in scores if not (x["unchanged"] and x["before"] == "—")]
+                out.append({"step": step, "by": by, "measure": m["key"], "measure_name": m.get("title"),
+                            "column": col.get("heading"), "inputs": inputs, "results": results})
+    return out
 
 
 def measure_card(m: dict, override: dict | None = None) -> dict:
@@ -260,31 +367,92 @@ def measure_card(m: dict, override: dict | None = None) -> dict:
                 "cells": [score_cell((c.get(key) or {}).get("calculated")) for c in cols]})
         if applied:
             card["result_rows"][-1]["label"] = f"Risk score (after trigger {' and '.join(t for _, t, _ in applied)})"
-    if m["key"] == "leverage":  # the figures before each trigger that changed them, in run order: T1, then T2
+    if m["key"] == "leverage":  # the figures before each trigger that changed them, in run order: T4, T1, T2, T3
         applied, done = [], []
-        for key, t in (("ebitdar_adjustment", "Debt/EBITDAR T1"), ("cash_adjustment", "Debt/EBITDAR T2")):
+        for key, t in (("debt_adjustment", "Debt/EBITDAR T4"), ("ebitdar_adjustment", "Debt/EBITDAR T1"), ("cash_adjustment", "Debt/EBITDAR T2"),
+                       ("lease_adjustment", "Debt/EBITDAR T3")):
             if any(c.get(key) for c in cols):
                 applied.append((key, t, f"after trigger {done[-1]}, before trigger {t}" if done
                                 else f"as calculated (before trigger {t})"))
                 done.append(t)
         rows = card["result_rows"]
         for key, t, stage in applied:
-            if key == "ebitdar_adjustment":  # T2 changes cash only: the gross ratio is T1's alone
+            if key in ("debt_adjustment", "ebitdar_adjustment"):  # T2 changes cash only, T3 the composite only
                 rows.insert(1, {"label": f"Debt / EBITDAR {stage}", "cells": [
                     _text((c.get(key) or {}).get("ratio_calculated"), times) for c in cols]})
-            net_at = next(i for i, r in enumerate(rows) if r["label"] == "Net debt / EBITDAR score")
-            rows.insert(net_at, {"label": f"Net debt / EBITDAR {stage}", "cells": [
-                _text((c.get(key) or {}).get("net_ratio_calculated"), times) for c in cols]})
+            if key == "lease_adjustment":  # T3 changes the composite only, and shows the score without leases
+                rows.insert(len(rows) - 1, {"label": "Composite leverage score without leases (trigger Debt/EBITDAR T3)",
+                                            "cells": [score_cell((c.get(key) or {}).get("score_without_leases"))
+                                                      for c in cols]})
+            else:
+                net_at = next(i for i, r in enumerate(rows) if r["label"] == "Net debt / EBITDAR score")
+                rows.insert(net_at, {"label": f"Net debt / EBITDAR {stage}", "cells": [
+                    _text((c.get(key) or {}).get("net_ratio_calculated"), times) for c in cols]})
             rows.insert(len(rows) - 1, {"label": f"Composite leverage score {stage}",
                                         "cells": [score_cell((c.get(key) or {}).get("calculated")) for c in cols]})
         if applied:
             rows[-1]["label"] = f"Composite leverage score (after trigger {' and '.join(t for _, t, _ in applied)})"
+    if m["key"] == "rcf":  # the figures before each trigger that changed them, in run order: T1, then T2
+        applied, done = [], []
+        for key, t in (("rcf_adjustment", "RCF/Debt T1"), ("rcf_t2_adjustment", "RCF/Debt T2"),
+                       ("rcf_t3_adjustment", "RCF/Debt T3"), ("rcf_t4_adjustment", "RCF/Debt T4")):
+            if any(c.get(key) for c in cols):
+                applied.append((key, f"after trigger {done[-1]}, before trigger {t}" if done
+                                else f"as calculated (before trigger {t})"))
+                done.append(t)
+        rows = card["result_rows"]
+        for i, (key, stage) in enumerate(applied):
+            rows.insert(1 + i, {"label": f"RCF / debt {stage}",
+                                "cells": [_text((c.get(key) or {}).get("ratio_calculated"), pct) for c in cols]})
+        for i, (key, stage) in enumerate(applied):
+            rows.insert(1 + len(applied) + i, {"label": f"Risk score {stage}", "cells": [
+                score_cell((c.get(key) or {}).get("calculated")) for c in cols]})
+        if applied:
+            rows[1 + 2 * len(applied)]["label"] = f"Risk score (after trigger {' and '.join(done)})"
+    if m["key"] == "margin" and any(c.get("margin_adjustment") for c in cols):  # before EBITDAR Margin T1
+        rows = card["result_rows"]
+        rows.insert(1, {"label": "EBITDAR margin as calculated (before trigger EBITDAR Margin T1)",
+                        "cells": [_text((c.get("margin_adjustment") or {}).get("ratio_calculated"), pct) for c in cols]})
+        rows.insert(2, {"label": "Risk score as calculated (before trigger EBITDAR Margin T1)",
+                        "cells": [score_cell((c.get("margin_adjustment") or {}).get("calculated")) for c in cols]})
+        rows[3]["label"] = "Risk score (after trigger EBITDAR Margin T1)"
+    if m["key"] == "margin" and any((c.get("margin_t2_adjustment") or {}).get("recomputed") is not None
+                                    for c in cols):  # before EBITDAR Margin T2 (the score only)
+        rows = card["result_rows"]
+        t1 = any(c.get("margin_adjustment") for c in cols)
+        rows.insert(len(rows) - 1, {
+            "label": "Risk score " + ("after trigger EBITDAR Margin T1, before trigger EBITDAR Margin T2" if t1
+                                      else "as calculated (before trigger EBITDAR Margin T2)"),
+            "cells": [score_cell((c.get("margin_t2_adjustment") or {}).get("calculated")) for c in cols]})
+        rows[-1]["label"] = f"Risk score (after trigger {'EBITDAR Margin T1 and T2' if t1 else 'EBITDAR Margin T2'})"
+    if m["key"] == "dso" and any((c.get("dso_adjustment") or {}).get("recomputed") is not None for c in cols):
+        rows = card["result_rows"]  # DSO, prior-year DSO, change, score: before DSO T1 after the change and score
+        rows.insert(3, {"label": "Change in DSO as calculated (before trigger DSO T1)", "cells": [
+            _text((c.get("dso_adjustment") or {}).get("change_calculated"), FORMATS["days+"]) for c in cols]})
+        rows.insert(4, {"label": "Risk score as calculated (before trigger DSO T1)",
+                        "cells": [score_cell((c.get("dso_adjustment") or {}).get("calculated")) for c in cols]})
+        rows[5]["label"] = "Risk score (after trigger DSO T1)"
     if m["key"] == "liquidity":
-        if any(c.get("covenant_adjustment") for c in cols):
-            card["result_rows"].insert(len(card["result_rows"]) - 1, {
-                "label": "Section score as calculated (before the covenant adjustment)",
+        rows = card["result_rows"]
+        done = [name for key, name in (("liquidity_adjustment", "Liquidity T1"), ("maturity_adjustment", "Liquidity T2"),
+                                  ("wall_adjustment", "Liquidity T3"))
+                if any((c.get(key) or {}).get("recomputed") is not None for c in cols)]
+        covenant = any(c.get("covenant_adjustment") for c in cols)
+        for key, name in (("liquidity_adjustment", "Liquidity T1"), ("maturity_adjustment", "Liquidity T2"),
+                                  ("wall_adjustment", "Liquidity T3")):
+            if name in done:  # each trigger's score before it ran (after any covenant relief)
+                rows.insert(len(rows) - 1, {
+                    "label": f"Section score before trigger {name}",
+                    "cells": [score_cell((c.get(key) or {}).get("calculated")) for c in cols]})
+        triggers = " and ".join(done)
+        if covenant:
+            rows.insert(len(rows) - 1, {
+                "label": (f"Section score after trigger {triggers}, before the covenant adjustment" if done
+                          else "Section score as calculated (before the covenant adjustment)"),
                 "cells": [score_cell((c.get("covenant_adjustment") or {}).get("calculated")) for c in cols]})
-            card["result_rows"][-1]["label"] = "Section score (after the covenant adjustment)"
+        if done or covenant:
+            rows[-1]["label"] = "Section score (after " + " and ".join(
+                ([f"trigger {triggers}"] if done else []) + (["the covenant adjustment"] if covenant else [])) + ")"
         card["bands"] += [{"label": "Liquidity coverage bands", "text": bands_line(LIQUIDITY_BANDS)},
                           {"label": "Refinancing coverage bands", "text": bands_line(REFINANCING_BANDS)}]
         for c in cols:
@@ -1091,6 +1259,689 @@ def leverage_t2_card(t: dict | None, overrides: list | None = None) -> dict | No
     }
 
 
+LEVERAGE_T3_LABELS = {"disclosed": "DISCLOSED: +1", "not_disclosed": "NOT DISCLOSED: UNRESOLVED",
+                      "not_triggered": "NOT TRIGGERED", "skipped": "SKIPPED"}
+LEVERAGE_T3_CSS = {"disclosed": "elevated", "not_disclosed": "very-high", "not_triggered": "low", "skipped": "none"}
+LEVERAGE_T3_DECIDED_BY = {"agent": "Trigger Agent (evidence verified against the filing)",
+                          "no_text": "Code: no MD&A or note passage mentions a master lease, a cross-default, a lease "
+                                     "guarantee or lease terms",
+                          "score": "Code: the Debt/EBITDAR score",
+                          "scores": "Code: the composite leverage score with and without leases",
+                          "gate": "Code: the going-concern gate"}
+
+
+def leverage_t3_card(t: dict | None, overrides: list | None = None) -> dict | None:
+    """The Debt/EBITDAR T3 trigger as the page shows it."""
+    if not t:
+        return None
+    agent = t.get("agent")
+    tag = trigger_status(t, overrides)
+    decided = tag in DECISION_TAG.values()
+    fx = t.get("inputs") or {}
+
+    def fact(e, tail):
+        who = f" with {e['counterparty']}" if e.get("counterparty") else ""
+        return {"fact": f"{LEVERAGE_T3_KIND_TEXT[e['kind']]}{who}{tail}", **e["evidence"]}
+
+    return {
+        "status": t["status"], "fired": t.get("fired"),
+        "label": tag.upper() if decided else LEVERAGE_T3_LABELS[t["status"]],
+        "css": TAG_CSS[tag] if decided else LEVERAGE_T3_CSS[t["status"]], "gap_threshold": _g(LEVERAGE_T3_GAP),
+        "uplift": _g(LEVERAGE_T3_UPLIFT),
+        "score": score_cell(t.get("score")), "column": t.get("column") or DASH,
+        "decided_by": LEVERAGE_T3_DECIDED_BY.get(t["decided_by"], t["decided_by"]), "mode": t["mode"],
+        "reason": t["reason"], "effect": t["effect"], "notes": t.get("notes") or [], "fired_by": t.get("fired_by"),
+        "inputs": None if not fx else {
+            "score": score_cell(fx.get("score")), "score_without": score_cell(fx.get("score_without")),
+            "gap": _g(fx["gap"]) if fx.get("gap") is not None else DASH,
+            "debt": money(fx.get("debt")), "op_leases": money(fx.get("op_leases")), "rent": money(fx.get("rent")),
+            "ebitdar": money(fx.get("ebitdar")), "ebitda": money(fx.get("ebitda")),
+            "lease_source": fx.get("op_leases_concept") or "not tagged", "rent_source": fx.get("rent_concept") or "not tagged",
+            "ratio": times(fx.get("debt_ratio")), "net_ratio": times(fx.get("net_debt_ratio")),
+            "ratio_without": times(fx.get("ratio_without")), "net_ratio_without": times(fx.get("net_ratio_without"))},
+        "resolution": None if not t.get("fired") else (
+            f"Unresolved: {t.get('unresolved_why')}, so Debt/EBITDAR is escalated to an analyst"
+            if t.get("unresolved", True) else
+            "Resolved: the agent and the verified evidence agree, so the verified outcome stands (no analyst "
+            "decision)"),
+        "unresolved": bool(t.get("fired") and t.get("unresolved", True)),
+        "evidence": [fact(e, f": +{_g(LEVERAGE_T3_UPLIFT)}") for e in t.get("debt_like") or []]
+        + [fact(e, ": no lease adjustment") for e in t.get("other") or []],
+        "rules": [{"when": w, "effect": e} for w, e in LEVERAGE_T3_RULES],
+        "sections": t.get("sections") or [], "passages": t.get("passages") or [],
+        "agent": _trigger_agent(agent, LEVERAGE_T3_LABELS, LEVERAGE_T3_CSS),
+        "agent_not_used": None if agent else (
+            "Not called: no MD&A or note passage mentions a master lease, a cross-default, a lease guarantee or lease "
+            "terms." if t.get("fired") else "Not called: the trigger wasn't set off."),
+    }
+
+
+LEVERAGE_T4_LABELS = {"reconciles": "RECONCILED: RECOMPUTED", "does_not_reconcile": "DOESN'T RECONCILE: UNRESOLVED",
+                      "not_triggered": "NOT TRIGGERED", "skipped": "SKIPPED"}
+LEVERAGE_T4_CSS = {"reconciles": "moderate", "does_not_reconcile": "very-high", "not_triggered": "low", "skipped": "none"}
+LEVERAGE_T4_DECIDED_BY = {"agent": "Trigger Agent (evidence verified against the filing)",
+                          "no_text": "Code: no balance-sheet, debt-note or lease-note passage mentions debt",
+                          "score": "Code: the Debt/EBITDAR score", "debt": "Code: how total debt was tagged",
+                          "gate": "Code: the going-concern gate"}
+
+
+def leverage_t4_card(t: dict | None, overrides: list | None = None) -> dict | None:
+    """The Debt/EBITDAR T4 trigger as the page shows it."""
+    if not t:
+        return None
+    agent = t.get("agent")
+    tag = trigger_status(t, overrides)
+    decided = tag in DECISION_TAG.values()
+    fx = t.get("inputs") or {}
+    total, fl = t.get("note_total"), t.get("finance_leases_note")
+    inside = t.get("finance_leases_inside_evidence")
+    return {
+        "status": t["status"], "fired": t.get("fired"),
+        "label": tag.upper() if decided else LEVERAGE_T4_LABELS[t["status"]],
+        "css": TAG_CSS[tag] if decided else LEVERAGE_T4_CSS[t["status"]], "tie_share": pct(LEVERAGE_T4_TIE),
+        "score": score_cell(t.get("score")), "column": t.get("column") or DASH,
+        "decided_by": LEVERAGE_T4_DECIDED_BY.get(t["decided_by"], t["decided_by"]), "mode": t["mode"],
+        "reason": t["reason"], "effect": t["effect"], "notes": t.get("notes") or [], "fired_by": t.get("fired_by"),
+        "inputs": None if not fx else {
+            "debt": money(fx.get("debt")), "debt_source": fx.get("debt_concept") or "not tagged",
+            "borrowings": money(fx.get("borrowings")),
+            "total_skipped": None if fx.get("total_skipped") is None else
+            f"{money(fx['total_skipped'])} million ({fx.get('total_skipped_concept')})",
+            "finance_leases_added": None if fx.get("finance_leases_added") is None else
+            f"{money(fx['finance_leases_added'])} million ({fx.get('finance_leases_concept')})",
+            "ratio": times(fx.get("debt_ratio"))},
+        "reconciled": money(t.get("reconciled_debt")) if t.get("reconciled_debt") is not None else None,
+        "instruments_sum": money(t.get("instruments_sum")) if t.get("instruments_sum") is not None else None,
+        "resolution": None if not t.get("fired") else (
+            f"Unresolved: {t.get('unresolved_why')}, so Debt/EBITDAR is escalated to an analyst"
+            if t.get("unresolved", True) else
+            "Resolved: the agent and the verified evidence agree, so the verified outcome stands (no analyst "
+            "decision)"),
+        "unresolved": bool(t.get("fired") and t.get("unresolved", True)),
+        "evidence": [{"fact": f"{LEVERAGE_T4_KIND_TEXT[e['kind']]}: {e['description']}, {money(e['amount'])} million",
+                      **e["evidence"]} for e in t.get("instruments") or []]
+        + ([{"fact": f"Debt note total: {money(total['amount'])} million", **total["evidence"]}] if total else [])
+        + ([{"fact": f"Finance lease liabilities (lease note): {money(fl['amount'])} million", **fl["evidence"]}]
+           if fl else [])
+        + ([{"fact": "Finance leases already in the total", **inside}] if inside else []),
+        "rules": [{"when": w, "effect": e} for w, e in LEVERAGE_T4_RULES],
+        "sections": t.get("sections") or [], "passages": t.get("passages") or [],
+        "agent": _trigger_agent(agent, LEVERAGE_T4_LABELS, LEVERAGE_T4_CSS),
+        "agent_not_used": None if agent else (
+            "Not called: no balance-sheet, debt-note or lease-note passage mentions debt." if t.get("fired")
+            else "Not called: the trigger wasn't set off."),
+    }
+
+
+RCF_T1_LABELS = {"added_back": "ADDED BACK: RECOMPUTED", "no_one_offs": "NO ONE-OFFS: NO ADJUSTMENT",
+                 "unresolved": "UNRESOLVED", "not_triggered": "NOT TRIGGERED", "skipped": "SKIPPED"}
+RCF_T1_CSS = {"added_back": "moderate", "no_one_offs": "low", "unresolved": "very-high", "not_triggered": "low",
+              "skipped": "none"}
+RCF_T1_DECIDED_BY = {"agent": "Trigger Agent (evidence verified against the filing)",
+                     "no_text": "Code: no MD&A or note passage mentions a one-off cash item or a special dividend",
+                     "score": "Code: the RCF / debt score and ratio", "gate": "Code: the going-concern gate"}
+
+
+def rcf_t1_card(t: dict | None, overrides: list | None = None) -> dict | None:
+    """The RCF/Debt T1 trigger as the page shows it."""
+    if not t:
+        return None
+    agent = t.get("agent")
+    tag = trigger_status(t, overrides)
+    decided = tag in DECISION_TAG.values()
+    fx = t.get("inputs") or {}
+
+    def kind(e):
+        return "Special dividend" if e["kind"] == "special_dividend" else "One-off cash cost"
+
+    return {
+        "status": t["status"], "fired": t.get("fired"),
+        "label": tag.upper() if decided else RCF_T1_LABELS[t["status"]],
+        "css": TAG_CSS[tag] if decided else RCF_T1_CSS[t["status"]], "threshold": _g(RCF_T1_THRESHOLD),
+        "score": score_cell(t.get("score")), "column": t.get("column") or DASH,
+        "decided_by": RCF_T1_DECIDED_BY.get(t["decided_by"], t["decided_by"]), "mode": t["mode"],
+        "reason": t["reason"], "effect": t["effect"], "notes": t.get("notes") or [], "fired_by": t.get("fired_by"),
+        "inputs": None if not fx else {
+            "cfo": money(fx.get("cfo")), "wc": money(fx.get("wc_change")), "ffo": money(fx.get("ffo")),
+            "ffo_basis": fx.get("ffo_basis") or DASH, "dividends": money(fx.get("dividends")),
+            "nci": money(fx.get("nci_distributions")), "rcf": money(fx.get("rcf")), "debt": money(fx.get("adj_debt")),
+            "ratio": pct(fx.get("ratio"))},
+        "cash_costs": money(t.get("cash_costs")) if t.get("cash_costs") else None,
+        "special_dividends": money(t.get("special_dividends")) if t.get("special_dividends") else None,
+        "resolution": None if not t.get("fired") else (
+            f"Unresolved: {t.get('unresolved_why')}, so RCF / debt is escalated to an analyst"
+            if t.get("unresolved", True) else
+            "Resolved: the agent and the verified evidence agree, so the verified outcome stands (no analyst "
+            "decision)"),
+        "unresolved": bool(t.get("fired") and t.get("unresolved", True)),
+        "evidence": [{"fact": f"{kind(e)} ({e['category'].replace('_', ' ')}): {money(e['amount'])} million, added "
+                              "back", **e["evidence"]} for e in t.get("one_offs") or []]
+        + [{"fact": f"Recurring {kind(e).lower()} ({e['category'].replace('_', ' ')}): {money(e['amount'])} million, "
+                    "not adjusted", **e["evidence"]} for e in t.get("recurring") or []]
+        + [{"fact": "Recurs", **e["recurring_evidence"]} for e in t.get("recurring") or []]
+        + [{"fact": f"{kind(e)} identified, not quantified ({e['category'].replace('_', ' ')})", **e["evidence"]}
+           for e in t.get("unquantified") or []],
+        "rules": [{"when": w, "effect": e} for w, e in RCF_T1_RULES],
+        "sections": t.get("sections") or [], "passages": t.get("passages") or [],
+        "agent": _trigger_agent(agent, RCF_T1_LABELS, RCF_T1_CSS),
+        "agent_not_used": None if agent else (
+            "Not called: no MD&A or note passage mentions a one-off cash item or a special dividend." if t.get("fired")
+            else "Not called: the trigger wasn't set off."),
+    }
+
+
+DSO_T1_LABELS = {"recomputed": "MECHANICAL: RECOMPUTED", "recovered": f"RECOVERED: −{DSO_T1_RELIEF}",
+                 "unresolved": "UNRESOLVED", "no_cause": "NO CAUSE: NO ADJUSTMENT", "not_triggered": "NOT TRIGGERED",
+                 "skipped": "SKIPPED"}
+DSO_T1_CSS = {"recomputed": "moderate", "recovered": "moderate", "unresolved": "very-high", "no_cause": "low",
+              "not_triggered": "low", "skipped": "none"}
+DSO_T1_DECIDED_BY = {"agent": "Trigger Agent (evidence verified against the filing)",
+                     "no_text": "Code: no MD&A, note or subsequent-events passage mentions receivables or collections",
+                     "score": "Code: the change in DSO", "gate": "Code: the going-concern gate"}
+
+
+LIQUIDITY_T1_LABELS = {"stated": "AVAILABILITY STATED", "computed": "AVAILABILITY WORKED OUT",
+                       "no_revolver": "NO REVOLVER: NO ADJUSTMENT", "unresolved": "UNRESOLVED",
+                       "not_triggered": "NOT TRIGGERED", "skipped": "SKIPPED"}
+LIQUIDITY_T1_CSS = {"stated": "moderate", "computed": "moderate", "no_revolver": "low", "unresolved": "very-high",
+                    "not_triggered": "low", "skipped": "none"}
+LIQUIDITY_T1_DECIDED_BY = {"agent": "Trigger Agent (evidence verified against the filing)",
+                           "no_text": "Code: no debt-note or MD&A liquidity passage mentions a revolver",
+                           "score": "Code: the revolver availability search", "gate": "Code: the going-concern gate"}
+
+
+def liquidity_t1_card(t: dict | None, overrides: list | None = None) -> dict | None:
+    """The Liquidity T1 trigger as the page shows it."""
+    if not t:
+        return None
+    agent = t.get("agent")
+    tag = trigger_status(t, overrides)
+    decided = tag in DECISION_TAG.values()
+    fx = t.get("inputs") or {}
+    facilities = [{
+        "facility_id": f["facility_id"], "description": f["description"], "asset_based": f["asset_based"],
+        "route": LIQUIDITY_T1_ROUTE_TEXT[f["route"]], "unresolved": f["route"] == "unresolved",
+        "availability": money(f["availability"]) if f["availability"] is not None else None,
+        "figures": [{"label": LIQUIDITY_T1_FIGURE_TEXT[k], "amount": money(x["amount"])}
+                    for k, x in f["figures"].items()],
+        "maturity": (f["maturity"] or {}).get("date"),
+        "matures_soon": bool((f["maturity"] or {}).get("within_12_months")),
+        "unresolved_why": f["unresolved_why"]} for f in t.get("facilities") or []]
+    return {
+        "status": t["status"], "fired": t.get("fired"),
+        "label": tag.upper() if decided else LIQUIDITY_T1_LABELS[t["status"]],
+        "css": TAG_CSS[tag] if decided else LIQUIDITY_T1_CSS[t["status"]],
+        "score": score_cell(t.get("score")), "column": t.get("column") or DASH,
+        "decided_by": LIQUIDITY_T1_DECIDED_BY.get(t["decided_by"], t["decided_by"]), "mode": t["mode"],
+        "reason": t["reason"], "effect": t["effect"], "notes": t.get("notes") or [], "fired_by": t.get("fired_by"),
+        "inputs": None if not fx else {
+            "as_at": fx.get("as_at"), "cash": money(fx.get("cash")), "cfo": money(fx.get("cfo")),
+            "coverage": times(fx.get("coverage")), "refinancing": times(fx.get("refinancing")),
+            "search": fx.get("revolver_found_source")},
+        "availability": money(t.get("availability")) if t.get("availability") is not None else None,
+        "facilities": facilities,
+        "resolution": None if not t.get("fired") else (
+            f"Unresolved: {t.get('unresolved_why')}, so liquidity and debt maturity is escalated to an analyst"
+            if t.get("unresolved", True) else
+            "Resolved: the agent and the verified evidence agree, so the verified outcome stands (no analyst "
+            "decision)"),
+        "unresolved": bool(t.get("fired") and t.get("unresolved", True)),
+        "evidence": [q for f in t.get("facilities") or [] for q in (
+            [{"fact": f"{f['facility_id']}: revolving facility" + (" (asset-based)" if f["asset_based"] else ""),
+              **f["evidence"]}]
+            + [{"fact": f"{f['facility_id']}: {LIQUIDITY_T1_FIGURE_TEXT[k].lower()} {money(x['amount'])} million",
+                **x["evidence"]} for k, x in f["figures"].items()]
+            + ([{"fact": f"{f['facility_id']}: matures {f['maturity']['date']}", **f["maturity"]["evidence"]}]
+               if f.get("maturity") else []))],
+        "rules": [{"when": w, "effect": e} for w, e in LIQUIDITY_T1_RULES],
+        "sections": t.get("sections") or [], "passages": t.get("passages") or [],
+        "agent": _trigger_agent(agent, LIQUIDITY_T1_LABELS, LIQUIDITY_T1_CSS),
+        "agent_not_used": None if agent else (
+            "Not called: no debt-note or MD&A liquidity passage mentions a revolver, credit facility or letters of "
+            "credit." if t.get("fired") else "Not called: the trigger wasn't set off."),
+    }
+
+
+LIQUIDITY_T2_LABELS = {"recomputed": "MATURITIES RECOMPUTED", "already_long_term": "ALREADY LONG-TERM: NO ADJUSTMENT",
+                       "unresolved": "UNRESOLVED", "none_found": "NOTHING FOUND: NO ADJUSTMENT",
+                       "not_triggered": "NOT TRIGGERED", "skipped": "SKIPPED"}
+LIQUIDITY_T2_CSS = {"recomputed": "moderate", "already_long_term": "low", "unresolved": "very-high", "none_found": "low",
+                    "not_triggered": "low", "skipped": "none"}
+LIQUIDITY_T2_DECIDED_BY = {"agent": "Trigger Agent (evidence verified against the filing)",
+                           "no_text": "Code: no subsequent-events, debt-note, MD&A liquidity or going-concern passage",
+                           "score": "Code: the coverage and refinancing scores", "gate": "Code: the going-concern gate"}
+_T2_EVIDENCE = {"reclassified": "already long-term (ASC 470-10-45-14)", "event": "event",
+                "original_maturity": "original maturity", "amount": "amount", "new_maturity": "new maturity",
+                "source": "source of repayment", "cash_used": "cash used"}
+
+
+def liquidity_t2_card(t: dict | None, overrides: list | None = None) -> dict | None:
+    """The Liquidity T2 trigger as the page shows it."""
+    if not t:
+        return None
+    agent = t.get("agent")
+    tag = trigger_status(t, overrides)
+    decided = tag in DECISION_TAG.values()
+    fx = t.get("inputs") or {}
+    bucket = lambda k: LIQUIDITY_T2_BUCKET_TEXT.get(k, DASH) if k else DASH  # noqa: E731
+    items = [{"item_id": e["item_id"], "description": e["description"],
+              "kind": LIQUIDITY_T2_KIND_TEXT.get(e["kind"], str(e["kind"]).capitalize()),
+              "route": LIQUIDITY_T2_ROUTE_TEXT[e["route"]], "unresolved": e["route"] in ("planned", "incomplete"),
+              "date": e.get("date") or DASH, "amount": money(e["amount"]) if e.get("amount") is not None else DASH,
+              "move": f"{bucket(e.get('from'))} → {bucket(e.get('to'))}" if e.get("to") else bucket(e.get("from")),
+              "cash_used": money(e["cash_used"]) if e.get("cash_used") else None,
+              "dscr_t1_item": e.get("dscr_t1_item"), "unresolved_why": e.get("unresolved_why")}
+             for e in t.get("items") or []]
+    return {
+        "status": t["status"], "fired": t.get("fired"),
+        "label": tag.upper() if decided else LIQUIDITY_T2_LABELS[t["status"]],
+        "css": TAG_CSS[tag] if decided else LIQUIDITY_T2_CSS[t["status"]],
+        "threshold": _g(LIQUIDITY_T2_THRESHOLD), "score": score_cell(t.get("score")), "column": t.get("column") or DASH,
+        "decided_by": LIQUIDITY_T2_DECIDED_BY.get(t["decided_by"], t["decided_by"]), "mode": t["mode"],
+        "reason": t["reason"], "effect": t["effect"], "notes": t.get("notes") or [], "fired_by": t.get("fired_by"),
+        "inputs": None if not fx else {
+            "as_at": fx.get("as_at"), "cash": money(fx.get("cash")),
+            "coverage": times(fx.get("coverage")), "coverage_score": score_cell(fx.get("coverage_score")),
+            "refinancing": times(fx.get("refinancing")), "refinancing_score": score_cell(fx.get("refinancing_score")),
+            "ladder": [{"label": LIQUIDITY_T2_BUCKET_TEXT[k], "amount": money(v)}
+                       for k, v in (fx.get("ladder") or {}).items()]},
+        "debts": items,
+        "dscr_t1": [{"item_id": e["item_id"], "outcome": e["outcome"].replace("_", " ")}
+                    for e in t.get("dscr_t1") or []],
+        "resolution": None if not t.get("fired") else (
+            f"Unresolved: {t.get('unresolved_why')}, so liquidity and debt maturity is escalated to an analyst"
+            if t.get("unresolved", True) else
+            "Resolved: the agent and the verified evidence agree, so the verified outcome stands (no analyst "
+            "decision)"),
+        "unresolved": bool(t.get("fired") and t.get("unresolved", True)),
+        "evidence": [{"fact": f"{e['item_id']}: {_T2_EVIDENCE[k]}" + (" (reused from DSCR T1)" if q.get("reused") else ""),
+                      "section": q.get("section") or ("DSCR T1" if q.get("reused") else DASH), **q}
+                     for e in t.get("items") or [] for k, q in e["evidence"].items()],
+        "rules": [{"when": w, "effect": e} for w, e in LIQUIDITY_T2_RULES],
+        "sections": t.get("sections") or [], "passages": t.get("passages") or [],
+        "agent": _trigger_agent(agent, LIQUIDITY_T2_LABELS, LIQUIDITY_T2_CSS),
+        "agent_not_used": None if agent else (
+            "Not called: no subsequent-events, debt-note, MD&A liquidity or going-concern passage to read."
+            if t.get("fired") else "Not called: the trigger wasn't set off."),
+    }
+
+
+LIQUIDITY_T3_LABELS = {"secured": "SECURED: −1", "unsecured": "UNSECURED: +1", "mixed": "MIXED: NO CHANGE",
+                       "not_triggered": "NOT TRIGGERED", "skipped": "SKIPPED"}
+LIQUIDITY_T3_CSS = {"secured": "moderate", "unsecured": "elevated", "mixed": "low", "not_triggered": "low",
+                    "skipped": "none"}
+LIQUIDITY_T3_DECIDED_BY = {"agent": "Trigger Agent (evidence verified against the filing)",
+                           "no_text": "Code: no debt-note or MD&A liquidity passage describes the debt",
+                           "score": "Code: the maturity table", "gate": "Code: the going-concern gate"}
+
+
+def liquidity_t3_card(t: dict | None, overrides: list | None = None) -> dict | None:
+    """The Liquidity T3 trigger as the page shows it."""
+    if not t:
+        return None
+    tag = trigger_status(t, overrides)
+    decided = tag in DECISION_TAG.values()
+    fx = t.get("inputs") or {}
+    return {
+        "status": t["status"], "fired": t.get("fired"),
+        "label": tag.upper() if decided else LIQUIDITY_T3_LABELS[t["status"]],
+        "css": TAG_CSS[tag] if decided else LIQUIDITY_T3_CSS[t["status"]],
+        "score": score_cell(t.get("score")), "column": t.get("column") or DASH,
+        "decided_by": LIQUIDITY_T3_DECIDED_BY.get(t["decided_by"], t["decided_by"]), "mode": t["mode"],
+        "reason": t["reason"], "effect": t["effect"], "notes": t.get("notes") or [], "fired_by": t.get("fired_by"),
+        "inputs": None if not fx.get("wall") else {
+            "wall": fx["wall_label"], "amount": money(fx["wall_amount"]), "total": money(fx["total"]),
+            "share": pct(fx["share"])},
+        "shares": None if not t.get("fired") else {"secured": pct(t.get("secured_share")),
+                                                   "unsecured": pct(t.get("unsecured_share"))},
+        "resolution": None if not t.get("fired") else (
+            f"Unresolved: {t.get('unresolved_why')}, so liquidity and debt maturity is escalated to an analyst"
+            if t.get("unresolved", True) else
+            "Resolved: the agent and the verified evidence agree, so the verified outcome stands (no analyst "
+            "decision)"),
+        "unresolved": bool(t.get("fired") and t.get("unresolved", True)),
+        "evidence": [{"fact": f"{e['item_id']}: {LIQUIDITY_T3_KIND_TEXT[e['kind']].lower()}, {money(e['amount'])} "
+                              f"million, matures {e['maturity']}", **e["evidence"]} for e in t.get("instruments") or []],
+        "rules": [{"when": w, "effect": e} for w, e in LIQUIDITY_T3_RULES],
+        "sections": t.get("sections") or [], "passages": t.get("passages") or [],
+        "agent": _trigger_agent(t.get("agent"), LIQUIDITY_T3_LABELS, LIQUIDITY_T3_CSS),
+    }
+
+
+def dso_t1_card(t: dict | None, overrides: list | None = None) -> dict | None:
+    """The DSO T1 trigger as the page shows it."""
+    if not t:
+        return None
+    agent = t.get("agent")
+    tag = trigger_status(t, overrides)
+    decided = tag in DECISION_TAG.values()
+    fx = t.get("inputs") or {}
+    return {
+        "status": t["status"], "fired": t.get("fired"),
+        "label": tag.upper() if decided else DSO_T1_LABELS[t["status"]],
+        "css": TAG_CSS[tag] if decided else DSO_T1_CSS[t["status"]], "threshold": _g(DSO_T1_DAYS),
+        "score": score_cell(t.get("score")), "column": t.get("column") or DASH,
+        "decided_by": DSO_T1_DECIDED_BY.get(t["decided_by"], t["decided_by"]), "mode": t["mode"],
+        "reason": t["reason"], "effect": t["effect"], "notes": t.get("notes") or [], "fired_by": t.get("fired_by"),
+        "inputs": None if not fx else {
+            "receivables": money(fx.get("receivables")), "revenue": money(fx.get("revenue")), "dso": days(fx.get("dso")),
+            "prior_receivables": money(fx.get("prior_receivables")), "prior_revenue": money(fx.get("prior_revenue")),
+            "prior_dso": days(fx.get("prior_dso")), "change": days(fx.get("change"), signed=True),
+            "deal_adjusted": fx.get("deal_adjusted")},
+        "added": money(t.get("added")) if t.get("added") else None,
+        "prior_added": money(t.get("prior_added")) if t.get("prior_added") else None,
+        "resolution": None if not t.get("fired") else (
+            f"Unresolved: {t.get('unresolved_why')}, so DSO is escalated to an analyst"
+            if t.get("unresolved", True) else
+            "Resolved: the agent and the verified evidence agree, so the verified outcome stands (no analyst "
+            "decision)"),
+        "unresolved": bool(t.get("fired") and t.get("unresolved", True)),
+        "evidence": [{"fact": f"{DSO_T1_KIND_TEXT[e['kind']]} ({e['year']} year): {money(e['amount'])} million, added "
+                              "back", **e["evidence"]} for e in t.get("mechanical") or []]
+        + [{"fact": "Unusual", **e["unusual_evidence"]} for e in t.get("mechanical") or [] if e.get("unusual_evidence")]
+        + [{"fact": f"{DSO_T1_KIND_TEXT[e['kind']]}: mentioned, not quantified", **e["evidence"]}
+           for e in t.get("unquantified") or []]
+        + [{"fact": f"Cause: {DSO_T1_KIND_TEXT[e['kind']].lower()}", **e["evidence"]}
+           for e in t.get("operational") or []]
+        + ([{"fact": "Collections recovered after the year-end", **t["recovery"]}] if t.get("recovery") else []),
+        "rules": [{"when": w, "effect": e} for w, e in DSO_T1_RULES],
+        "sections": t.get("sections") or [], "passages": t.get("passages") or [],
+        "agent": _trigger_agent(agent, DSO_T1_LABELS, DSO_T1_CSS),
+        "agent_not_used": None if agent else (
+            "Not called: no MD&A, note or subsequent-events passage mentions receivables or collections."
+            if t.get("fired") else "Not called: the trigger wasn't set off."),
+    }
+
+
+RCF_T2_LABELS = {"removed": "INFLOWS REMOVED: RECOMPUTED", "no_adjustment": "NO ADJUSTMENT",
+                 "unresolved": "UNRESOLVED", "not_triggered": "NOT TRIGGERED", "skipped": "SKIPPED"}
+RCF_T2_CSS = {"removed": "moderate", "no_adjustment": "low", "unresolved": "very-high", "not_triggered": "low",
+              "skipped": "none"}
+RCF_T2_DECIDED_BY = {"agent": "Trigger Agent (evidence verified against the filing)",
+                     "no_text": "Code: no cash flow statement, MD&A or note passage mentions a cash receipt",
+                     "score": "Code: the RCF / debt score",
+                     "ffo": "Code: the tagged one-off inflows and FFO's change on the prior year",
+                     "gate": "Code: the going-concern gate"}
+RCF_T2_OUTCOME = {"remove": "removed from CFO and FFO", "inside": "inside the working-capital lines: no adjustment",
+                  "recurring": "recurs: no adjustment", "not_one_time": "not described as one-time: no adjustment",
+                  "outside_cash_flow": "investing or financing: no adjustment", "unquantified": "not quantified",
+                  "unknown_composition": "can't be placed (no working-capital lines tagged)"}
+
+
+def rcf_t2_card(t: dict | None, overrides: list | None = None) -> dict | None:
+    """The RCF/Debt T2 trigger as the page shows it."""
+    if not t:
+        return None
+    agent = t.get("agent")
+    tag = trigger_status(t, overrides)
+    decided = tag in DECISION_TAG.values()
+    fx = t.get("inputs") or {}
+    return {
+        "status": t["status"], "fired": t.get("fired"),
+        "label": tag.upper() if decided else RCF_T2_LABELS[t["status"]],
+        "css": TAG_CSS[tag] if decided else RCF_T2_CSS[t["status"]], "share_threshold": pct(RCF_T2_SHARE),
+        "growth_threshold": pct(RCF_T2_GROWTH), "excess_threshold": f"{RCF_T2_EXCESS * 100:.0f} points",
+        "score": score_cell(t.get("score")), "column": t.get("column") or DASH,
+        "decided_by": RCF_T2_DECIDED_BY.get(t["decided_by"], t["decided_by"]), "mode": t["mode"],
+        "reason": t["reason"], "effect": t["effect"], "notes": t.get("notes") or [], "fired_by": t.get("fired_by"),
+        "inputs": None if not fx else {
+            "cfo": money(fx.get("cfo")), "wc": money(fx.get("wc_change")), "ffo": money(fx.get("ffo")),
+            "ffo_basis": fx.get("ffo_basis") or DASH, "prior_ffo": money(fx.get("prior_ffo")),
+            "prior_heading": fx.get("prior_heading") or DASH, "growth": pct(fx.get("growth")),
+            "revenue_growth": pct(fx.get("revenue_growth")) if fx.get("revenue_growth") is not None else "not tagged",
+            "tagged": money(fx.get("tagged_total")), "share": pct(fx.get("share")),
+            "tagged_concepts": ", ".join(e["concept"] for e in fx.get("tagged_inflows") or []) or "none tagged",
+            "wc_lines": ", ".join(x["label"] for x in fx.get("working_capital_lines") or []) or "none tagged"},
+        "removed": money(t.get("removed")) if t.get("removed") else None,
+        "resolution": None if not t.get("fired") else (
+            f"Unresolved: {t.get('unresolved_why')}, so RCF / debt is escalated to an analyst"
+            if t.get("unresolved", True) else
+            "Resolved: the agent and the verified evidence agree, so the verified outcome stands (no analyst "
+            "decision)"),
+        "unresolved": bool(t.get("fired") and t.get("unresolved", True)),
+        "evidence": [{"fact": f"{RCF_T2_KIND_TEXT.get(e['kind'], 'Inflow')} ({(e.get('category') or 'other').replace('_', ' ')})"
+                              + (f": {money(e['amount'])} million" if e.get("amount") is not None else "")
+                              + f", {RCF_T2_OUTCOME.get(e['outcome'], e['outcome'])}"
+                              + (f" ({e['recurrence']})" if e.get("recurrence") else ""), **e["evidence"]}
+                     for e in t.get("inflows") or []]
+        + [{"fact": "Described as one-time or timing", **e["one_time_evidence"]}
+           for e in t.get("inflows") or [] if e.get("one_time_evidence")],
+        "rules": [{"when": w, "effect": e} for w, e in RCF_T2_RULES],
+        "sections": t.get("sections") or [], "passages": t.get("passages") or [],
+        "agent": _trigger_agent(agent, RCF_T2_LABELS, RCF_T2_CSS),
+        "agent_not_used": None if agent else (
+            "Not called: no cash flow statement, MD&A or note passage mentions a cash receipt." if t.get("fired")
+            else "Not called: the trigger wasn't set off."),
+    }
+
+
+RCF_T3_LABELS = {"cash_paid": "CASH PAID: RECOMPUTED", "declared": "DECLARED: RECOMPUTED (TIMING)",
+                 "none_in_year": "NONE IN THE YEAR: NO ADJUSTMENT", "unresolved": "UNRESOLVED",
+                 "not_triggered": "NOT TRIGGERED", "skipped": "SKIPPED"}
+RCF_T3_CSS = {"cash_paid": "moderate", "declared": "elevated", "none_in_year": "low", "unresolved": "very-high",
+              "not_triggered": "low", "skipped": "none"}
+RCF_T3_DECIDED_BY = {"agent": "Trigger Agent (evidence verified against the filing)",
+                     "no_text": "Code: no cash flow statement, equity statement or note passage mentions NCI",
+                     "score": "Code: the RCF / debt score",
+                     "nci": "Code: the NCI-distributions tags and NCI's size", "gate": "Code: the going-concern gate"}
+
+
+def rcf_t3_card(t: dict | None, overrides: list | None = None) -> dict | None:
+    """The RCF/Debt T3 trigger as the page shows it."""
+    if not t:
+        return None
+    agent = t.get("agent")
+    tag = trigger_status(t, overrides)
+    decided = tag in DECISION_TAG.values()
+    fx = t.get("inputs") or {}
+    return {
+        "status": t["status"], "fired": t.get("fired"),
+        "label": tag.upper() if decided else RCF_T3_LABELS[t["status"]],
+        "css": TAG_CSS[tag] if decided else RCF_T3_CSS[t["status"]], "share_threshold": pct(RCF_T3_SHARE),
+        "score": score_cell(t.get("score")), "column": t.get("column") or DASH,
+        "decided_by": RCF_T3_DECIDED_BY.get(t["decided_by"], t["decided_by"]), "mode": t["mode"],
+        "reason": t["reason"], "effect": t["effect"], "notes": t.get("notes") or [], "fired_by": t.get("fired_by"),
+        "inputs": None if not fx else {
+            "tagged": "yes" if fx.get("tagged") else "no", "nci_income": money(fx.get("nci_income")),
+            "net_income": money(fx.get("net_income")), "nci_equity": money(fx.get("nci_equity")),
+            "total_equity": money(fx.get("total_equity")), "share": pct(fx.get("share")),
+            "test": {"income": "share of consolidated net income", "equity": "share of total equity"}.get(
+                fx.get("test"), "no NCI tagged"),
+            "counted": money(fx.get("nci_distributions"))},
+        "amount": money(t.get("amount")) if t.get("amount") else None,
+        "resolution": None if not t.get("fired") else (
+            f"Unresolved: {t.get('unresolved_why')}, so RCF / debt is escalated to an analyst"
+            if t.get("unresolved", True) else
+            "Resolved: the agent and the verified evidence agree, so the verified outcome stands (no analyst "
+            "decision)"),
+        "unresolved": bool(t.get("fired") and t.get("unresolved", True)),
+        "evidence": [{"fact": f"Distribution to {'redeemable NCI' if e['holder'] == 'redeemable_nci' else 'NCI'} ("
+                              + ("cash paid" if e["basis"] == "cash_paid" else "declared") + f"): {money(e['amount'])} "
+                              "million", **e["evidence"]} for e in t.get("distributions") or []]
+        + [{"fact": "Purchase of NCI ownership (excluded)", **q} for q in t.get("purchases") or []]
+        + [{"fact": "No distribution in the year", **q} for q in t.get("none_evidence") or []]
+        + [{"fact": "Lumped with other financing or buyouts", **q} for q in t.get("lumped") or []],
+        "rules": [{"when": w, "effect": e} for w, e in RCF_T3_RULES],
+        "sections": t.get("sections") or [], "passages": t.get("passages") or [],
+        "agent": _trigger_agent(agent, RCF_T3_LABELS, RCF_T3_CSS),
+        "agent_not_used": None if agent else (
+            "Not called: no cash flow statement, equity statement or note passage mentions NCI." if t.get("fired")
+            else "Not called: the trigger wasn't set off."),
+    }
+
+
+RCF_T4_LABELS = {"buyouts_excluded": "BUYOUTS EXCLUDED: RECOMPUTED", "distributions_only": "DISTRIBUTIONS ONLY",
+                 "unresolved": "UNRESOLVED", "not_triggered": "NOT TRIGGERED", "skipped": "SKIPPED"}
+RCF_T4_CSS = {"buyouts_excluded": "moderate", "distributions_only": "low", "unresolved": "very-high",
+              "not_triggered": "low", "skipped": "none"}
+RCF_T4_DECIDED_BY = {"agent": "Trigger Agent (evidence verified against the filing)",
+                     "no_text": "Code: no cash flow statement, equity statement or note passage mentions NCI",
+                     "score": "Code: the RCF / debt score", "tag": "Code: the NCI-distributions tag used",
+                     "tags": "Code: the equity statement's distributions to NCI and the purchase-of-NCI tags",
+                     "gate": "Code: the going-concern gate"}
+
+
+def rcf_t4_card(t: dict | None, overrides: list | None = None) -> dict | None:
+    """The RCF/Debt T4 trigger as the page shows it."""
+    if not t:
+        return None
+    agent = t.get("agent")
+    tag = trigger_status(t, overrides)
+    decided = tag in DECISION_TAG.values()
+    fx = t.get("inputs") or {}
+    return {
+        "status": t["status"], "fired": t.get("fired"),
+        "label": tag.upper() if decided else RCF_T4_LABELS[t["status"]],
+        "css": TAG_CSS[tag] if decided else RCF_T4_CSS[t["status"]], "concept": t.get("concept"),
+        "score": score_cell(t.get("score")), "column": t.get("column") or DASH,
+        "decided_by": RCF_T4_DECIDED_BY.get(t["decided_by"], t["decided_by"]), "mode": t["mode"],
+        "reason": t["reason"], "effect": t["effect"], "notes": t.get("notes") or [], "fired_by": t.get("fired_by"),
+        "inputs": None if not fx else {"concept": fx.get("concept") or "none tagged",
+                                       "tagged": money(fx.get("nci_distributions"))},
+        "excluded": money(t.get("excluded")) if t.get("excluded") else None,
+        "resolution": None if not t.get("fired") else (
+            f"Unresolved: {t.get('unresolved_why')}, so RCF / debt is escalated to an analyst"
+            if t.get("unresolved", True) else
+            "Resolved: the agent and the verified evidence agree, so the verified outcome stands (no analyst "
+            "decision)"),
+        "unresolved": bool(t.get("fired") and t.get("unresolved", True)),
+        "evidence": [{"fact": "Buyout of NCI in the tagged amount" + (f": {money(e['amount'])} million, excluded"
+                                                                     if e.get("amount") is not None
+                                                                     else ": not quantified"), **e["evidence"]}
+                     for e in t.get("buyouts") or []]
+        + [{"fact": "No purchase of NCI in the year", **q} for q in t.get("no_purchase_evidence") or []],
+        "rules": [{"when": w, "effect": e} for w, e in RCF_T4_RULES],
+        "sections": t.get("sections") or [], "passages": t.get("passages") or [],
+        "agent": _trigger_agent(agent, RCF_T4_LABELS, RCF_T4_CSS),
+        "agent_not_used": None if agent else (
+            "Not called: no cash flow statement, equity statement or note passage mentions NCI." if t.get("fired")
+            else "Not called: the trigger wasn't set off."),
+    }
+
+
+MARGIN_T1_LABELS = {"revenue_adjusted": "REVENUE ADJUSTED: RECOMPUTED", "outside_revenue": "OUTSIDE REVENUE: EBITDAR ONLY",
+                    "unresolved": "UNRESOLVED", "not_triggered": "NOT TRIGGERED", "skipped": "SKIPPED"}
+MARGIN_T1_CSS = {"revenue_adjusted": "moderate", "outside_revenue": "low", "unresolved": "very-high",
+                 "not_triggered": "low", "skipped": "none"}
+MARGIN_T1_DECIDED_BY = {"agent": "Trigger Agent (evidence verified against the filing)",
+                        "no_text": "Code: no income statement, MD&A or note passage to read",
+                        "score": "Code: the EBITDAR margin score",
+                        "leverage_t1": "Code: whether Debt/EBITDAR T1 removed one-off items",
+                        "gate": "Code: the going-concern gate"}
+
+
+def margin_t1_card(t: dict | None, overrides: list | None = None) -> dict | None:
+    """The EBITDAR Margin T1 trigger as the page shows it."""
+    if not t:
+        return None
+    agent = t.get("agent")
+    tag = trigger_status(t, overrides)
+    decided = tag in DECISION_TAG.values()
+    fx = t.get("inputs") or {}
+    return {
+        "status": t["status"], "fired": t.get("fired"),
+        "label": tag.upper() if decided else MARGIN_T1_LABELS[t["status"]],
+        "css": TAG_CSS[tag] if decided else MARGIN_T1_CSS[t["status"]],
+        "score": score_cell(t.get("score")), "column": t.get("column") or DASH,
+        "decided_by": MARGIN_T1_DECIDED_BY.get(t["decided_by"], t["decided_by"]), "mode": t["mode"],
+        "reason": t["reason"], "effect": t["effect"], "notes": t.get("notes") or [], "fired_by": t.get("fired_by"),
+        "inputs": None if not fx else {
+            "ebitdar": money(fx.get("ebitdar")), "revenue": money(fx.get("revenue")), "ratio": pct(fx.get("ratio")),
+            "normalisation": money(fx.get("normalisation")), "rent_basis": fx.get("rent_basis")},
+        "revenue_adjustment": money(t.get("revenue_adjustment")) if t.get("revenue_adjustment") else None,
+        "placed": [{"item_id": e["item_id"], "kind": e["kind"], "category": e["category"].replace("_", " "),
+                   "amount": money(e["amount"]), "location": MARGIN_LOCATION_TEXT[e["location"]]}
+                  for e in t.get("items") or []],
+        "resolution": None if not t.get("fired") else (
+            f"Unresolved: {t.get('unresolved_why')}, so the margin is escalated to an analyst"
+            if t.get("unresolved", True) else
+            "Resolved: the agent and the verified evidence agree, so the verified outcome stands (no analyst "
+            "decision)"),
+        "unresolved": bool(t.get("fired") and t.get("unresolved", True)),
+        "evidence": [{"fact": f"{e['item_id']} ({e['kind']}, {money(e['amount'])} million): booked "
+                              f"{MARGIN_LOCATION_TEXT[e['location']]}", **e["location_evidence"]}
+                     for e in t.get("items") or [] if e.get("location_evidence")],
+        "rules": [{"when": w, "effect": e} for w, e in MARGIN_T1_RULES],
+        "sections": t.get("sections") or [], "passages": t.get("passages") or [],
+        "agent": _trigger_agent(agent, MARGIN_T1_LABELS, MARGIN_T1_CSS),
+        "agent_not_used": None if agent else (
+            "Not called: no income statement, MD&A or note passage to read." if t.get("fired")
+            else "Not called: the trigger wasn't set off."),
+    }
+
+
+MARGIN_T2_LABELS = {"moved_toward_p": "MOVED 1 POINT TOWARD P", "no_adjustment": "NO ADJUSTMENT",
+                    "unresolved": "UNRESOLVED", "not_triggered": "NOT TRIGGERED", "skipped": "SKIPPED"}
+MARGIN_T2_CSS = {"moved_toward_p": "moderate", "no_adjustment": "low", "unresolved": "very-high",
+                 "not_triggered": "low", "skipped": "none"}
+MARGIN_T2_DECIDED_BY = {"agent": "Trigger Agent (evidence verified against the filing)",
+                        "no_text": "Code: no segment note or MD&A passage to read",
+                        "score": "Code: the EBITDAR margin score",
+                        "segments": "Code: the segment note's tags (segment revenue and profit)",
+                        "gate": "Code: the going-concern gate"}
+MARGIN_T2_FINDINGS = {"reportable_segments": ("Reportable segments", {"multiple": "more than one", "single": "a single "
+                                                                       "reportable segment"}),
+                      "profit_measure": ("Segment profit", {"same_measure": "measured the same way across segments",
+                                                            "not_comparable": "not comparable across segments",
+                                                            "unclear": "not shown to be measured the same way"}),
+                      "outlier_explanation": ("The outlier's margin", {"business_model": "explained by how that "
+                                                                         "business works",
+                                                                         "year_performance": "explained by the year's "
+                                                                         "performance",
+                                                                         "none": "not explained"})}
+
+
+def margin_t2_card(t: dict | None, overrides: list | None = None) -> dict | None:
+    """The EBITDAR Margin T2 trigger as the page shows it."""
+    if not t:
+        return None
+    agent = t.get("agent")
+    tag = trigger_status(t, overrides)
+    decided = tag in DECISION_TAG.values()
+    fx = t.get("inputs") or {}
+    o = fx.get("outlier") or {}
+    th = t.get("thresholds") or {}
+    findings = t.get("findings") or {}
+    return {
+        "status": t["status"], "fired": t.get("fired"),
+        "label": tag.upper() if decided else MARGIN_T2_LABELS[t["status"]],
+        "css": TAG_CSS[tag] if decided else MARGIN_T2_CSS[t["status"]],
+        "score": score_cell(t.get("score")), "column": t.get("column") or DASH,
+        "high": f"{th.get('high', 9):g}", "low": f"{th.get('low', 2):g}", "share": pct(th.get("share", 0.3)),
+        "gap": f"{th.get('gap', 0.05) * 100:g} points",
+        "decided_by": MARGIN_T2_DECIDED_BY.get(t["decided_by"], t["decided_by"]), "mode": t["mode"],
+        "reason": t["reason"], "effect": t["effect"], "notes": t.get("notes") or [], "fired_by": t.get("fired_by"),
+        "segments": [{"name": s["name"], "revenue": money(s["revenue"]), "profit": money(s.get("profit")),
+                      "margin": pct(s.get("margin")), "share": pct(s.get("share")),
+                      "outlier": s["member"] == o.get("member")} for s in fx.get("segments") or []],
+        "profit_measure": fx.get("profit_label"), "profit_concept": fx.get("profit_concept"),
+        "segment_margin": pct(fx.get("segment_margin")), "ratio": pct(fx.get("ratio")),
+        "outlier": None if not o else {
+            "name": o["name"], "margin": pct(o["margin"]), "share": pct(o["share"]),
+            "rest_margin": pct(o.get("rest_margin")), "p": f"{fx['p']:g}",
+            "implied_ratio": pct(fx.get("implied_ratio")), "implied_score": score_cell(fx.get("implied_score")),
+            "direction": MARGIN_T2_DIRECTION_TEXT.get(fx.get("direction"), fx.get("direction"))},
+        "recomputed": score_cell(t.get("recomputed")) if t.get("recomputed") is not None else None,
+        "findings": [{"label": MARGIN_T2_FINDINGS[k][0], "text": MARGIN_T2_FINDINGS[k][1].get(v, v)}
+                     for k, v in findings.items()],
+        "resolution": None if not t.get("fired") else (
+            f"Unresolved: {t.get('unresolved_why')}, so the margin is escalated to an analyst"
+            if t.get("unresolved", True) else
+            "Resolved: the agent and the verified evidence agree, so the verified outcome stands (no analyst "
+            "decision)"),
+        "unresolved": bool(t.get("fired") and t.get("unresolved", True)),
+        "evidence": [{"fact": f"{MARGIN_T2_FINDINGS[k][0]}: {MARGIN_T2_FINDINGS[k][1].get(findings.get(k), '')}",
+                      **e} for k, e in (t.get("evidence") or {}).items()],
+        "rules": [{"when": w, "effect": e} for w, e in MARGIN_T2_RULES],
+        "sections": t.get("sections") or [], "passages": t.get("passages") or [],
+        "agent": _trigger_agent(agent, MARGIN_T2_LABELS, MARGIN_T2_CSS),
+        "agent_not_used": None if agent else (
+            "Not called: no segment profit tagged for each segment." if t.get("decided_by") == "segments" and
+            t.get("fired") else "Not called: no segment note or MD&A passage to read." if t.get("fired")
+            else "Not called: the trigger wasn't set off."),
+    }
+
+
 def agent_result(agent: dict, labels: dict, css: dict, names: dict | None = None) -> dict:
     """The Pre-check Agent's answer as recorded: its stated status, the verified status, and every finding it
     gave with the validator's verdict on it. ``labels`` maps passage ids (in document order) to their section."""
@@ -1171,6 +2022,24 @@ def gate_view(gc: dict | None, run_status: str | None, review: dict | None, esca
     return {"state": run_status, "show_composite": False, "show_measures": True, "message": None}
 
 
+def agent_reading_view(t: dict, metrics: list[dict]) -> dict:
+    """One trigger's agent answer beside its verified result, as the page shows it: the measure's score as calculated
+    before the check, as verified (applied) and as the agent's answer would make it (not applied), and its notes."""
+    reading = t["agent_reading"]
+    sc = reading.get("scores")
+    title = next((m["title"] for m in metrics if m["key"] == t.get("measure")), t.get("measure"))
+    agent = t.get("agent") or {}
+    return {
+        "stated": str(reading.get("status") or agent.get("stated_status") or "none").replace("_", " ").upper(),
+        "verified": str(t.get("status") or "").replace("_", " ").upper(),
+        "agrees": agent.get("status_consistent") is not False,
+        "measure_name": title, "column": (sc or {}).get("column") or t.get("column") or DASH,
+        "scores": None if not sc else {k: score_cell(sc[k]) for k in ("calculated", "verified", "agent")},
+        "same_score": bool(sc) and sc["verified"] == sc["agent"],
+        "notes": [f"The agent's answer, as stated: {n}" for n in reading.get("notes") or []],
+    }
+
+
 def overview_view(payload: dict[str, Any], *, run_status: str | None = None, review: dict | None = None,
                   overrides: list | None = None) -> dict[str, Any]:
     from .review import override_decisions, override_scores
@@ -1212,7 +2081,24 @@ def overview_view(payload: dict[str, Any], *, run_status: str | None = None, rev
         "icr_t3": icr_t3_card((payload.get("triggers") or {}).get("icr_t3"), overrides),
         "leverage_t1": leverage_t1_card((payload.get("triggers") or {}).get("leverage_t1"), overrides),
         "leverage_t2": leverage_t2_card((payload.get("triggers") or {}).get("leverage_t2"), overrides),
+        "leverage_t3": leverage_t3_card((payload.get("triggers") or {}).get("leverage_t3"), overrides),
+        "leverage_t4": leverage_t4_card((payload.get("triggers") or {}).get("leverage_t4"), overrides),
+        "rcf_t1": rcf_t1_card((payload.get("triggers") or {}).get("rcf_t1"), overrides),
+        "rcf_t2": rcf_t2_card((payload.get("triggers") or {}).get("rcf_t2"), overrides),
+        "rcf_t3": rcf_t3_card((payload.get("triggers") or {}).get("rcf_t3"), overrides),
+        "rcf_t4": rcf_t4_card((payload.get("triggers") or {}).get("rcf_t4"), overrides),
+        "margin_t1": margin_t1_card((payload.get("triggers") or {}).get("margin_t1"), overrides),
+        "margin_t2": margin_t2_card((payload.get("triggers") or {}).get("margin_t2"), overrides),
+        "dso_t1": dso_t1_card((payload.get("triggers") or {}).get("dso_t1"), overrides),
+        "liquidity_t1": liquidity_t1_card((payload.get("triggers") or {}).get("liquidity_t1"), overrides),
+        "liquidity_t2": liquidity_t2_card((payload.get("triggers") or {}).get("liquidity_t2"), overrides),
+        "liquidity_t3": liquidity_t3_card((payload.get("triggers") or {}).get("liquidity_t3"), overrides),
         "escalations": escalations,
+        "recomputations": payload.get("recomputations") or [],
+        # What changed the scored measures: without the agent's answers, which are recomputed but never applied.
+        "applied_recomputations": [r for r in payload.get("recomputations") or [] if not r["step"].endswith(":agent")],
+        "agent_readings": {k: agent_reading_view(t, metrics) for k, t in (payload.get("triggers") or {}).items()
+                           if t.get("fired") and t.get("agent_reading")},
         "gate": gate_view(gc, run_status, review, escalations, overrides),
         "composite": {**composite_card(composite), "after_override": bool(overrides) or sided_with_agent},
         "measures": [measure_card(m, by_measure.get(m["key"])) for m in metrics[1:]],

@@ -29,7 +29,7 @@ import re
 from app.prompts.fo_prompts import FO_ICR_T2_PROMPT, FO_ICR_T2_SCHEMA, FO_ICR_T2_TEMPLATE
 
 from .covenants import DEBT_TITLE, NOTE_HEADING
-from .dscr_triggers import _held, _millions, add_trigger_note, collect_passages
+from .dscr_triggers import _held, _millions, add_trigger_note, collect_passages, stated_amount
 from .icr_triggers import MDNA_SKIP, _amount, verified_swap
 from .measures import ICR_BANDS, NET_INTEREST_CONCEPTS, OPERATING_INTEREST_CONCEPTS, risk_score
 from .precheck import DATA_NOTICE, PrecheckAgentError, call_agent, require_agent
@@ -161,6 +161,38 @@ def validate_icr_t2(parsed: dict, t: dict, fx: dict) -> dict:
             "status_consistent": parsed.get("status") == status}
 
 
+def agent_reading(parsed: dict, t: dict, fx: dict) -> dict:
+    """The agent's answer as it states it (not verified, not applied), for an analyst to compare with the verified
+    outcome: "gross_disclosed" uses the gross interest it gives; "gross_from_income" the net
+    interest tagged plus the interest income it gives; then its swap loss comes out (a gain goes in). Any other answer
+    keeps the interest tagged."""
+    by_id = {p["passage_id"]: p for p in t["passages"]}
+    stated, notes = parsed.get("status"), []
+    tagged = fx["tagged_expense"] or 0.0
+    base, swap = tagged, None
+    if stated == "gross_disclosed":
+        gross = stated_amount(parsed.get("gross_interest"), by_id, notes, "gross interest")
+        if gross is None:
+            notes.append("it gives no gross interest amount, so the interest tagged is kept.")
+        else:
+            base = gross
+    elif stated == "gross_from_income":
+        income = stated_amount(parsed.get("interest_income"), by_id, notes, "interest income")
+        if income is None:
+            notes.append("it gives no interest-income amount, so there is nothing to add to the net interest tagged.")
+        else:
+            base = tagged + income
+    s = parsed.get("swap_mark_to_market")
+    if s:
+        v = stated_amount(s.get("evidence"), by_id, notes, "swap mark-to-market")
+        if v:
+            base -= v if s.get("direction") == "loss" else -v
+            swap = {"amount": v}
+    change = base + fx["capitalised"] - fx["interest"] if fx["interest"] is not None else 0.0
+    return {"status": stated, "notes": notes,
+            "applies": {"status": stated, "gross_used": base, "interest_change": change, "swap": swap}}
+
+
 def register_prompt(session):
     from app.prompts.registry import PromptRegistry
 
@@ -263,6 +295,7 @@ def _run_agent(result, t, data, fx, session, backend, case_id):
         raise PrecheckAgentError(f"The Trigger Agent's ICR T2 output was rejected ({agent['validation_detail']}); "
                                  "the run was not recorded. Run it again.")
     checked = validate_icr_t2(run.parsed, t, fx)
+    result["agent_reading"] = agent_reading(run.parsed, t, fx)
     agent.update(rationale=run.parsed.get("rationale"), missing_information=run.parsed.get("missing_information") or [],
                  held_back=checked["held_back"], derived_status=checked["status"],
                  stated_status=checked["stated_status"], status_consistent=checked["status_consistent"])

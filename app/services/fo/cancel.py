@@ -1,9 +1,12 @@
-"""Stopping a Financial Overview run from the browser.
+"""Stopping a Financial Overview run from the browser, and showing which step it is on.
 
 The run form carries a random token. Its Stop button posts that token to ``/fo/run/cancel``, and the running request
 checks ``stop_requested(token)`` between steps (before each pre-check's model call, before scoring, before
 recording). The run then ends with ``FoRunCancelled`` and records nothing. A model call already in flight can't be
 interrupted: the stop takes effect when it returns.
+
+The same calls report progress: each ``check_stop(step)`` records the step the run is starting, so the page can
+poll ``/fo/run/progress`` while the run is under way, and an error names the step it happened in.
 
 The registry is in memory, so it works within one server process (``python -m app.preview``); with several worker
 processes a stop could reach a different process than the run.
@@ -19,6 +22,7 @@ TOKEN = re.compile(r"[A-Za-z0-9_-]{8,64}")
 KEEP_SECONDS = 3600
 
 _stops: dict[str, float] = {}
+_progress: dict[str, dict] = {}  # token -> {"started": t, "steps": [{"step": str, "at": t}]}
 _lock = threading.Lock()
 
 
@@ -53,11 +57,38 @@ def stop_requested(token: str | None) -> bool:
 def clear(token: str | None) -> None:
     with _lock:
         _stops.pop(token or "", None)
+        _progress.pop(token or "", None)
+
+
+def set_step(token: str | None, step: str) -> None:
+    """Record that the run with this token is starting ``step``."""
+    if not valid(token):
+        return
+    now = time.time()
+    with _lock:
+        for t, p in list(_progress.items()):
+            if now - p["started"] > KEEP_SECONDS:
+                del _progress[t]
+        _progress.setdefault(token, {"started": now, "steps": []})["steps"].append({"step": step, "at": now})
+
+
+def progress(token: str | None) -> dict:
+    """Where the run with this token is: the step under way (``None`` before the first), its number, the steps
+    done and the seconds since the run started."""
+    with _lock:
+        p = _progress.get(token or "")
+        if not p:
+            return {"step": None, "number": 0, "done": [], "elapsed": 0}
+        steps = [s["step"] for s in p["steps"]]
+        return {"step": steps[-1], "number": len(steps), "done": steps[:-1],
+                "elapsed": round(time.time() - p["started"])}
 
 
 def checker(token: str | None):
-    """A callable the runner calls between steps: raises ``FoRunCancelled`` once a stop is requested."""
+    """A callable the runner calls between steps: records the step it is starting, and raises ``FoRunCancelled``
+    once a stop is requested."""
     def check(step: str) -> None:
+        set_step(token, step)
         if stop_requested(token):
             raise FoRunCancelled(f"Run stopped by the analyst before {step}; nothing was recorded.")
     return check

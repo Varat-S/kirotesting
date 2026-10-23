@@ -63,6 +63,29 @@
 {% else %}<p class="subtle">{{ t.agent_not_used }}</p>{% endif %}
 {% endmacro %}
 {% macro attention(key) %}{% if key in needs %}<span class="fo-attn" title="An analyst must check this and decide">&#9888; Analyst decision required</span>{% endif %}{% endmacro %}
+{% macro recomputed(key, title='Recomputed', note=None) %}{% set rs = (view.recomputations or [])|selectattr('step', 'equalto', key)|list %}{% if rs %}
+<div class="fo-recomputed"><h4>{{ title }}</h4>{% if note %}<p class="notice">{{ note }}</p>{% endif %}
+<div class="table-wrap"><table><thead><tr><th>Measure</th><th>Column</th><th>Inputs changed</th><th>Result (before → after)</th></tr></thead><tbody>
+{% for r in rs %}<tr><td>{{ r.measure_name }}</td><td>{{ r.column }}</td><td>{% for i in r.inputs %}{{ i.label }}: {{ i.before }} → {{ i.after }}{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</td><td>{% for x in r.results %}{% if x.score %}<strong>{{ x.label }}: {{ x.before }} → {{ x.after }}</strong>{% if x.unchanged %} <span class="subtle">(unchanged)</span>{% endif %}{% else %}{{ x.label }}: {{ x.before }} → {{ x.after }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</td></tr>{% endfor %}
+</tbody></table></div><p class="subtle">Amounts in millions. {% if key.endswith(':agent') %}Code worked it out from the agent's answer as stated (the agent quotes and classifies; it never computes). Not applied: the engine scored the verified result.{% else %}The step's own recomputation, as code worked it out from the verified evidence (the agent quotes and classifies; it never computes).{% endif %}</p></div>
+{% endif %}{% endmacro %}
+{% macro agent_recomputed(key) %}{% set r = (view.agent_readings or {}).get(key) %}{% if r %}
+<div class="fo-compare"><h4>Verified result and the agent's answer</h4>
+<div class="table-wrap"><table><thead><tr><th></th><th>Outcome</th><th>{{ r.measure_name }} score ({{ r.column }})</th></tr></thead><tbody>
+{% if r.scores %}<tr><td>As calculated, before this check</td><td>—</td><td><span class="risk {{ r.scores.calculated.css }}">{{ r.scores.calculated.text }}</span></td></tr>{% endif %}
+<tr><td><strong>Verified result (applied)</strong></td><td>{{ r.verified }}</td><td>{% if r.scores %}<span class="risk {{ r.scores.verified.css }}">{{ r.scores.verified.text }}</span>{% endif %}</td></tr>
+<tr><td>The agent's answer, as stated (not applied)</td><td>{{ r.stated }}{% if not r.agrees %} <span class="warn">differs</span>{% endif %}</td><td>{% if r.scores %}<span class="risk {{ r.scores.agent.css }}">{{ r.scores.agent.text }}</span>{% if r.same_score %} <span class="subtle">(same score)</span>{% endif %}{% endif %}</td></tr>
+</tbody></table></div>
+<p class="subtle">The verified result is what the engine scored. The agent's answer is its status, items and amounts taken exactly as it gave them, with no check against the filing or this check's rules; an analyst can compare the two and, where the measure is escalated, accept the engine's score or override it.</p>
+{{ recomputed(key ~ ':agent', "The agent's answer, recomputed (not applied)") }}
+{% for n in r.notes %}<p class="subtle">{{ n }}</p>{% endfor %}</div>
+{% endif %}{% endmacro %}
+{% macro recomputations_of(key) %}{% set rs = (view.applied_recomputations or [])|selectattr('measure', 'equalto', key)|list %}{% if rs %}
+<details class="fo-recomputations" open><summary>Recomputations ({{ rs|length }} step{{ 's' if rs|length != 1 }})</summary>
+<div class="table-wrap"><table><thead><tr><th>Step</th><th>Column</th><th>Inputs changed</th><th>Result (before → after)</th></tr></thead><tbody>
+{% for r in rs %}<tr><td>{{ r.by }}</td><td>{{ r.column }}</td><td>{% for i in r.inputs %}{{ i.label }}: {{ i.before }} → {{ i.after }}{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</td><td>{% for x in r.results %}{% if x.score %}<strong>{{ x.label }}: {{ x.before }} → {{ x.after }}</strong>{% if x.unchanged %} <span class="subtle">(unchanged)</span>{% endif %}{% else %}{{ x.label }}: {{ x.before }} → {{ x.after }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</td></tr>{% endfor %}
+</tbody></table></div><p class="subtle">In run order: each pre-check, then each trigger that changed this measure. Amounts in millions.</p></details>
+{% endif %}{% endmacro %}
 {% macro decision_panel(key) %}
 {% if key == 'going_concern' and gate.state == 'awaiting_gc_decision' %}
 <div id="review" class="fo-gate fo-decision">
@@ -105,16 +128,16 @@
 <p class="subtle">Command line: <code>python -m app.cli fo-override {{ rid }} --measure {{ e.measure }} --decision accept|override [--score N] --reviewer "&lt;name&gt;" --reason "&lt;why&gt;"</code></p>
 </div>
 {% elif key in hosts %}
-<p class="fo-gate"><strong>&#9888; This check is part of the {{ e.measure_name }} decision:</strong> <a href="#override-{{ e.measure }}">decide it in the {{ hosts[0]|replace('_', ' ')|replace('dscr t', 'DSCR T')|replace('icr t', 'ICR T')|replace('leverage t', 'Debt/EBITDAR T') }} row</a>.</p>
+<p class="fo-gate"><strong>&#9888; This check is part of the {{ e.measure_name }} decision:</strong> <a href="#override-{{ e.measure }}">decide it in the {{ hosts[0]|replace('_', ' ')|replace('dscr t', 'DSCR T')|replace('icr t', 'ICR T')|replace('leverage t', 'Debt/EBITDAR T')|replace('rcf t', 'RCF/Debt T')|replace('margin t', 'EBITDAR Margin T')|replace('dso t', 'DSO T') }} row</a>.</p>
 {% endif %}
 {% endfor %}
 {% endif %}
 {% endmacro %}
-{% if pc or view.covenants or view.acquisitions or view.prepaid or view.dscr_t2 or view.dscr_t3 or view.dscr_t1 or view.icr_t2 or view.icr_t3 or view.icr_t1 or view.leverage_t1 or view.leverage_t2 %}<section id="fo-agents"><h2 class="fo-agents-head"><span>Agent checks</span> <span class="fo-agents-tools"><button type="button" data-fo-agents="open">Expand all</button> <button type="button" data-fo-agents="close">Collapse all</button></span></h2>{% endif %}
+{% if pc or view.covenants or view.acquisitions or view.prepaid or view.dscr_t2 or view.dscr_t3 or view.dscr_t1 or view.icr_t2 or view.icr_t3 or view.icr_t1 or view.leverage_t1 or view.leverage_t2 or view.leverage_t3 or view.leverage_t4 or view.rcf_t1 or view.rcf_t2 or view.rcf_t3 or view.rcf_t4 or view.margin_t1 or view.margin_t2 or view.dso_t1 or view.liquidity_t1 or view.liquidity_t2 or view.liquidity_t3 %}<section id="fo-agents"><h2 class="fo-agents-head"><span>Agent checks</span> <span class="fo-agents-tools"><button type="button" data-fo-agents="open">Expand all</button> <button type="button" data-fo-agents="close">Collapse all</button></span></h2>{% endif %}
 {% if pc %}
 <div id="fo-precheck" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Pre-check: going concern</span> <span class="risk {{ pc.css }}">{{ pc.label }}</span> <span class="fo-agent-reason">{{ pc.reason }}</span>{{ attention('going_concern') }}</summary>
 <div class="fo-agent-body">
-{{ decision_panel('going_concern') }}
+{{ decision_panel('going_concern') }}{{ recomputed('going_concern') }}
 <dl>
 <dt>Decided by</dt><dd>{{ pc.decided_by }}{% if pc.agent %} · {{ pc.mode }} model <code>{{ pc.agent.model_id }}</code> · prompt <code>{{ pc.agent.prompt_id }}</code>{% endif %}</dd>
 <dt>Effect</dt><dd>{{ pc.effect }}</dd>
@@ -157,7 +180,7 @@
 {% if cv %}
 <div id="fo-covenants" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Pre-check: covenants</span> <span class="risk {{ cv.css }}">{{ cv.label }}</span> <span class="fo-agent-reason">Outcome ({{ cv.outcome }}): {{ cv.reason }}</span>{{ attention('covenants') }}</summary>
 <div class="fo-agent-body">
-{{ decision_panel('covenants') }}
+{{ decision_panel('covenants') }}{{ recomputed('covenants') }}
 <dl>
 <dt>Decided by</dt><dd>{{ cv.decided_by }}{% if cv.agent %} · {{ cv.mode }} model <code>{{ cv.agent.model_id }}</code> · prompt <code>{{ cv.agent.prompt_id }}</code>{% endif %}</dd>
 <dt>Effect</dt><dd>{{ cv.effect }}</dd>
@@ -210,7 +233,7 @@
 {% if ad %}
 <div id="fo-acquisitions" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Pre-check: acquisitions and divestitures</span> <span class="risk {{ ad.css }}">{{ ad.label }}</span> <span class="fo-agent-reason">{{ ad.reason }}</span>{{ attention('acquisitions') }}</summary>
 <div class="fo-agent-body">
-{{ decision_panel('acquisitions') }}
+{{ decision_panel('acquisitions') }}{{ recomputed('acquisitions') }}
 <dl>
 <dt>Decided by</dt><dd>{{ ad.decided_by }}{% if ad.agent %} · {{ ad.mode }} model <code>{{ ad.agent.model_id }}</code> · prompt <code>{{ ad.agent.prompt_id }}</code>{% endif %}</dd>
 <dt>Effect</dt><dd>{{ ad.effect }}</dd>
@@ -265,7 +288,7 @@
 {% if pq %}
 <div id="fo-prepaid" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Pre-check: prepaid model</span> <span class="risk {{ pq.css }}">{{ pq.label }}</span> <span class="fo-agent-reason">{{ pq.reason }}</span>{{ attention('prepaid') }}</summary>
 <div class="fo-agent-body">
-{{ decision_panel('prepaid') }}
+{{ decision_panel('prepaid') }}{{ recomputed('prepaid') }}
 <dl>
 <dt>Decided by</dt><dd>{{ pq.decided_by }}{% if pq.agent %} · {{ pq.mode }} model <code>{{ pq.agent.model_id }}</code> · prompt <code>{{ pq.agent.prompt_id }}</code>{% endif %}</dd>
 <dt>Effect</dt><dd>{{ pq.effect }}</dd>
@@ -311,7 +334,7 @@
 {% if tc %}
 <div id="fo-dscr-t2" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: DSCR T2 (CapEx above {{ '%g' % tc.multiple_threshold }}× depreciation)</span> <span class="risk {{ tc.css }}">{{ tc.label }}</span> <span class="fo-agent-reason">{{ tc.reason }}</span>{{ attention('dscr_t2') }}</summary>
 <div class="fo-agent-body">
-{{ decision_panel('dscr_t2') }}
+{{ decision_panel('dscr_t2') }}{{ recomputed('dscr_t2') }}
 <dl>
 <dt>Trigger</dt><dd>{% if tc.capex %}CapEx {{ tc.capex.capex }} million is {{ tc.capex.multiple }} depreciation of {{ tc.capex.depreciation }} million{% else %}CapEx against depreciation{% endif %} · {{ tc.column }} · DSCR risk score <span class="risk {{ tc.score.css }}">{{ tc.score.text }}</span> · fires above {{ '%g' % tc.multiple_threshold }}×{% if not tc.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
 {% if tc.capex %}<dt>Sources</dt><dd><span class="subtle">CapEx: {{ tc.capex.capex_source }} · depreciation (excluding amortisation of acquired intangibles): {{ tc.capex.depreciation_source }}</span></dd>{% endif %}
@@ -328,6 +351,7 @@
 {% for n in tc.notes %}<p class="notice">{{ n }}</p>{% endfor %}
 {% if tc.fired %}
 {{ trigger_agent_result(tc, 'T2') }}
+{{ agent_recomputed('dscr_t2') }}
 <details><summary>Rules and passages read ({{ tc.passages|length }} passage(s))</summary>
 <div class="table-wrap"><table><thead><tr><th>When CapEx is above {{ '%g' % tc.multiple_threshold }}× depreciation (first match)</th><th>Adjustment</th></tr></thead><tbody>
 {% for r in tc.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
@@ -343,7 +367,7 @@
 {% if tx %}
 <div id="fo-dscr-t3" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: DSCR T3 (cash taxes vs current tax expense)</span> <span class="risk {{ tx.css }}">{{ tx.label }}</span> <span class="fo-agent-reason">{{ tx.reason }}</span>{{ attention('dscr_t3') }}</summary>
 <div class="fo-agent-body">
-{{ decision_panel('dscr_t3') }}
+{{ decision_panel('dscr_t3') }}{{ recomputed('dscr_t3') }}
 <dl>
 <dt>Trigger</dt><dd>{% if tx.taxes %}Cash taxes paid {{ tx.taxes.cash_taxes }} million vs current tax expense {{ tx.taxes.current_tax }} million: gap {{ tx.taxes.gap }} million, {{ tx.taxes.gap_share }} of CFADS ({{ tx.taxes.cfads }} million){% else %}Cash taxes paid against current tax expense{% endif %} · {{ tx.column }} · DSCR risk score <span class="risk {{ tx.score.css }}">{{ tx.score.text }}</span> · fires above {{ tx.share_threshold }} of CFADS{% if not tx.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
 {% if tx.taxes %}<dt>Sources</dt><dd><span class="subtle">Cash taxes paid (net of refunds): {{ tx.taxes.cash_taxes_source }} · current tax expense: {{ tx.taxes.current_tax_source }}</span></dd>{% endif %}
@@ -361,6 +385,7 @@
 {% for n in tx.notes %}<p class="notice">{{ n }}</p>{% endfor %}
 {% if tx.fired %}
 {{ trigger_agent_result(tx, 'T3') }}
+{{ agent_recomputed('dscr_t3') }}
 <details><summary>Rules and passages read ({{ tx.passages|length }} passage(s))</summary>
 <div class="table-wrap"><table><thead><tr><th>When |cash taxes paid − current tax expense| is above {{ tx.share_threshold }} of CFADS (first match)</th><th>Adjustment</th></tr></thead><tbody>
 {% for r in tx.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
@@ -376,7 +401,7 @@
 {% if tq %}
 <div id="fo-dscr-t1" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: DSCR T1 (score {{ tq.threshold }} or more)</span> <span class="risk {{ tq.css }}">{{ tq.label }}</span> <span class="fo-agent-reason">{{ tq.reason }}</span>{{ attention('dscr_t1') }}</summary>
 <div class="fo-agent-body">
-{{ decision_panel('dscr_t1') }}
+{{ decision_panel('dscr_t1') }}{{ recomputed('dscr_t1') }}
 <dl>
 <dt>Trigger</dt><dd>DSCR risk score <span class="risk {{ tq.score.css }}">{{ tq.score.text }}</span> · {{ tq.column }}{% if tq.principal %} · DSCR {{ tq.principal.ratio }}{% endif %} · fires at {{ tq.threshold }} or more{% if not tq.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
 <dt>Decided by</dt><dd>{{ tq.decided_by }}{% if tq.agent %} · {{ tq.mode }} model <code>{{ tq.agent.model_id }}</code> · prompt <code>{{ tq.agent.prompt_id }}</code>{% endif %}</dd>
@@ -419,6 +444,7 @@
 {% if a.missing_information %}<p class="subtle"><strong>Missing information:</strong> {{ a.missing_information|join('; ') }}</p>{% endif %}
 <p class="subtle">The full exchange (system prompt, inputs, raw response) is in <code>trigger_transcript.json</code> in the run's output folder.</p>
 {% else %}<p class="subtle">{{ tq.agent_not_used }}</p>{% endif %}
+{{ agent_recomputed('dscr_t1') }}
 <details><summary>Rules and passages read ({{ tq.passages|length }} passage(s))</summary>
 <div class="table-wrap"><table><thead><tr><th>When DSCR scores {{ tq.threshold }} or more</th><th>Adjustment</th></tr></thead><tbody>
 {% for r in tq.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
@@ -435,7 +461,7 @@
 {% if tj %}
 <div id="fo-icr-t2" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: ICR T2 (net or operating interest tag)</span> <span class="risk {{ tj.css }}">{{ tj.label }}</span> <span class="fo-agent-reason">{{ tj.reason }}</span>{{ attention('icr_t2') }}</summary>
 <div class="fo-agent-body">
-{{ decision_panel('icr_t2') }}
+{{ decision_panel('icr_t2') }}{{ recomputed('icr_t2') }}
 <dl>
 <dt>Trigger</dt><dd>{% if tj.inputs %}Interest is from {{ tj.inputs.kind }} (<code>{{ tj.inputs.concept }}</code>, {{ tj.inputs.tagged }} million; capitalised {{ tj.inputs.capitalised }} million) · {% endif %}{{ tj.column }} · ICR risk score <span class="risk {{ tj.score.css }}">{{ tj.score.text }}</span>{% if tj.inputs %} · ICR {{ tj.inputs.ratio }}{% endif %} · fires on a net-interest or operating-interest tag{% if not tj.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
 <dt>Decided by</dt><dd>{{ tj.decided_by }}{% if tj.agent %} · {{ tj.mode }} model <code>{{ tj.agent.model_id }}</code> · prompt <code>{{ tj.agent.prompt_id }}</code>{% endif %}</dd>
@@ -452,6 +478,7 @@
 {% for n in tj.notes %}<p class="notice">{{ n }}</p>{% endfor %}
 {% if tj.fired %}
 {{ trigger_agent_result(tj, 'ICR T2') }}
+{{ agent_recomputed('icr_t2') }}
 <details><summary>Rules and passages read ({{ tj.passages|length }} passage(s))</summary>
 <div class="table-wrap"><table><thead><tr><th>When ICR's interest is from a net-interest or operating-interest tag (first match)</th><th>Adjustment</th></tr></thead><tbody>
 {% for r in tj.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
@@ -467,7 +494,7 @@
 {% if tk %}
 <div id="fo-icr-t3" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: ICR T3 (EBIT from operating income)</span> <span class="risk {{ tk.css }}">{{ tk.label }}</span> <span class="fo-agent-reason">{{ tk.reason }}</span>{{ attention('icr_t3') }}</summary>
 <div class="fo-agent-body">
-{{ decision_panel('icr_t3') }}
+{{ decision_panel('icr_t3') }}{{ recomputed('icr_t3') }}
 <dl>
 <dt>Trigger</dt><dd>{% if tk.inputs %}EBIT {{ tk.inputs.ebit }} million from <code>{{ tk.inputs.source }}</code> · ICR {{ tk.inputs.ratio }} · {% endif %}{{ tk.column }} · ICR risk score <span class="risk {{ tk.score.css }}">{{ tk.score.text }}</span> · fires when EBIT is operating income{% if not tk.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
 <dt>Decided by</dt><dd>{{ tk.decided_by }}{% if tk.agent %} · {{ tk.mode }} model <code>{{ tk.agent.model_id }}</code> · prompt <code>{{ tk.agent.prompt_id }}</code>{% endif %}</dd>
@@ -483,6 +510,7 @@
 {% for n in tk.notes %}<p class="notice">{{ n }}</p>{% endfor %}
 {% if tk.fired %}
 {{ trigger_agent_result(tk, 'ICR T3') }}
+{{ agent_recomputed('icr_t3') }}
 <details><summary>Rules and passages read ({{ tk.passages|length }} passage(s))</summary>
 <div class="table-wrap"><table><thead><tr><th>When ICR's EBIT is operating income (first match)</th><th>Adjustment</th></tr></thead><tbody>
 {% for r in tk.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
@@ -498,7 +526,7 @@
 {% if ti %}
 <div id="fo-icr-t1" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: ICR T1 (score {{ ti.threshold }} or more)</span> <span class="risk {{ ti.css }}">{{ ti.label }}</span> <span class="fo-agent-reason">{{ ti.reason }}</span>{{ attention('icr_t1') }}</summary>
 <div class="fo-agent-body">
-{{ decision_panel('icr_t1') }}
+{{ decision_panel('icr_t1') }}{{ recomputed('icr_t1') }}
 <dl>
 <dt>Trigger</dt><dd>ICR risk score <span class="risk {{ ti.score.css }}">{{ ti.score.text }}</span> · {{ ti.column }}{% if ti.inputs %} · ICR {{ ti.inputs.ratio }} = (EBIT {{ ti.inputs.ebit }} + rent {{ ti.inputs.rent }}) / (interest incurred {{ ti.inputs.interest }} + rent), USD millions{% endif %} · fires at {{ ti.threshold }} or more{% if not ti.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
 {% if ti.inputs %}<dt>Interest source</dt><dd><span class="subtle">{{ ti.inputs.interest_source }}</span></dd>{% endif %}
@@ -516,6 +544,7 @@
 {% for n in ti.notes %}<p class="notice">{{ n }}</p>{% endfor %}
 {% if ti.fired %}
 {{ trigger_agent_result(ti, 'ICR T1') }}
+{{ agent_recomputed('icr_t1') }}
 <details><summary>Rules and passages read ({{ ti.passages|length }} passage(s))</summary>
 <div class="table-wrap"><table><thead><tr><th>When ICR scores {{ ti.threshold }} or more</th><th>Adjustment</th></tr></thead><tbody>
 {% for r in ti.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
@@ -531,7 +560,7 @@
 {% if tl %}
 <div id="fo-leverage-t1" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: Debt/EBITDAR T1 (one-offs above {{ tl.share_threshold }} of EBITDAR, or EBITDAR ≤ 0)</span> <span class="risk {{ tl.css }}">{{ tl.label }}</span> <span class="fo-agent-reason">{{ tl.reason }}</span>{{ attention('leverage_t1') }}</summary>
 <div class="fo-agent-body">
-{{ decision_panel('leverage_t1') }}
+{{ decision_panel('leverage_t1') }}{{ recomputed('leverage_t1') }}
 <dl>
 <dt>Trigger</dt><dd>{% if tl.inputs %}EBITDAR {{ tl.inputs.ebitdar }} million · net one-offs as tagged {{ tl.inputs.net }} million (charges {{ tl.inputs.charges }} − gains {{ tl.inputs.gains }}){% if tl.inputs.share != '—' %}, {{ tl.inputs.share }} of EBITDAR{% endif %} · Debt / EBITDAR {{ tl.inputs.ratio }}, net {{ tl.inputs.net_ratio }} · {% endif %}{{ tl.column }} · composite leverage score <span class="risk {{ tl.score.css }}">{{ tl.score.text }}</span> · fires when |net one-offs| is above {{ tl.share_threshold }} of EBITDAR, or EBITDAR ≤ 0{% if not tl.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
 {% if tl.inputs %}<dt>One-off tags</dt><dd><span class="subtle">{{ tl.inputs.source }}</span></dd>{% endif %}
@@ -550,6 +579,7 @@
 {% for n in tl.notes %}<p class="notice">{{ n }}</p>{% endfor %}
 {% if tl.fired %}
 {{ trigger_agent_result(tl, 'Debt/EBITDAR T1') }}
+{{ agent_recomputed('leverage_t1') }}
 <details><summary>Rules and passages read ({{ tl.passages|length }} passage(s))</summary>
 <div class="table-wrap"><table><thead><tr><th>When |net one-offs| is above {{ tl.share_threshold }} of EBITDAR, or EBITDAR ≤ 0 (first match)</th><th>Adjustment</th></tr></thead><tbody>
 {% for r in tl.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
@@ -565,7 +595,7 @@
 {% if tm %}
 <div id="fo-leverage-t2" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: Debt/EBITDAR T2 (gross and net scores {{ tm.gap_threshold }} or more apart)</span> <span class="risk {{ tm.css }}">{{ tm.label }}</span> <span class="fo-agent-reason">{{ tm.reason }}</span>{{ attention('leverage_t2') }}</summary>
 <div class="fo-agent-body">
-{{ decision_panel('leverage_t2') }}
+{{ decision_panel('leverage_t2') }}{{ recomputed('leverage_t2') }}
 <dl>
 <dt>Trigger</dt><dd>{% if tm.inputs %}Debt / EBITDAR {{ tm.inputs.ratio }}, score <span class="risk {{ tm.inputs.gross_score.css }}">{{ tm.inputs.gross_score.text }}</span> · Net debt / EBITDAR {{ tm.inputs.net_ratio }}, score <span class="risk {{ tm.inputs.net_score.css }}">{{ tm.inputs.net_score.text }}</span> · gap {{ tm.inputs.gap }} · cash {{ tm.inputs.cash }} million · {% endif %}{{ tm.column }} · composite leverage score <span class="risk {{ tm.score.css }}">{{ tm.score.text }}</span> · fires when the two scores are {{ tm.gap_threshold }} or more apart{% if not tm.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
 {% if tm.inputs %}<dt>Cash source</dt><dd><span class="subtle">{{ tm.inputs.cash_source }}</span></dd>{% endif %}
@@ -582,6 +612,7 @@
 {% for n in tm.notes %}<p class="notice">{{ n }}</p>{% endfor %}
 {% if tm.fired %}
 {{ trigger_agent_result(tm, 'Debt/EBITDAR T2') }}
+{{ agent_recomputed('leverage_t2') }}
 <details><summary>Rules and passages read ({{ tm.passages|length }} passage(s))</summary>
 <div class="table-wrap"><table><thead><tr><th>When the Debt / EBITDAR and Net debt / EBITDAR scores are {{ tm.gap_threshold }} or more apart (first match)</th><th>Adjustment</th></tr></thead><tbody>
 {% for r in tm.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
@@ -593,7 +624,421 @@
 {% endif %}
 </div></details></div>
 {% endif %}
-{% if pc or view.covenants or view.acquisitions or view.prepaid or view.dscr_t2 or view.dscr_t3 or view.dscr_t1 or view.icr_t2 or view.icr_t3 or view.icr_t1 or view.leverage_t1 or view.leverage_t2 %}</section>{% endif %}
+{% set tr = view.leverage_t3 %}
+{% if tr %}
+<div id="fo-leverage-t3" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: Debt/EBITDAR T3 (score with leases {{ tr.gap_threshold }} or more worse than without)</span> <span class="risk {{ tr.css }}">{{ tr.label }}</span> <span class="fo-agent-reason">{{ tr.reason }}</span>{{ attention('leverage_t3') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('leverage_t3') }}{{ recomputed('leverage_t3') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tr.inputs %}with leases: Debt / EBITDAR {{ tr.inputs.ratio }}, net {{ tr.inputs.net_ratio }}, composite score <span class="risk {{ tr.inputs.score.css }}">{{ tr.inputs.score.text }}</span> · without leases: Debt / EBITDA {{ tr.inputs.ratio_without }}, net {{ tr.inputs.net_ratio_without }}, composite score <span class="risk {{ tr.inputs.score_without.css }}">{{ tr.inputs.score_without.text }}</span> · gap {{ tr.inputs.gap }} · {% endif %}{{ tr.column }} · fires when the score with leases is {{ tr.gap_threshold }} or more worse{% if not tr.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if tr.inputs %}<dt>Leases</dt><dd>Debt {{ tr.inputs.debt }} million · operating lease liabilities {{ tr.inputs.op_leases }} million · EBITDAR {{ tr.inputs.ebitdar }} million − rent {{ tr.inputs.rent }} million = EBITDA {{ tr.inputs.ebitda }} million <span class="subtle">({{ tr.inputs.lease_source }}; {{ tr.inputs.rent_source }})</span></dd>{% endif %}
+<dt>Decided by</dt><dd>{{ tr.decided_by }}{% if tr.agent %} · {{ tr.mode }} model <code>{{ tr.agent.model_id }}</code> · prompt <code>{{ tr.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tr.effect }}</dd>
+{% if tr.resolution %}<dt>Resolution</dt><dd>{% if tr.unresolved %}<strong class="bad">{{ tr.resolution }}</strong>{% else %}<span class="ok">{{ tr.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'leverage_t3' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'leverage_t3' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tr.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tr.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tr.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tr.fired %}
+{{ trigger_agent_result(tr, 'Debt/EBITDAR T3') }}
+{{ agent_recomputed('leverage_t3') }}
+<details><summary>Rules and passages read ({{ tr.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When the composite leverage score with leases is {{ tr.gap_threshold }} or more worse than without</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tr.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tr.sections %}<p class="subtle">Sections: {% for s in tr.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tr.passages %}<ul>{% for p in tr.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">The score without leases rescores the same column on the same benchmark curve with operating lease liabilities left out of debt and rent left out of EBITDAR: debt / EBITDA and (debt − cash) / EBITDA, EBITDA = EBITDAR − rent (EBITDAR and cash as the measure holds them, after Debt/EBITDAR T1 and T2). A feature counts only with a verbatim quote that names it and is about a lease: a master lease (typically with a REIT, so the leases stand or fall together), a cross-default, or a parent guarantee of lease obligations. Any of them adds {{ tr.uplift }} to the composite leverage score (capped at 10); the ratios and their scores don't change. Rent escalators, cancellable leases and lease terms are shown but get no lease adjustment. None disclosed is unresolved. T3 runs after Debt/EBITDAR T2. Only the headline column is recomputed.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set tf = view.leverage_t4 %}
+{% if tf %}
+<div id="fo-leverage-t4" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: Debt/EBITDAR T4 (total debt from a fallback)</span> <span class="risk {{ tf.css }}">{{ tf.label }}</span> <span class="fo-agent-reason">{{ tf.reason }}</span>{{ attention('leverage_t4') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('leverage_t4') }}{{ recomputed('leverage_t4') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tf.inputs %}total debt {{ tf.inputs.debt }} million (balance-sheet debt lines {{ tf.inputs.borrowings }} million{% if tf.inputs.finance_leases_added %} + finance leases {{ tf.inputs.finance_leases_added }}{% endif %}) · Debt / EBITDAR {{ tf.inputs.ratio }} · {% endif %}{{ tf.column }} · composite leverage score <span class="risk {{ tf.score.css }}">{{ tf.score.text }}</span> · fires when total debt comes from a fallback (the tagged total skipped, or finance leases added){% if not tf.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if tf.inputs %}<dt>Debt source</dt><dd><span class="subtle">{{ tf.inputs.debt_source }}</span>{% if tf.inputs.total_skipped %} · tagged total skipped: {{ tf.inputs.total_skipped }}{% endif %}</dd>{% endif %}
+{% if tf.fired_by %}<dt>Set off by</dt><dd>{{ tf.fired_by }}</dd>{% endif %}
+<dt>Decided by</dt><dd>{{ tf.decided_by }}{% if tf.agent %} · {{ tf.mode }} model <code>{{ tf.agent.model_id }}</code> · prompt <code>{{ tf.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tf.effect }}</dd>
+{% if tf.reconciled %}<dt>Total debt used</dt><dd><strong>{{ tf.reconciled }} million</strong> (reconciled to the debt note and the balance sheet){% if tf.instruments_sum %} · instruments add up to {{ tf.instruments_sum }} million{% endif %}</dd>{% endif %}
+{% if tf.resolution %}<dt>Resolution</dt><dd>{% if tf.unresolved %}<strong class="bad">{{ tf.resolution }}</strong>{% else %}<span class="ok">{{ tf.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'leverage_t4' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'leverage_t4' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tf.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tf.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tf.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tf.fired %}
+{{ trigger_agent_result(tf, 'Debt/EBITDAR T4') }}
+{{ agent_recomputed('leverage_t4') }}
+<details><summary>Rules and passages read ({{ tf.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When total debt comes from a fallback</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tf.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tf.sections %}<p class="subtle">Sections: {% for s in tf.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tf.passages %}<ul>{% for p in tf.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">Every amount is at carrying amount, at the year-end, in a verbatim quote that names it. Code adds up the debt-note instruments (borrowings and finance leases listed as debt, less discounts and issuance costs, plus premiums) and checks they make the note's total, then ties the total to the balance sheet's debt lines (with the finance leases added when the note's total includes them), each within {{ tf.tie_share }}. Reconciled total debt = the note's total, plus the finance lease liabilities (the lease note's, else the tagged ones) only when they aren't already in it. Debt + op. leases, net debt and both ratios are recomputed and rescored; EBITDAR and cash don't change. T4 runs first among the Debt/EBITDAR triggers. Only the headline column is recomputed; RCF / debt and liquidity keep the debt as calculated.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set tc = view.rcf_t1 %}
+{% if tc %}
+<div id="fo-rcf-t1" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: RCF/Debt T1 (score {{ tc.threshold }} or more, or RCF / debt below zero)</span> <span class="risk {{ tc.css }}">{{ tc.label }}</span> <span class="fo-agent-reason">{{ tc.reason }}</span>{{ attention('rcf_t1') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('rcf_t1') }}{{ recomputed('rcf_t1') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tc.inputs %}RCF {{ tc.inputs.rcf }} million (FFO {{ tc.inputs.ffo }} − dividends {{ tc.inputs.dividends }} − NCI distributions {{ tc.inputs.nci }}) / debt + op. leases {{ tc.inputs.debt }} million = {{ tc.inputs.ratio }} · {% endif %}{{ tc.column }} · score <span class="risk {{ tc.score.css }}">{{ tc.score.text }}</span> · fires at {{ tc.threshold }} or more, or below zero{% if not tc.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if tc.inputs %}<dt>FFO</dt><dd>CFO {{ tc.inputs.cfo }} million − working-capital changes {{ tc.inputs.wc }} million <span class="subtle">({{ tc.inputs.ffo_basis }})</span></dd>{% endif %}
+{% if tc.fired_by %}<dt>Set off by</dt><dd>{{ tc.fired_by }}</dd>{% endif %}
+<dt>Decided by</dt><dd>{{ tc.decided_by }}{% if tc.agent %} · {{ tc.mode }} model <code>{{ tc.agent.model_id }}</code> · prompt <code>{{ tc.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tc.effect }}</dd>
+{% if tc.cash_costs or tc.special_dividends %}<dt>Added back</dt><dd>{% if tc.cash_costs %}one-off cash costs <strong>{{ tc.cash_costs }} million</strong> to FFO{% endif %}{% if tc.cash_costs and tc.special_dividends %} · {% endif %}{% if tc.special_dividends %}special dividends <strong>{{ tc.special_dividends }} million</strong> out of dividends paid{% endif %}</dd>{% endif %}
+{% if tc.resolution %}<dt>Resolution</dt><dd>{% if tc.unresolved %}<strong class="bad">{{ tc.resolution }}</strong>{% else %}<span class="ok">{{ tc.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'rcf_t1' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'rcf_t1' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tc.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tc.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}{% if q.amount %} · {{ q.amount }}{% endif %}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tc.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tc.fired %}
+{{ trigger_agent_result(tc, 'RCF/Debt T1') }}
+{{ agent_recomputed('rcf_t1') }}
+<details><summary>Rules and passages read ({{ tc.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When RCF / debt scores {{ tc.threshold }} or more, or is below zero (first match)</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tc.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tc.sections %}<p class="subtle">Sections: {% for s in tc.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tc.passages %}<ul>{% for p in tc.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">A one-off counts only with its cash amount in a verbatim quote that names it and is the year's (not a forecast): a cash cost (restructuring or severance, a litigation settlement, acquisition or integration costs, a special pension contribution, tax on a disposal) needs the quote to show cash paid, not a charge or an accrual; a special dividend (special, one-time, extra) needs it to show the dividend was paid. An item counts as recurring (not adjusted) only with a verbatim quote showing it recurs. First match is literal: a quantified one-off is added back even when another is identified without an amount (noted, not added). Cash costs go back into FFO; special dividends come out of dividends paid (never more than the dividends paid as tagged). RCF and RCF / debt are recomputed and rescored on the same benchmark curve; the CFO-based comparison stays as tagged. Only the headline column is recomputed.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set tg = view.rcf_t2 %}
+{% if tg %}
+<div id="fo-rcf-t2" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: RCF/Debt T2 (one-off cash inflow, at any score)</span> <span class="risk {{ tg.css }}">{{ tg.label }}</span> <span class="fo-agent-reason">{{ tg.reason }}</span>{{ attention('rcf_t2') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('rcf_t2') }}{{ recomputed('rcf_t2') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tg.inputs %}FFO {{ tg.inputs.ffo }} million (CFO {{ tg.inputs.cfo }} − working-capital changes {{ tg.inputs.wc }}; {{ tg.inputs.ffo_basis }}) vs {{ tg.inputs.prior_heading }} {{ tg.inputs.prior_ffo }} million: {{ tg.inputs.growth }} (revenue {{ tg.inputs.revenue_growth }}) · tagged one-off inflows {{ tg.inputs.tagged }} million, {{ tg.inputs.share }} of FFO · {% endif %}{{ tg.column }} · score <span class="risk {{ tg.score.css }}">{{ tg.score.text }}</span> · fires when tagged one-off inflows are above {{ tg.share_threshold }} of FFO, or FFO is up {{ tg.growth_threshold }} or more and over {{ tg.excess_threshold }} faster than revenue{% if not tg.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if tg.inputs %}<dt>Tagged inflows</dt><dd><span class="subtle">{{ tg.inputs.tagged_concepts }}</span></dd>
+<dt>Working-capital lines (outside FFO)</dt><dd><span class="subtle">{{ tg.inputs.wc_lines }}</span></dd>{% endif %}
+{% if tg.fired_by %}<dt>Set off by</dt><dd>{{ tg.fired_by }}</dd>{% endif %}
+<dt>Decided by</dt><dd>{{ tg.decided_by }}{% if tg.agent %} · {{ tg.mode }} model <code>{{ tg.agent.model_id }}</code> · prompt <code>{{ tg.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tg.effect }}</dd>
+{% if tg.removed %}<dt>Removed</dt><dd>one-off inflows <strong>{{ tg.removed }} million</strong> out of CFO and FFO</dd>{% endif %}
+{% if tg.resolution %}<dt>Resolution</dt><dd>{% if tg.unresolved %}<strong class="bad">{{ tg.resolution }}</strong>{% else %}<span class="ok">{{ tg.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'rcf_t2' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'rcf_t2' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tg.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tg.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}{% if q.amount %} · {{ q.amount }}{% endif %}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tg.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tg.fired %}
+{{ trigger_agent_result(tg, 'RCF/Debt T2') }}
+{{ agent_recomputed('rcf_t2') }}
+<details><summary>Rules and passages read ({{ tg.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When a one-off cash inflow may lift FFO (first match)</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tg.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tg.sections %}<p class="subtle">Sections: {% for s in tg.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tg.passages %}<ul>{% for p in tg.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">The growth leg compares FFO's growth with revenue's: a business that is simply growing (FFO up with revenue) doesn't set it off; without revenue tagged for both years, the growth alone does. The test uses FFO, the RCF numerator: FFO is CFO less the working-capital lines the filing's calculation linkbase adds into CFO, so a CFO rise from working capital alone doesn't move it. An inflow counts only with its amount in a verbatim quote that names it, shows cash received and is the year's (not a forecast), from the 10-K only (no estimates or non-GAAP figures). Code places it: on one of the working-capital lines, FFO already excludes it (no adjustment); outside them, an operating inflow comes out of CFO and FFO, and a working-capital release only when quoted as one-time or timing; with no working-capital lines tagged, a release can't be placed (unresolved). Recurrence (2 of the 3 years presented) is tested on the tags where they cover the category, else on verified quotes for the earlier years. Items RCF/Debt T1 counted aren't counted again; T1's add-backs and T2's removals net on the same column. RCF, RCF / debt and the CFO-based comparison are recomputed and rescored. Only the headline column is recomputed.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set tn = view.rcf_t3 %}
+{% if tn %}
+<div id="fo-rcf-t3" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: RCF/Debt T3 (NCI distributions missing, NCI material)</span> <span class="risk {{ tn.css }}">{{ tn.label }}</span> <span class="fo-agent-reason">{{ tn.reason }}</span>{{ attention('rcf_t3') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('rcf_t3') }}{{ recomputed('rcf_t3') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tn.inputs %}standard NCI-distributions concept tagged: {{ tn.inputs.tagged }} · NCI share of net income {{ tn.inputs.nci_income }} million of {{ tn.inputs.net_income }} million · NCI equity {{ tn.inputs.nci_equity }} million of total equity {{ tn.inputs.total_equity }} million · tested on the {{ tn.inputs.test }}: {{ tn.inputs.share }} · distributions to NCI counted {{ tn.inputs.counted }} million · {% endif %}{{ tn.column }} · score <span class="risk {{ tn.score.css }}">{{ tn.score.text }}</span> · fires when no standard concept is tagged and NCI is above {{ tn.share_threshold }}{% if not tn.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if tn.fired_by %}<dt>Set off by</dt><dd>{{ tn.fired_by }}</dd>{% endif %}
+<dt>Decided by</dt><dd>{{ tn.decided_by }}{% if tn.agent %} · {{ tn.mode }} model <code>{{ tn.agent.model_id }}</code> · prompt <code>{{ tn.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tn.effect }}</dd>
+{% if tn.amount %}<dt>Distributions to NCI used</dt><dd><strong>{{ tn.amount }} million</strong>{% if tn.status == 'declared' %} (declared, not cash paid: a timing difference){% endif %}</dd>{% endif %}
+{% if tn.resolution %}<dt>Resolution</dt><dd>{% if tn.unresolved %}<strong class="bad">{{ tn.resolution }}</strong>{% else %}<span class="ok">{{ tn.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'rcf_t3' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'rcf_t3' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tn.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tn.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}{% if q.amount %} · {{ q.amount }}{% endif %}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tn.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tn.fired %}
+{{ trigger_agent_result(tn, 'RCF/Debt T3') }}
+{{ agent_recomputed('rcf_t3') }}
+<details><summary>Rules and passages read ({{ tn.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When NCI distributions aren't tagged under a standard concept while NCI is material (first match)</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tn.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tn.sections %}<p class="subtle">Sections: {% for s in tn.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tn.passages %}<ul>{% for p in tn.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">NCI is material when its share of net income is above {{ tn.share_threshold }} of consolidated net income (|NCI share| against |consolidated net income|), or, when consolidated net income is zero, negative or not tagged, when NCI equity (plus redeemable NCI) is above {{ tn.share_threshold }} of total equity, or total equity is zero or negative. A distribution counts only with its amount in a verbatim quote that names it and NCI (or partners), the year's: the cash flow statement's cash paid first, else a declared amount (a timing difference). Distributions to redeemable NCI come from the mezzanine rollforward; a quote that combines distributions with purchases of NCI ownership is held back (purchases are always excluded). "None in the year" needs a quote showing no distribution. The distributions found replace the ones counted (none, as tagged); RCF, RCF / debt and the CFO-based comparison are recomputed and rescored. T3 runs after RCF/Debt T2. Only the headline column is recomputed.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set tb = view.rcf_t4 %}
+{% if tb %}
+<div id="fo-rcf-t4" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: RCF/Debt T4 (NCI distributions from {{ tb.concept }})</span> <span class="risk {{ tb.css }}">{{ tb.label }}</span> <span class="fo-agent-reason">{{ tb.reason }}</span>{{ attention('rcf_t4') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('rcf_t4') }}{{ recomputed('rcf_t4') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tb.inputs %}distributions to NCI {{ tb.inputs.tagged }} million from <code>{{ tb.inputs.concept }}</code> · {% endif %}{{ tb.column }} · score <span class="risk {{ tb.score.css }}">{{ tb.score.text }}</span> · fires whenever <code>{{ tb.concept }}</code> is the source of the NCI-distributions figure{% if not tb.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+<dt>Decided by</dt><dd>{{ tb.decided_by }}{% if tb.agent %} · {{ tb.mode }} model <code>{{ tb.agent.model_id }}</code> · prompt <code>{{ tb.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tb.effect }}</dd>
+{% if tb.excluded %}<dt>Buyouts excluded</dt><dd><strong>{{ tb.excluded }} million</strong> out of the distributions to NCI</dd>{% endif %}
+{% if tb.resolution %}<dt>Resolution</dt><dd>{% if tb.unresolved %}<strong class="bad">{{ tb.resolution }}</strong>{% else %}<span class="ok">{{ tb.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'rcf_t4' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'rcf_t4' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tb.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tb.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}{% if q.amount %} · {{ q.amount }}{% endif %}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tb.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tb.fired %}
+{{ trigger_agent_result(tb, 'RCF/Debt T4') }}
+{{ agent_recomputed('rcf_t4') }}
+<details><summary>Rules and passages read ({{ tb.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When distributions to NCI come from {{ tb.concept }}</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tb.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tb.sections %}<p class="subtle">Sections: {% for s in tb.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tb.passages %}<ul>{% for p in tb.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">A buyout (a purchase of NCI ownership, an additional interest in a subsidiary, a redemption of redeemable NCI) counts only with a verbatim quote that names it and NCI (or partners), for the year; its amount must be in the quote. Quantified buyouts come out of the tagged distributions (never below zero); RCF, RCF / debt and the CFO-based comparison are recomputed and rescored. A buyout identified without an amount is unresolved; "distributions only" needs a quote from the equity statement or the ASC 810 schedule showing no purchases. With nothing found either way, T4 is unresolved. T3 and T4 can't both fire. Only the headline column is recomputed.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set ta = view.margin_t1 %}
+{% if ta %}
+<div id="fo-margin-t1" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: EBITDAR Margin T1 (one-offs Debt/EBITDAR T1 removed)</span> <span class="risk {{ ta.css }}">{{ ta.label }}</span> <span class="fo-agent-reason">{{ ta.reason }}</span>{{ attention('margin_t1') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('margin_t1') }}{{ recomputed('margin_t1') }}
+<dl>
+<dt>Trigger</dt><dd>{% if ta.inputs %}EBITDAR {{ ta.inputs.ebitdar }} million / revenue {{ ta.inputs.revenue }} million = {{ ta.inputs.ratio }} · Debt/EBITDAR T1's normalisation {{ ta.inputs.normalisation }} million · {% endif %}{{ ta.column }} · score <span class="risk {{ ta.score.css }}">{{ ta.score.text }}</span> · fires when Debt/EBITDAR T1 removed one-off items{% if not ta.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if ta.inputs and ta.inputs.rent_basis %}<dt>Rent</dt><dd>{{ ta.inputs.rent_basis }} (labelled; resolved)</dd>{% endif %}
+{% if ta.placed %}<dt>Where each one-off was booked</dt><dd>{% for e in ta.placed %}{{ e.item_id }} ({{ e.kind }}, {{ e.category }}, {{ e.amount }} million): <strong>{{ e.location }}</strong>{{ ' · ' if not loop.last }}{% endfor %}</dd>{% endif %}
+<dt>Decided by</dt><dd>{{ ta.decided_by }}{% if ta.agent %} · {{ ta.mode }} model <code>{{ ta.agent.model_id }}</code> · prompt <code>{{ ta.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ ta.effect }}</dd>
+{% if ta.revenue_adjustment %}<dt>Revenue adjusted by</dt><dd><strong>{{ ta.revenue_adjustment }} million</strong> (the one-offs booked in revenue)</dd>{% endif %}
+{% if ta.resolution %}<dt>Resolution</dt><dd>{% if ta.unresolved %}<strong class="bad">{{ ta.resolution }}</strong>{% else %}<span class="ok">{{ ta.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'margin_t1' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'margin_t1' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if ta.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in ta.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in ta.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if ta.fired %}
+{{ trigger_agent_result(ta, 'EBITDAR Margin T1') }}
+{{ agent_recomputed('margin_t1') }}
+<details><summary>Rules and passages read ({{ ta.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When Debt/EBITDAR T1 removed one-offs</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in ta.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if ta.sections %}<p class="subtle">Sections: {% for s in ta.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if ta.passages %}<ul>{% for p in ta.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">The margin always takes Debt/EBITDAR T1's normalisation (the same one-offs: charges added back, gains removed). Each of T1's items is placed with a verbatim quote: in revenue (a gain comes out of revenue too; a charge booked as a reduction of revenue goes back in), in operating income outside revenue, or below operating income; an item without a verified placement is unclear. An item in revenue comes first (an unclear one beside it is noted); otherwise an unclear one leaves the margin unresolved, on T1's EBITDAR with revenue as reported. Without the lease-cost table the margin uses cash lease payments, labelled; that counts as resolved. Only the headline column is recomputed.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set ta = view.margin_t2 %}
+{% if ta %}
+<div id="fo-margin-t2" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: EBITDAR Margin T2 (segment margins dispersed)</span> <span class="risk {{ ta.css }}">{{ ta.label }}</span> <span class="fo-agent-reason">{{ ta.reason }}</span>{{ attention('margin_t2') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('margin_t2') }}{{ recomputed('margin_t2') }}
+<dl>
+<dt>Trigger</dt><dd>{{ ta.column }} · score <span class="risk {{ ta.score.css }}">{{ ta.score.text }}</span> · fires at {{ ta.high }} or more, or {{ ta.low }} or less, with more than one reportable segment and one with {{ ta.share }} or more of revenue whose margin is {{ ta.gap }} or more from all segments'{% if not ta.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if ta.segments %}<dt>Segments (segment note)</dt><dd><div class="table-wrap"><table><thead><tr><th>Segment</th><th>Revenue</th><th>Segment profit</th><th>Margin</th><th>Share of revenue</th></tr></thead><tbody>
+{% for s in ta.segments %}<tr><td>{% if s.outlier %}<strong>{{ s.name }}</strong> (outlier){% else %}{{ s.name }}{% endif %}</td><td>{{ s.revenue }}</td><td>{{ s.profit }}</td><td>{{ s.margin }}</td><td>{{ s.share }}</td></tr>{% endfor %}
+<tr><td>All reportable segments</td><td></td><td></td><td>{{ ta.segment_margin }}</td><td></td></tr>
+</tbody></table></div><span class="subtle">Millions. Segment profit: {% if ta.profit_measure %}{{ ta.profit_measure }} <code>{{ ta.profit_concept }}</code>{% else %}not tagged for each segment{% endif %}. It only compares segments; it never feeds a score.</span></dd>{% endif %}
+{% if ta.outlier %}<dt>Without the outlier</dt><dd>Remaining segments' margin {{ ta.outlier.rest_margin }} against {{ ta.segment_margin }} for all segments: the EBITDAR margin {{ ta.ratio }} would be {{ ta.outlier.implied_ratio }}, scoring <span class="risk {{ ta.outlier.implied_score.css }}">{{ ta.outlier.implied_score.text }}</span> (compared only, never applied) · p = {{ ta.outlier.p }} · <strong>{{ ta.outlier.direction }}</strong></dd>{% endif %}
+{% if ta.findings %}<dt>What the filing says</dt><dd>{% for f in ta.findings %}{{ f.label }}: <strong>{{ f.text }}</strong>{{ ' · ' if not loop.last }}{% endfor %}</dd>{% endif %}
+<dt>Decided by</dt><dd>{{ ta.decided_by }}{% if ta.agent %} · {{ ta.mode }} model <code>{{ ta.agent.model_id }}</code> · prompt <code>{{ ta.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ ta.effect }}</dd>
+{% if ta.recomputed %}<dt>Score after the move</dt><dd><span class="risk {{ ta.recomputed.css }}">{{ ta.recomputed.text }}</span></dd>{% endif %}
+{% if ta.resolution %}<dt>Resolution</dt><dd>{% if ta.unresolved %}<strong class="bad">{{ ta.resolution }}</strong>{% else %}<span class="ok">{{ ta.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'margin_t2' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'margin_t2' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if ta.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in ta.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in ta.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if ta.fired %}
+{{ trigger_agent_result(ta, 'EBITDAR Margin T2') }}
+{{ agent_recomputed('margin_t2') }}
+<details><summary>Rules and passages read ({{ ta.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When the segment margins are dispersed (first match)</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in ta.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if ta.sections %}<p class="subtle">Sections: {% for s in ta.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if ta.passages %}<ul>{% for p in ta.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">Code computes each segment's margin (segment profit / segment revenue) from the segment note's tags and names the outlier; nothing is classified as core or non-core. The margin without the outlier (the EBITDAR margin moved by the remaining segments' margin less all segments') is scored only to see whether it lands at least a point closer to p, on the same extreme or further out, or neither. The agent quotes whether the filing reports a single reportable segment, whether segment profit is measured the same way across segments, and whether MD&amp;A or the segment note explains the outlier's margin by how that business works or by the year's performance (the passage must name the segment). A move is 1 point toward p, never past it; the ratio is unchanged. Only the headline column is adjusted. If a mix-weighted benchmark is built, this trigger is dropped.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set tc = view.dso_t1 %}
+{% if tc %}
+<div id="fo-dso-t1" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: DSO T1 (DSO moved {{ tc.threshold }} days or more)</span> <span class="risk {{ tc.css }}">{{ tc.label }}</span> <span class="fo-agent-reason">{{ tc.reason }}</span>{{ attention('dso_t1') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('dso_t1') }}{{ recomputed('dso_t1') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tc.inputs %}DSO {{ tc.inputs.dso }} (receivables {{ tc.inputs.receivables }} million / revenue {{ tc.inputs.revenue }} million × 365) vs prior year {{ tc.inputs.prior_dso }} (receivables {{ tc.inputs.prior_receivables }} million / revenue {{ tc.inputs.prior_revenue }} million × 365): change <strong>{{ tc.inputs.change }}</strong>{% if tc.inputs.deal_adjusted %} <span class="subtle">(revenue as the acquisitions-and-divestitures pre-check corrected it)</span>{% endif %} · {% endif %}{{ tc.column }} · score <span class="risk {{ tc.score.css }}">{{ tc.score.text }}</span> · fires at {{ tc.threshold }} days or more either way{% if not tc.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if tc.fired_by %}<dt>Set off by</dt><dd>{{ tc.fired_by }}</dd>{% endif %}
+<dt>Decided by</dt><dd>{{ tc.decided_by }}{% if tc.agent %} · {{ tc.mode }} model <code>{{ tc.agent.model_id }}</code> · prompt <code>{{ tc.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tc.effect }}</dd>
+{% if tc.added or tc.prior_added %}<dt>Added back</dt><dd>{% if tc.added %}<strong>{{ tc.added }} million</strong> to {{ tc.column }} receivables{% endif %}{% if tc.added and tc.prior_added %} · {% endif %}{% if tc.prior_added %}<strong>{{ tc.prior_added }} million</strong> to prior-year receivables{% endif %}</dd>{% endif %}
+{% if tc.resolution %}<dt>Resolution</dt><dd>{% if tc.unresolved %}<strong class="bad">{{ tc.resolution }}</strong>{% else %}<span class="ok">{{ tc.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'dso_t1' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'dso_t1' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tc.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tc.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}{% if q.amount %} · {{ q.amount }}{% endif %}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tc.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tc.fired %}
+{{ trigger_agent_result(tc, 'DSO T1') }}
+{{ agent_recomputed('dso_t1') }}
+<details><summary>Rules and passages read ({{ tc.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When |change in DSO| is {{ tc.threshold }} days or more (first match)</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tc.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tc.sections %}<p class="subtle">Sections: {% for s in tc.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tc.passages %}<ul>{% for p in tc.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">The trigger reads DSO after the acquisitions-and-divestitures pre-check's correction. Mechanical causes count in either direction and are added back in the year they happened (the headline year and the year before), so both DSOs and the change are recomputed. Only receivables sold and derecognised count: a securitisation accounted for as a secured borrowing stays in receivables. A write-off must be shown to be unusual. Operational causes count only when DSO went up, and the recovery must be quoted from MD&amp;A or subsequent events as having happened after the year-end (a plan or expectation isn't).</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set tq = view.liquidity_t1 %}
+{% if tq %}
+<div id="fo-liquidity-t1" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: Liquidity T1 (revolver availability not found)</span> <span class="risk {{ tq.css }}">{{ tq.label }}</span> <span class="fo-agent-reason">{{ tq.reason }}</span>{{ attention('liquidity_t1') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('liquidity_t1') }}{{ recomputed('liquidity_t1') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tq.inputs %}Revolver availability at {{ tq.inputs.as_at }}: <strong>not found</strong> <span class="subtle">({{ tq.inputs.search }})</span>, so it counted as 0: cash {{ tq.inputs.cash }} million, CFO {{ tq.inputs.cfo }} million, liquidity coverage {{ tq.inputs.coverage }}, refinancing coverage {{ tq.inputs.refinancing }} · {% endif %}{{ tq.column }} · score <span class="risk {{ tq.score.css }}">{{ tq.score.text }}</span>{% if not tq.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if tq.fired_by %}<dt>Set off by</dt><dd>{{ tq.fired_by }}</dd>{% endif %}
+<dt>Decided by</dt><dd>{{ tq.decided_by }}{% if tq.agent %} · {{ tq.mode }} model <code>{{ tq.agent.model_id }}</code> · prompt <code>{{ tq.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tq.effect }}</dd>
+{% if tq.availability %}<dt>Revolver availability</dt><dd><strong>{{ tq.availability }} million</strong> into the liquidity and refinancing sources</dd>{% endif %}
+{% if tq.resolution %}<dt>Resolution</dt><dd>{% if tq.unresolved %}<strong class="bad">{{ tq.resolution }}</strong>{% else %}<span class="ok">{{ tq.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'liquidity_t1' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'liquidity_t1' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tq.facilities %}
+<h4>Revolving facilities</h4>
+<div class="table-wrap"><table><thead><tr><th>Facility</th><th>Figures (millions, verified)</th><th>Matures</th><th>Availability</th></tr></thead><tbody>
+{% for f in tq.facilities %}<tr><td><code>{{ f.facility_id }}</code> {{ f.description }}{% if f.asset_based %} <span class="subtle">(asset-based)</span>{% endif %}</td><td>{% for x in f.figures %}{{ x.label }} {{ x.amount }}{{ ' · ' if not loop.last }}{% else %}<span class="subtle">none verified</span>{% endfor %}</td><td>{{ f.maturity or '—' }}{% if f.matures_soon %} <strong class="bad">(within 12 months)</strong>{% endif %}</td><td>{% if f.unresolved %}<strong class="bad">Unresolved:</strong> {{ f.unresolved_why }}{% else %}<strong>{{ f.availability }}</strong> <span class="subtle">({{ f.route }})</span>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% if tq.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tq.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}{% if q.amount %} · {{ q.amount }}{% endif %}{% if q.date %} · {{ q.date }}{% endif %}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tq.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tq.fired %}
+{{ trigger_agent_result(tq, 'Liquidity T1') }}
+{{ agent_recomputed('liquidity_t1') }}
+<details><summary>Rules and passages read ({{ tq.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When the revolver availability isn't found (first match, per facility)</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tq.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tq.sections %}<p class="subtle">Sections: {% for s in tq.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tq.passages %}<ul>{% for p in tq.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">Only revolving facilities count (not term loans, notes, commercial paper or securitisations). Availability, drawn amounts, letters of credit and the borrowing base must be dated at the year-end; a nil amount needs a quote saying none is outstanding. An asset-based revolver takes the lower of commitment − drawn − letters of credit and its borrowing base. Several facilities are summed; if any can't be worked out, the trigger is unresolved and nothing is added. A revolver maturing within 12 months is noted but still counted.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set tm = view.liquidity_t2 %}
+{% if tm %}
+<div id="fo-liquidity-t2" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: Liquidity T2 (coverage or refinancing score {{ tm.threshold }} or more)</span> <span class="risk {{ tm.css }}">{{ tm.label }}</span> <span class="fo-agent-reason">{{ tm.reason }}</span>{{ attention('liquidity_t2') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('liquidity_t2') }}{{ recomputed('liquidity_t2') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tm.inputs %}At {{ tm.inputs.as_at }}: liquidity coverage {{ tm.inputs.coverage }} (score <span class="risk {{ tm.inputs.coverage_score.css }}">{{ tm.inputs.coverage_score.text }}</span>), refinancing coverage {{ tm.inputs.refinancing }} (score <span class="risk {{ tm.inputs.refinancing_score.css }}">{{ tm.inputs.refinancing_score.text }}</span>), cash {{ tm.inputs.cash }} million{% if tm.inputs.ladder %}; maturities (millions): {% for x in tm.inputs.ladder %}{{ x.label }} {{ x.amount }}{{ ' · ' if not loop.last }}{% endfor %}{% endif %} · {% endif %}{{ tm.column }} · score <span class="risk {{ tm.score.css }}">{{ tm.score.text }}</span> · fires at {{ tm.threshold }} or more on either test, after Liquidity T1{% if not tm.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if tm.fired_by %}<dt>Set off by</dt><dd>{{ tm.fired_by }}</dd>{% endif %}
+<dt>Decided by</dt><dd>{{ tm.decided_by }}{% if tm.agent %} · {{ tm.mode }} model <code>{{ tm.agent.model_id }}</code> · prompt <code>{{ tm.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tm.effect }}</dd>
+{% if tm.fired %}<dt>DSCR T1 reused</dt><dd>{% for x in tm.dscr_t1 %}<code>{{ x.item_id }}</code> {{ x.outcome }}{{ ' · ' if not loop.last }}{% else %}<span class="subtle">no DSCR T1 refinancing record (T1 didn't fire, or found none)</span>{% endfor %}</dd>{% endif %}
+{% if tm.resolution %}<dt>Resolution</dt><dd>{% if tm.unresolved %}<strong class="bad">{{ tm.resolution }}</strong>{% else %}<span class="ok">{{ tm.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'liquidity_t2' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'liquidity_t2' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tm.debts %}
+<h4>Debt refinanced, extended or repaid</h4>
+<div class="table-wrap"><table><thead><tr><th>Item</th><th>What happened</th><th>When</th><th>Amount (millions)</th><th>Maturity</th><th>Outcome</th></tr></thead><tbody>
+{% for e in tm.debts %}<tr><td><code>{{ e.item_id }}</code> {{ e.description }}{% if e.dscr_t1_item %} <span class="subtle">(DSCR T1 {{ e.dscr_t1_item }})</span>{% endif %}</td><td>{{ e.kind }}</td><td>{{ e.date }}</td><td>{{ e.amount }}{% if e.cash_used %} <span class="subtle">(cash used {{ e.cash_used }})</span>{% endif %}</td><td>{{ e.move }}</td><td>{% if e.unresolved %}<strong class="bad">Unresolved:</strong> {{ e.unresolved_why }}{% else %}{{ e.route }}{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% if tm.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tm.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}{% if q.amount %} · {{ q.amount }}{% endif %}{% if q.date %} · {{ q.date }}{% endif %}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tm.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tm.fired %}
+{{ trigger_agent_result(tm, 'Liquidity T2') }}
+{{ agent_recomputed('liquidity_t2') }}
+<details><summary>Rules and passages read ({{ tm.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When the coverage or refinancing score is {{ tm.threshold }} or more (first match, per item)</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tm.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tm.sections %}<p class="subtle">Sections: {% for s in tm.sections %}{{ s.label }}: {% if s.located %}located, {{ s.passages }} passage(s){% else %}no heading found{% endif %}{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if tm.passages %}<ul>{% for p in tm.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ 'F-pages' if p.item == 'F' else ('Item ' ~ p.item if p.item else 'document') }} · {{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">The trigger reads the scores after Liquidity T1. DSCR T1's verified refinancings are reused, not re-checked. An executed event must be dated after the year-end; a plan or expectation isn't executed. The debt's amount comes out of the maturity-table year it was due in (never below 0) and, when refinanced, extended or repaid from new borrowing, goes in at the year of its new maturity (a date given only as a year that spans two maturity years goes in the earlier one). A repayment from cash also takes the cash used out of cash. Without a tagged maturity table only year 1 changes. Verified executed items are applied even when another item is unresolved.</p>
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% set tw = view.liquidity_t3 %}
+{% if tw %}
+<div id="fo-liquidity-t3" class="fo-agent"><details class="fo-agent-box"><summary><span class="fo-agent-title">Trigger Agent: Liquidity T3 (maturity wall 25% or more of total debt)</span> <span class="risk {{ tw.css }}">{{ tw.label }}</span> <span class="fo-agent-reason">{{ tw.reason }}</span>{{ attention('liquidity_t3') }}</summary>
+<div class="fo-agent-body">
+{{ decision_panel('liquidity_t3') }}{{ recomputed('liquidity_t3') }}
+<dl>
+<dt>Trigger</dt><dd>{% if tw.inputs %}{{ tw.inputs.wall }}: {{ tw.inputs.amount }} million of {{ tw.inputs.total }} million total debt (<strong>{{ tw.inputs.share }}</strong>) · {% endif %}{{ tw.column }} · score <span class="risk {{ tw.score.css }}">{{ tw.score.text }}</span> · fires at 25% or more, the largest year of years 2–5{% if not tw.fired %} · <span class="subtle">not set off</span>{% endif %}</dd>
+{% if tw.fired_by %}<dt>Set off by</dt><dd>{{ tw.fired_by }}</dd>{% endif %}
+<dt>Decided by</dt><dd>{{ tw.decided_by }}{% if tw.agent %} · {{ tw.mode }} model <code>{{ tw.agent.model_id }}</code> · prompt <code>{{ tw.agent.prompt_id }}</code>{% endif %}</dd>
+<dt>Effect</dt><dd>{{ tw.effect }}</dd>
+{% if tw.shares %}<dt>Wall year</dt><dd>secured bank debt and mortgages {{ tw.shares.secured }} · unsecured bonds {{ tw.shares.unsecured }} (of the wall year's maturities in the table)</dd>{% endif %}
+{% if tw.resolution %}<dt>Resolution</dt><dd>{% if tw.unresolved %}<strong class="bad">{{ tw.resolution }}</strong>{% else %}<span class="ok">{{ tw.resolution }}</span>{% endif %}</dd>{% endif %}
+</dl>
+{% if gate.state == 'awaiting_override' and 'liquidity_t3' in gate.checks %}<p class="fo-gate"><strong>{{ gate.message }}</strong></p>{% elif gate.state == 'overridden' and 'liquidity_t3' in gate.checks %}<p class="fo-gate continued"><strong>{{ gate.message }}</strong></p>{% endif %}
+{% if tw.evidence %}
+<h4>Verified evidence</h4>
+<ul>{% for q in tw.evidence %}<li><span class="subtle">{{ q.fact }} <code>{{ q.passage_id }}</code> · {{ q.section }}</span><blockquote class="fo-quote">{{ q.quote }}</blockquote></li>{% endfor %}</ul>
+{% endif %}
+{% for n in tw.notes %}<p class="notice">{{ n }}</p>{% endfor %}
+{% if tw.fired %}
+{{ trigger_agent_result(tw, 'Liquidity T3') }}
+{{ agent_recomputed('liquidity_t3') }}
+<details><summary>Rules and passages read ({{ tw.passages|length }} passage(s))</summary>
+<div class="table-wrap"><table><thead><tr><th>When the wall year is 25% or more of total debt</th><th>Adjustment</th></tr></thead><tbody>
+{% for r in tw.rules %}<tr><td>{{ r.when }}</td><td>{{ r.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if tw.passages %}<ul>{% for p in tw.passages %}<li><code>{{ p.passage_id }}</code> <span class="subtle">{{ p.section_label }} · {{ p.kind }}</span> {{ p.text }}</li>{% endfor %}</ul>{% endif %}
+</details>
+{% endif %}
+</div></details></div>
+{% endif %}
+{% if pc or view.covenants or view.acquisitions or view.prepaid or view.dscr_t2 or view.dscr_t3 or view.dscr_t1 or view.icr_t2 or view.icr_t3 or view.icr_t1 or view.leverage_t1 or view.leverage_t2 or view.leverage_t3 or view.leverage_t4 or view.rcf_t1 or view.rcf_t2 or view.rcf_t3 or view.rcf_t4 or view.margin_t1 or view.margin_t2 or view.dso_t1 or view.liquidity_t1 or view.liquidity_t2 or view.liquidity_t3 %}</section>{% endif %}
 {% set c = view.composite %}
 {% if gate.show_composite %}
 <section id="fo-composite"><h2>Composite risk score{% if gate.provisional %} <span class="warn">(provisional)</span>{% elif c.after_override %} <span class="subtle">(after the analyst's decision)</span>{% endif %}</h2>
@@ -606,10 +1051,11 @@
 </div>
 {% if c.reason %}<p class="notice">{{ c.reason }}</p>{% endif %}
 {% if c.gc_status == 'fail' %}<p>{% for a in c.adjustments %}{{ a }}{{ ' · ' if not loop.last }}{% endfor %}. Going concern: fail. Agent triggers skipped.</p>
-{% else %}<p>Weighted average {{ c.average }} over {{ c.used }} measure(s){% for a in c.adjustments %} · {{ a }}{% endfor %}. Going concern: {{ c.gc_status }}{% if not pc %} (no pre-check recorded for this run){% endif %}{% if cv %} · Covenants: {{ cv.label|lower }} (outcome {{ cv.outcome }}){% endif %}{% if view.acquisitions %} · Acquisitions and divestitures: {{ view.acquisitions.label|lower }}{% endif %}{% if view.prepaid %} · Prepaid model: {{ view.prepaid.label|lower }}{% endif %}{% if view.dscr_t2 %} · DSCR trigger T2: {{ view.dscr_t2.label|lower }}{% endif %}{% if view.dscr_t3 %} · DSCR trigger T3: {{ view.dscr_t3.label|lower }}{% endif %}{% if view.dscr_t1 %} · DSCR trigger T1: {{ view.dscr_t1.label|lower }}{% endif %}{% if view.icr_t2 %} · ICR trigger T2: {{ view.icr_t2.label|lower }}{% endif %}{% if view.icr_t3 %} · ICR trigger T3: {{ view.icr_t3.label|lower }}{% endif %}{% if view.icr_t1 %} · ICR trigger T1: {{ view.icr_t1.label|lower }}{% endif %}{% if view.leverage_t1 %} · Debt/EBITDAR trigger T1: {{ view.leverage_t1.label|lower }}{% endif %}{% if view.leverage_t2 %} · Debt/EBITDAR trigger T2: {{ view.leverage_t2.label|lower }}{% endif %}.</p>{% endif %}
+{% else %}<p>Weighted average {{ c.average }} over {{ c.used }} measure(s){% for a in c.adjustments %} · {{ a }}{% endfor %}. Going concern: {{ c.gc_status }}{% if not pc %} (no pre-check recorded for this run){% endif %}{% if cv %} · Covenants: {{ cv.label|lower }} (outcome {{ cv.outcome }}){% endif %}{% if view.acquisitions %} · Acquisitions and divestitures: {{ view.acquisitions.label|lower }}{% endif %}{% if view.prepaid %} · Prepaid model: {{ view.prepaid.label|lower }}{% endif %}{% if view.dscr_t2 %} · DSCR trigger T2: {{ view.dscr_t2.label|lower }}{% endif %}{% if view.dscr_t3 %} · DSCR trigger T3: {{ view.dscr_t3.label|lower }}{% endif %}{% if view.dscr_t1 %} · DSCR trigger T1: {{ view.dscr_t1.label|lower }}{% endif %}{% if view.icr_t2 %} · ICR trigger T2: {{ view.icr_t2.label|lower }}{% endif %}{% if view.icr_t3 %} · ICR trigger T3: {{ view.icr_t3.label|lower }}{% endif %}{% if view.icr_t1 %} · ICR trigger T1: {{ view.icr_t1.label|lower }}{% endif %}{% if view.leverage_t1 %} · Debt/EBITDAR trigger T1: {{ view.leverage_t1.label|lower }}{% endif %}{% if view.leverage_t2 %} · Debt/EBITDAR trigger T2: {{ view.leverage_t2.label|lower }}{% endif %}{% if view.leverage_t3 %} · Debt/EBITDAR trigger T3: {{ view.leverage_t3.label|lower }}{% endif %}{% if view.leverage_t4 %} · Debt/EBITDAR trigger T4: {{ view.leverage_t4.label|lower }}{% endif %}{% if view.rcf_t1 %} · RCF/Debt trigger T1: {{ view.rcf_t1.label|lower }}{% endif %}{% if view.rcf_t2 %} · RCF/Debt trigger T2: {{ view.rcf_t2.label|lower }}{% endif %}{% if view.rcf_t3 %} · RCF/Debt trigger T3: {{ view.rcf_t3.label|lower }}{% endif %}{% if view.rcf_t4 %} · RCF/Debt trigger T4: {{ view.rcf_t4.label|lower }}{% endif %}{% if view.margin_t1 %} · EBITDAR Margin trigger T1: {{ view.margin_t1.label|lower }}{% endif %}{% if view.margin_t2 %} · EBITDAR Margin trigger T2: {{ view.margin_t2.label|lower }}{% endif %}{% if view.liquidity_t1 %} · Liquidity trigger T1: {{ view.liquidity_t1.label|lower }}{% endif %}{% if view.liquidity_t2 %} · Liquidity trigger T2: {{ view.liquidity_t2.label|lower }}{% endif %}{% if view.liquidity_t3 %} · Liquidity trigger T3: {{ view.liquidity_t3.label|lower }}{% endif %}.</p>{% endif %}
 <div class="table-wrap"><table><thead><tr><th>Measure</th><th>Score</th><th>Column</th><th class="num">Weight</th><th class="num">Share</th><th class="num">Adds</th><th>Notes</th></tr></thead><tbody>
 {% for r in c.rows %}<tr><td>{{ r.name }}</td><td><span class="risk {{ r.score.css }}">{{ r.score.text }}</span></td><td>{{ r.heading }}</td><td class="num">{{ r.weight }}</td><td class="num">{{ r.share }}</td><td class="num">{{ r.contribution }}</td><td>{{ r.notes }}</td></tr>{% endfor %}
 </tbody></table></div>
+{{ recomputations_of('overall') }}
 <p class="subtle">Scale: 1 = lowest risk, 10 = highest. Rating AAA (1) … D (10); the first decimal notches it (+ below .5, − above .5).</p>
 <details><summary>Method and limitations</summary><p class="fo-formula">{{ c.formula }}</p><p>{{ c.notes }}</p><p class="subtle">{{ c.gaps }}</p></details>
 </section>
@@ -625,10 +1071,11 @@
 {% if m.covenant_note %}<p class="fo-gate{% if 'breach' not in m.covenant_note %} watch{% endif %}">{{ m.covenant_note }}</p>{% endif %}
 {% if m.deal_note %}<p class="fo-gate{% if not m.deal_unresolved %} watch{% elif m.deal_tag != 'Unresolved' %} continued{% endif %}">{% if m.deal_tag %}<span class="risk {{ 'very-high' if m.deal_tag == 'Unresolved' else ('moderate' if m.deal_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.deal_tag }}</span> {% endif %}{{ m.deal_note }}</p>{% endif %}
 {% if m.prepaid_note %}<p class="fo-gate{% if not m.prepaid_tag %} watch{% elif m.prepaid_tag != 'Unresolved' %} continued{% endif %}">{% if m.prepaid_tag %}<span class="risk {{ 'very-high' if m.prepaid_tag == 'Unresolved' else ('moderate' if m.prepaid_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.prepaid_tag }}</span> {% endif %}{{ m.prepaid_note }}</p>{% endif %}
-{% if m.trigger_note %}<p class="fo-gate{% if not m.trigger_tag %} watch{% elif m.trigger_tag != 'Escalated' %} continued{% endif %}">{% if m.trigger_tag %}<span class="risk {{ 'very-high' if m.trigger_tag == 'Escalated' else ('moderate' if m.trigger_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.trigger_tag }}</span> {% endif %}{{ m.trigger_note }} {% for key, name in ([('dscr_t2', 'T2'), ('dscr_t3', 'T3'), ('dscr_t1', 'T1')] if m.key == 'dscr' else [('icr_t2', 'ICR T2'), ('icr_t3', 'ICR T3'), ('icr_t1', 'ICR T1')] if m.key == 'icr' else [('leverage_t1', 'Debt/EBITDAR T1'), ('leverage_t2', 'Debt/EBITDAR T2')] if m.key == 'leverage' else []) %}{% if view[key] and view[key].fired %}<a href="#fo-{{ key|replace('_', '-') }}">Trigger Agent result: {{ name }}</a> {% endif %}{% endfor %}</p>{% endif %}
+{% if m.trigger_note %}<p class="fo-gate{% if not m.trigger_tag %} watch{% elif m.trigger_tag != 'Escalated' %} continued{% endif %}">{% if m.trigger_tag %}<span class="risk {{ 'very-high' if m.trigger_tag == 'Escalated' else ('moderate' if m.trigger_tag == 'Overridden by analyst' else 'low') }}" style="font-weight:600">{{ m.trigger_tag }}</span> {% endif %}{{ m.trigger_note }} {% for key, name in ([('dscr_t2', 'T2'), ('dscr_t3', 'T3'), ('dscr_t1', 'T1')] if m.key == 'dscr' else [('icr_t2', 'ICR T2'), ('icr_t3', 'ICR T3'), ('icr_t1', 'ICR T1')] if m.key == 'icr' else [('leverage_t4', 'Debt/EBITDAR T4'), ('leverage_t1', 'Debt/EBITDAR T1'), ('leverage_t2', 'Debt/EBITDAR T2'), ('leverage_t3', 'Debt/EBITDAR T3')] if m.key == 'leverage' else [('rcf_t1', 'RCF/Debt T1'), ('rcf_t2', 'RCF/Debt T2'), ('rcf_t3', 'RCF/Debt T3'), ('rcf_t4', 'RCF/Debt T4')] if m.key == 'rcf' else [('margin_t1', 'EBITDAR Margin T1'), ('margin_t2', 'EBITDAR Margin T2')] if m.key == 'margin' else [('liquidity_t1', 'Liquidity T1'), ('liquidity_t2', 'Liquidity T2'), ('liquidity_t3', 'Liquidity T3')] if m.key == 'liquidity' else []) %}{% if view[key] and view[key].fired %}<a href="#fo-{{ key|replace('_', '-') }}">Trigger Agent result: {{ name }}</a> {% endif %}{% endfor %}</p>{% endif %}
 {% for f in m.flag_notes %}<p class="fo-gate watch"><span class="warn">&#9888; {{ f }}</span> <a href="#fo-icr-t2">Trigger Agent result: ICR T2</a></p>{% endfor %}
 {% if m.data_confidence_note %}<p class="fo-gate watch"><span class="warn">&#9888; {{ m.data_confidence_note }}</span> <a href="#fo-dscr-t3">Trigger Agent result: T3</a></p>{% endif %}
 {% if m.override %}<p class="fo-gate continued"><strong>{{ m.override.text }}</strong> · counted in the composite: <span class="risk {{ m.override.score.css }}">{{ m.override.score.text }}</span></p>{% endif %}
+{{ recomputations_of(m.key) }}
 <p class="fo-formula">{{ m.formula }}</p>
 {% if m.empty %}<p class="notice">{{ m.empty }}</p>{% else %}
 <div class="table-wrap"><table><thead><tr><th>{{ m.unit }} millions</th>{% for h in m.headings %}<th class="num">{{ h }}</th>{% endfor %}</tr></thead><tbody>

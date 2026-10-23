@@ -68,7 +68,8 @@ def responses(gc=None, cov=None, ad=None, pp=None, t2=None):
     """Scripted Pre-check Agent responses for NVIDIA: a clean auditor's report, the debt note's (C01) statement
     that it complied with its covenants, the Groq deal (P04), not material, and a billed (not prepaid) business
     model. NVIDIA's CapEx is above 1.5× depreciation, so DSCR trigger T2 fires: by default the Trigger Agent finds no
-    growth spending described (the score is held)."""
+    growth spending described (the score is held). Its FFO is up 25% or more but not over 10 points faster than revenue, so RCF/Debt
+    trigger T2 doesn't fire."""
     return {"going_concern": gc or _agent_says("pass"),
             "covenants": cov or _covenants_say("compliant", {"passage_id": "C01", "classification": "in_compliance",
                                                              "quote": COMPLIED}),
@@ -222,7 +223,12 @@ def test_going_concern_fail_waits_for_the_analyst_then_continues(db_session, aud
                                       "triggers": {"dscr_t1": "skipped", "dscr_t2": "skipped", "dscr_t3": "skipped",
                                                    "icr_t1": "skipped", "icr_t2": "skipped",
                                                    "icr_t3": "skipped", "leverage_t1": "skipped",
-                                                   "leverage_t2": "skipped"},
+                                                   "leverage_t2": "skipped", "leverage_t3": "skipped",
+                                                   "leverage_t4": "skipped", "rcf_t1": "skipped",
+                                                   "rcf_t2": "skipped", "rcf_t3": "skipped", "rcf_t4": "skipped",
+                                                   "margin_t1": "skipped", "margin_t2": "skipped", "dso_t1": "skipped",
+                                                   "liquidity_t1": "skipped", "liquidity_t2": "skipped",
+                                                   "liquidity_t3": "skipped"},
                                       "requires_decision": True}
     assert [e["type"] for e in result.payload["escalations"]] == ["run_decision"]
     summary = result.summary()
@@ -314,6 +320,10 @@ def test_a_divestiture_with_its_revenue_disclosed_recomputes_dso(db_session, nvd
     assert col["revenue"] == col["revenue_reported"] - 2.1e9
     assert col["dso"] == pytest.approx(col["receivables"] / (col["revenue"] / 365))
     assert payload["gate"]["deal_adjustments"] == ["dso"] and payload["escalations"] == []
+    [rec] = payload["recomputations"]  # the pre-check's recomputation, step by step
+    assert (rec["step"], rec["measure"], rec["inputs"]) == (
+        "acquisitions", "dso", [{"label": "Net revenue", "before": "215,938.0", "after": "213,838.0"}])
+    assert {"label": "DSO", "before": "65.0 days", "after": "65.7 days", "score": False} in rec["results"]
 
 
 def test_an_unresolved_deal_escalates_dso_then_the_analyst_overrides(db_session, nvda_sale, nvda_as_hospital,
@@ -438,6 +448,10 @@ def test_covenant_breach_escalates_liquidity_then_the_analyst_overrides(db_sessi
     assert payload["gate"]["covenants"] == "breach" and payload["gate"]["agent_triggers"] == "enabled"
     liquidity = next(m for m in payload["metrics"] if m["key"] == "liquidity")["columns"][0]
     assert liquidity["revolver"] == 0 and liquidity["score"] == 10
+    recs = {r["measure"]: r for r in payload["recomputations"] if r["step"] == "covenants"}
+    assert {"label": "Section score (worse of the two)", "before": "1", "after": "10", "score": True,
+            "unchanged": False} in recs["liquidity"]["results"]
+    assert recs["overall"]["results"][0]["after"] == "7"  # the composite floored at 7
     [escalation] = payload["escalations"]
     assert (escalation["type"], escalation["measure"], escalation["engine_score"]) == ("measure_override",
                                                                                          "liquidity", 10)
@@ -494,7 +508,13 @@ def test_dscr_trigger_t1_resolved_completes_unresolved_escalates_dscr(db_session
     assert payload["gate"]["triggers"] == {"dscr_t1": "no_adjustment", "dscr_t2": "no_growth",
                                              "dscr_t3": "not_triggered", "icr_t1": "not_triggered",
                                              "icr_t2": "not_triggered", "icr_t3": "not_triggered",
-                                             "leverage_t1": "not_triggered", "leverage_t2": "not_triggered"} and t1["passages"]
+                                             "leverage_t1": "not_triggered", "leverage_t2": "not_triggered",
+                                             "leverage_t3": "not_triggered", "leverage_t4": "not_triggered",
+                                             "rcf_t1": "not_triggered", "rcf_t2": "not_triggered",
+                                             "rcf_t3": "not_triggered", "rcf_t4": "not_triggered",
+                                             "margin_t1": "not_triggered", "margin_t2": "not_triggered", "dso_t1": "not_triggered",
+                                             "liquidity_t1": "no_revolver", "liquidity_t2": "not_triggered",
+                                             "liquidity_t3": "not_triggered"} and t1["passages"]
     assert payload["escalations"] == [] and result.summary()["run_status"] == "completed"
     dscr = next(m for m in payload["metrics"] if m["key"] == "dscr")
     assert not dscr["trigger_escalated"] and dscr["columns"][0]["score"] == t1["score"]
@@ -541,7 +561,13 @@ def test_dscr_trigger_t2_recomputes_with_depreciation_or_escalates_when_unresolv
     assert (col["capex_reported"], col["capex"]) == (6_042e6, 2_400e6)
     assert col["cash_flow"] == pytest.approx(col["cash_flow_reported"] + 3_642e6)
     assert result.payload["escalations"] == [] and result.summary()["run_status"] == "completed"
+    [rec] = [r for r in result.payload["recomputations"] if r["step"] == "dscr_t2"]
+    assert {"label": "Maintenance CapEx", "before": "6,042.0", "after": "2,400.0"} in rec["inputs"]
+    assert {"label": "DSCR", "before": "67.80x", "after": "69.88x", "score": False} in rec["results"]
+    assert any(x["score"] for x in rec["results"])  # the revised score is shown, even when it doesn't move
     html = result.paths["financial_overview.html"].read_text(encoding="utf-8")
+    assert "<h4>Recomputed</h4>" in html and "Maintenance CapEx: 6,042.0 → 2,400.0" in html
+    assert "Recomputations (1 step)" in html
     assert "Trigger Agent: DSCR T2" in html and "INPUT CORRECTION: RECOMPUTED" in html
     assert "Total CapEx as tagged (before trigger T2)" in html and "trigger T2: recomputed" in html
 
@@ -716,7 +742,7 @@ def test_a_run_stopped_between_steps_records_nothing(db_session):
     with pytest.raises(FoRunCancelled, match="before the covenants pre-check"):
         FinancialOverviewRunner(db_session, agent_backend=agent(), agent_mode="scripted",
                                 check_stop=stop_at_covenants).run_filing(FOLDER, "NVDA_STOP")
-    assert steps == ["the going-concern pre-check", "the covenants pre-check"]
+    assert steps == ["reading the filing", "the going-concern pre-check", "the covenants pre-check"]
     assert db_session.query(FinancialOverviewRunRow).count() == 0
 
 
@@ -727,7 +753,7 @@ def test_the_stop_button_stops_a_browser_run(client, db_session):
     assert client.post("/fo/run/cancel", data={"run_token": token}).json() == {"stopping": True}
     stopped = client.post("/fo/run", data={"folder": FOLDER, "case_id": "NVDA_STOP_WEB", "run_token": token})
     assert stopped.status_code == 200 and "Run stopped." in stopped.text
-    assert "before the going-concern pre-check" in stopped.text
+    assert "before reading the filing" in stopped.text
     assert db_session.query(FinancialOverviewRunRow).count() == 0
     assert client.post("/fo/run/cancel", data={"run_token": "bad"}).status_code == 400
     # The token is cleared after its run: a new run with a new token goes through.
@@ -736,6 +762,39 @@ def test_the_stop_button_stops_a_browser_run(client, db_session):
     done = client.post("/fo/run", data={"folder": FOLDER, "case_id": "NVDA_GO", "run_token": fresh},
                        follow_redirects=False)
     assert done.status_code == 303
+
+
+def test_the_run_reports_its_steps_and_a_failure_names_its_step(client, db_session, monkeypatch):
+    from app.services.fo import cancel, runner as fo_runner
+
+    steps = []
+    FinancialOverviewRunner(db_session, agent_backend=agent(), agent_mode="scripted",
+                            check_stop=steps.append).run_filing(FOLDER, "NVDA_STEPS")
+    assert steps[:6] == ["reading the filing", "the going-concern pre-check", "the covenants pre-check",
+                         "the acquisitions pre-check", "the prepaid pre-check", "scoring the measures"]
+    assert "the ICR trigger T1 check" in steps and "the RCF/Debt trigger T2 check" in steps
+    assert steps[-1] == "recording the run and writing its files"
+    # The registry the page polls: the step under way, its number, the steps done.
+    assert cancel.progress("tok-progress-1") == {"step": None, "number": 0, "done": [], "elapsed": 0}
+    cancel.set_step("tok-progress-1", "reading the filing")
+    cancel.set_step("tok-progress-1", "the going-concern pre-check")
+    got = client.get("/fo/run/progress", params={"run_token": "tok-progress-1"}).json()
+    assert (got["step"], got["number"], got["done"]) == ("the going-concern pre-check", 2, ["reading the filing"])
+    cancel.clear("tok-progress-1")
+    # A fault in a trigger is reported with its step, not as an unreadable filing.
+    monkeypatch.setattr(precheck, "live_backend", lambda: agent())
+
+    def broken(*args, **kw):
+        raise KeyError("ebit")
+
+    monkeypatch.setattr(fo_runner, "icr_t1_trigger", broken)
+    token = client.get("/fo").text.split('id="fo-run-token" value="')[1].split('"')[0]
+    failed = client.post("/fo/run", data={"folder": FOLDER, "case_id": "NVDA_FAIL", "run_token": token})
+    assert failed.status_code == 500
+    assert "Run failed during step" in failed.text and "the ICR trigger T1 check" in failed.text
+    assert "Unexpected error (KeyError)" in failed.text and "Could not read this filing" not in failed.text
+    assert "Steps completed before it" in failed.text
+    assert 'id="fo-progress-step"' in client.get("/fo").text
 
 
 def test_only_text_analysis_models_can_be_picked(monkeypatch):

@@ -154,6 +154,38 @@ def test_a_disagreement_escalates_icr_even_with_an_adjustment(db_session):
     assert e["engine_score"] == 8.5  # (350 + 50) / 300 = 1.33x
 
 
+def test_the_agents_answer_as_stated_is_recomputed_beside_the_verified_result(db_session):
+    """Any trigger, not only Debt/EBITDAR T1, and whatever the agent answered: its answer as stated (status, items and
+    amounts, nothing checked) is recomputed on a copy and its score shown beside the verified one."""
+    from app.services.fo.runner import agent_recomputation
+
+    def compare(response):
+        result, metrics = _run(response, db_session), _icr()
+        verified = apply_icr_t1(metrics, result)
+        found = agent_recomputation(metrics, apply_icr_t1, result, "icr_t1", "ICR trigger T1", verified)
+        assert metrics[1]["columns"][0]["ebit"] == 200e6  # never applied to the scored measure
+        return result, found
+
+    # The charge's quote isn't verbatim, so the verified result is nothing found; as stated, EBIT 200 + 150 = 350,
+    # (350 + 50) / 300 = 1.33x: 8.5.
+    paraphrased = {**CHARGE, "evidence": _quote("I01", "We recorded an impairment of $150 million.",
+                                                amount="$150 million")}
+    result, [rec] = compare(_says("adjusted", [paraphrased]))
+    assert result["status"] == "nothing_found" and rec["step"] == "icr_t1:agent"
+    assert result["agent_reading"]["scores"] == {"measure": "icr", "column": "FY2025", "calculated": 10,
+                                                 "verified": 10, "agent": 8.5}
+    [e] = escalations_for(PASS, COMPLIANT, apply_icr_t1(_icr(), result)[1:], None, None, {"icr_t1": result})
+    assert "the agent's answer, if accepted, gives risk score 8.5 (the score as calculated: 10)" in e["reason"]
+    # A rule holds the item back (a forecast): as stated, it still counts. 200 + 40 = 240: (240 + 50) / 300 < 1.0x.
+    forecast = {**CHARGE, "evidence": _quote("I03", FORECAST, amount="$40 million")}
+    result, _ = compare(_says("adjusted", [forecast]))
+    assert result["status"] == "nothing_found" and result["agent_reading"]["applies"]["ebit_change"] == 40e6
+    # The agent and the verified evidence agree: both are still shown, with the same score.
+    result, [rec] = compare(_says("adjusted", [CHARGE]))
+    assert result["status"] == "adjusted" and result["agent_reading"]["scores"]["agent"] == 8.5
+    assert result["agent_reading"]["scores"]["verified"] == 8.5
+
+
 def test_capitalised_interest_is_a_cross_check_only(db_session):
     found = _quote("I06", CAPITALISED, amount="$25 million")
     untagged = _run(_says("nothing_found", capitalised=found), db_session, metrics=_icr(capitalised=0.0))

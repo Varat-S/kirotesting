@@ -173,6 +173,17 @@ def test_quantified_one_offs_normalise_ebitdar_and_rescore(db_session):
     assert (result["smaller_reporting_company"], result["average_years"]) == (False, 3)
 
 
+def test_normalised_ebitdar_at_or_below_zero_scores_10_with_the_flag(db_session):
+    """EBITDAR 10 includes a one-off gain of 20: normalised EBITDAR is −10, so Debt/EBITDAR scores 10, no ratio."""
+    metrics = _leverage(ebitdar=10e6, net=-20e6)
+    result = _run(_says("normalised", [SALE]), db_session, metrics)
+    assert (result["status"], result["ebitdar_used"]) == ("normalised", -10e6)
+    col = apply_leverage_t1(metrics, result)[1]["columns"][0]
+    for key in ("debt_to_ebitdar", "net_debt_to_ebitdar"):
+        assert (col[key]["score"], col[key]["ratio"], col[key]["flag"]) == (10.0, None, "EBITDAR ≤ 0")
+    assert col["composite"]["score"] == 10 and col["ebitdar_adjustment"]["calculated"] < 10
+
+
 def test_a_recurring_item_is_explained_but_not_adjusted(db_session):
     result = _run(_says("normalised", [CHARGE, SALE, RESTRUCTURE]), db_session)
     assert result["status"] == "normalised" and result["normalisation"] == 100e6  # the 15 restructuring stays in
@@ -242,6 +253,35 @@ def test_evidence_that_does_not_hold_up_is_held_back(db_session):
                "loss on a disposal…)"),
         ("P1", "the quote names no operating driver (volumes, pricing, costs…)")]
     assert (result["status"], result["unresolved"]) == ("unresolved", True)
+
+
+def test_the_agents_answer_is_recomputed_when_the_verified_result_disagrees(db_session):
+    """As for ACHC: the agent answers NORMALISED, its quotes don't hold up, so the verified outcome is unresolved. Its
+    answer is still recomputed, at face value, on a copy: EBITDAR 400 + 120 charge − 20 gain = 500."""
+    from app.services.fo.runner import agent_recomputation
+
+    not_verbatim = {**CHARGE, "evidence": _quote("L01", "We recorded an impairment of $120 million.",
+                                                 amount="$120 million")}
+    result = _run(_says("normalised", [not_verbatim, SALE]), db_session)
+    assert (result["status"], result["disagreement"]) == ("unresolved", True)
+    reading = result["agent_reading"]
+    assert (reading["status"], reading["ebitdar_used"], reading["normalisation"]) == ("normalised", 500e6, 100e6)
+    metrics = _leverage()
+    [rec] = agent_recomputation(metrics, apply_leverage_t1, result, "leverage_t1", "Debt/EBITDAR trigger T1")
+    assert (rec["step"], rec["by"]) == ("leverage_t1:agent",
+                                        "Debt/EBITDAR trigger T1: the agent's answer, if accepted (not applied)")
+    by_label = {x["label"]: x for x in rec["results"]}
+    assert (by_label["Debt / EBITDAR"]["before"], by_label["Debt / EBITDAR"]["after"]) == ("5.00x", "4.00x")
+    composite = by_label["Composite leverage score"]
+    assert composite["after"] == f"{_score_at(500e6):g}" and composite["before"] == f"{_score_at(400e6):g}"
+    assert metrics[1]["columns"][0]["ebitdar"] == 400e6  # never applied to the scored measure
+    applied = apply_leverage_t1(metrics, result)
+    [e] = escalations_for(PASS, COMPLIANT, applied[1:], None, None, {"leverage_t1": result})
+    assert f"the agent's answer, if accepted, gives composite leverage score {_score_at(500e6):g}" in e["reason"]
+    unparsed = _run(_says("normalised", [{**SALE, "evidence": _quote("L02", GAIN, amount="twenty")}]), db_session)
+    assert unparsed["agent_reading"]["ebitdar_used"] is None  # nothing readable: no recomputation
+    assert unparsed["agent_reading"]["notes"][0].startswith("O2: left out")
+    assert agent_recomputation(metrics, apply_leverage_t1, unparsed, "leverage_t1", "x") == []
 
 
 def test_the_escalation_merges_with_an_unresolved_deal_on_leverage(db_session):

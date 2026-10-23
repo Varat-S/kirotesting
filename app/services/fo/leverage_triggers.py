@@ -39,6 +39,7 @@ import re
 
 from app.prompts.fo_prompts import FO_LEVERAGE_T1_PROMPT, FO_LEVERAGE_T1_SCHEMA, FO_LEVERAGE_T1_TEMPLATE
 
+from .acquisitions import parse_amount
 from .dscr_triggers import _ev, _held, _millions, _quoted, add_trigger_note, collect_passages
 from .icr_triggers import KIND_WORDS, ONE_OFF, SECTIONS, _amount, _section_after
 from .measures import LEVERAGE_MEASURES
@@ -228,6 +229,43 @@ def validate_leverage_t1(parsed: dict, t: dict, fx: dict, average: dict | None, 
             "validation_notes": notes}
 
 
+def agent_reading(parsed: dict, t: dict, fx: dict, average: dict | None) -> dict | None:
+    """The agent's answer as it states it (not verified, not applied), for an analyst to compare with the verified
+    outcome: the EBITDAR it implies. "normalised": reported EBITDAR + the charges − the gains it lists as not
+    recurring, at the amounts it gives (an amount without a readable unit is left out, and said so); "average_ebitdar":
+    the average. Any other answer changes nothing."""
+    stated = parsed.get("status")
+    unchanged = {"status": stated, "ebitdar_used": None}
+    if stated == "average_ebitdar":
+        if not average:
+            return {"status": stated, "ebitdar_used": None, "items": [], "applies": unchanged,
+                    "notes": ["The agent's answer needs an average EBITDAR, and too few years are available."]}
+        return {"status": stated, "ebitdar_used": average["average"], "items": [], "notes": [],
+                "basis": average["label"],
+                "applies": {"status": stated, "ebitdar_used": average["average"], "average": average}}
+    if stated != "normalised":
+        return {"status": stated, "ebitdar_used": None, "items": [], "notes": [], "applies": unchanged}
+    by_id = {p["passage_id"]: p for p in t["passages"]}
+    items, notes = [], []
+    for o in parsed.get("one_offs") or []:
+        if o.get("recurring"):
+            continue
+        e = o.get("evidence") or {}
+        value, why = parse_amount(e.get("amount") or "", (by_id.get(e.get("passage_id")) or {}).get("scale"))
+        if why:
+            notes.append(f"{o.get('item_id')}: left out ({why}).")
+            continue
+        effect = value if o.get("kind") == "charge" else -value
+        items.append({"item_id": o.get("item_id"), "kind": o.get("kind"), "category": o.get("category"),
+                      "description": o.get("description"), "amount": value, "effect": effect})
+    if not items:
+        return {"status": stated, "ebitdar_used": None, "items": [], "applies": unchanged,
+                "notes": notes + ["The agent's answer lists no one-off with a readable amount."]}
+    change = sum(e["effect"] for e in items)
+    return {"status": stated, "ebitdar_used": fx["ebitdar"] + change, "normalisation": change, "items": items,
+            "notes": notes, "applies": {"status": stated, "ebitdar_used": fx["ebitdar"] + change}}
+
+
 def register_prompt(session):
     from app.prompts.registry import PromptRegistry
 
@@ -346,6 +384,7 @@ def _run_agent(result, t, data, fx, average, years, session, backend, case_id):
     if not checked["status_consistent"]:
         result["notes"].append(f"The agent stated {str(checked['stated_status']).upper()} but its verified evidence "
                                f"supports {checked['status'].upper()}; the verified evidence decides.")
+    result["agent_reading"] = agent_reading(run.parsed, t, fx, average)
     return checked, "agent"
 
 

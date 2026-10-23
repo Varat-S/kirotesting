@@ -42,6 +42,8 @@ GC_WATCH_LIQUIDITY_FLOOR = 7
 DSO_LOW_RELEVANCE_DAYS = 15  # below this DSO the business is largely paid in advance: DSO gets half weight
 # Composite leverage score: the net debt score, one step worse when the gross debt score is this much worse.
 COMPOSITE_GAP, COMPOSITE_UPLIFT = 2, 1
+# Debt/EBITDAR conventions: EBITDAR ≤ 0 scores the worst (no ratio), debt or net debt ≤ 0 the best (no ratio).
+LEVERAGE_WORST, LEVERAGE_BEST = 10, 1
 
 
 def logit(x):
@@ -141,19 +143,24 @@ def score_leverage(col, settings):
     v = settings["values"]
     for key, short, _, den in LEVERAGE_MEASURES:
         mc, bench = col[key], settings["benchmarks"][key]
-        mc.update(score=None, g=None, note=None)
+        # The ratio as computed: a ratio cleared for debt ≤ 0 keeps its value in "raw" until it is recomputed.
+        raw = mc["ratio"] if mc["ratio"] is not None else mc.get("raw")
+        mc.update(score=None, g=None, note=None, flag=None, net_cash=False, raw=raw)
         if mc["reason"]:
             continue
         if bench is None:
             mc["reason"] = (f"No {short} benchmark for {settings['sector']} in {BENCHMARK_FILE_NAME}"
                             if settings["sector"] else
                             "No industry benchmark for this company's industry group")
-        elif mc["negative_ebitda"]:
-            mc["g"], mc["note"] = v["cap"], f"{den.upper()} ≤ 0: worst capped gap"
+        elif mc["negative_ebitda"]:  # EBITDAR ≤ 0 (after any normalisation): 10, no ratio, flagged
+            mc.update(score=float(LEVERAGE_WORST), ratio=None, raw=None, flag=f"{den.upper()} ≤ 0",
+                      note=f"{den.upper()} ≤ 0: scores {LEVERAGE_WORST}, no ratio")
+        elif raw is not None and raw <= 0:  # debt or net debt ≤ 0: 1, no ratio
+            mc.update(score=float(LEVERAGE_BEST), ratio=None, net_cash=True,
+                      note=("Net debt" if key == "net_debt_to_ebitdar" else "Debt") + f" ≤ 0: scores {LEVERAGE_BEST}, "
+                      "no ratio")
         else:
             mc["g"] = ratio_gap(mc["ratio"], bench, 1, v["m"], v["cap"])
-            mc["note"] = "Net cash: best capped gap" if mc["ratio"] <= 0 else None
-        if mc["g"] is not None:
             mc["score"] = round(gap_score(mc["g"], v["p"], v["delta"]), 1)
     col["composite"] = composite_leverage(col["debt_to_ebitdar"]["score"], col["net_debt_to_ebitdar"]["score"])
 
@@ -163,6 +170,49 @@ def leverage_settings(m):
     s = m["scoring"]
     return {"values": {k: s[k] for k in ("p", "m", "delta", "cap")}, "benchmarks": s["benchmarks"],
             "sector": s["sector"]}
+
+
+def cash_flow_settings(m):
+    """The settings a points-scored measure (RCF / debt, the EBITDAR margin) was scored with (its ``scoring`` record),
+    to rescore a column."""
+    s = m["scoring"]
+    return {"values": {k: s[k] for k in ("p", "delta", "cap", "D")}, "benchmarks": s["benchmarks"],
+            "sector": s["sector"]}
+
+
+def score_margin(col, settings):
+    """Score one year's EBITDAR margin against the benchmark, in percentage points (higher is lower risk)."""
+    v, bench = settings["values"], settings["benchmarks"]["ebitdar_margin"]
+    col.update(score=None, g=None, note=None)
+    if col["reason"]:
+        return
+    if bench is None:
+        col["reason"] = "No industry benchmark for this company's industry group"
+        return
+    col["g"] = points_gap(col["ratio"] * 100, bench * 100, -1, v["D"], v["cap"])
+    col["score"] = round(gap_score(col["g"], v["p"], v["delta"]), 1)
+
+
+def dso_settings(m):
+    """The settings DSO was scored with (its ``scoring`` record), to rescore a column."""
+    s = m["scoring"]
+    return {"values": {k: s[k] for k in ("p", "delta", "cap", "D_dso")}, "benchmarks": s["benchmarks"],
+            "sector": s["sector"]}
+
+
+def score_dso(col, settings):
+    """Score one year's change in DSO against the benchmark, in days (more days is higher risk)."""
+    v, bench = settings["values"], settings["benchmarks"]["days_sales_outstanding"]
+    col.update(score=None, g=None)
+    if col["reason"]:
+        return
+    if bench is None:
+        col["reason"] = (f"No DSO benchmark for {settings['sector']} in {BENCHMARK_FILE_NAME}"
+                         if settings["sector"] else
+                         "No industry benchmark for this company's industry group")
+        return
+    col["g"] = points_gap(col["change"], bench, 1, v["D_dso"], v["cap"])  # more days = worse
+    col["score"] = round(gap_score(col["g"], v["p"], v["delta"]), 1)
 
 
 def score_cash_flow(col, settings):
@@ -236,30 +286,12 @@ def score_financial_overview(fo, settings, gc_status="pass", covenant_status="co
                 score_cash_flow(col, settings)
         elif m["key"] == "margin":
             m = copy.deepcopy(m)
-            bench = settings["benchmarks"]["ebitdar_margin"]
             for col in m["columns"]:
-                col.update(score=None, g=None, note=None)
-                if col["reason"]:
-                    continue
-                if bench is None:
-                    col["reason"] = "No industry benchmark for this company's industry group"
-                    continue
-                col["g"] = points_gap(col["ratio"] * 100, bench * 100, -1, v["D"], v["cap"])
-                col["score"] = round(gap_score(col["g"], v["p"], v["delta"]), 1)
+                score_margin(col, settings)
         elif m["key"] == "dso":
             m = copy.deepcopy(m)
-            bench = settings["benchmarks"]["days_sales_outstanding"]
             for col in m["columns"]:
-                col.update(score=None, g=None)
-                if col["reason"]:
-                    continue
-                if bench is None:
-                    col["reason"] = (f"No DSO benchmark for {settings['sector']} in {BENCHMARK_FILE_NAME}"
-                                     if settings["sector"] else
-                                     "No industry benchmark for this company's industry group")
-                    continue
-                col["g"] = points_gap(col["change"], bench, 1, v["D_dso"], v["cap"])  # more days = worse
-                col["score"] = round(gap_score(col["g"], v["p"], v["delta"]), 1)
+                score_dso(col, settings)
         else:
             out.append(m)
             continue
@@ -412,16 +444,30 @@ def composite_risk(fo, settings, gc_status="pass", overrides=None, decisions=Non
                      "interest expense (else net + interest income); neither disclosed escalates ICR; net interest "
                      "income makes ICR n/a (not counted); an operating tag is flagged. ICR trigger T3 (EBIT from operating "
                      "income; after T2): EBIT = pre-tax income + interest expense when pre-tax income is found, "
-                     "otherwise operating income is kept and ICR escalated. Debt/EBITDAR trigger T1 (|net one-offs as "
+                     "otherwise operating income is kept and ICR escalated. RCF/Debt trigger T1 (an RCF / debt score of 9 or more, or a negative ratio; first match): a quantified, non-recurring one-off cash cost (added back to FFO) or special dividend (taken out of dividends paid) recomputes RCF / debt; no one-offs found gets no adjustment; a one-off identified but not quantified escalates RCF / debt. RCF/Debt trigger T2 (at any score: tagged one-off inflows above 5% of FFO, or FFO up 25% or more and over 10 points faster than revenue; after T1): a quantified, non-recurring one-off inflow in operating cash flow outside the working-capital lines comes out of CFO and FFO and RCF / debt is recomputed; one inside the working-capital lines, recurring, or in investing or financing gets no adjustment; one identified but not quantified escalates RCF / debt. RCF/Debt trigger T3 (no standard NCI-distributions concept tagged while NCI is material: its share of net income above 5%, or of total equity when net income is zero or negative; after T2): distributions found with the cash paid recompute RCF / debt (redeemable NCI included, purchases of NCI excluded); only declared amounts are used and labelled a timing difference; none in the year gets no adjustment; lumped without a split escalates RCF / debt. RCF/Debt trigger T4 (NCI distributions from PaymentsToMinorityShareholders, which can hold buyouts; after T3): quantified buyouts are excluded and RCF / debt recomputed with distributions only; no purchases of NCI shown gets no adjustment; buyouts mixed in but not quantified escalate RCF / debt. EBITDAR Margin trigger T1 (Debt/EBITDAR T1 removed one-offs): the margin takes T1's normalised EBITDAR; a one-off booked in revenue also comes out of revenue; one booked outside revenue gets no further adjustment; an unclear location escalates the margin. The margin alone falls back to cash lease payments (labelled) without the lease-cost table. Debt/EBITDAR conventions: net debt ≤ 0 scores 1 and EBITDAR ≤ 0 scores 10 (flagged), with no ratio computed in either case; rent is the operating lease cost, never cash paid. "
+                     "Debt/EBITDAR trigger T1 (|net one-offs as "
                      "tagged| above 5% of EBITDAR, or EBITDAR ≤ 0; first match): quantified non-recurring one-offs "
                      "normalise EBITDAR (charges added back, gains removed) and Debt/EBITDAR is recomputed; an "
                      "operational change with no one-offs gets no adjustment; a one-off identified but not quantified "
                      "uses the 3-year average EBITDAR (2-year for a smaller reporting company); partly quantified with an unexplained remainder, or no "
-                     "explanation, escalates Debt/EBITDAR. Debt/EBITDAR trigger T2 (gross and net leverage scores 2 or more apart; after T1; first match): a quantified acquisition or payout earmark, or trapped cash, comes out of cash and Net debt / EBITDAR is recomputed; cash earmarked only for debt maturities, or freely available, gets no adjustment; an earmark or trapping described but not quantified escalates Debt/EBITDAR (a buyback authorisation isn't an earmark). "
+                     "explanation, escalates Debt/EBITDAR. Debt/EBITDAR trigger T2 (gross and net leverage scores 2 or more apart; after T1; first match): a quantified acquisition or payout earmark, or trapped cash, comes out of cash and Net debt / EBITDAR is recomputed; cash earmarked only for debt maturities, or freely available, gets no adjustment; an earmark or trapping described but not quantified escalates Debt/EBITDAR (a buyback authorisation isn't an earmark). Debt/EBITDAR trigger T3 (composite leverage score with leases 2 or more worse than without; after T2): a master lease, cross-default or parent guarantee disclosed adds 1 to the composite leverage score; none disclosed escalates Debt/EBITDAR (escalators and cancellable leases get no adjustment). DSO trigger T1 (|change in DSO| of 5 days or more, after the acquisitions-and-divestitures pre-check's correction; first match): a quantified mechanical cause (receivables sold and derecognised, or an unusual write-off) is added back to receivables in both years and DSO recomputed; DSO up with an operational cause and collections recovered after the year-end takes 1 off the DSO score; DSO up with a cause and no fix, or a mechanical cause not quantified, escalates DSO; no cause found gets no adjustment (a securitisation accounted for as a secured borrowing stays in receivables).Debt/EBITDAR trigger T4 (total debt from a fallback: the tagged total skipped, or finance leases added; before T1): the debt note's instruments reconciled to the balance sheet, finance leases counted once, recompute Debt/EBITDAR with the reconciled total debt; no reconciliation escalates Debt/EBITDAR. "
                      "DSCR trigger T1 (a DSCR score of 9 or more, unless a "
                      "going-concern fail skips agent triggers): rollover debt with backstop capacity is removed from "
                      "year-1 principal and DSCR recomputed, an executed refinancing of year-1 maturities after the "
-                     "year-end takes 2 off the score, and DSCR is escalated. An analyst's override of an escalated "
+                     "year-end takes 2 off the score, and DSCR is escalated. Liquidity trigger T1 (the revolver "
+                     "availability at the year-end not found; first match): a stated availability is used, else "
+                     "commitment − drawn − letters of credit (an asset-based revolver: the lower of this and the "
+                     "borrowing base), and both liquidity tests are recomputed; no revolver gets no adjustment; a "
+                     "revolver whose availability can't be worked out escalates liquidity. Liquidity trigger T2 (a coverage or "
+                     "refinancing score of 9 or more after T1; first match, reusing DSCR T1's refinancing record): "
+                     "debt already classified as long-term (ASC 470-10-45-14) gets no further adjustment; debt "
+                     "refinanced or extended after the year-end moves to its new maturity; debt repaid from cash "
+                     "comes out with the cash used; debt repaid from new borrowing or equity comes out, the new debt "
+                     "going in at its maturity; a refinancing only planned escalates liquidity. An analyst's "
+                     "override of an escalated "
                      "measure replaces its score.",
             "gaps": "The weights are judgement-based and provisional: back-test them against agency ratings before "
                     "relying on absolute levels. Scores inherit each measure's simplifications (see each section)."}
+
+
+margin_settings = cash_flow_settings  # the EBITDAR margin is scored in points, as RCF / debt

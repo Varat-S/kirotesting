@@ -30,7 +30,7 @@ import re
 from app.prompts.fo_prompts import FO_ICR_T3_PROMPT, FO_ICR_T3_SCHEMA, FO_ICR_T3_TEMPLATE
 
 from .covenants import NOTE_HEADING
-from .dscr_triggers import _held, _millions, add_trigger_note, collect_passages
+from .dscr_triggers import _held, _millions, add_trigger_note, collect_passages, stated_amount
 from .icr_triggers import MDNA_SKIP, _amount
 from .measures import ICR_BANDS, OPERATING_INCOME_CONCEPTS, risk_score
 from .precheck import DATA_NOTICE, PrecheckAgentError, call_agent, require_agent
@@ -160,6 +160,24 @@ def validate_icr_t3(parsed: dict, t: dict, fx: dict) -> dict:
             "status_consistent": parsed.get("status") == status}
 
 
+def agent_reading(parsed: dict, t: dict, fx: dict) -> dict:
+    """The agent's answer as it states it (not verified, not applied), for an analyst to compare with the verified
+    outcome: "pretax_found" makes EBIT the pre-tax income it gives (a loss below zero) plus its
+    interest expense (else the interest tagged). Any other answer keeps operating income."""
+    by_id = {p["passage_id"]: p for p in t["passages"]}
+    stated, notes, ebit = parsed.get("status"), [], None
+    if stated == "pretax_found":
+        pt = parsed.get("pretax_income") or {}
+        pretax = stated_amount(pt, by_id, notes, "pre-tax income")
+        interest = stated_amount(parsed.get("interest_expense"), by_id, notes, "interest expense")
+        interest = fx["tagged_expense"] if interest is None else interest
+        if pretax is None or interest is None:
+            notes.append("it gives no readable pre-tax income or interest expense, so EBIT stays operating income.")
+        else:
+            ebit = (-pretax if pt.get("is_loss") else pretax) + interest
+    return {"status": stated, "notes": notes, "applies": {"status": stated, "ebit": ebit}}
+
+
 def register_prompt(session):
     from app.prompts.registry import PromptRegistry
 
@@ -245,6 +263,7 @@ def _run_agent(result, t, data, fx, session, backend, case_id):
         raise PrecheckAgentError(f"The Trigger Agent's ICR T3 output was rejected ({agent['validation_detail']}); "
                                  "the run was not recorded. Run it again.")
     checked = validate_icr_t3(run.parsed, t, fx)
+    result["agent_reading"] = agent_reading(run.parsed, t, fx)
     agent.update(rationale=run.parsed.get("rationale"), missing_information=run.parsed.get("missing_information") or [],
                  held_back=checked["held_back"], derived_status=checked["status"],
                  stated_status=checked["stated_status"], status_consistent=checked["status_consistent"])

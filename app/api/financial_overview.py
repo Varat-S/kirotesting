@@ -6,6 +6,7 @@ writes (it records one new run); every other route is a read of recorded runs.
 * ``GET  /fo`` -- recorded runs and the run form (folders in ``edgar_filings/``)
 * ``POST /fo/run`` -- run the FO engine over one folder, then open its workbench
 * ``POST /fo/run/cancel`` -- stop a run in progress (its form token); it records nothing
+* ``GET  /fo/run/progress`` -- the step a run in progress is on (its form token), polled by the run form
 * ``GET  /cases/{case_id}/fo.html`` -- the case's FO workbench (``?run_id=`` picks a run)
 * ``POST /cases/{case_id}/fo/runs/{run_id}/review`` -- the analyst's decision on a going-concern fail
 * ``POST /cases/{case_id}/fo/runs/{run_id}/override`` -- the analyst's score for an escalated measure
@@ -50,13 +51,13 @@ _env = Environment(
 
 
 def _page(session, *, view=None, runs=None, error=None, selected_folder=None, case_id=None, selected_model=None,
-          stopped=None, status_code=200):
+          stopped=None, failed=None, status_code=200):
     agent_ok, agent_reason = precheck.agent_available()
     models, models_note = fo_models.available_models() if agent_ok else ([], None)
     return HTMLResponse(
         _env.get_template("fo_workbench.html.j2").render(
             runs=fo_runs(session) if runs is None else runs, filings=loader.list_filings(), view=view,
-            error=error, stopped=stopped, selected_folder=selected_folder, case_id=case_id,
+            error=error, stopped=stopped, failed=failed, selected_folder=selected_folder, case_id=case_id,
             agent_ok=agent_ok, agent_reason=agent_reason, models=models, models_note=models_note,
             selected_model=selected_model or fo_models.configured_model(),
             run_token=secrets.token_urlsafe(16)),  # identifies the next run, so its Stop button can reach it
@@ -106,11 +107,15 @@ def run_financial_overview(
     except fo_cancel.FoRunCancelled as exc:
         return _page(session, stopped=str(exc), **again)
     except (loader.FilingFolderError, FoRunError) as exc:
-        return _page(session, error=str(exc), status_code=400, **again)
+        return _page(session, error=str(exc), failed=fo_cancel.progress(run_token), status_code=400, **again)
     except precheck.PrecheckAgentError as exc:
-        return _page(session, error=str(exc), status_code=502, **again)
-    except Exception as exc:  # an unreadable filing must not surface as a 500
-        return _page(session, error=f"Could not read this filing as Inline XBRL: {exc}", status_code=422, **again)
+        return _page(session, error=str(exc), failed=fo_cancel.progress(run_token), status_code=502, **again)
+    except Exception as exc:  # an unreadable filing, or a fault in a later step, must not surface as a 500
+        failed = fo_cancel.progress(run_token)
+        reading = (failed["step"] or "reading the filing").startswith("reading the filing")
+        return _page(session, error=(f"Could not read this filing as Inline XBRL: {exc}" if reading
+                                     else f"Unexpected error ({type(exc).__name__}): {exc}"),
+                     failed=failed, status_code=422 if reading else 500, **again)
     finally:
         fo_cancel.clear(run_token)
     return RedirectResponse(
@@ -124,6 +129,13 @@ def cancel_financial_overview_run(run_token: str = Form(default="")) -> dict:
     if not fo_cancel.request_stop(run_token):
         raise HTTPException(status_code=400, detail="Unknown run token.")
     return {"stopping": True}
+
+
+@router.get("/fo/run/progress")
+def financial_overview_run_progress(run_token: str = Query(default="")) -> dict:
+    """The step the run started with this token is on, its number, the steps done and the seconds elapsed (the run
+    form polls it while the run is under way). Empty before the run's first step and after it ends."""
+    return fo_cancel.progress(run_token)
 
 
 @router.get("/cases/{case_id}/fo.html", response_class=HTMLResponse)

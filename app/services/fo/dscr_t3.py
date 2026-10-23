@@ -34,7 +34,8 @@ from app.prompts.fo_prompts import FO_DSCR_T3_PROMPT, FO_DSCR_T3_SCHEMA, FO_DSCR
 
 from .covenants import DEBT_TITLE, LIQUIDITY_TITLE, MDNA_END, NOTE_HEADING, OTHER_NOTE_TITLE, SUBSEQUENT_TITLE
 from .dscr_t2 import FORECAST
-from .dscr_triggers import _ev, _headline_index, _held, _millions, _quoted, _value, add_trigger_note, collect_passages
+from .dscr_triggers import (_ev, _headline_index, _held, _millions, _quoted, _value, add_trigger_note, collect_passages,
+                            stated_amount)
 from .measures import DSCR_BANDS, risk_score
 from .precheck import DATA_NOTICE, PrecheckAgentError, call_agent, require_agent
 from .scoring import headline_score
@@ -224,6 +225,21 @@ def validate_t3(parsed: dict, t3: dict, tx: dict) -> dict:
             "validation_notes": notes}
 
 
+def agent_reading(parsed: dict, t3: dict) -> dict:
+    """The agent's answer as it states it (not verified, not applied), for an analyst to compare with the verified
+    outcome: "one_off_quantified" backs its one-offs out of cash taxes paid (a refund goes back
+    in); "low_confidence" holds the score. Any other answer changes nothing."""
+    by_id = {p["passage_id"]: p for p in t3["passages"]}
+    stated, notes, backed_out = parsed.get("status"), [], 0.0
+    if stated == "one_off_quantified":
+        for o in parsed.get("one_offs") or []:
+            v = stated_amount(o.get("evidence"), by_id, notes, o.get("item_id"))
+            backed_out += (-v if o.get("kind") == "refund" else v) if v else 0.0
+    return {"status": stated, "notes": notes,
+            "applies": {"status": stated, "backed_out": backed_out,
+                        "data_confidence": "low" if stated == "low_confidence" else None}}
+
+
 def register_prompt(session):
     from app.prompts.registry import PromptRegistry
 
@@ -318,6 +334,7 @@ def _run_agent(result, t3, data, tx, session, backend, case_id):
         raise PrecheckAgentError(f"The Trigger Agent's DSCR T3 output was rejected ({agent['validation_detail']}); "
                                  "the run was not recorded. Run it again.")
     checked = validate_t3(run.parsed, t3, tx)
+    result["agent_reading"] = agent_reading(run.parsed, t3)
     agent.update(rationale=run.parsed.get("rationale"), missing_information=run.parsed.get("missing_information") or [],
                  held_back=checked["held_back"], derived_status=checked["status"],
                  stated_status=checked["stated_status"], status_consistent=checked["status_consistent"])

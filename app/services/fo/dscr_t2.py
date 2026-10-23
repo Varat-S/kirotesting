@@ -41,8 +41,7 @@ from .dscr_triggers import (
     _quoted,
     _value,
     add_trigger_note,
-    collect_passages,
-)
+    collect_passages, stated_amount)
 from .measures import DSCR_BANDS, risk_score
 from .precheck import DATA_NOTICE, PrecheckAgentError, call_agent, require_agent
 from .scoring import headline_score
@@ -219,6 +218,24 @@ def validate_t2(parsed: dict, t2: dict, cx: dict) -> dict:
             "status_consistent": parsed.get("status") == status, "validation_notes": notes}
 
 
+def agent_reading(parsed: dict, t2: dict, cx: dict) -> dict:
+    """The agent's answer as it states it (not verified, not applied), for an analyst to compare with the verified
+    outcome: "split_disclosed" uses the maintenance CapEx it gives (else total CapEx less its growth
+    CapEx); "growth_not_quantified" uses depreciation. Any other answer changes nothing."""
+    by_id = {p["passage_id"]: p for p in t2["passages"]}
+    stated, notes, used = parsed.get("status"), [], None
+    if stated == "split_disclosed":
+        used = stated_amount(parsed.get("maintenance_capex"), by_id, notes, "maintenance CapEx")
+        if used is None:
+            growth = stated_amount(parsed.get("growth_capex"), by_id, notes, "growth CapEx")
+            used = cx["capex"] - growth if growth is not None else None
+        if used is None:
+            notes.append("it gives no readable maintenance or growth CapEx amount.")
+    elif stated == "growth_not_quantified":
+        used = cx["depreciation"]
+    return {"status": stated, "notes": notes, "applies": {"status": stated, "maintenance_capex": used}}
+
+
 def register_prompt(session):
     from app.prompts.registry import PromptRegistry
 
@@ -315,6 +332,7 @@ def _run_agent(result, t2, data, cx, session, backend, case_id):
         raise PrecheckAgentError(f"The Trigger Agent's DSCR T2 output was rejected ({agent['validation_detail']}); "
                                  "the run was not recorded. Run it again.")
     checked = validate_t2(run.parsed, t2, cx)
+    result["agent_reading"] = agent_reading(run.parsed, t2, cx)
     agent.update(rationale=run.parsed.get("rationale"), missing_information=run.parsed.get("missing_information") or [],
                  held_back=checked["held_back"], derived_status=checked["status"],
                  stated_status=checked["stated_status"], status_consistent=checked["status_consistent"])

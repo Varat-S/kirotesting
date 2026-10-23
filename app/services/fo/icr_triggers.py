@@ -35,7 +35,7 @@ from app.prompts.fo_prompts import FO_ICR_T1_PROMPT, FO_ICR_T1_SCHEMA, FO_ICR_T1
 
 from .covenants import NOTE_HEADING
 from .dscr_t2 import FORECAST
-from .dscr_triggers import _ev, _held, _millions, _quoted, _value, add_trigger_note, collect_passages
+from .dscr_triggers import _ev, _held, _millions, _quoted, _value, add_trigger_note, collect_passages, stated_amount
 from .measures import ICR_BANDS, risk_score
 from .precheck import DATA_NOTICE, PrecheckAgentError, call_agent, require_agent
 from .scoring import headline_score
@@ -226,6 +226,26 @@ def validate_icr_t1(parsed: dict, t: dict, fx: dict) -> dict:
             "status_consistent": parsed.get("status") == status, "validation_notes": notes}
 
 
+def agent_reading(parsed: dict, t: dict, fx: dict) -> dict:
+    """The agent's answer as it states it (not verified, not applied), for an analyst to compare with the verified
+    outcome: "adjusted" adds its one-off charges back to EBIT and takes its gains out, and takes a
+    swap loss out of interest (a gain back in). Any other answer changes nothing."""
+    by_id = {p["passage_id"]: p for p in t["passages"]}
+    stated, notes, ebit_change, interest_change = parsed.get("status"), [], 0.0, 0.0
+    if stated == "adjusted":
+        for o in parsed.get("one_offs") or []:
+            v = stated_amount(o.get("evidence"), by_id, notes, o.get("item_id"))
+            ebit_change += (v if o.get("kind") == "charge" else -v) if v else 0.0
+        s = parsed.get("swap_mark_to_market")
+        if s and fx.get("swap_mtm_removed") is not None:
+            notes.append("its swap mark-to-market was already removed by ICR trigger T2: not counted twice.")
+        elif s:
+            v = stated_amount(s.get("evidence"), by_id, notes, "swap mark-to-market")
+            interest_change = (-v if s.get("direction") == "loss" else v) if v else 0.0
+    return {"status": stated, "notes": notes,
+            "applies": {"status": stated, "ebit_change": ebit_change, "interest_change": interest_change}}
+
+
 def register_prompt(session):
     from app.prompts.registry import PromptRegistry
 
@@ -309,6 +329,7 @@ def _run_agent(result, t, data, fx, session, backend, case_id):
         raise PrecheckAgentError(f"The Trigger Agent's ICR T1 output was rejected ({agent['validation_detail']}); "
                                  "the run was not recorded. Run it again.")
     checked = validate_icr_t1(run.parsed, t, fx)
+    result["agent_reading"] = agent_reading(run.parsed, t, fx)
     agent.update(rationale=run.parsed.get("rationale"), missing_information=run.parsed.get("missing_information") or [],
                  held_back=checked["held_back"], derived_status=checked["status"],
                  stated_status=checked["stated_status"], status_consistent=checked["status_consistent"])

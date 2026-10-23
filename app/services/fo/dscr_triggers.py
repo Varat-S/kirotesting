@@ -325,6 +325,17 @@ def _dated(e):
     return (span, None) if span else (None, f"date {e['date']!r} isn't a date")
 
 
+def stated_amount(e, by_id, notes, what):
+    """The amount the agent gives for ``e``, as it states it (for the agent's answer, not applied): nothing is checked
+    against the filing; a number without its unit takes the cited passage's. None, and a note, when it can't be read."""
+    if not isinstance(e, dict) or not (e.get("amount") or "").strip():
+        return None
+    value, why = parse_amount(e["amount"], (by_id.get(e.get("passage_id")) or {}).get("scale"))
+    if why:
+        notes.append(f"{what}: left out ({why}).")
+    return value
+
+
 def _ev(e, p):
     return {**{k: e[k] for k in ("passage_id", "quote", "amount", "date") if e.get(k) is not None},
             "section": p["section_label"]}
@@ -509,6 +520,28 @@ def validate_t1(parsed: dict, t1: dict, pr: dict) -> dict:
             "status_consistent": parsed.get("status") == status, "validation_notes": notes}
 
 
+def agent_reading(parsed: dict, t1: dict, pr: dict) -> dict:
+    """The agent's answer as it states it (not verified, not applied), for an analyst to compare with the verified
+    outcome: "adjusted" removes the rollover items it says are in year-1 principal, rolled over and
+    backed (their balances, up to year-1 principal), and takes 2 off the score for a refinancing it calls executed and
+    not already classified as long-term. Any other answer changes nothing."""
+    by_id = {p["passage_id"]: p for p in t1["passages"]}
+    stated, notes, removed, relief = parsed.get("status"), [], 0.0, 0
+    if stated == "adjusted":
+        removed = sum(v for r in parsed.get("rollover") or [] if r.get("in_year1_principal") and r.get("rollover")
+                      and r.get("backstop")
+                      for v in [stated_amount(r.get("balance"), by_id, notes, r.get("item_id"))] if v)
+        if removed and pr["principal"] is None:
+            notes.append("year-1 principal isn't tagged, so nothing can be removed from it.")
+            removed = 0.0
+        elif removed and removed > pr["principal"]:
+            removed = pr["principal"]
+        if any(f.get("kind") == "executed" and not f.get("reclassified") for f in parsed.get("refinancings") or []):
+            relief = T1_REFINANCING_RELIEF
+    return {"status": stated, "notes": notes,
+            "applies": {"status": stated, "principal_removed": removed, "refinancing_relief": relief}}
+
+
 def register_prompt(session):
     from app.prompts.registry import PromptRegistry
 
@@ -598,6 +631,7 @@ def _run_agent(result, t1, data, pr, session, backend, case_id):
         raise PrecheckAgentError(f"The Trigger Agent's DSCR T1 output was rejected ({agent['validation_detail']}); "
                                  "the run was not recorded. Run it again.")
     checked = validate_t1(run.parsed, t1, pr)
+    result["agent_reading"] = agent_reading(run.parsed, t1, pr)
     agent.update(rationale=run.parsed.get("rationale"), missing_information=run.parsed.get("missing_information") or [],
                  held_back=checked["held_back"], derived_status=checked["status"],
                  stated_status=checked["stated_status"], status_consistent=checked["status_consistent"])

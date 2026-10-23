@@ -11,7 +11,7 @@ from app.services.fo.measures import (
     pick,
     plain_values,
 )
-from app.services.fo.scoring import gap_score, score_financial_overview, scoring_settings
+from app.services.fo.scoring import score_financial_overview, scoring_settings
 
 FY = "2025-01-01--2025-12-31"
 BS = "2025-12-31"
@@ -54,7 +54,7 @@ def _scored(*facts):
                                            scoring_settings({}, HOSPITALS)))
 
 
-def test_negative_ebitdar_scores_as_the_worst_capped_gap():
+def test_ebitdar_at_or_below_zero_scores_10_with_no_ratio_and_a_flag():
     lev = _scored(
         fact(PRETAX_CONCEPTS[0], FY, -500), fact("us-gaap:InterestExpense", FY, 100),
         fact("us-gaap:DepreciationDepletionAndAmortization", FY, 50), fact("us-gaap:OperatingLeaseCost", FY, 10),
@@ -62,12 +62,18 @@ def test_negative_ebitdar_scores_as_the_worst_capped_gap():
         fact("us-gaap:CashAndCashEquivalentsAtCarryingValue", BS, 200),
     )["leverage"]
     col = lev["columns"][0]
-    assert col["ebitdar"] == -340
-    assert col["debt_to_ebitdar"]["g"] == 3.0
-    assert col["debt_to_ebitdar"]["score"] == round(gap_score(3.0, 5, 2.5), 1)
+    assert col["ebitdar"] == -340  # a real value, not n/a
+    for key in ("debt_to_ebitdar", "net_debt_to_ebitdar"):
+        assert (col[key]["score"], col[key]["ratio"], col[key]["flag"], col[key]["reason"]) == (
+            10.0, None, "EBITDAR ≤ 0", None)
+    assert col["composite"]["score"] == 10
+    from app.services.fo.reporting import measure_card
+    card = measure_card(lev)
+    assert card["result_rows"][0]["cells"][0]["text"] == "n/m: EBITDAR ≤ 0"
+    assert "EBITDAR ≤ 0: scores 10, no ratio" in card["column_notes"][0]["entries"]
 
 
-def test_net_cash_scores_as_the_best_capped_gap_and_ebitdar_adds_rent():
+def test_net_cash_scores_1_with_no_ratio_and_ebitdar_adds_rent():
     lev = _scored(
         fact(PRETAX_CONCEPTS[0], FY, 900), fact("us-gaap:InterestExpense", FY, 100),
         fact("us-gaap:DepreciationDepletionAndAmortization", FY, 100),
@@ -77,8 +83,58 @@ def test_net_cash_scores_as_the_best_capped_gap_and_ebitdar_adds_rent():
     col = lev["columns"][0]
     assert (col["ebit"], col["ebitda"], col["rent"], col["ebitdar"]) == (1000, 1100, 0.0, 1100)
     assert col["debt_to_ebitdar"]["ratio"] == pytest.approx(100 / 1100)
-    assert col["net_debt_to_ebitdar"]["g"] == -3.0
-    assert col["net_debt_to_ebitdar"]["note"] == "Net cash: best capped gap"
+    net = col["net_debt_to_ebitdar"]
+    assert (net["score"], net["ratio"], net["net_cash"], net["raw"]) == (1.0, None, True, pytest.approx(-400 / 1100))
+    assert net["note"] == "Net debt ≤ 0: scores 1, no ratio"
+    gross = col["debt_to_ebitdar"]["score"]
+    assert col["composite"]["score"] == (2.0 if gross - 1 >= 2 else 1.0)
+    from app.services.fo.reporting import measure_card
+    assert measure_card(lev)["result_rows"][2]["cells"][0]["text"] == "n/m: net cash"
+
+
+def test_a_rescore_keeps_a_net_cash_ratio_cleared_earlier():
+    """T2 recomputes only the net ratio before rescoring: the gross ratio cleared for debt ≤ 0 still scores 1."""
+    from app.services.fo.scoring import leverage_settings, score_leverage
+    lev = _scored(
+        fact(PRETAX_CONCEPTS[0], FY, 900), fact("us-gaap:InterestExpense", FY, 100),
+        fact("us-gaap:DepreciationDepletionAndAmortization", FY, 100),
+        fact("us-gaap:CashAndCashEquivalentsAtCarryingValue", BS, 500),
+        fact("us-gaap:DebtLongtermAndShorttermCombinedAmount", BS, 0),
+    )["leverage"]
+    col = lev["columns"][0]
+    assert (col["debt_to_ebitdar"]["score"], col["debt_to_ebitdar"]["note"]) == (1.0, "Debt ≤ 0: scores 1, no ratio")
+    col["net_debt_to_ebitdar"]["ratio"] = 0.5  # a recomputed net ratio
+    score_leverage(col, leverage_settings(lev))
+    assert col["debt_to_ebitdar"]["score"] == 1.0 and col["net_debt_to_ebitdar"]["net_cash"] is False
+
+
+def test_rent_is_the_operating_lease_cost_never_cash_paid():
+    base = (fact(PRETAX_CONCEPTS[0], FY, 900), fact("us-gaap:InterestExpense", FY, 100),
+            fact("us-gaap:DepreciationDepletionAndAmortization", FY, 100),
+            fact("us-gaap:DebtLongtermAndShorttermCombinedAmount", BS, 1000),
+            fact("us-gaap:CashAndCashEquivalentsAtCarryingValue", BS, 100))
+    paid = fact("us-gaap:OperatingLeasePayments", FY, 30)
+    no_leases = _scored(*base, paid)["leverage"]["columns"][0]
+    assert (no_leases["rent"], no_leases["rent_concept"]) == (0.0, "none tagged (taken as 0)")  # cash paid isn't rent
+    leased = _scored(*base, paid, fact("us-gaap:OperatingLeaseLiability", BS, 200))
+    col = leased["leverage"]["columns"][0]
+    assert (col["rent"], col["ebitdar"], col["debt_to_ebitdar"]["score"]) == (None, None, None)
+    assert col["debt_to_ebitdar"]["reason"] == "No operating lease cost tagged"  # n/a: the input can't be found
+    assert leased["icr"]["columns"][0]["reason"] == "No operating lease cost tagged"
+    cost = _scored(*base, fact("us-gaap:OperatingLeaseLiability", BS, 200), fact("us-gaap:OperatingLeaseCost", FY, 25))
+    assert cost["leverage"]["columns"][0]["rent"] == 25
+
+
+def test_restricted_cash_is_never_netted_against_debt():
+    lev = _scored(
+        fact(PRETAX_CONCEPTS[0], FY, 900), fact("us-gaap:InterestExpense", FY, 100),
+        fact("us-gaap:DepreciationDepletionAndAmortization", FY, 100),
+        fact("us-gaap:DebtLongtermAndShorttermCombinedAmount", BS, 1000),
+        fact("us-gaap:CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents", BS, 700),
+        fact("us-gaap:CashAndCashEquivalentsAtCarryingValue", BS, 100),
+    )["leverage"]
+    col = lev["columns"][0]
+    assert (col["cash"], col["adj_net_debt"]) == (100, 900)
 
 
 def test_measures_report_why_when_nothing_is_tagged():

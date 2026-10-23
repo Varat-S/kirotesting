@@ -34,7 +34,7 @@ import re
 
 from app.prompts.fo_prompts import FO_LEVERAGE_T2_PROMPT, FO_LEVERAGE_T2_SCHEMA, FO_LEVERAGE_T2_TEMPLATE
 
-from .dscr_triggers import _ev, _held, _millions, _quoted, _value, add_trigger_note, collect_passages
+from .dscr_triggers import _ev, _held, _millions, _quoted, _value, add_trigger_note, collect_passages, stated_amount
 from .icr_triggers import SECTIONS, _section_after
 from .leverage_triggers import _headline_index
 from .precheck import DATA_NOTICE, PrecheckAgentError, call_agent, require_agent
@@ -197,6 +197,19 @@ def validate_leverage_t2(parsed: dict, t: dict, fx: dict) -> dict:
             "status_consistent": parsed.get("status") == status, "validation_notes": notes}
 
 
+def agent_reading(parsed: dict, t: dict, fx: dict) -> dict:
+    """The agent's answer as it states it (not verified, not applied), for an analyst to compare with the verified
+    outcome: "cash_reduced" takes the acquisition, payout and trapped amounts it gives out of cash
+    (not below zero). Any other answer changes nothing."""
+    by_id = {p["passage_id"]: p for p in t["passages"]}
+    stated, notes, removed = parsed.get("status"), [], 0.0
+    if stated == "cash_reduced":
+        total = sum(v for o in parsed.get("items") or [] if o.get("kind") in REDUCING
+                    for v in [stated_amount(o.get("evidence"), by_id, notes, o.get("item_id"))] if v)
+        removed = min(total, max(fx["cash"], 0.0))
+    return {"status": stated, "notes": notes, "applies": {"status": stated, "removed": removed}}
+
+
 def register_prompt(session):
     from app.prompts.registry import PromptRegistry
 
@@ -290,6 +303,7 @@ def _run_agent(result, t, data, fx, session, backend, case_id):
         raise PrecheckAgentError(f"The Trigger Agent's Debt/EBITDAR T2 output was rejected "
                                  f"({agent['validation_detail']}); the run was not recorded. Run it again.")
     checked = validate_leverage_t2(run.parsed, t, fx)
+    result["agent_reading"] = agent_reading(run.parsed, t, fx)
     agent.update(rationale=run.parsed.get("rationale"), missing_information=run.parsed.get("missing_information") or [],
                  held_back=checked["held_back"], derived_status=checked["status"],
                  stated_status=checked["stated_status"], status_consistent=checked["status_consistent"])

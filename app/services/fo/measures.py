@@ -260,9 +260,17 @@ def one_offs_for(values, labels, period):
 
 
 def rent_for(values, period):
-    """(source, rent): the year's operating lease cost (else cash paid for operating leases); none tagged = none."""
+    """(source, rent): the year's operating lease cost, from the lease-cost table (never cash paid for leases). Without
+    it: no operating lease liabilities at the year-end = no leases, rent 0; liabilities tagged = rent can't be found
+    (None), so EBITDAR is n/a rather than understated."""
     c, v, _ = pick(values, RENT_CONCEPTS, period)
-    return c or "none tagged (taken as 0)", abs(v) if v is not None else 0.0
+    if c:
+        return c, abs(v)
+    lease_concepts = OPERATING_LEASE_CONCEPTS + OPERATING_LEASE_PARTS
+    as_at = instant_near(values, lease_concepts, date.fromisoformat(period.split("--")[1]))
+    if as_at and any(values[(x, as_at)][0] for x in lease_concepts if (x, as_at) in values):
+        return None, None
+    return "none tagged (taken as 0)", 0.0
 
 
 def interest_incurred(values, labels, period):
@@ -312,8 +320,8 @@ def debt_service_coverage(facts, labels, sections=(), n_periods=3):
     values = plain_values(facts)
     bs_lines = balance_sheet_lines(sections)
     periods = annual_periods(values, PRETAX_CONCEPTS + OPERATING_INCOME_CONCEPTS)
-    parts = (("ebit", "EBIT"), ("da", "D&A"), ("cash_taxes", "cash taxes"), ("capex", "CapEx"),
-             ("interest", "interest"), ("principal", "principal due"))
+    parts = (("ebit", "EBIT"), ("da", "D&A"), ("rent", "operating lease cost"), ("cash_taxes", "cash taxes"),
+             ("capex", "CapEx"), ("interest", "interest"), ("principal", "principal due"))
 
     def column(heading, period, principal_day, basis):
         col = ebitda_for(values, labels, period)
@@ -322,7 +330,7 @@ def debt_service_coverage(facts, labels, sections=(), n_periods=3):
             fwd_c, fwd, _ = pick(values, RENT_NEXT_12M_CONCEPTS, period.split("--")[1])
             if fwd_c:
                 rent_c, rent = fwd_c, abs(fwd)
-        ebitdar = col["ebitda"] + rent if col["ebitda"] is not None else None
+        ebitdar = col["ebitda"] + rent if col["ebitda"] is not None and rent is not None else None
         tax_c, cash_taxes, _ = pick(values, CASH_TAX_CONCEPTS, period)  # signed: a net refund adds to cash flow
         capex_c, capex, _ = pick(values, CAPEX_CONCEPTS, period)
         capex = abs(capex) if capex is not None else None
@@ -335,7 +343,7 @@ def debt_service_coverage(facts, labels, sections=(), n_periods=3):
         as_at = instant_near(values, PRINCIPAL_CONCEPTS, principal_day) or principal_day.isoformat()
         prin = year1_principal(facts, values, labels, as_at, bs_lines)
         principal = prin["principal"]
-        service = interest + principal + rent if interest is not None and principal is not None else None
+        service = (interest + principal + rent if None not in (interest, principal, rent) else None)
         col.update({"heading": heading, "period": period, "basis": basis, "rent": rent, "rent_concept": rent_c,
                     "ebitdar": ebitdar, "cash_taxes": cash_taxes, "cash_taxes_concept": tax_c, "capex": capex,
                     "capex_concept": capex_c, "depreciation": dep, "depreciation_concept": dep_c,
@@ -365,7 +373,7 @@ def interest_coverage(facts, labels, n_periods=3):
     the same figure as DSCR's; EBIT adds back only the expensed part (pre-tax income + interest expense)."""
     values = plain_values(facts)
     periods = annual_periods(values, PRETAX_CONCEPTS + OPERATING_INCOME_CONCEPTS)
-    parts = (("ebit", "EBIT"), ("interest", "interest incurred"))
+    parts = (("ebit", "EBIT"), ("rent", "operating lease cost"), ("interest", "interest incurred"))
     cols = []
     for p in periods[:n_periods]:
         int_c, interest, capitalised = interest_incurred(values, labels, p)
@@ -379,13 +387,14 @@ def interest_coverage(facts, labels, n_periods=3):
         rent_c, rent = rent_for(values, p)
         cols.append(finish_column({"heading": period_label(p), "period": p, "basis": "historical", "unit": unit,
                                    "ebit": ebit_v, "ebit_concept": ebit_c, "rent": rent, "rent_concept": rent_c,
-                                   "ebitr": ebit_v + rent if ebit_v is not None else None,
+                                   "ebitr": ebit_v + rent if ebit_v is not None and rent is not None else None,
                                    "interest": interest, "interest_concept": int_c,
                                    "interest_capitalised": capitalised,
                                    "interest_expense": None if total_c else expense,
                                    "interest_expense_concept": None if total_c else exp_c,
                                    "net_interest_income": net_income,
-                                   "fixed_charges": interest + rent if interest is not None else None},
+                                   "fixed_charges": (interest + rent if interest is not None and rent is not None
+                                                     else None)},
                                   parts, "ebitr", "fixed_charges", ICR_BANDS, "No interest expense to cover"))
     return {"columns": cols, "sources": ratio_sources(cols, ("ebit", "interest", "rent"), labels)}
 
@@ -407,8 +416,12 @@ FINANCE_LEASE_PARTS = ["us-gaap:FinanceLeaseLiabilityCurrent", "us-gaap:FinanceL
 # lease maturity table.
 OPERATING_LEASE_CONCEPTS = ["us-gaap:OperatingLeaseLiability"]
 OPERATING_LEASE_PARTS = ["us-gaap:OperatingLeaseLiabilityCurrent", "us-gaap:OperatingLeaseLiabilityNoncurrent"]
-RENT_CONCEPTS = ["us-gaap:OperatingLeaseCost", "us-gaap:OperatingLeasePayments"]
+RENT_CONCEPTS = ["us-gaap:OperatingLeaseCost"]  # the lease-cost table; never cash paid for operating leases
+# The EBITDAR margin alone falls back to cash paid for operating leases when the lease-cost table is missing.
+RENT_CASH_CONCEPTS = ["us-gaap:OperatingLeasePayments"]
+RENT_CASH_LABEL = "cash lease payments: lease-cost table missing"
 RENT_NEXT_12M_CONCEPTS = ["us-gaap:LesseeOperatingLeaseLiabilityPaymentsDueNextTwelveMonths"]
+# Unrestricted cash only: restricted cash (and the totals that include it) is never netted against debt.
 CASH_CONCEPTS = ["us-gaap:CashAndCashEquivalentsAtCarryingValue", "ifrs-full:CashAndCashEquivalents"]
 DA_CONCEPTS = ["us-gaap:DepreciationDepletionAndAmortization", "us-gaap:DepreciationAmortizationAndAccretionNet",
                "us-gaap:DepreciationAndAmortization", "ifrs-full:DepreciationAndAmortisationExpense"]
@@ -418,6 +431,26 @@ LEVERAGE_MEASURES = [("debt_to_ebitdar", "Debt / EBITDAR", "adj_debt", "ebitdar"
                      ("net_debt_to_ebitdar", "Net debt / EBITDAR", "adj_net_debt", "ebitdar")]
 # RCF / debt: retained cash flow (operating cash flow − dividends − distributions to noncontrolling interests) /
 # year-end lease-adjusted debt. None tagged = none paid.
+# One-off cash inflows tagged in (or alongside) operating cash flow, for RCF/Debt trigger T2: (concept, category).
+ONE_OFF_INFLOW_CONCEPTS = [("us-gaap:ProceedsFromIncomeTaxRefunds", "tax_refund"),
+                           ("us-gaap:ProceedsFromInsuranceSettlementOperatingActivities", "insurance")]
+# NCI materiality, for RCF/Debt trigger T3 (distributions to NCI not tagged under a standard concept).
+NCI_INCOME_CONCEPTS = ["us-gaap:NetIncomeLossAttributableToNoncontrollingInterest",
+                       "ifrs-full:ProfitLossAttributableToNoncontrollingInterests"]
+CONSOLIDATED_NET_INCOME_CONCEPTS = [
+    "us-gaap:ProfitLoss", "us-gaap:IncomeLossFromContinuingOperationsIncludingPortionAttributableToNoncontrollingInterest",
+    "ifrs-full:ProfitLoss"]
+PARENT_NET_INCOME_CONCEPTS = ["us-gaap:NetIncomeLoss", "ifrs-full:ProfitLossAttributableToOwnersOfParent"]
+NCI_EQUITY_CONCEPTS = ["us-gaap:MinorityInterest", "ifrs-full:NoncontrollingInterests"]
+REDEEMABLE_NCI_CONCEPTS = ["us-gaap:RedeemableNoncontrollingInterestEquityCarryingAmount"]
+TOTAL_EQUITY_CONCEPTS = ["us-gaap:StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+                         "ifrs-full:Equity", "us-gaap:StockholdersEquity"]  # the parent's equity when all NCI is redeemable
+# For RCF/Debt trigger T4: the equity statement's distributions to NCI, and purchases of NCI ownership.
+NCI_EQUITY_DISTRIBUTION_CONCEPTS = ["us-gaap:MinorityInterestDecreaseFromDistributionsToNoncontrollingInterestHolders"]
+NCI_PURCHASE_CONCEPTS = ["us-gaap:PaymentsToAcquireAdditionalInterestInSubsidiaries",
+                         "us-gaap:PaymentsForRepurchaseOfRedeemableNoncontrollingInterest",
+                         "us-gaap:MinorityInterestDecreaseFromRedemptions",
+                         "us-gaap:PaymentsForRepurchaseOfNoncontrollingInterest"]
 DIVIDEND_CONCEPTS = ["us-gaap:PaymentsOfDividends", "us-gaap:PaymentsOfDividendsCommonStock",
                      "ifrs-full:DividendsPaidClassifiedAsFinancingActivities"]
 NCI_DISTRIBUTION_CONCEPTS = ["us-gaap:PaymentsOfDividendsMinorityInterest", "us-gaap:PaymentsToMinorityShareholders",
@@ -442,25 +475,33 @@ def balance_sheet_lines(sections):
 
 
 def total_debt(values, labels, as_at, bs_lines=frozenset()):
-    """(source, debt): borrowings, plus finance leases when the balance sheet shows them separately. The current and
-    non-current lines win over a tagged total when the balance sheet presents them (a total can come from a note)."""
+    """(source, debt, fallback): borrowings, plus finance leases when the balance sheet shows them separately. The
+    current and non-current lines win over a tagged total when the balance sheet presents them (a total can come from
+    a note). ``fallback`` says how the debt departs from a tagged total ({"total_skipped": the total's concept and
+    value, "finance_leases_added": the amount, "borrowings": the debt before them}), or None (Debt/EBITDAR T4)."""
     current_c, _, _ = pick(values, DEBT_CURRENT_CONCEPTS, as_at)
     groups = ([DEBT_CURRENT_CONCEPTS] if current_c else [["us-gaap:LongTermDebtCurrent"], SHORT_TERM_DEBT_CONCEPTS]) \
         + [DEBT_NONCURRENT_CONCEPTS]
     c, v, _ = pick(values, DEBT_TOTAL_CONCEPTS, as_at)
+    skipped = None
     if c and not bs_lines & {x for g in groups for x in g}:
         src = concept_ref(labels, c)
     else:
         total = (concept_ref(labels, c), v) if c else (None, None)
         src, v = summed(values, labels, groups, as_at)
+        if src and c:
+            skipped = {"concept": concept_ref(labels, c), "value": total[1]}
         if not src:
             src, v = total if total[0] else summed(values, labels, [["us-gaap:LongTermDebt"], SHORT_TERM_DEBT_CONCEPTS],
                                                    as_at)
+    borrowings, added = v, None
     if src and bs_lines & set(FINANCE_LEASE_PARTS):
         lease_src, leases = summed(values, labels, [[c] for c in FINANCE_LEASE_PARTS], as_at)
         if lease_src:
-            src, v = f"{src} + {lease_src}", v + leases
-    return src, v
+            src, v, added = f"{src} + {lease_src}", v + leases, {"concept": lease_src, "value": leases}
+    fallback = ({"total_skipped": skipped, "finance_leases_added": added, "borrowings": borrowings}
+                if skipped or added else None)
+    return src, v, fallback
 
 
 def operating_lease_liability(values, labels, as_at):
@@ -478,12 +519,13 @@ def year_end_balances(values, labels, period, bs_lines=frozenset()):
     balance_concepts = (DEBT_TOTAL_CONCEPTS + DEBT_CURRENT_CONCEPTS + DEBT_NONCURRENT_CONCEPTS + ["us-gaap:LongTermDebt"]
                         + CASH_CONCEPTS)
     as_at = instant_near(values, balance_concepts, date.fromisoformat(period.split("--")[1]))
-    debt_c, debt = total_debt(values, labels, as_at, bs_lines) if as_at else (None, None)
+    debt_c, debt, fallback = total_debt(values, labels, as_at, bs_lines) if as_at else (None, None, None)
     lease_c, leases = operating_lease_liability(values, labels, as_at) if as_at else (None, None)
     cash_c, cash, _ = pick(values, CASH_CONCEPTS, as_at) if as_at else (None, None, None)
     adj_debt = debt + leases if debt is not None else None
     return {"heading": period_label(period), "period": period, "basis": "historical", "as_at": as_at,
-            "debt": debt, "debt_concept": debt_c, "op_leases": leases, "op_leases_concept": lease_c,
+            "debt": debt, "debt_concept": debt_c, "debt_fallback": fallback, "op_leases": leases,
+            "op_leases_concept": lease_c,
             "adj_debt": adj_debt, "cash": cash, "cash_concept": cash_c}
 
 
@@ -498,12 +540,13 @@ def debt_to_ebitdar(facts, labels, sections=(), n_periods=3):
         col.update(year_end_balances(values, labels, p, bs_lines))
         ebitda, as_at, adj_debt, cash = col["ebitda"], col["as_at"], col["adj_debt"], col["cash"]
         col["rent_concept"], col["rent"] = rent_for(values, p)
-        col["ebitdar"] = ebitda + col["rent"] if ebitda is not None else None
+        col["ebitdar"] = ebitda + col["rent"] if ebitda is not None and col["rent"] is not None else None
         col.update(one_offs_for(values, labels, p))
         col["adj_net_debt"] = adj_debt - cash if adj_debt is not None and cash is not None else None
         for key, _, numerator, denominator in LEVERAGE_MEASURES:
-            missing = [name for k, name in (("ebit", "EBIT"), ("da", "D&A"), ("debt", "debt"),
-                                             ("cash", "cash")) if col[k] is None and (k != "cash" or key == "net_debt_to_ebitdar")]
+            missing = [name for k, name in (("ebit", "EBIT"), ("da", "D&A"), ("rent", "operating lease cost"),
+                                             ("debt", "debt"), ("cash", "cash"))
+                       if col[k] is None and (k != "cash" or key == "net_debt_to_ebitdar")]
             num, den = col[numerator], col[denominator]
             reason = "No " + " or ".join(missing) + " tagged" if missing else None
             if as_at is None and ebitda is not None:  # a 10-K has only two balance sheets
@@ -524,6 +567,7 @@ def rcf_to_debt(facts, labels, sections=(), wc_lines=None, n_periods=3):
     for p in annual_periods(values, OPERATING_CASH_FLOW_CONCEPTS)[:n_periods]:
         col = year_end_balances(values, labels, p, bs_lines)
         col.update(cash_flow_measures(values, p, col["as_at"], col["debt"], col["adj_debt"], wc_lines, labels))
+        col["revenue_concept"], col["revenue"], _ = pick(values, REVENUE_CONCEPTS, p)  # RCF/Debt T2's growth test
         cols.append(col)
     return {"columns": cols, "sources": ratio_sources(cols, ("cfo", "wc_change", "dividends", "nci_distributions",
                                                              "debt", "op_leases"), labels)}
@@ -547,9 +591,16 @@ def ebitdar_margin(facts, labels, n_periods=3):
     for p in annual_periods(values, PRETAX_CONCEPTS + OPERATING_INCOME_CONCEPTS)[:n_periods]:
         col = ebitda_for(values, labels, p)
         col["rent_concept"], col["rent"] = rent_for(values, p)
-        col["ebitdar"] = col["ebitda"] + col["rent"] if col["ebitda"] is not None else None
+        if col["rent"] is None:  # the margin only: without the lease-cost table, cash lease payments, labelled
+            paid_c, paid, _ = pick(values, RENT_CASH_CONCEPTS, p)
+            if paid_c:
+                col["rent_concept"], col["rent"] = f"{paid_c} ({RENT_CASH_LABEL})", abs(paid)
+                col["rent_basis"] = RENT_CASH_LABEL
+        col["ebitdar"] = (col["ebitda"] + col["rent"] if col["ebitda"] is not None and col["rent"] is not None
+                          else None)
         rev_c, revenue, _ = pick(values, REVENUE_CONCEPTS, p)
-        missing = [name for k, name in (("ebit", "EBIT"), ("da", "D&A")) if col[k] is None] + \
+        missing = [name for k, name in (("ebit", "EBIT"), ("da", "D&A"), ("rent", "operating lease cost"))
+                   if col[k] is None] + \
                   (["revenue"] if revenue is None else [])
         col.update({"heading": period_label(p), "period": p, "basis": "historical",
                     "revenue": revenue, "revenue_concept": rev_c,
@@ -572,6 +623,19 @@ def cash_flow_measures(values, period, as_at, debt, adj_debt, wc_lines=None, lab
     wc_c, wc = working_capital_change(values, labels or {}, period, wc_lines) if cfo is not None else (None, None)
     ffo = cfo - wc if wc is not None else cfo
     rcf_cfo = cfo - dividends - nci if cfo is not None else None
+    eq_dist_c, eq_dist, _ = pick(values, NCI_EQUITY_DISTRIBUTION_CONCEPTS, period)
+    purchases = [c for c in NCI_PURCHASE_CONCEPTS if (c, period) in values and values[(c, period)][0]]
+    nci_income_c, nci_income, _ = pick(values, NCI_INCOME_CONCEPTS, period)
+    ni_c, net_income, _ = pick(values, CONSOLIDATED_NET_INCOME_CONCEPTS, period)
+    if ni_c is None and nci_income is not None:  # parent net income + the NCI share
+        parent_c, parent, _ = pick(values, PARENT_NET_INCOME_CONCEPTS, period)
+        if parent_c:
+            ni_c, net_income = f"{parent_c} + {nci_income_c}", parent + nci_income
+    nci_eq = [pick(values, g, as_at)[:2] for g in (NCI_EQUITY_CONCEPTS, REDEEMABLE_NCI_CONCEPTS)] if as_at else []
+    nci_eq = [(c, v) for c, v in nci_eq if c]
+    eq_c, total_equity, _ = pick(values, TOTAL_EQUITY_CONCEPTS, as_at) if as_at else (None, None, None)
+    inflows = [{"concept": c, "category": cat, "value": abs(values[(c, period)][0])}
+               for c, cat in ONE_OFF_INFLOW_CONCEPTS if (c, period) in values and values[(c, period)][0]]
     rcf = ffo - dividends - nci if ffo is not None else None
     if cfo is None:
         rcf_reason = "No operating cash flow tagged"
@@ -586,6 +650,15 @@ def cash_flow_measures(values, period, as_at, debt, adj_debt, wc_lines=None, lab
             "nci_distributions": nci, "nci_distributions_concept": nci_c or "none tagged (taken as 0)",
             "wc_change": wc, "wc_change_concept": wc_c or ("none tagged: FFO taken as CFO" if cfo is not None else None),
             "ffo": ffo, "ffo_basis": "FFO" if wc is not None else "CFO (no working-capital lines tagged)",
+            "tagged_inflows": inflows,
+            "nci_distributions_tagged": nci_c is not None,
+            "nci_equity_distributions": abs(eq_dist) if eq_dist is not None else None,
+            "nci_equity_distributions_concept": eq_dist_c, "nci_purchases_tagged": purchases,
+            "nci_income": nci_income, "nci_income_concept": nci_income_c,
+            "consolidated_net_income": net_income, "consolidated_net_income_concept": ni_c,
+            "nci_equity": sum(v for _, v in nci_eq) if nci_eq else None,
+            "nci_equity_concept": " + ".join(c for c, _ in nci_eq) or None,
+            "total_equity": total_equity, "total_equity_concept": eq_c,
             "rcf": rcf, "rcf_cfo": rcf_cfo,
             "rcf_to_debt_cfo": rcf_cfo / adj_debt if rcf_reason is None and adj_debt else None,
             "rcf_to_debt": {"ratio": rcf / adj_debt if rcf_reason is None and adj_debt else None, "reason": rcf_reason,
@@ -647,6 +720,7 @@ REFINANCING_BANDS = [(1.5, 1, "≥ 1.5x"), (1.0, 3, "1.0–1.5x"), (0.75, 5, "0.
                      (0.25, 9, "0.25–0.5x"), (None, 10, "< 0.25x")]
 REFINANCING_FCF_YEARS = 2  # years of free cash flow counted towards meeting maturities
 REVOLVER_CAPACITY_CONCEPTS = ["us-gaap:LineOfCreditFacilityRemainingBorrowingCapacity"]
+MANUAL_REVOLVER = "Manual override (Scoring settings)"  # the revolver source when the settings give the availability
 _AMOUNT = r"\$\s?([\d,]+(?:\.\d+)?)\s*(million|billion)"
 REVOLVER_TEXT = [  # "$824 million available", "$786 million of additional borrowing capacity", "availability of $5.8 billion"
     re.compile(_AMOUNT + r"\s+(?:was\s+|is\s+|were\s+|remained\s+)?(?:available|undrawn|"
@@ -776,7 +850,7 @@ def score_liquidity(col, override, blocked=None):
             f"{col['revolver_found'] / 1e6:,.1f} million, {col['revolver_found_source']})"
             if col["revolver_found"] is not None else f"{col['revolver_found_source']})")
     elif override is not None:
-        col["revolver"], col["revolver_source"] = override * 1e6, "Manual override (Scoring settings)"
+        col["revolver"], col["revolver_source"] = override * 1e6, MANUAL_REVOLVER
     else:
         col["revolver"], col["revolver_source"] = col["revolver_found"], col["revolver_found_source"]
     rev = col["revolver"] or 0.0
@@ -842,7 +916,8 @@ def build_financial_overview(data):
             "notes": "A fixed-charge DSCR: rent is treated as a fixed obligation alongside debt service. Cash flow for "
                      "debt service is EBITDAR (EBIT + D&A + rent) less income taxes paid (net of refunds, from the cash "
                      "flow statement), maintenance CapEx and distributions to noncontrolling interests (none tagged = "
-                     "none). Rent is the operating lease cost (else cash paid for operating leases); none tagged = none. "
+                     "none). Rent is the operating lease cost from the lease-cost table (never cash paid); with no "
+                     "operating leases it is none, and with leases but no lease cost tagged it can't be found (n/a). "
                      "Filers don't tag maintenance CapEx, so total CapEx (purchases of PP&E) is used, which understates "
                      "DSCR for a company investing for growth (DSCR trigger T2 checks this when CapEx is above 1.5× "
                      "depreciation). "
@@ -879,7 +954,8 @@ def build_financial_overview(data):
                      "pre-tax income isn't tagged, operating income is used. Interest is interest incurred: the tagged "
                      "Interest Costs Incurred, else the income-statement (accrual) expense plus capitalised interest "
                      "(none tagged = none), never cash interest paid; DSCR uses the same figure. Rent is the operating "
-                     "lease cost (else cash paid for operating leases); none tagged = none. Risk score (10 = highest "
+                     "lease cost (never cash paid); n/a when leases are tagged but their cost isn't. Risk score (10 = "
+                     "highest "
                      f"risk): {bands_text(ICR_BANDS)}. These bands are provisional.",
             "gaps": "Interest expense may be shown net of interest income by some filers (check the label in Sources). "
                     "Capitalised interest under a company's own tag is not picked up: check the debt or PP&E note. "
@@ -902,18 +978,22 @@ def build_financial_overview(data):
             "empty": "No annual pre-tax income or operating income is tagged in this filing.",
             "notes": "EBITDAR is EBIT (as for ICR: pre-tax income + interest expense, else operating income) plus "
                      "depreciation and amortisation from the cash flow statement plus rent (the year's operating lease "
-                     "cost, else cash paid for operating leases). Debt, leases and cash are at the year-end: total "
+                     "cost from the lease-cost table, never cash paid; n/a when leases are tagged but their cost isn't). "
+                     "Debt, leases and cash are at the year-end, at carrying amount: total "
                      "debt is borrowings + finance leases: the tagged total (debt, or debt and finance leases "
                      "combined), else current + non-current debt (incl. commercial paper and short-term borrowings); "
                      "finance lease liabilities are added only when the balance sheet shows them as separate lines. "
-                     "Operating lease liabilities are added to debt (none tagged = none), so lessees and owners of "
+                     "Operating lease liabilities (ASC 842) are added to debt (none tagged = none), so lessees and owners of "
                      "their facilities compare on the same footing. Unrestricted cash is cash and cash equivalents "
-                     "(restricted cash is tagged separately). Each ratio is scored against the benchmark for the "
+                     "(restricted cash is never netted against debt). Each ratio is scored against the benchmark for the "
                      "company's industry group (config/financial_overview/Benchmarks.json) with "
                      "r = 1 + 9 / (1 + e^-(k·g + c)), where g = ln(company / benchmark) / ln(m), capped at ±cap; "
                      "c = L(p), k = L(p + Δ) − L(p) when g > 0 and L(p) − L(p − Δ) when g < 0, L(x) = ln((x − 1) / "
                      "(10 − x)). At the benchmark the score is p; m times worse scores p + Δ; m times better p − Δ. "
-                     "Net cash (net debt ≤ 0) scores as the best capped gap; negative EBITDAR as the worst. "
+                     "Net debt ≤ 0 (net cash) scores 1 and no ratio is computed (debt ≤ 0 the same); EBITDAR ≤ 0 (after "
+                     "any trigger T1 normalisation) scores 10 on both ratios, no ratio is computed, and the column is "
+                     "flagged \"EBITDAR ≤ 0\". A negative value is a real value, not n/a: n/a only when an input "
+                     "isn't tagged. "
                      "Net one-offs as tagged (impairments, restructuring, litigation, acquisition and integration "
                      "costs, less gains on disposals and litigation settlements) are shown for trigger T1: above 5% "
                      "of EBITDAR, or with EBITDAR ≤ 0, the Trigger Agent checks them and EBITDAR may be normalised "
@@ -1003,7 +1083,8 @@ def build_financial_overview(data):
             "source_parts": [("ebit", "EBIT"), ("da", "D&A"), ("rent", "Rent"), ("revenue", "Net operating revenue")],
             "empty": "No annual pre-tax income or operating income is tagged in this filing.",
             "notes": "Consolidated EBITDAR, as for Debt to EBITDAR, over net operating revenue (the income statement's "
-                     "revenue line, undimensioned). Adding back rent puts companies that lease their facilities on the "
+                     "revenue line, undimensioned). Unlike Debt to EBITDAR, the margin falls back to cash paid for "
+                     "operating leases when the lease-cost table is missing (labelled on the column). Adding back rent puts companies that lease their facilities on the "
                      "same footing as owners. The margin is scored against the industry benchmark in percentage "
                      "points, as for RCF to debt: g = (benchmark − company) / D, capped at ±cap, then the same curve. "
                      "A higher margin is lower risk; a negative margin is scored on the same scale (capped).",
