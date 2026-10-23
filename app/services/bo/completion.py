@@ -474,6 +474,7 @@ def _module_conclusions(agents, hypotheses, governed_m3, *, case_id=None):
     # standalone files by write_completion_artifacts.
     deliverables = build_m3_deliverables(structure_artifact, governed_m3, m3_output)
     out["M3"]["m3_corporate_structure"] = deliverables["m3_corporate_structure"]
+    out["M3"]["m3_structure_sidecar"] = deliverables["m3_structure_sidecar"]
     out["M3"]["m3_analysis"] = deliverables["m3_analysis"]
     # Reflect partial completion (A unavailable, B assessed) without silently
     # marking the module fully complete, but never weaken an already-incomplete
@@ -965,13 +966,24 @@ def write_completion_artifacts(packet: dict[str, Any], output_dir: str | Path) -
     # structure is available (fail-closed: no diagram is fabricated when the
     # onboarding JSON is absent). Deliverable B (m3_analysis.json) is always
     # written and references A by stable artifact id.
+    #
+    # Deliverable A is the de-wrapped refined v2.0 payload at root (matching the
+    # final-output contract); its governed internal record (artifact id +
+    # provenance + round-trip) is written to a separate governed sidecar
+    # m3_structure_provenance.json so source/audit metadata stays out of the
+    # presentation-ready export.
     m3 = ((packet.get("handoff") or {}).get("module_conclusions") or {}).get("M3") or {}
     m3_structure = m3.get("m3_corporate_structure")
+    m3_structure_sidecar = m3.get("m3_structure_sidecar")
     m3_analysis = m3.get("m3_analysis")
     if m3_structure is not None:
         paths["m3_corporate_structure"] = folder / "m3_corporate_structure.json"
         paths["m3_corporate_structure"].write_text(
             canonical_json(m3_structure) + "\n", encoding="utf-8")
+        if m3_structure_sidecar is not None:
+            paths["m3_structure_provenance"] = folder / "m3_structure_provenance.json"
+            paths["m3_structure_provenance"].write_text(
+                canonical_json(m3_structure_sidecar) + "\n", encoding="utf-8")
     if m3_analysis is not None:
         paths["m3_analysis"] = folder / "m3_analysis.json"
         paths["m3_analysis"].write_text(

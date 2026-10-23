@@ -135,10 +135,17 @@ def test_both_deliverables_written_to_disk_when_available(tmp_path):
     assert "m3_analysis" in paths and paths["m3_analysis"].exists()
     structure = json.loads(paths["m3_corporate_structure"].read_text())
     analysis = json.loads(paths["m3_analysis"].read_text())
-    assert structure["refined_structure"]["schema_version"] == "2.0"
-    assert len(structure["refined_structure"]["companies"]) == 1
-    # B references A by stable id.
-    assert analysis["corporate_structure_reference"]["artifact_id"] == structure["artifact_id"]
+    # Deliverable A export is the de-wrapped v2.0 payload AT ROOT (no
+    # refined_structure/artifact_kind wrapper), matching the final-output contract.
+    assert structure["schema_version"] == "2.0"
+    assert len(structure["companies"]) == 1
+    assert "refined_structure" not in structure
+    assert "artifact_kind" not in structure
+    # The governed internal record is written to a separate sidecar.
+    assert "m3_structure_provenance" in paths and paths["m3_structure_provenance"].exists()
+    sidecar = json.loads(paths["m3_structure_provenance"].read_text())
+    # B references A by the stable sidecar id.
+    assert analysis["corporate_structure_reference"]["artifact_id"] == sidecar["artifact_id"]
     # Deterministic: re-running yields identical bytes.
     m3b = _build_module_m3("HCA_CASE", _simplified())
     assert canonical_json(m3b["m3_corporate_structure"]) == canonical_json(

@@ -378,13 +378,21 @@ def test_deliverables_structure_and_analysis_linked_when_available():
                                    structure_svg=svg)
     deliv = build_m3_deliverables(art, _governed_stub(), m3_output)
     a = deliv["m3_corporate_structure"]
+    sidecar = deliv["m3_structure_sidecar"]
     b = deliv["m3_analysis"]
     assert a is not None
-    assert a["artifact_kind"] == "m3_corporate_structure"
-    assert a["refined_structure"]["schema_version"] == "2.0"
-    assert a["roundtrip_reconciliation"]["consistent"]
-    # Deliverable B references A by stable id and carries management + conclusion.
-    assert b["corporate_structure_reference"]["artifact_id"] == a["artifact_id"]
+    # Deliverable A export is the de-wrapped v2.0 payload at root.
+    assert a["schema_version"] == "2.0"
+    assert "companies" in a and "visual_spec" in a
+    assert "refined_structure" not in a
+    assert "artifact_kind" not in a
+    # The governed internal record lives in the sidecar (provenance + round-trip).
+    assert sidecar is not None
+    assert sidecar["artifact_kind"] == "m3_corporate_structure"
+    assert sidecar["provenance"] is not None
+    assert sidecar["roundtrip_reconciliation"]["consistent"]
+    # Deliverable B references A by the stable sidecar id and carries management + conclusion.
+    assert b["corporate_structure_reference"]["artifact_id"] == sidecar["artifact_id"]
     assert b["senior_management_assessment"]["management_signals"]
     assert b["consolidated_conclusion"]["forced_outcome"] is False
     assert b["requires_human_review"] is True

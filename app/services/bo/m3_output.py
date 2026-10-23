@@ -110,12 +110,18 @@ def _completion_status(section_a: dict[str, Any], section_b: dict[str, Any]) -> 
     b_assessed = section_b["assessment_status"] in {"assessed", "insufficient_evidence"}
     b_supported = section_b["assessment_status"] == "assessed"
 
-    if a_available and b_supported:
+    if not a_available and not b_assessed:
+        # Neither deliverable is present -> incomplete.
+        status = "incomplete"
+    elif a_available and b_supported:
+        # Only path to 'complete': A available AND B assessed.
         status = "complete"
     elif b_assessed:
-        # B proceeded even though A is unavailable -> partial, never silently full.
+        # B proceeded (assessed or explicitly insufficient) though A is
+        # unavailable -> partial, never silently full.
         status = "partial"
     else:
+        # A available but B not assessed at all.
         status = "incomplete"
     return {
         "status": status,

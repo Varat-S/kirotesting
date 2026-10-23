@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.schemas.bo import Admissibility, Confidence, Disposition
+from app.schemas.bo import Admissibility, Confidence, Direction, Disposition
 from app.schemas.agentic import Materiality
 
 
@@ -145,6 +145,10 @@ class ManagementObservation(_Strict):
     admissibility: Admissibility
     confidence: Confidence = Confidence.MEDIUM
     materiality: Materiality = Materiality.MEDIUM
+    # Credit direction is kept SEPARATE from disposition (credibility): a credible
+    # explanation of an adverse development never flips the direction positive.
+    credit_direction: Direction = Direction.NEUTRAL
+    credibility_vs_direction_note: str | None = None
     missing_information: list[str] = Field(default_factory=list)
     validation_reasons: list[str] = Field(default_factory=list)
 

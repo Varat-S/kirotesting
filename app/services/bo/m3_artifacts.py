@@ -57,14 +57,39 @@ def _structure_artifact_id(structure: CorporateStructureArtifact) -> str:
     return f"m3struct_{content_hash(basis)[:16]}"
 
 
-def build_m3_corporate_structure_artifact(
+def build_m3_corporate_structure_export(
     structure: CorporateStructureArtifact,
 ) -> dict[str, Any] | None:
-    """Deliverable A: the refined, presentation-ready corporate-structure JSON.
+    """Deliverable A (export): the refined, presentation-ready v2.0 JSON AT ROOT.
+
+    The exported ``m3_corporate_structure.json`` follows the supplied final-output
+    contract directly: its root is the refined v2.0 payload
+    (``schema_version``, ``artifact_type``, ``purpose``, ``how_to_use``,
+    ``visual_spec``, ``companies``, ``generated_by`` and, when present,
+    ``simulation_disclaimer``). It is NOT wrapped under ``refined_structure`` and
+    carries no ``artifact_kind`` envelope; the governed internal record (artifact
+    id + provenance + round-trip) lives in the separate sidecar.
 
     Returns ``None`` when no validated structure is available (fail-closed: no
-    diagram is fabricated). The returned object is the refined v2.0 payload with
-    a thin audit envelope (artifact id + provenance + round-trip record).
+    diagram is fabricated).
+    """
+    if structure.status != "available" or not structure.refined_structure:
+        return None
+    return dict(structure.refined_structure)
+
+
+def build_m3_structure_sidecar(
+    structure: CorporateStructureArtifact,
+) -> dict[str, Any] | None:
+    """Governed internal record for Deliverable A (sidecar, not the export).
+
+    Written to ``m3_structure_provenance.json``. Keeps the stable artifact id
+    (so Deliverable B's reference is unchanged), the simulation flag, source
+    provenance, the onboarding round-trip reconciliation and the document hash /
+    transform version, separate from the presentation-ready export so source and
+    audit metadata stay in a governed record.
+
+    Returns ``None`` when no validated structure is available (fail-closed).
     """
     if structure.status != "available" or not structure.refined_structure:
         return None
@@ -75,8 +100,43 @@ def build_m3_corporate_structure_artifact(
         "is_simulated": structure.is_simulated,
         "provenance": prov.model_dump(mode="json") if prov else None,
         "roundtrip_reconciliation": structure.roundtrip_reconciliation,
-        "refined_structure": structure.refined_structure,
+        "document_hash": prov.document_hash if prov else None,
+        "transform_version": prov.transform_version if prov else None,
     }
+
+
+def build_m3_corporate_structure_artifact(
+    structure: CorporateStructureArtifact,
+) -> dict[str, Any] | None:
+    """DEPRECATED thin alias for :func:`build_m3_structure_sidecar`.
+
+    The exported corporate-structure JSON is now the de-wrapped v2.0 payload at
+    root (see :func:`build_m3_corporate_structure_export`); this builder returns
+    only the governed internal record (artifact id + provenance + round-trip).
+    Retained so existing imports keep resolving. Prefer the sidecar builder.
+    """
+    return build_m3_structure_sidecar(structure)
+
+
+def _is_admitted(signal: dict[str, Any]) -> bool:
+    """Whether a finding may inform the authoritative consolidated conclusion.
+
+    Excludes a ``rejected`` disposition outright, and a material-level
+    ``unverified`` finding (materiality high/medium). Structural signals have no
+    ``disposition``; they are gated instead by ``assessment_availability`` and
+    are already pre-filtered to 'sufficient' before reaching this check. Rejected
+    and unresolved items are never dropped from the audit trail
+    (evidence_verification retains them).
+    """
+    disposition = signal.get("disposition")
+    if disposition == "rejected":
+        return False
+    availability = signal.get("assessment_availability")
+    if availability == "insufficient_evidence":
+        return False
+    if disposition == "unverified" and signal.get("materiality") in {"high", "medium"}:
+        return False
+    return True
 
 
 def build_m3_analysis_artifact(
@@ -98,6 +158,19 @@ def build_m3_analysis_artifact(
     section_b = m3_output["section_b_management_commentary"]
     section_c = m3_output["section_c_conclusion"]
     completion = m3_output["completion"]
+
+    # Only admitted findings may inform the authoritative conclusion: a rejected
+    # disposition, or a material-level 'unverified', is excluded here (it is
+    # still retained in full under evidence_verification). This never forces an
+    # equal positive/negative count and never promotes anything to fact.
+    management_signals = section_b.get("management_signals", []) or []
+    governance_signals = section_b.get("governance_signals", []) or []
+    structural_observations = section_a.get("structural_observations", []) or []
+    material_implications = section_a.get("material_credit_implications", []) or []
+
+    admitted_management = [s for s in management_signals if _is_admitted(s)]
+    admitted_governance = [s for s in governance_signals if _is_admitted(s)]
+    admitted_structural = [s for s in material_implications if _is_admitted(s)]
 
     available = structure.status == "available"
     structure_reference: dict[str, Any] = {
@@ -121,28 +194,54 @@ def build_m3_analysis_artifact(
         "corporate_structure_status": structure.status,
         "corporate_structure_reference": structure_reference,
         # Structural credit observations + material signals (descriptive, qualified).
-        "structural_observations": section_a.get("structural_observations", []),
-        "material_credit_implications": section_a.get("material_credit_implications", []),
+        # material_credit_implications carries only ADMITTED signals; the full
+        # descriptive observation set stays available for context.
+        "structural_observations": structural_observations,
+        "material_credit_implications": admitted_structural,
         "structural_limitations": section_a.get("limitations", []),
-        # Senior-management assessment (unchanged, source-grounded).
+        # Senior-management assessment (unchanged, source-grounded): the full
+        # signal sets are retained here for transparency, including qualified and
+        # downgraded items. The authoritative conclusion below draws only on the
+        # admitted subset.
         "senior_management_assessment": {
             "assessment_status": section_b.get("assessment_status"),
-            "management_signals": section_b.get("management_signals", []),
-            "governance_signals": section_b.get("governance_signals", []),
+            "management_signals": management_signals,
+            "governance_signals": governance_signals,
             "borrower_identification": section_b.get("borrower_identification"),
             "limitations": section_b.get("limitations", []),
         },
         # Evidence/verification posture carried from the governed assessment.
+        # EVERY rejected/unresolved item is retained here for audit, including
+        # those excluded from the authoritative conclusion.
         "evidence_verification": {
             "validation_issues": (governed_m3 or {}).get("validation_issues", []),
             "rejected_items": (governed_m3 or {}).get("rejected_items", []),
+            "excluded_from_conclusion_ids": sorted(
+                str(s.get("observation_id") or s.get("finding_id") or s.get("signal_id"))
+                for s in (management_signals + governance_signals + material_implications)
+                if not _is_admitted(s)),
             "replay_provenance": (governed_m3 or {}).get("replay_provenance"),
         },
         "information_gaps": sorted(set(
             list((governed_m3 or {}).get("information_gaps", []))
             + list(section_b.get("information_gaps", []))
         )),
-        "consolidated_conclusion": section_c,
+        # Authoritative conclusion: section C commentary plus the explicit
+        # admitted-finding references it rests on. Rejected / material-unverified
+        # findings are intentionally absent here (retained only for audit above).
+        "consolidated_conclusion": {
+            **section_c,
+            "admitted_management_signal_ids": sorted(
+                str(s.get("observation_id")) for s in admitted_management
+                if s.get("observation_id")),
+            "admitted_governance_signal_ids": sorted(
+                str(s.get("finding_id")) for s in admitted_governance
+                if s.get("finding_id")),
+            "admitted_structural_signal_ids": sorted(
+                str(s.get("signal_id")) for s in admitted_structural
+                if s.get("signal_id")),
+            "disposition": "human_review_required",
+        },
         "completion": completion,
         "requires_human_review": True,
         "forced_outcome": False,
@@ -155,11 +254,21 @@ def build_m3_deliverables(
     governed_m3: dict[str, Any] | None,
     m3_output: dict[str, Any],
 ) -> dict[str, Any]:
-    """Build both Module 3 deliverables (A + B) with stable cross-references."""
-    structure_artifact = build_m3_corporate_structure_artifact(structure)
+    """Build both Module 3 deliverables (A + B) with stable cross-references.
+
+    * ``m3_corporate_structure`` — Deliverable A export: the de-wrapped v2.0
+      payload at root (None when unavailable).
+    * ``m3_structure_sidecar`` — the governed internal record for A (artifact id
+      + provenance + round-trip; None when unavailable).
+    * ``m3_analysis`` — Deliverable B: the governed analytical record whose
+      ``corporate_structure_reference.artifact_id`` equals the sidecar id.
+    """
+    structure_export = build_m3_corporate_structure_export(structure)
+    structure_sidecar = build_m3_structure_sidecar(structure)
     analysis_artifact = build_m3_analysis_artifact(
-        structure, governed_m3, m3_output, structure_artifact=structure_artifact)
+        structure, governed_m3, m3_output, structure_artifact=structure_sidecar)
     return {
-        "m3_corporate_structure": structure_artifact,  # Deliverable A (None if unavailable)
-        "m3_analysis": analysis_artifact,               # Deliverable B (always present)
+        "m3_corporate_structure": structure_export,     # Deliverable A export (None if unavailable)
+        "m3_structure_sidecar": structure_sidecar,       # Governed internal record (None if unavailable)
+        "m3_analysis": analysis_artifact,                # Deliverable B (always present)
     }

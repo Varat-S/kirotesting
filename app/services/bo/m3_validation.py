@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from datetime import date
 from typing import Any
@@ -11,6 +12,61 @@ from pydantic import ValidationError
 from app.schemas.bo import Admissibility, ClaimType, Disposition
 from app.schemas.bo_m3 import M3CorporateAssessment
 from app.services.bo.hypotheses import derive_admissibility
+from app.services.bo.semantic_entailment import DeterministicCheck
+
+
+# Numeric tokens (e.g. 1,234.5 , 45% , $3.2) and fiscal-period tokens
+# (e.g. 2024 , FY2023 , Q3 2022) asserted in a claim. These are the only
+# machine-checkable surface forms; everything else stays conservative.
+_NUMBER_RE = re.compile(r"\$?\d[\d,]*(?:\.\d+)?%?")
+_PERIOD_RE = re.compile(r"\b(?:FY\s?\d{4}|Q[1-4]\s?\d{4}|20\d{2}|19\d{2})\b", re.IGNORECASE)
+
+
+def _normalise_number(token: str) -> str:
+    return token.replace("$", "").replace(",", "").rstrip("%").strip()
+
+
+def _deterministic_claim_checks(
+    claim_text: str, evidence_ids: list[str], evidence_texts: dict[str, str],
+) -> tuple[DeterministicCheck, ...]:
+    """Deterministic numeric/period checks of a claim against its cited evidence.
+
+    Returns an empty tuple when nothing machine-checkable is asserted or no
+    cited evidence text is available (then the caller keeps its conservative
+    disposition — citation-id existence is NOT entailment). A check fails with
+    ``contradiction=True`` when a specific value/period asserted in the claim is
+    absent from every cited evidence passage. No live model is called.
+    """
+    corpus = " ".join(
+        evidence_texts.get(eid, "") for eid in evidence_ids if eid in evidence_texts)
+    if not corpus.strip():
+        return ()
+    corpus_numbers = {_normalise_number(t) for t in _NUMBER_RE.findall(corpus)}
+    corpus_periods = {p.upper().replace(" ", "") for p in _PERIOD_RE.findall(corpus)}
+    checks: list[DeterministicCheck] = []
+
+    claimed_periods = {p.upper().replace(" ", "") for p in _PERIOD_RE.findall(claim_text)}
+    # Numbers in the claim that are not themselves a period token.
+    claimed_numbers = {
+        _normalise_number(t) for t in _NUMBER_RE.findall(claim_text)
+        if _normalise_number(t) and _normalise_number(t) not in {
+            p.lstrip("FYQ") for p in claimed_periods}
+    }
+    for number in sorted(claimed_numbers):
+        present = number in corpus_numbers
+        checks.append(DeterministicCheck(
+            name="numeric_value_present_in_cited_evidence", passed=present,
+            detail=("" if present else
+                    f"claimed value {number} is absent from the cited evidence"),
+            contradiction=not present))
+    for period in sorted(claimed_periods):
+        present = period in corpus_periods
+        checks.append(DeterministicCheck(
+            name="fiscal_period_present_in_cited_evidence", passed=present,
+            detail=("" if present else
+                    f"claimed period {period} is absent from the cited evidence"),
+            contradiction=not present))
+    return tuple(checks)
 
 
 class M3AssessmentError(ValueError):
@@ -37,7 +93,8 @@ def _evidence_ok(ids: list[str], allowed: set[str]) -> bool:
 
 
 def _govern_finding(raw: dict[str, Any], *, allowed: set[str], borrower_known: bool,
-                     issues: list[dict], bucket: str) -> dict[str, Any]:
+                     issues: list[dict], bucket: str,
+                     evidence_texts: dict[str, str] | None = None) -> dict[str, Any]:
     item = deepcopy(raw)
     item_id = str(item.get("finding_id") or item.get("observation_id") or "unknown")
     supporting = item.get("supporting_evidence_ids") or []
@@ -67,6 +124,19 @@ def _govern_finding(raw: dict[str, Any], *, allowed: set[str], borrower_known: b
         reasons.append("Borrower-specific conclusion is unavailable because no borrower is identified.")
         _issue(issues, "m3.borrower_unavailable", item_id, "downgraded", reasons[-1])
     if bucket == "management_assessments":
+        # Credit direction is governed SEPARATELY from disposition (credibility).
+        # A credible explanation of an adverse development must never launder a
+        # negative observation into a positive/neutral one.
+        direction = item.get("credit_direction")
+        if direction in {"negative", "mixed"} and disposition in {"supported", "qualified"}:
+            note = ("A credible management explanation does not change the adverse "
+                    "credit direction of the underlying development; credibility "
+                    "and credit direction are assessed separately.")
+            if not item.get("credibility_vs_direction_note"):
+                item["credibility_vs_direction_note"] = note
+            if note not in reasons:
+                reasons.append(note)
+                _issue(issues, "m3.credibility_vs_direction", item_id, "recorded_gap", note)
         # Reported background is useful, but is not outcome evidence of competence.
         text = " ".join((item.get("hypothesis") or "", item.get("credit_mechanism") or "")).lower()
         weak_basis = item.get("evidence_basis") in {
@@ -93,6 +163,26 @@ def _govern_finding(raw: dict[str, Any], *, allowed: set[str], borrower_known: b
             disposition = "qualified"
             reasons.append("Auditor assurance over internal control over financial reporting is date- and scope-specific and does not establish broader operational, clinical or strategic governance effectiveness.")
             _issue(issues, "m3.icfr_scope", item_id, "downgraded", reasons[-1])
+    # Citation-id existence is NOT entailment: for a still-admitted claim that
+    # asserts a specific value/period, run deterministic numeric/period checks
+    # against the cited evidence text (no live model). A mismatch downgrades the
+    # claim; where nothing is machine-checkable the conservative disposition and
+    # its limitation stand (human review still required).
+    if evidence_texts and disposition in {"supported", "qualified"}:
+        claim_text = " ".join((
+            item.get("credit_hypothesis") or item.get("hypothesis") or "",
+            item.get("causal_mechanism") or item.get("credit_mechanism") or ""))
+        checks = _deterministic_claim_checks(claim_text, supporting, evidence_texts)
+        failed = [c for c in checks if not c.passed]
+        if failed:
+            disposition = "rejected" if any(c.contradiction for c in failed) else "unverified"
+            for check in failed:
+                reason = (f"Deterministic entailment check failed ({check.name}): "
+                          f"{check.detail or 'mismatch'}. A matching citation id does "
+                          f"not establish the asserted value/period.")
+                reasons.append(reason)
+                _issue(issues, "m3.deterministic_entailment", item_id,
+                       "rejected" if disposition == "rejected" else "downgraded", reason)
     item["disposition"] = disposition
     claim_type = ClaimType.INFERENCE
     item["admissibility"] = derive_admissibility(claim_type, Disposition(disposition)).value
@@ -286,7 +376,7 @@ def validate_m3_assessment(
             seen_ids.add(item_id)
             clean.append(_govern_finding(
                 item, allowed=allowed_evidence_ids, borrower_known=borrower_known,
-                issues=issues, bucket=bucket))
+                issues=issues, bucket=bucket, evidence_texts=evidence_texts))
         data[bucket] = clean
 
     identities: dict[str, tuple[str, str]] = {}
