@@ -182,6 +182,50 @@ def load_artifact(
     return payload, manifest
 
 
+def load_artifact_bytes(
+    case_id: str,
+    artifact_id: str,
+    output_dir: str | Path,
+    *,
+    repo_root: str | Path = ".",
+) -> tuple[bytes, str, ArtifactManifest]:
+    """Return ``(raw_bytes, original_sha256, manifest)`` for a whole-file artifact.
+
+    This is the EXACT recorded bytes on disk (not a re-serialisation), with the
+    original SHA-256 of those bytes — so a download preserves byte-for-byte
+    integrity. Per-agent slice artifacts (which index a section of a shared file,
+    e.g. the BO audit) have no independent original file and raise
+    :class:`ArtifactAccessError`; use the normalized export for those.
+    """
+    source = _source_for(case_id, output_dir, repo_root)
+    if source is None:
+        raise ArtifactAccessError(f"unknown case: {case_id}")
+    manifest = manifest_for_case(case_id, output_dir, repo_root=repo_root)
+    if manifest is None:
+        raise ArtifactAccessError(f"no manifest for case: {case_id}")
+    entry = manifest.by_id(artifact_id)
+    if entry is None:
+        raise ArtifactAccessError(f"unknown artifact: {artifact_id}")
+    if entry.audit_subpath:
+        raise ArtifactAccessError(
+            f"artifact '{artifact_id}' indexes a slice of a shared file "
+            f"({entry.file_location}); it has no independent original bytes. "
+            f"Use the normalized export instead.")
+    if not entry.file_location:
+        raise ArtifactAccessError(
+            f"artifact '{artifact_id}' has no payload ({entry.status.value}: "
+            f"{entry.status_reason or 'not produced'})")
+
+    import hashlib
+    roots = [source.repo_root, source.output_root, *source.m3_dirs]
+    path = _safe_resolve(source.repo_root / entry.file_location, roots)
+    if not path.is_file():
+        raise ArtifactAccessError(f"artifact file missing: {entry.file_location}")
+    raw = path.read_bytes()
+    original_sha256 = hashlib.sha256(raw).hexdigest()
+    return raw, original_sha256, manifest
+
+
 def _extract_agent_slice(audit: Any, entry) -> dict[str, Any]:
     """Pull one agent/validator/synthesis/challenger slice from a BO audit report.
 
@@ -276,27 +320,44 @@ def inspect_node(
         "status": entry.status.value,
         "status_reason": entry.status_reason,
         "schema_name": entry.schema_name,
-        "content_hash": entry.content_hash,
+        "content_hash": entry.content_hash,       # canonical SHA-256 of the payload
+        "canonical_content_hash": entry.content_hash,
+        "original_file_sha256": None,             # set below for whole-file artifacts
+        "is_slice": bool(entry.audit_subpath),
+        "audit_subpath": entry.audit_subpath,
         "source_evidence_snapshot": entry.source_evidence_snapshot,
+        "provenance": entry.provenance.model_dump(mode="json") if entry.provenance else None,
         "depends_on": entry.depends_on,
         "validation_status": entry.validation_status,
+        "validator_issues_count": entry.validator_issues_count,
         "human_review_status": entry.human_review_status.value,
+        "escalations": entry.escalations,
         "model_id": entry.model_id,
         "prompt_version": entry.prompt_version,
         "model_invoked": entry.model_invoked,
         "file_location": entry.file_location,
         "payload_available": bool(entry.file_location),
         "payload": None,
-        "evidence_ids": [],
+        "evidence_ids": list(entry.evidence_ids),
     }
 
     if not entry.file_location:
         # Absent/skipped/failed-without-file: report the reason, never fabricate.
         return info
 
+    # Original-bytes hash only for whole-file artifacts (slices have no own file).
+    if not entry.audit_subpath:
+        try:
+            _, original_sha, _ = load_artifact_bytes(
+                case_id, artifact_id, output_dir, repo_root=repo_root)
+            info["original_file_sha256"] = original_sha
+        except ArtifactAccessError:
+            pass
+
     payload, _ = load_artifact(case_id, artifact_id, output_dir, repo_root=repo_root)
     info["payload"] = payload
-    info["evidence_ids"] = _collect_evidence_ids(payload)
+    if not info["evidence_ids"]:
+        info["evidence_ids"] = _collect_evidence_ids(payload)
     if isinstance(payload, dict):
         issues = payload.get("validation_issues")
         if isinstance(issues, list):

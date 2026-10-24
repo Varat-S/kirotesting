@@ -16,13 +16,14 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from jinja2 import Environment, FileSystemLoader
 
 from app.core import get_settings
-from app.core.hashing import canonical_json
+from app.core.hashing import canonical_json, content_hash
 from app.services.registry.explorer import (
     ArtifactAccessError,
     discover_cases,
     graph_for_case,
     inspect_node,
     load_artifact,
+    load_artifact_bytes,
     manifest_for_case,
 )
 from app.services.registry.json_render import render_json_html, render_json_pdf
@@ -90,19 +91,101 @@ def pipeline_node_html(case_id: str, artifact_id: str) -> HTMLResponse:
     return HTMLResponse(render_json_html(payload, title=artifact_id))
 
 
-@router.get("/pipeline/{case_id}/node/{artifact_id}/download.json")
-def pipeline_node_json(case_id: str, artifact_id: str) -> Response:
-    """Download the exact recorded JSON for an artifact (canonical form)."""
+def _safe_name(artifact_id: str) -> str:
+    return artifact_id.replace("/", "_").replace("..", "_")
+
+
+@router.get("/pipeline/{case_id}/node/{artifact_id}/original.json")
+def pipeline_node_original(case_id: str, artifact_id: str) -> Response:
+    """Download the EXACT recorded file bytes, preserving the original SHA-256.
+
+    Byte-for-byte identical to what the producer wrote. The ``X-Original-SHA256``
+    header and strong ``ETag`` are the hash of those exact bytes. Not available
+    for per-agent slice artifacts (they have no independent original file).
+    """
+    import hashlib
+
+    try:
+        raw, original_sha256, _ = load_artifact_bytes(
+            case_id, artifact_id, _output_dir(), repo_root=".")
+    except ArtifactAccessError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=raw,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{_safe_name(artifact_id)}.json"',
+            "X-Original-SHA256": original_sha256,
+            "X-Export-Kind": "original-bytes",
+            "ETag": f'"{original_sha256}"',
+        },
+    )
+
+
+@router.get("/pipeline/{case_id}/node/{artifact_id}/normalized.json")
+def pipeline_node_normalized(case_id: str, artifact_id: str) -> Response:
+    """Export NORMALIZED (canonical) JSON with a separate canonical content hash.
+
+    Semantically equivalent to the recorded artifact but re-serialised with
+    deterministic canonical form (sorted keys). Explicitly labelled normalized;
+    the ``X-Canonical-SHA256`` header is the hash of the canonical bytes, which
+    may differ from the original file hash. Works for per-agent slices too.
+    """
     try:
         payload, _ = load_artifact(case_id, artifact_id, _output_dir(), repo_root=".")
     except ArtifactAccessError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    safe_name = artifact_id.replace("/", "_").replace("..", "_")
+    body = canonical_json(payload) + "\n"
+    canonical_sha256 = content_hash(payload)
     return Response(
-        content=canonical_json(payload) + "\n",
+        content=body,
         media_type="application/json",
-        headers={"Content-Disposition": f'attachment; filename="{safe_name}.json"'},
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="{_safe_name(artifact_id)}.normalized.json"',
+            "X-Canonical-SHA256": canonical_sha256,
+            "X-Export-Kind": "normalized-canonical",
+        },
     )
+
+
+@router.get("/pipeline/{case_id}/node/{artifact_id}/download.json")
+def pipeline_node_json(case_id: str, artifact_id: str) -> Response:
+    """Backwards-compatible download.
+
+    Returns the EXACT original bytes when the artifact is a whole file; for
+    per-agent slice artifacts (no independent original file) it returns the
+    normalized canonical slice, labelled as such. Integrity headers always
+    describe exactly what is returned.
+    """
+    try:
+        raw, original_sha256, _ = load_artifact_bytes(
+            case_id, artifact_id, _output_dir(), repo_root=".")
+        return Response(
+            content=raw,
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="{_safe_name(artifact_id)}.json"',
+                "X-Original-SHA256": original_sha256,
+                "X-Export-Kind": "original-bytes",
+                "ETag": f'"{original_sha256}"',
+            },
+        )
+    except ArtifactAccessError:
+        # Slice artifact (or no original file): fall back to normalized export.
+        try:
+            payload, _ = load_artifact(case_id, artifact_id, _output_dir(), repo_root=".")
+        except ArtifactAccessError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return Response(
+            content=canonical_json(payload) + "\n",
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="{_safe_name(artifact_id)}.json"',
+                "X-Canonical-SHA256": content_hash(payload),
+                "X-Export-Kind": "normalized-canonical",
+            },
+        )
 
 
 @router.get("/pipeline/{case_id}/node/{artifact_id}/export.pdf")
@@ -118,9 +201,8 @@ def pipeline_node_pdf(case_id: str, artifact_id: str) -> Response:
     if entry is not None and entry.schema_name:
         subtitle += f" · schema {entry.schema_name}"
     pdf = render_json_pdf(payload, title=artifact_id, subtitle=subtitle)
-    safe_name = artifact_id.replace("/", "_").replace("..", "_")
     return Response(
         content=pdf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{safe_name}.pdf"'},
+        headers={"Content-Disposition": f'inline; filename="{_safe_name(artifact_id)}.pdf"'},
     )

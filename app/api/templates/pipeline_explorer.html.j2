@@ -275,11 +275,19 @@ async function selectNode(n) {
         <div>Human review</div><div>${esc(info.human_review_status)}</div>
         <div>Model</div><div>${esc(info.model_id)} ${info.model_invoked===false?'(not invoked)':''}</div>
         <div>Prompt version</div><div>${esc(info.prompt_version)}</div>
-        <div>Content hash</div><div style="word-break:break-all">${esc(info.content_hash)}</div>
+        <div>Canonical hash</div><div style="word-break:break-all">${esc(info.canonical_content_hash)}</div>
+        <div>Original file hash</div><div style="word-break:break-all">${esc(info.original_file_sha256 || '(slice — no original file)')}</div>
+        <div>Snapshot equivalence</div><div>${esc((info.provenance||{}).snapshot_equivalence)}</div>
       </div>
       <div class="actions">
-        <a href="${base}/download.json" target="_blank"><button>Download JSON</button></a>
+        ${info.is_slice ? '' : `<a href="${base}/original.json" target="_blank"><button>Download original JSON</button></a>`}
+        <a href="${base}/normalized.json" target="_blank"><button>Export normalized JSON</button></a>
         <a href="${base}/export.pdf" target="_blank"><button>Render PDF</button></a>
+      </div>
+      <div class="note">
+        ${info.is_slice
+          ? 'This node indexes a slice of a shared recorded file; only normalized export is available.'
+          : 'Original download preserves exact recorded bytes and the original SHA-256. Normalized export is canonical JSON with its own hash.'}
       </div>
       <h3>Evidence IDs</h3>
       <div>${(info.evidence_ids||[]).length ? esc(info.evidence_ids.join(', ')) : '<span class="note">none referenced</span>'}</div>
