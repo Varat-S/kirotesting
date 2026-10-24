@@ -1,0 +1,19 @@
+{
+  "metric_definitions": {
+    "debt_to_ebitdar": "(Total debt + operating lease liabilities) / EBITDAR",
+    "net_debt_to_ebitdar": "(Total debt + operating lease liabilities - unrestricted cash) / EBITDAR",
+    "rcf_to_debt": "(CFO - dividends - NCI distributions) / (total debt + operating lease liabilities)",
+    "ebitdar_margin": "Consolidated (EBIT + D&A + operating lease cost) / net operating revenue; noncontrolling interests not deducted",
+    "days_sales_outstanding": "Change in DSO from the prior year-end, in days; DSO = net patient receivables / (net patient revenue / 365)"
+  },
+  "benchmarks": [
+    {
+      "sector": "Hospitals/Healthcare Facilities",
+      "debt_to_ebitdar": 3.61,
+      "net_debt_to_ebitdar": 3.42,
+      "rcf_to_debt": 0.146,
+      "ebitdar_margin": 0.1580,
+      "days_sales_outstanding": 0
+    }
+  ]
+}

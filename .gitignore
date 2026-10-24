@@ -40,3 +40,7 @@ output/**
 # (not published); see examples/healthcare/README.md.
 examples/healthcare/reference/*
 !examples/healthcare/reference/.gitkeep
+
+# Financial Overview input filings (large; one folder per 10-K), keep the README
+edgar_filings/*
+!edgar_filings/README.md

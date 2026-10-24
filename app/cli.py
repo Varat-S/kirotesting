@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import sys
 from datetime import date, datetime
 from pathlib import Path
 
@@ -218,6 +219,74 @@ def main(argv=None):
         "--acknowledge-unresolved", action="store_true",
         help="Accept although challenger findings remain open (they stay recorded)",
     )
+    fo_run = commands.add_parser(
+        "run-fo-case",
+        help="Run the deterministic Financial Overview over a filing folder in edgar_filings/",
+    )
+    fo_run.add_argument(
+        "case_id", nargs="?",
+        help="Case id (default: TICKER_FY<year> from the filing's cover page)",
+    )
+    fo_run.add_argument(
+        "--filing", required=True,
+        help='Folder in edgar_filings/, e.g. "HCA 10-K FY2025" (or "edgar_filings/HCA 10-K FY2025")',
+    )
+    fo_agent = fo_run.add_mutually_exclusive_group(required=True)
+    fo_agent.add_argument(
+        "--live", action="store_true",
+        help="Run the Pre-check Agent (going concern, covenants, acquisitions and divestitures, prepaid model) and "
+             "the Trigger Agent (DSCR T2, when CapEx is above 1.5x depreciation; DSCR T3, when cash taxes paid differ "
+             "from current tax expense by more than 5%% of CFADS; DSCR T1, when DSCR scores 9 or more; ICR T2, when ICR's interest is from a net or operating tag; ICR T3, when ICR's EBIT is operating income; ICR T1, when ICR scores 8.5 or more; Debt/EBITDAR T1, when net one-offs are above 5%% of EBITDAR or EBITDAR is zero or negative; Debt/EBITDAR T2, when the gross and net leverage scores are 2 or more apart; Debt/EBITDAR T3, when the leverage score with leases is 2 or more worse than without; Debt/EBITDAR T4, when total debt is from a fallback (total tag skipped or finance leases added); RCF/Debt T1, when RCF / debt scores 9 or more or is negative; RCF/Debt T2, when tagged one-off inflows are above 5%% of FFO or FFO is up 25%% or more and over 10 points faster than revenue; RCF/Debt T3, when NCI distributions aren't tagged under a standard concept and NCI is material; RCF/Debt T4, when NCI distributions come from PaymentsToMinorityShareholders; EBITDAR Margin T1, when Debt/EBITDAR T1 removed one-off items; EBITDAR Margin T2, when the margin scores 9 or more or 2 or less and a segment with 30%% or more of revenue has a margin 5 points or more from all segments; DSO T1, when DSO moves by 5 days or more either way; Liquidity T1, when the revolver availability at the year-end isn't tagged or found in the 10-K text; Liquidity T2, when the liquidity coverage or refinancing score is 9 or more after T1; Liquidity T3, when the largest year of maturities in years 2-5 is 25%% or more of total debt) on the configured live provider (model cost). "
+             "The agent is required: give --live or --responses.",
+    )
+    fo_agent.add_argument(
+        "--responses", type=Path,
+        help='Scripted agent responses (JSON) for an offline run: one going-concern response, or '
+             '{"going_concern": ..., "covenants": ..., "acquisitions": ..., "prepaid": ..., "dscr_t1": ..., '
+             '"dscr_t2": ..., "dscr_t3": ..., "icr_t1": ..., "icr_t2": ..., "icr_t3": ..., "leverage_t1": ..., "leverage_t2": ..., "leverage_t3": ..., "leverage_t4": ..., "rcf_t1": ..., "rcf_t2": ..., "rcf_t3": ..., "rcf_t4": ..., "margin_t1": ..., "margin_t2": ..., "dso_t1": ..., "liquidity_t1": ..., "liquidity_t2": ..., "liquidity_t3": ...} ("dscr_t1" only needed when DSCR scores 9 or more, "dscr_t2" when '
+             'CapEx is above 1.5x depreciation, "dscr_t3" when the cash-tax gap is above 5%% of CFADS, '
+             '"icr_t1" when ICR scores 8.5 or more, "icr_t2" when ICR\'s interest is from a net or operating '
+             'tag, "icr_t3" when ICR\'s EBIT is operating income, "leverage_t1" when net one-offs are above 5%% of '
+             'EBITDAR or EBITDAR is zero or negative, "leverage_t2" when the gross and net leverage scores are 2 '
+             'or more apart, "leverage_t3" when the leverage score with leases is 2 or more worse than without, '
+             '"leverage_t4" when total debt is from a fallback, "rcf_t1" when RCF / debt scores 9 or more or is '
+             'negative, "rcf_t2" when tagged one-off inflows are above 5%% of FFO or FFO is up 25%% or more and over '
+             '10 points faster than revenue, "rcf_t3" when NCI distributions aren\'t tagged under a standard '
+             'concept and NCI is material, "rcf_t4" when NCI distributions come from '
+             'PaymentsToMinorityShareholders, "margin_t1" when Debt/EBITDAR T1 removed one-off items, "margin_t2" '
+             'when the EBITDAR margin scores 9 or more or 2 or less and a segment with 30%% or more of revenue has a '
+             'margin 5 points or more from all segments, "dso_t1" when DSO moves by 5 days or more either way, '
+             '"liquidity_t1" when the revolver availability at the year-end isn\'t tagged or found in the 10-K text, '
+             '"liquidity_t2" when the liquidity coverage or refinancing score is 9 or more after liquidity_t1, '
+             '"liquidity_t3" when the largest year of maturities in years 2-5 is 25%% or more of total debt)',
+    )
+    fo_run.add_argument(
+        "--model",
+        help="With --live: the Vertex text-analysis model for the Pre-check Agent, e.g. gemini-3.5-flash (default: "
+             "VERTEX_MODEL_NARROW). Must be one of app/services/fo/models.py's text-analysis candidates.",
+    )
+    fo_review = commands.add_parser(
+        "fo-review",
+        help="Record your continue / stop decision on an FO run escalated by a going-concern fail",
+    )
+    fo_review.add_argument("run_id")
+    fo_review.add_argument("--decision", required=True, choices=("continue", "stop", "use_verified"),
+                           help="continue / stop on a going-concern fail; use_verified keeps the verified result "
+                                "when the agent read FAIL but its evidence didn't hold up")
+    fo_review.add_argument("--reviewer", required=True)
+    fo_review.add_argument("--reason", required=True)
+    fo_override = commands.add_parser(
+        "fo-override",
+        help="Accept or override the score of a measure an FO run escalated (liquidity after a covenant breach; dso "
+             "or leverage after an unresolved acquisition or divestiture; dscr after its trigger T1, T2 or T3 was unresolved; icr after ICR T1, T2 or T3 was unresolved)",
+    )
+    fo_override.add_argument("run_id")
+    fo_override.add_argument("--measure", required=True,
+                             help='The escalated measure: "liquidity", "dso", "leverage", "dscr", "icr" or "rcf"')
+    fo_override.add_argument("--decision", required=True, choices=("accept", "override"))
+    fo_override.add_argument("--score", type=float, help="Your score, 1-10 (required to override)")
+    fo_override.add_argument("--reviewer", required=True)
+    fo_override.add_argument("--reason", required=True)
     approve = commands.add_parser(
         "approve", help="Record your explicit approval of the exact draft content"
     )
@@ -256,6 +325,28 @@ def main(argv=None):
             )
             if args.command == "run-bo-case":
                 print(json.dumps(_run_bo_case(session, database, args), indent=2))
+                session.commit()
+                return
+            if args.command == "run-fo-case":
+                print(json.dumps(_run_fo_case(session, args), indent=2))
+                session.commit()
+                return
+            if args.command == "fo-review":
+                from app.services.fo.review import review_run
+
+                print(json.dumps(review_run(
+                    session, args.run_id, decision=args.decision, reviewer=args.reviewer,
+                    reason=args.reason, output_root=args.output,
+                ), indent=2))
+                session.commit()
+                return
+            if args.command == "fo-override":
+                from app.services.fo.review import override_measure
+
+                print(json.dumps(override_measure(
+                    session, args.run_id, measure=args.measure, decision=args.decision, score=args.score,
+                    reviewer=args.reviewer, reason=args.reason, output_root=args.output,
+                ), indent=2))
                 session.commit()
                 return
             if args.command == "run-bo-specialists":
@@ -598,6 +689,36 @@ def _run_m3(session, database, args):
         "rejected_item_count": len(result.rejected_items),
         "outputs": {k: str(v) for k, v in paths.items()},
     }
+
+
+def _run_fo_case(session, args):
+    """Run the Financial Overview (going-concern pre-check, then the measures) and summarise the recorded run."""
+    from app.services.fo import loader, precheck
+    from app.services.fo.runner import FinancialOverviewRunner
+
+    filing = Path(args.filing)
+    name = filing.name
+    if len(filing.parts) > 1 and filing.resolve().parent != Path(loader.FILINGS_ROOT).resolve():
+        raise ValueError(f"--filing must be a folder directly inside {loader.FILINGS_ROOT}.")
+    if getattr(args, "live", False):
+        backend, mode = precheck.live_backend(getattr(args, "model", None)), "live"
+    elif getattr(args, "model", None):
+        raise ValueError("--model applies to --live runs only.")
+    else:
+        backend, mode = precheck.scripted_backend(args.responses), "scripted"
+    steps = []
+
+    def show_step(step):  # progress on stderr, so a failed run shows where it stopped
+        steps.append(step)
+        print(f"[fo] step {len(steps)}: {step}", file=sys.stderr, flush=True)
+
+    try:
+        result = FinancialOverviewRunner(session, output_root=args.output, agent_backend=backend,
+                                         agent_mode=mode, check_stop=show_step).run_filing(name, args.case_id)
+    except loader.FilingFolderError as exc:
+        available = [f["name"] for f in loader.list_filings()]
+        raise ValueError(f"{exc} Available folders: {available or 'none'}.") from exc
+    return result.summary()
 
 
 def _run_bo_case(session, database, args):

@@ -1,0 +1,3482 @@
+{
+  "FDMT": {
+    "company_name": "4D Molecular Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ABBV": {
+    "company_name": "AbbVie Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ABEO": {
+    "company_name": "Abeona Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ABP": {
+    "company_name": "Abpro Holdings, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ABSI": {
+    "company_name": "Absci Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ABVC": {
+    "company_name": "ABVC BioPharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ACAD": {
+    "company_name": "ACADIA Pharmaceuticals Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ACHV": {
+    "company_name": "Achieve Life Sciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ACRV": {
+    "company_name": "Acrivon Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ATNM": {
+    "company_name": "Actinium Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ACTU": {
+    "company_name": "Actuate Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ABOS": {
+    "company_name": "Acumen Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ACXP": {
+    "company_name": "Acurx Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ACET": {
+    "company_name": "Adicet Bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ADTX": {
+    "company_name": "Aditxt, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ADMA": {
+    "company_name": "ADMA Biologics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "AEON": {
+    "company_name": "AEON Biopharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "AGEN": {
+    "company_name": "Agenus Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "AGIO": {
+    "company_name": "Agios Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "AIM": {
+    "company_name": "AIM ImmunoTech Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "AIXC": {
+    "company_name": "AIxCrypto Holdings, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "AKBA": {
+    "company_name": "Akebia Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TCRT": {
+    "company_name": "Alaunos Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ALDX": {
+    "company_name": "Aldeyra Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ALEC": {
+    "company_name": "Alector, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ALGS": {
+    "company_name": "Aligos Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ALLR": {
+    "company_name": "Allarity Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ALLO": {
+    "company_name": "Allogene Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ALNY": {
+    "company_name": "Alnylam Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ALT": {
+    "company_name": "Altimmune, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ALXO": {
+    "company_name": "ALX Oncology Holdings Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ALZN": {
+    "company_name": "Alzamend Neuro, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "AMGN": {
+    "company_name": "Amgen Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "FOLD": {
+    "company_name": "Amicus Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ANAB": {
+    "company_name": "AnaptysBio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "AVXL": {
+    "company_name": "Anavex Life Sciences Corp.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ANIK": {
+    "company_name": "Anika Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ANIX": {
+    "company_name": "Anixa Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ANNX": {
+    "company_name": "Annexon, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ANVS": {
+    "company_name": "Annovis Bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "APLS": {
+    "company_name": "Apellis Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "APGE": {
+    "company_name": "Apogee Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "APLM": {
+    "company_name": "Apollomics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "APLT": {
+    "company_name": "Applied Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "APRE": {
+    "company_name": "Aprea Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "APVO": {
+    "company_name": "Aptevo Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "AQB": {
+    "company_name": "AquaBounty Technologies, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ABUS": {
+    "company_name": "Arbutus Biopharma Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ACLX": {
+    "company_name": "Arcellx, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ARCT": {
+    "company_name": "Arcturus Therapeutics Holdings Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RCUS": {
+    "company_name": "Arcus Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ARQT": {
+    "company_name": "Arcutis Biotherapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ARDX": {
+    "company_name": "Ardelyx, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ARMP": {
+    "company_name": "Armata Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "AVBP": {
+    "company_name": "ArriVent BioPharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ARWR": {
+    "company_name": "Arrowhead Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SPRY": {
+    "company_name": "ARS Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ARTV": {
+    "company_name": "Artiva Biotherapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ASMB": {
+    "company_name": "Assembly Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ATXS": {
+    "company_name": "Astria Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ATRA": {
+    "company_name": "Atara Biotherapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ATOS": {
+    "company_name": "Atossa Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ATYR": {
+    "company_name": "aTyr Pharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "AURA": {
+    "company_name": "Aura Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "AVTX": {
+    "company_name": "Avalo Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RNA": {
+    "company_name": "Avidity Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RCEL": {
+    "company_name": "AVITA Medical, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "AZTR": {
+    "company_name": "Azitra, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BEAM": {
+    "company_name": "Beam Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BNTC": {
+    "company_name": "Benitec Biopharma Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BYSI": {
+    "company_name": "BeyondSpring Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BCAX": {
+    "company_name": "Bicara Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BIAF": {
+    "company_name": "bioAffinity Technologies, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BCAB": {
+    "company_name": "BioAtla, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BCDA": {
+    "company_name": "BioCardia, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BCRX": {
+    "company_name": "BioCryst Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BIIB": {
+    "company_name": "Biogen Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BHVN": {
+    "company_name": "Biohaven Ltd.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BMRN": {
+    "company_name": "BioMarin Pharmaceutical Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BMEA": {
+    "company_name": "Biomea Fusion, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BRTX": {
+    "company_name": "BioRestorative Therapies, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BIVI": {
+    "company_name": "BioVie Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BTAI": {
+    "company_name": "BioXcel Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BDTX": {
+    "company_name": "Black Diamond Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BOLT": {
+    "company_name": "Bolt Biotherapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BBLG": {
+    "company_name": "Bone Biologics Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BOLD": {
+    "company_name": "Boundless Bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BBOT": {
+    "company_name": "BridgeBio Oncology Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "BBIO": {
+    "company_name": "BridgeBio Pharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CCCC": {
+    "company_name": "C4 Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CABA": {
+    "company_name": "Cabaletta Bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CLDI": {
+    "company_name": "Calidi Biotherapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CAMP": {
+    "company_name": "Camp4 Therapeutics Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CADL": {
+    "company_name": "Candel Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CAPR": {
+    "company_name": "Capricor Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CRDF": {
+    "company_name": "Cardiff Oncology, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CDIO": {
+    "company_name": "Cardio Diagnostics Holdings, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CDNA": {
+    "company_name": "CareDx, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CRBU": {
+    "company_name": "Caribou Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CAI": {
+    "company_name": "Caris Life Sciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RNAC": {
+    "company_name": "Cartesian Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CPRX": {
+    "company_name": "Catalyst Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CVM": {
+    "company_name": "CEL-SCI Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CELC": {
+    "company_name": "Celcuity Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CLDX": {
+    "company_name": "Celldex Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CLRB": {
+    "company_name": "Cellectar Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CELU": {
+    "company_name": "Celularity Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IPSC": {
+    "company_name": "Century Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CRVO": {
+    "company_name": "CervoMed Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CGON": {
+    "company_name": "CG Oncology, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CBUS": {
+    "company_name": "Cibus, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CDTX": {
+    "company_name": "Cidara Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CTOR": {
+    "company_name": "Citius Oncology, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CLNN": {
+    "company_name": "Clene Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CLYM": {
+    "company_name": "Climb Bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "COEP": {
+    "company_name": "Coeptis Therapeutics Holdings, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "COGT": {
+    "company_name": "Cogent Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CHRS": {
+    "company_name": "Coherus Oncology, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CMPX": {
+    "company_name": "Compass Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CRBP": {
+    "company_name": "Corbus Pharmaceuticals Holdings, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CRVS": {
+    "company_name": "Corvus Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "COYA": {
+    "company_name": "Coya Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CELZ": {
+    "company_name": "Creative Medical Technology Holdings, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CBIO": {
+    "company_name": "Crescent Biopharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CUE": {
+    "company_name": "Cue Biopharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CGEM": {
+    "company_name": "Cullinan Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CRIS": {
+    "company_name": "Curis, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CYCN": {
+    "company_name": "Cyclerion Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CYPH": {
+    "company_name": "Cypherpunk Technologies Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CYTK": {
+    "company_name": "Cytokinetics, Incorporated",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CTMX": {
+    "company_name": "CytomX Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "DAWN": {
+    "company_name": "Day One Biopharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "DNLI": {
+    "company_name": "Denali Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "DRMA": {
+    "company_name": "Dermata Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "DSGN": {
+    "company_name": "Design Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "DMAC": {
+    "company_name": "DiaMedica Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "DNTH": {
+    "company_name": "Dianthus Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IRON": {
+    "company_name": "Disc Medicine, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "DWTX": {
+    "company_name": "Dogwood Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "DYAI": {
+    "company_name": "Dyadic International, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "DVAX": {
+    "company_name": "Dynavax Technologies Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "DYN": {
+    "company_name": "Dyne Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "EDIT": {
+    "company_name": "Editas Medicine, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ELDN": {
+    "company_name": "Eledon Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ELTX": {
+    "company_name": "Elicio Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ELUT": {
+    "company_name": "Elutia Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "EBS": {
+    "company_name": "Emergent BioSolutions Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ENTA": {
+    "company_name": "Enanta Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ENSC": {
+    "company_name": "Ensysce Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TRDA": {
+    "company_name": "Entrada Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "EQ": {
+    "company_name": "Equillium, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ERAS": {
+    "company_name": "Erasca, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ERNA": {
+    "company_name": "Ernexa Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ESLA": {
+    "company_name": "Estrella Immunopharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ETHZ": {
+    "company_name": "ETHZilla Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "EVMN": {
+    "company_name": "Evommune, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "EXAS": {
+    "company_name": "Exact Sciences Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "XGN": {
+    "company_name": "Exagen Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "EXEL": {
+    "company_name": "Exelixis, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "XCUR": {
+    "company_name": "Exicure, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "EXOZ": {
+    "company_name": "eXoZymes, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "FATE": {
+    "company_name": "Fate Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "FENC": {
+    "company_name": "Fennec Pharmaceuticals Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "FBLG": {
+    "company_name": "FibroBiologics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "FGEN": {
+    "company_name": "FibroGen, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "FHTX": {
+    "company_name": "Foghorn Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "FBRX": {
+    "company_name": "Forte Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "FBIO": {
+    "company_name": "Fortress Biotech, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GANX": {
+    "company_name": "Gain Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GALT": {
+    "company_name": "Galectin Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GNLX": {
+    "company_name": "Genelux Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GBIO": {
+    "company_name": "Generation Bio Co.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GNPX": {
+    "company_name": "Genprex, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GOVX": {
+    "company_name": "GeoVax Labs, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GERN": {
+    "company_name": "Geron Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GILD": {
+    "company_name": "Gilead Sciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GOSS": {
+    "company_name": "Gossamer Bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GRAL": {
+    "company_name": "GRAIL, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GLSI": {
+    "company_name": "Greenwich LifeSciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GRI": {
+    "company_name": "GRI Bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GTBP": {
+    "company_name": "GT Biopharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GYRE": {
+    "company_name": "Gyre Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "HALO": {
+    "company_name": "Halozyme Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "HCWB": {
+    "company_name": "HCW Biologics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "HRTX": {
+    "company_name": "Heron Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "HUMA": {
+    "company_name": "Humacyte, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PURR": {
+    "company_name": "Hyperliquid Strategies Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IBIO": {
+    "company_name": "iBio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IDYA": {
+    "company_name": "IDEAYA Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IMMX": {
+    "company_name": "Immix Biopharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ICCC": {
+    "company_name": "ImmuCell Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IMRX": {
+    "company_name": "Immuneering Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IMUX": {
+    "company_name": "Immunic, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IBRX": {
+    "company_name": "ImmunityBio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IMNM": {
+    "company_name": "Immunome, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IMVT": {
+    "company_name": "Immunovant, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IMNN": {
+    "company_name": "Imunon, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "INAB": {
+    "company_name": "IN8bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "INCY": {
+    "company_name": "Incyte Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "INDP": {
+    "company_name": "Indaptus Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IKT": {
+    "company_name": "Inhibikase Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "INBX": {
+    "company_name": "Inhibrx Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "INMB": {
+    "company_name": "INmune Bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "INO": {
+    "company_name": "Inovio Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IMDX": {
+    "company_name": "Insight Molecular Diagnostics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "INSM": {
+    "company_name": "Insmed Incorporated",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TIL": {
+    "company_name": "Instil Bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "NTLA": {
+    "company_name": "Intellia Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "INTS": {
+    "company_name": "Intensity Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IVVD": {
+    "company_name": "Invivyd, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IONS": {
+    "company_name": "Ionis Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IOVA": {
+    "company_name": "Iovance Biotherapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IRWD": {
+    "company_name": "Ironwood Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "JBIO": {
+    "company_name": "Jade Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "JANX": {
+    "company_name": "Janux Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "JSPR": {
+    "company_name": "Jasper Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KAPA": {
+    "company_name": "Kairos Pharma, Ltd.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KALA": {
+    "company_name": "KALA BIO, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KLRS": {
+    "company_name": "Kalaris Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KALV": {
+    "company_name": "KalVista Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KPTI": {
+    "company_name": "Karyopharm Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KROS": {
+    "company_name": "Keros Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KZR": {
+    "company_name": "Kezar Life Sciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KLTO": {
+    "company_name": "Klotho Neurosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KOD": {
+    "company_name": "Kodiak Sciences Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KRRO": {
+    "company_name": "Korro Bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KRYS": {
+    "company_name": "Krystal Biotech, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KURA": {
+    "company_name": "Kura Oncology, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KYMR": {
+    "company_name": "Kymera Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KYTX": {
+    "company_name": "Kyverna Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "LTRN": {
+    "company_name": "Lantern Pharma Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "LRMR": {
+    "company_name": "Larimar Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "LXEO": {
+    "company_name": "Lexeo Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "LIMN": {
+    "company_name": "Liminatus Pharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "LCTX": {
+    "company_name": "Lineage Cell Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "LSTA": {
+    "company_name": "Lisata Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "LITS": {
+    "company_name": "Lite Strategy, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "LIXT": {
+    "company_name": "Lixte Biotechnology Holdings, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "LGVN": {
+    "company_name": "Longeveron Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "LNAI": {
+    "company_name": "Lunai Bioworks Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "LYEL": {
+    "company_name": "Lyell Immunopharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MGNX": {
+    "company_name": "MacroGenics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MDGL": {
+    "company_name": "Madrigal Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MAIA": {
+    "company_name": "MAIA Biotechnology, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MNKD": {
+    "company_name": "MannKind Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MPLT": {
+    "company_name": "MapLight Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MRKR": {
+    "company_name": "Marker Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MTNB": {
+    "company_name": "Matinas BioPharma Holdings, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MNOV": {
+    "company_name": "MediciNova, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MDCX": {
+    "company_name": "Medicus Pharma Ltd.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MGTX": {
+    "company_name": "MeiraGTx Holdings plc",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MRSN": {
+    "company_name": "Mersana Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MGX": {
+    "company_name": "Metagenomi, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MTVA": {
+    "company_name": "MetaVia Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MDXG": {
+    "company_name": "MiMedx Group, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MLYS": {
+    "company_name": "Mineralys Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "NERV": {
+    "company_name": "Minerva Neurosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "INKT": {
+    "company_name": "MiNK Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MIRM": {
+    "company_name": "Mirum Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MRNA": {
+    "company_name": "Moderna, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MBRX": {
+    "company_name": "Moleculin Biotech, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MNPR": {
+    "company_name": "Monopar Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "GLUE": {
+    "company_name": "Monte Rosa Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MBIO": {
+    "company_name": "Mustang Bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MYGN": {
+    "company_name": "Myriad Genetics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "NNVC": {
+    "company_name": "NanoViricides, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "NTRA": {
+    "company_name": "Natera, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "NEUP": {
+    "company_name": "Neuphoria Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "NBIX": {
+    "company_name": "Neurocrine Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "NGNE": {
+    "company_name": "Neurogene Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "NXTC": {
+    "company_name": "NextCure, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "NKTX": {
+    "company_name": "Nkarta, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "NVAX": {
+    "company_name": "Novavax, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "NRIX": {
+    "company_name": "Nurix Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "NUVL": {
+    "company_name": "Nuvalent, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "NVCT": {
+    "company_name": "Nuvectis Pharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "OCGN": {
+    "company_name": "Ocugen, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "OLMA": {
+    "company_name": "Olema Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ONCO": {
+    "company_name": "Onconetix, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "OKUR": {
+    "company_name": "OnKure Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "IRD": {
+    "company_name": "Opus Genetics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "OGEN": {
+    "company_name": "Oragenics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ORGO": {
+    "company_name": "Organogenesis Holdings Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ORIC": {
+    "company_name": "ORIC Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ORKA": {
+    "company_name": "Oruka Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "OSTX": {
+    "company_name": "OS Therapies Incorporated",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "OSRH": {
+    "company_name": "OSR Holdings, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "OTLK": {
+    "company_name": "Outlook Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "OVID": {
+    "company_name": "Ovid Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PALI": {
+    "company_name": "Palisade Bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PVLA": {
+    "company_name": "Palvella Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "KTTA": {
+    "company_name": "Pasithea Therapeutics Corp.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PASG": {
+    "company_name": "Passage Bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PDSB": {
+    "company_name": "PDS Biotechnology Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PTHS": {
+    "company_name": "Pelthos Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PEPG": {
+    "company_name": "PepGen Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "CATX": {
+    "company_name": "Perspective Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PMCB": {
+    "company_name": "PharmaCyte Biotech, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PHIO": {
+    "company_name": "Phio Pharmaceuticals Corp.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PSTV": {
+    "company_name": "Plus Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PMVP": {
+    "company_name": "PMV Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PRAX": {
+    "company_name": "Praxis Precision Medicines, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PGEN": {
+    "company_name": "Precigen, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "DTIL": {
+    "company_name": "Precision BioSciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PRLD": {
+    "company_name": "Prelude Therapeutics Incorporated",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PRME": {
+    "company_name": "Prime Medicine, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PROK": {
+    "company_name": "ProKidney Corp.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PTIX": {
+    "company_name": "Protagenic Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PTGX": {
+    "company_name": "Protagonist Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PLX": {
+    "company_name": "Protalix BioTherapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TARA": {
+    "company_name": "Protara Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PTCT": {
+    "company_name": "PTC Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PBYI": {
+    "company_name": "Puma Biotechnology, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PYXS": {
+    "company_name": "Pyxis Oncology, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "QTTB": {
+    "company_name": "Q32 Bio Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "QNCX": {
+    "company_name": "Quince Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RLYB": {
+    "company_name": "Rallybio Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RAPT": {
+    "company_name": "RAPT Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RXRX": {
+    "company_name": "Recursion Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "REGN": {
+    "company_name": "Regeneron Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RGNX": {
+    "company_name": "REGENXBIO Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RNTX": {
+    "company_name": "Rein Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RLAY": {
+    "company_name": "Relay Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RNXT": {
+    "company_name": "RenovoRx, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "REPL": {
+    "company_name": "Replimune Group, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "REVB": {
+    "company_name": "Revelation Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RVMD": {
+    "company_name": "Revolution Medicines, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RZLT": {
+    "company_name": "Rezolute, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RYTM": {
+    "company_name": "Rhythm Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RIGL": {
+    "company_name": "Rigel Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RCKT": {
+    "company_name": "Rocket Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SABS": {
+    "company_name": "SAB Biotherapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SGMT": {
+    "company_name": "Sagimet Biosciences Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SLRX": {
+    "company_name": "Salarius Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SANA": {
+    "company_name": "Sana Biotechnology, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SGMO": {
+    "company_name": "Sangamo Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SRPT": {
+    "company_name": "Sarepta Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SVRA": {
+    "company_name": "Savara Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SRRK": {
+    "company_name": "Scholar Rock Holding Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SLS": {
+    "company_name": "SELLAS Life Sciences Group, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SNSE": {
+    "company_name": "Sensei Biotherapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SNTI": {
+    "company_name": "Senti Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SERA": {
+    "company_name": "Sera Prognostics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "MCRB": {
+    "company_name": "Seres Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SER": {
+    "company_name": "Serina Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "STTK": {
+    "company_name": "Shattuck Labs, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SHPH": {
+    "company_name": "Shuttle Pharmaceuticals Holdings, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SILO": {
+    "company_name": "Silo Pharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SION": {
+    "company_name": "Sionna Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SKYE": {
+    "company_name": "Skye Bioscience, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SLNO": {
+    "company_name": "Soleno Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SLDB": {
+    "company_name": "Solid Biosciences Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SNGX": {
+    "company_name": "Soligenix, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SPRO": {
+    "company_name": "Spero Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SPRB": {
+    "company_name": "Spruce Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SYRE": {
+    "company_name": "Spyre Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "STOK": {
+    "company_name": "Stoke Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SMMT": {
+    "company_name": "Summit Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SBFM": {
+    "company_name": "Sunshine Biopharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SRZN": {
+    "company_name": "Surrozen, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "STRO": {
+    "company_name": "Sutro Biopharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SNDX": {
+    "company_name": "Syndax Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SYBX": {
+    "company_name": "Synlogic, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TNGX": {
+    "company_name": "Tango Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TSHA": {
+    "company_name": "Taysha Gene Therapies, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TECX": {
+    "company_name": "Tectonic Therapeutic, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TPST": {
+    "company_name": "Tempest Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TENX": {
+    "company_name": "Tenax Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TNYA": {
+    "company_name": "Tenaya Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TVGN": {
+    "company_name": "Tevogen Bio Holdings Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TGTX": {
+    "company_name": "TG Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "THAR": {
+    "company_name": "Tharimmune, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TOVX": {
+    "company_name": "Theriva Biologics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TNXP": {
+    "company_name": "Tonix Pharmaceuticals Holding Corp.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RNAZ": {
+    "company_name": "TransCode Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TVTX": {
+    "company_name": "Travere Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TLSI": {
+    "company_name": "TriSalus Life Sciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TCRX": {
+    "company_name": "TScan Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "HURA": {
+    "company_name": "TuHURA Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TWST": {
+    "company_name": "Twist Bioscience Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "TYRA": {
+    "company_name": "Tyra Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "RARE": {
+    "company_name": "Ultragenyx Pharmaceutical Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "UNCY": {
+    "company_name": "Unicycive Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "UTHR": {
+    "company_name": "United Therapeutics Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "UPB": {
+    "company_name": "Upstream Bio, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "URGN": {
+    "company_name": "UroGen Pharma Ltd.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "VNDA": {
+    "company_name": "Vanda Pharmaceuticals Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "PCVX": {
+    "company_name": "Vaxcyte, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "VERA": {
+    "company_name": "Vera Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "VCYT": {
+    "company_name": "Veracyte, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "VSTM": {
+    "company_name": "Verastem, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "VCEL": {
+    "company_name": "Vericel Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "VRTX": {
+    "company_name": "Vertex Pharmaceuticals Incorporated",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "VKTX": {
+    "company_name": "Viking Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "VIR": {
+    "company_name": "Vir Biotechnology, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "VRDN": {
+    "company_name": "Viridian Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "VTGN": {
+    "company_name": "Vistagen Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "VIVS": {
+    "company_name": "VivoSim Labs, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "VOR": {
+    "company_name": "Vor Biopharma Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "VYGR": {
+    "company_name": "Voyager Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "VTVT": {
+    "company_name": "vTv Therapeutics Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "HOWL": {
+    "company_name": "Werewolf Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "WHWK": {
+    "company_name": "Whitehawk Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "XFOR": {
+    "company_name": "X4 Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "XBIT": {
+    "company_name": "XBiotech Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "XNCR": {
+    "company_name": "Xencor, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "XBIO": {
+    "company_name": "Xenetic Biosciences, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "XLO": {
+    "company_name": "Xilio Therapeutics, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "XOMA": {
+    "company_name": "XOMA Royalty Corporation",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ZBIO": {
+    "company_name": "Zenas BioPharma, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ZNTL": {
+    "company_name": "Zentalis Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ZURA": {
+    "company_name": "Zura Bio Limited",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "ZYME": {
+    "company_name": "Zymeworks Inc.",
+    "industry_group": "Drugs (Biotechnology)"
+  },
+  "SXTP": {
+    "company_name": "60 Degrees Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "AARD": {
+    "company_name": "Aardvark Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ACRS": {
+    "company_name": "Aclaris Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ADIL": {
+    "company_name": "Adial Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ANRO": {
+    "company_name": "Alto Neuroscience, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ALMS": {
+    "company_name": "Alumis Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "AMRX": {
+    "company_name": "Amneal Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "AMPH": {
+    "company_name": "Amphastar Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "AMLX": {
+    "company_name": "Amylyx Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ANTX": {
+    "company_name": "AN2 Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ANEB": {
+    "company_name": "Anebulo Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ANIP": {
+    "company_name": "ANI Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "AQST": {
+    "company_name": "Aquestive Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ARTL": {
+    "company_name": "Artelo Biosciences, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ARVN": {
+    "company_name": "Arvinas, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ASBP": {
+    "company_name": "Aspire Biopharma Holdings, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ASRT": {
+    "company_name": "Assertio Holdings, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "AVIR": {
+    "company_name": "Atea Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ATHA": {
+    "company_name": "Athira Pharma, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "AXSM": {
+    "company_name": "Axsome Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "AYTU": {
+    "company_name": "Aytu BioPharma, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "BIOA": {
+    "company_name": "BioAge Labs, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "BFRI": {
+    "company_name": "Biofrontera Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "BTMD": {
+    "company_name": "biote Corp.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "BMY": {
+    "company_name": "Bristol-Myers Squibb Company",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "CVKD": {
+    "company_name": "Cadrenal Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "CALC": {
+    "company_name": "CalciMedica, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "SAVA": {
+    "company_name": "Cassava Sciences, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "YCBD": {
+    "company_name": "cbdMD, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "CING": {
+    "company_name": "Cingulate Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "CTXR": {
+    "company_name": "Citius Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "CNSP": {
+    "company_name": "CNS Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "COCP": {
+    "company_name": "Cocrystal Pharma, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "CGTX": {
+    "company_name": "Cognition Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "COLL": {
+    "company_name": "Collegium Pharmaceutical, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "CNTX": {
+    "company_name": "Context Therapeutics Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "CTNM": {
+    "company_name": "Contineum Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "CORT": {
+    "company_name": "Corcept Therapeutics Incorporated",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "CRMD": {
+    "company_name": "CorMedix Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "CRNX": {
+    "company_name": "Crinetics Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "CPIX": {
+    "company_name": "Cumberland Pharmaceuticals Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "CURX": {
+    "company_name": "Curanex Pharmaceuticals Inc",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "DARE": {
+    "company_name": "Daré Bioscience, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "EWTX": {
+    "company_name": "Edgewise Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ELAN": {
+    "company_name": "Elanco Animal Health Incorporated",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "LLY": {
+    "company_name": "Eli Lilly and Company",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ELVN": {
+    "company_name": "Enliven Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ENVB": {
+    "company_name": "Enveric Biosciences, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ESPR": {
+    "company_name": "Esperion Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ETON": {
+    "company_name": "Eton Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "EOLS": {
+    "company_name": "Evolus, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "EYPT": {
+    "company_name": "EyePoint, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "FULC": {
+    "company_name": "Fulcrum Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "GRCE": {
+    "company_name": "Grace Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "HRMY": {
+    "company_name": "Harmony Biosciences Holdings, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "HROW": {
+    "company_name": "Harrow, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "HOTH": {
+    "company_name": "Hoth Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "HYPD": {
+    "company_name": "Hyperion DeFi, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "IGC": {
+    "company_name": "IGC Pharma, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "IMA": {
+    "company_name": "ImageneBio, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "IBO": {
+    "company_name": "Impact BioMedical Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "INDV": {
+    "company_name": "Indivior PLC",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "INVA": {
+    "company_name": "Innoviva, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "JAGX": {
+    "company_name": "Jaguar Health, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "JNJ": {
+    "company_name": "Johnson & Johnson",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "DERM": {
+    "company_name": "Journey Medical Corporation",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "JUNS": {
+    "company_name": "Jupiter Neurosciences, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "KPRX": {
+    "company_name": "Kiora Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "LBRX": {
+    "company_name": "LB Pharmaceuticals Inc",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "LENZ": {
+    "company_name": "LENZ Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "LXRX": {
+    "company_name": "Lexicon Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "LGND": {
+    "company_name": "Ligand Pharmaceuticals Incorporated",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "LPCN": {
+    "company_name": "Lipocine Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "LQDA": {
+    "company_name": "Liquidia Corporation",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "LYRA": {
+    "company_name": "Lyra Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "MAZE": {
+    "company_name": "Maze Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "MBX": {
+    "company_name": "MBX Biosciences, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "MRK": {
+    "company_name": "Merck & Co., Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "MNMD": {
+    "company_name": "Mind Medicine (MindMed) Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "MIRA": {
+    "company_name": "MIRA Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "NKTR": {
+    "company_name": "Nektar Therapeutics",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "NTHI": {
+    "company_name": "NeOnc Technologies Holdings, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "NMRA": {
+    "company_name": "Neumora Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "NBY": {
+    "company_name": "NovaBay Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "NRXP": {
+    "company_name": "NRx Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "NTRB": {
+    "company_name": "Nutriband Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "NUVB": {
+    "company_name": "Nuvation Bio Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "OCUL": {
+    "company_name": "Ocular Therapeutix, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "OMER": {
+    "company_name": "Omeros Corporation",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ORMP": {
+    "company_name": "Oramed Pharmaceuticals Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "OGN": {
+    "company_name": "Organon & Co.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "PCRX": {
+    "company_name": "Pacira BioSciences, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "PFE": {
+    "company_name": "Pfizer Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "PHAT": {
+    "company_name": "Phathom Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "PAHC": {
+    "company_name": "Phibro Animal Health Corporation",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "PLRX": {
+    "company_name": "Pliant Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "PBH": {
+    "company_name": "Prestige Consumer Healthcare Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "PCSA": {
+    "company_name": "Processa Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "PRPH": {
+    "company_name": "ProPhase Labs, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "PULM": {
+    "company_name": "Pulmatrix, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "QCLS": {
+    "company_name": "Q/C Technologies, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "RFL": {
+    "company_name": "Rafael Holdings, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "RANI": {
+    "company_name": "Rani Therapeutics Holdings, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "RAPP": {
+    "company_name": "Rapport Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "RLMD": {
+    "company_name": "Relmada Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "RVPH": {
+    "company_name": "Reviva Pharmaceuticals Holdings, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "RPRX": {
+    "company_name": "Royalty Pharma plc",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "SCLX": {
+    "company_name": "Scilex Holding Company",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "SCYX": {
+    "company_name": "SCYNEXIS, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "SEPN": {
+    "company_name": "Septerna, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "SIGA": {
+    "company_name": "SIGA Technologies, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "SNOA": {
+    "company_name": "Sonoma Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "SUPN": {
+    "company_name": "Supernus Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "TLPH": {
+    "company_name": "Talphera, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "TARS": {
+    "company_name": "Tarsus Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "TELO": {
+    "company_name": "Telomir Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "TERN": {
+    "company_name": "Terns Pharmaceuticals, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "TXMD": {
+    "company_name": "TherapeuticsMD, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "TBPH": {
+    "company_name": "Theravance Biopharma, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "TRAW": {
+    "company_name": "Traws Pharma, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "TRVI": {
+    "company_name": "Trevi Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "TTRX": {
+    "company_name": "Turn Therapeutics Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "TVRD": {
+    "company_name": "Tvardi Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "VTYX": {
+    "company_name": "Ventyx Biosciences, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "VRCA": {
+    "company_name": "Verrica Pharmaceuticals Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "VERU": {
+    "company_name": "Veru Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "VTRS": {
+    "company_name": "Viatris Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "VYNE": {
+    "company_name": "VYNE Therapeutics Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "HIND": {
+    "company_name": "Vyome Holdings, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "XERS": {
+    "company_name": "Xeris Biopharma Holdings, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ZVRA": {
+    "company_name": "Zevra Therapeutics, Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ZTS": {
+    "company_name": "Zoetis Inc.",
+    "industry_group": "Drugs (Pharmaceutical)"
+  },
+  "ABT": {
+    "company_name": "Abbott Laboratories",
+    "industry_group": "Healthcare Products"
+  },
+  "ARAY": {
+    "company_name": "Accuray Incorporated",
+    "industry_group": "Healthcare Products"
+  },
+  "ACU": {
+    "company_name": "Acme United Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "ADGM": {
+    "company_name": "Adagio Medical Holdings, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "ADVB": {
+    "company_name": "Advanced Biomed Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "AEMD": {
+    "company_name": "Aethlon Medical, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "ALGN": {
+    "company_name": "Align Technology, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "ATEC": {
+    "company_name": "Alphatec Holdings, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "ANGO": {
+    "company_name": "AngioDynamics, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "APYX": {
+    "company_name": "Apyx Medical Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "AORT": {
+    "company_name": "Artivion, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "ATRC": {
+    "company_name": "AtriCure, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "AMIX": {
+    "company_name": "Autonomix Medical, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "AVNS": {
+    "company_name": "Avanos Medical, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "AGPU": {
+    "company_name": "Axe Compute Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "AXGN": {
+    "company_name": "Axogen, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "BAX": {
+    "company_name": "Baxter International Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "BDX": {
+    "company_name": "Becton, Dickinson and Company",
+    "industry_group": "Healthcare Products"
+  },
+  "BBNX": {
+    "company_name": "Beta Bionics, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "XAIR": {
+    "company_name": "Beyond Air, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "BMRA": {
+    "company_name": "Biomerica, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "BVS": {
+    "company_name": "Bioventus Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "BJDX": {
+    "company_name": "Bluejay Diagnostics, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "BSX": {
+    "company_name": "Boston Scientific Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "BFLY": {
+    "company_name": "Butterfly Network, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "CV": {
+    "company_name": "CapsoVision, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "CARL": {
+    "company_name": "Carlsmed, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "VTAK": {
+    "company_name": "Catheter Precision, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "CBLL": {
+    "company_name": "CeriBell, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "CERS": {
+    "company_name": "Cerus Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "CLPT": {
+    "company_name": "ClearPoint Neuro, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "CODX": {
+    "company_name": "Co-Diagnostics, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "CNMD": {
+    "company_name": "CONMED Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "CVRX": {
+    "company_name": "CVRx, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "CTSO": {
+    "company_name": "Cytosorbents Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "DXR": {
+    "company_name": "Daxor Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "DCTH": {
+    "company_name": "Delcath Systems, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "XRAY": {
+    "company_name": "DENTSPLY SIRONA Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "DXCM": {
+    "company_name": "DexCom, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "EW": {
+    "company_name": "Edwards Lifesciences Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "EKSO": {
+    "company_name": "Ekso Bionics Holdings, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "ECOR": {
+    "company_name": "electroCore, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "ELMD": {
+    "company_name": "Electromed, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "EMBC": {
+    "company_name": "Embecta Corp.",
+    "industry_group": "Healthcare Products"
+  },
+  "NDRA": {
+    "company_name": "ENDRA Life Sciences Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "ENOV": {
+    "company_name": "Enovis Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "NVST": {
+    "company_name": "Envista Holdings Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "COCH": {
+    "company_name": "Envoy Medical, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "FEED": {
+    "company_name": "ENvue Medical, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "NVNO": {
+    "company_name": "enVVeno Medical Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "FEMY": {
+    "company_name": "Femasys Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "FONR": {
+    "company_name": "FONAR Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "GUTS": {
+    "company_name": "Fractyl Health, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "GEHC": {
+    "company_name": "GE HealthCare Technologies Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "GKOS": {
+    "company_name": "Glaukos Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "GMED": {
+    "company_name": "Globus Medical, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "GCTK": {
+    "company_name": "GlucoTrack, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "HAE": {
+    "company_name": "Haemonetics Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "BEAT": {
+    "company_name": "HeartBeam, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "HSCS": {
+    "company_name": "HeartSciences Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "HOLX": {
+    "company_name": "Hologic, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "HYPR": {
+    "company_name": "Hyperfine, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "ICUI": {
+    "company_name": "ICU Medical, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "IDXX": {
+    "company_name": "IDEXX Laboratories, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "INGN": {
+    "company_name": "Inogen, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "INSP": {
+    "company_name": "Inspire Medical Systems, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "NSPR": {
+    "company_name": "InspireMD, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "PODD": {
+    "company_name": "Insulet Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "ITGR": {
+    "company_name": "Integer Holdings Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "IART": {
+    "company_name": "Integra LifeSciences Holdings Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "INBS": {
+    "company_name": "Intelligent Bio Solutions Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "ISRG": {
+    "company_name": "Intuitive Surgical, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "IVF": {
+    "company_name": "INVO Fertility, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "IRMD": {
+    "company_name": "IRADIMED CORPORATION",
+    "industry_group": "Healthcare Products"
+  },
+  "IRTC": {
+    "company_name": "iRhythm Technologies, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "IRIX": {
+    "company_name": "IRIDEX Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "KMTS": {
+    "company_name": "Kestra Medical Technologies, Ltd.",
+    "industry_group": "Healthcare Products"
+  },
+  "KEQU": {
+    "company_name": "Kewaunee Scientific Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "KRMD": {
+    "company_name": "KORU Medical Systems, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "LNTH": {
+    "company_name": "Lantheus Holdings, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "LMAT": {
+    "company_name": "LeMaitre Vascular, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "LNSR": {
+    "company_name": "LENSAR, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "LUCD": {
+    "company_name": "Lucid Diagnostics Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "LUCY": {
+    "company_name": "Lucyd, Inc",
+    "industry_group": "Healthcare Products"
+  },
+  "MASI": {
+    "company_name": "Masimo Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "MDLN": {
+    "company_name": "Medline Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "MMSI": {
+    "company_name": "Merit Medical Systems, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "MBOT": {
+    "company_name": "Microbot Medical Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "MLSS": {
+    "company_name": "Milestone Scientific Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "MODD": {
+    "company_name": "Modular Medical, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "MYO": {
+    "company_name": "Myomo, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "NEOG": {
+    "company_name": "Neogen Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "NRXS": {
+    "company_name": "NeurAxis, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "STIM": {
+    "company_name": "Neuronetics, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "NMTC": {
+    "company_name": "NeuroOne Medical Technologies Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "NPCE": {
+    "company_name": "NeuroPace, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "NXL": {
+    "company_name": "Nexalin Technology, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "NXGL": {
+    "company_name": "NEXGEL, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "NUWE": {
+    "company_name": "Nuwellis, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "OMCL": {
+    "company_name": "Omnicell, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "OSUR": {
+    "company_name": "OraSure Technologies, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "OBIO": {
+    "company_name": "Orchestra BioMed Holdings, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "OFIX": {
+    "company_name": "Orthofix Medical Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "KIDS": {
+    "company_name": "OrthoPediatrics Corp.",
+    "industry_group": "Healthcare Products"
+  },
+  "OM": {
+    "company_name": "Outset Medical, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "OWLT": {
+    "company_name": "Owlet, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "PAVM": {
+    "company_name": "PAVmed Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "PEN": {
+    "company_name": "Penumbra, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "PMI": {
+    "company_name": "Picard Medical, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "POCI": {
+    "company_name": "Precision Optics Corporation, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "PDEX": {
+    "company_name": "Pro-Dex, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "PRCT": {
+    "company_name": "PROCEPT BioRobotics Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "PFSA": {
+    "company_name": "Profusa, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "LUNG": {
+    "company_name": "Pulmonx Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "PLSE": {
+    "company_name": "Pulse Biosciences, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "QDEL": {
+    "company_name": "QuidelOrtho Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "RMD": {
+    "company_name": "ResMed Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "RVP": {
+    "company_name": "Retractable Technologies, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "RMTI": {
+    "company_name": "Rockwell Medical, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "RXST": {
+    "company_name": "RxSight, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "SMTI": {
+    "company_name": "Sanara MedTech Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "SNWV": {
+    "company_name": "SANUWAVE Health, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "ICU": {
+    "company_name": "SeaStar Medical Holding Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "SMLR": {
+    "company_name": "Semler Scientific, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "SENS": {
+    "company_name": "Senseonics Holdings, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "SRTS": {
+    "company_name": "Sensus Healthcare, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "STSS": {
+    "company_name": "Sharps Technology, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "SI": {
+    "company_name": "Shoulder Innovations, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "SIBN": {
+    "company_name": "SI-BONE, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "SGHT": {
+    "company_name": "Sight Sciences, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "SINT": {
+    "company_name": "Sintx Technologies, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "HSDT": {
+    "company_name": "Solana Company",
+    "industry_group": "Healthcare Products"
+  },
+  "SOLV": {
+    "company_name": "Solventum Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "MDAI": {
+    "company_name": "Spectral AI, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "STAA": {
+    "company_name": "STAAR Surgical Company",
+    "industry_group": "Healthcare Products"
+  },
+  "STXS": {
+    "company_name": "Stereotaxis, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "STE": {
+    "company_name": "STERIS plc",
+    "industry_group": "Healthcare Products"
+  },
+  "SSKN": {
+    "company_name": "STRATA Skin Sciences, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "STEX": {
+    "company_name": "Streamex Corp.",
+    "industry_group": "Healthcare Products"
+  },
+  "SYK": {
+    "company_name": "Stryker Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "TCMD": {
+    "company_name": "Tactile Systems Technology, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "TNDM": {
+    "company_name": "Tandem Diabetes Care, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "TELA": {
+    "company_name": "TELA Bio, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "TFX": {
+    "company_name": "Teleflex Incorporated",
+    "industry_group": "Healthcare Products"
+  },
+  "TNON": {
+    "company_name": "Tenon Medical, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "COO": {
+    "company_name": "The Cooper Companies, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "TIVC": {
+    "company_name": "Tivic Health Systems, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "TMDX": {
+    "company_name": "TransMedics Group, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "TMCI": {
+    "company_name": "Treace Medical Concepts, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "UFPT": {
+    "company_name": "UFP Technologies, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "UTMD": {
+    "company_name": "Utah Medical Products, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "VREX": {
+    "company_name": "Varex Imaging Corporation",
+    "industry_group": "Healthcare Products"
+  },
+  "RBOT": {
+    "company_name": "Vicarious Surgical Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "VANI": {
+    "company_name": "Vivani Medical, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "VNRX": {
+    "company_name": "VolitionRx Limited",
+    "industry_group": "Healthcare Products"
+  },
+  "XTNT": {
+    "company_name": "Xtant Medical Holdings, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "ZBH": {
+    "company_name": "Zimmer Biomet Holdings, Inc.",
+    "industry_group": "Healthcare Products"
+  },
+  "OMI": {
+    "company_name": "Accendra Health, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "AHCO": {
+    "company_name": "AdaptHealth Corp.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "ADUS": {
+    "company_name": "Addus HomeCare Corporation",
+    "industry_group": "Healthcare Support Services"
+  },
+  "AGL": {
+    "company_name": "agilon health, inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "AIRS": {
+    "company_name": "AirSculpt Technologies, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "ALHC": {
+    "company_name": "Alignment Healthcare, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "AMS": {
+    "company_name": "American Shared Hospital Services",
+    "industry_group": "Healthcare Support Services"
+  },
+  "AMN": {
+    "company_name": "AMN Healthcare Services, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "ASTH": {
+    "company_name": "Astrana Health, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "AVAH": {
+    "company_name": "Aveanna Healthcare Holdings Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "BLLN": {
+    "company_name": "BillionToOne, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "BDSX": {
+    "company_name": "Biodesix, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "BTSG": {
+    "company_name": "BrightSpring Health Services, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "CAH": {
+    "company_name": "Cardinal Health, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "CSTL": {
+    "company_name": "Castle Biosciences, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "COR": {
+    "company_name": "Cencora, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "CNC": {
+    "company_name": "Centene Corporation",
+    "industry_group": "Healthcare Support Services"
+  },
+  "CHE": {
+    "company_name": "Chemed Corporation",
+    "industry_group": "Healthcare Support Services"
+  },
+  "CLOV": {
+    "company_name": "Clover Health Investments, Corp.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "CRVL": {
+    "company_name": "CorVel Corporation",
+    "industry_group": "Healthcare Support Services"
+  },
+  "COSM": {
+    "company_name": "Cosmos Health Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "CCRN": {
+    "company_name": "Cross Country Healthcare, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "CCEL": {
+    "company_name": "Cryo-Cell International, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "CVS": {
+    "company_name": "CVS Health Corporation",
+    "industry_group": "Healthcare Support Services"
+  },
+  "DVA": {
+    "company_name": "DaVita Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "DCGO": {
+    "company_name": "DocGo Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "ELV": {
+    "company_name": "Elevance Health, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "EHAB": {
+    "company_name": "Enhabit, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "FLGT": {
+    "company_name": "Fulgent Genetics, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "WGS": {
+    "company_name": "GeneDx Holdings Corp.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "GH": {
+    "company_name": "Guardant Health, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "GRDN": {
+    "company_name": "Guardian Pharmacy Services, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "HQY": {
+    "company_name": "HealthEquity, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "HSIC": {
+    "company_name": "Henry Schein, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "HIMS": {
+    "company_name": "Hims & Hers Health, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "HNGE": {
+    "company_name": "Hinge Health, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "HUM": {
+    "company_name": "Humana Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "INFU": {
+    "company_name": "InfuSystem Holdings, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "INNV": {
+    "company_name": "InnovAge Holding Corp.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "NAKA": {
+    "company_name": "Kindly MD, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "LH": {
+    "company_name": "Labcorp Holdings Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "LFST": {
+    "company_name": "LifeStance Health Group, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "LMRI": {
+    "company_name": "Lumexa Imaging Holdings, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "MCK": {
+    "company_name": "McKesson Corporation",
+    "industry_group": "Healthcare Support Services"
+  },
+  "MOH": {
+    "company_name": "Molina Healthcare, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "NRC": {
+    "company_name": "National Research Corporation",
+    "industry_group": "Healthcare Support Services"
+  },
+  "NEO": {
+    "company_name": "NeoGenomics, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "OMDA": {
+    "company_name": "Omada Health, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "OPK": {
+    "company_name": "OPKO Health, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "OPCH": {
+    "company_name": "Option Care Health, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "PIII": {
+    "company_name": "P3 Health Partners Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "PARK": {
+    "company_name": "Park Dental Partners, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "MD": {
+    "company_name": "Pediatrix Medical Group, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "PRPO": {
+    "company_name": "Precipio, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "PRVA": {
+    "company_name": "Privia Health Group, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "PGNY": {
+    "company_name": "Progyny, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "DGX": {
+    "company_name": "Quest Diagnostics Incorporated",
+    "industry_group": "Healthcare Support Services"
+  },
+  "RDNT": {
+    "company_name": "RadNet, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "SBC": {
+    "company_name": "SBC Medical Group Holdings Incorporated",
+    "industry_group": "Healthcare Support Services"
+  },
+  "SRTA": {
+    "company_name": "Strata Critical Medical, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "TALK": {
+    "company_name": "Talkspace, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "CI": {
+    "company_name": "The Cigna Group",
+    "industry_group": "Healthcare Support Services"
+  },
+  "PNTG": {
+    "company_name": "The Pennant Group, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "UNH": {
+    "company_name": "UnitedHealth Group Incorporated",
+    "industry_group": "Healthcare Support Services"
+  },
+  "VMD": {
+    "company_name": "Viemed Healthcare, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "VVOS": {
+    "company_name": "Vivos Therapeutics, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "WGRX": {
+    "company_name": "Wellgistics Health, Inc.",
+    "industry_group": "Healthcare Support Services"
+  },
+  "TXG": {
+    "company_name": "10x Genomics, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "ACON": {
+    "company_name": "Aclarion, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "ADPT": {
+    "company_name": "Adaptive Biotechnologies Corporation",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "A": {
+    "company_name": "Agilent Technologies, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "TKNO": {
+    "company_name": "Alpha Teknova, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "AMWL": {
+    "company_name": "American Well Corporation",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "ATLN": {
+    "company_name": "Atlantic International Corp.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "AVTR": {
+    "company_name": "Avantor, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "AZTA": {
+    "company_name": "Azenta, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "BIO": {
+    "company_name": "Bio-Rad Laboratories, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "TECH": {
+    "company_name": "Bio-Techne Corporation",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "BLFS": {
+    "company_name": "BioLife Solutions, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "BNGO": {
+    "company_name": "Bionano Genomics, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "BNBX": {
+    "company_name": "BNB Plus Corp.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "BRKR": {
+    "company_name": "Bruker Corporation",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "BFRG": {
+    "company_name": "Bullfrog AI Holdings, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "CCLD": {
+    "company_name": "CareCloud, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "CDT": {
+    "company_name": "CDT Equity Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "CERT": {
+    "company_name": "Certara, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "CSBR": {
+    "company_name": "Champions Oncology, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "CRL": {
+    "company_name": "Charles River Laboratories International, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "CTEV": {
+    "company_name": "Claritev Corporation",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "CDXS": {
+    "company_name": "Codexis, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "CYRX": {
+    "company_name": "Cryoport, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "CTKB": {
+    "company_name": "Cytek Biosciences, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "DHR": {
+    "company_name": "Danaher Corporation",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "DRIO": {
+    "company_name": "DarioHealth Corp.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "DH": {
+    "company_name": "Definitive Healthcare Corp.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "DOCS": {
+    "company_name": "Doximity, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "EVH": {
+    "company_name": "Evolent Health, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "AIFF": {
+    "company_name": "Firefly Neuroscience, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "FORA": {
+    "company_name": "Forian Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "FTRE": {
+    "company_name": "Fortrea Holdings Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "DNA": {
+    "company_name": "Ginkgo Bioworks Holdings, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "GDRX": {
+    "company_name": "GoodRx Holdings, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "HBIO": {
+    "company_name": "Harvard Bioscience, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "HCAT": {
+    "company_name": "Health Catalyst, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "HCTI": {
+    "company_name": "Healthcare Triangle, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "HSTM": {
+    "company_name": "HealthStream, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "HTFL": {
+    "company_name": "HeartFlow, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "ILMN": {
+    "company_name": "Illumina, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "NOTV": {
+    "company_name": "Inotiv, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "IQV": {
+    "company_name": "IQVIA Holdings Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "ISPC": {
+    "company_name": "iSpecimen Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "LFCR": {
+    "company_name": "Lifecore Biomedical, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "LFMD": {
+    "company_name": "LifeMD, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "MRVI": {
+    "company_name": "Maravai LifeSciences Holdings, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "MXCT": {
+    "company_name": "MaxCyte, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "MEDP": {
+    "company_name": "Medpace Holdings, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "MLAB": {
+    "company_name": "Mesa Laboratories, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "MTD": {
+    "company_name": "Mettler-Toledo International Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "HYFT": {
+    "company_name": "MindWalk Holdings Corp.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "NAUT": {
+    "company_name": "Nautilus Biotechnology, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "NAGE": {
+    "company_name": "Niagen Bioscience, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "OABI": {
+    "company_name": "OmniAb, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "ONMD": {
+    "company_name": "OneMedNet Corporation",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "OPRX": {
+    "company_name": "OptimizeRx Corporation",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "PACB": {
+    "company_name": "Pacific Biosciences of California, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "PSNL": {
+    "company_name": "Personalis, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "PHR": {
+    "company_name": "Phreesia, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "QTRX": {
+    "company_name": "Quanterix Corporation",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "QSI": {
+    "company_name": "Quantum-Si incorporated",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "RPID": {
+    "company_name": "Rapid Micro Biosystems, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "RGEN": {
+    "company_name": "Repligen Corporation",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "RVTY": {
+    "company_name": "Revvity, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "SDGR": {
+    "company_name": "Schrödinger, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "SCNX": {
+    "company_name": "Scienture Holdings, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "WORX": {
+    "company_name": "SCWorx Corp.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "SEER": {
+    "company_name": "Seer, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "SLP": {
+    "company_name": "Simulations Plus, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "SHC": {
+    "company_name": "Sotera Health Company",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "LAB": {
+    "company_name": "Standard BioTools Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "TDOC": {
+    "company_name": "Teladoc Health, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "TEM": {
+    "company_name": "Tempus AI, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "TMO": {
+    "company_name": "Thermo Fisher Scientific Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "TBRG": {
+    "company_name": "TruBridge, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "VEEV": {
+    "company_name": "Veeva Systems Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "VSEE": {
+    "company_name": "VSee Health, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "WAT": {
+    "company_name": "Waters Corporation",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "WAY": {
+    "company_name": "Waystar Holding Corp.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "WST": {
+    "company_name": "West Pharmaceutical Services, Inc.",
+    "industry_group": "Healthcare Information and Technology"
+  },
+  "ACHC": {
+    "company_name": "Acadia Healthcare Company, Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "ARDT": {
+    "company_name": "Ardent Health, Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "BKD": {
+    "company_name": "Brookdale Senior Living Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "CYH": {
+    "company_name": "Community Health Systems, Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "CON": {
+    "company_name": "Concentra Group Holdings Parent, Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "EHC": {
+    "company_name": "Encompass Health Corporation",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "HCA": {
+    "company_name": "HCA Healthcare, Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "IVP": {
+    "company_name": "Inspire Veterinary Partners, Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "NHC": {
+    "company_name": "National HealthCare Corporation",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "NUTX": {
+    "company_name": "Nutex Health Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "PACS": {
+    "company_name": "PACS Group, Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "SEM": {
+    "company_name": "Select Medical Holdings Corporation",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "SNDA": {
+    "company_name": "Sonida Senior Living, Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "SGRY": {
+    "company_name": "Surgery Partners, Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "THC": {
+    "company_name": "Tenet Healthcare Corporation",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "ENSG": {
+    "company_name": "The Ensign Group, Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "JYNT": {
+    "company_name": "The Joint Corp.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "TOI": {
+    "company_name": "The Oncology Institute, Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "USPH": {
+    "company_name": "U.S. Physical Therapy, Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "UHS": {
+    "company_name": "Universal Health Services, Inc.",
+    "industry_group": "Hospitals/Healthcare Facilities"
+  }
+}

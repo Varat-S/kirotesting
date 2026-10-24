@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Financial Overview workbench</title>{% include 'browser_style.html.j2' %}
+<style>
+  .ok { color: #2f6b45; font-weight: bold; } .bad { color: #9a3324; font-weight: bold; } .warn { color: #8a6d1c; font-weight: bold; }
+  form.run { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 12px; align-items: end; }
+  form.review { display: grid; grid-template-columns: 1fr 2fr; gap: 12px; align-items: end; }
+  form.review .buttons { grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap; }
+  @media (max-width: 650px) { form.run, form.review { grid-template-columns: 1fr; } }
+  .fo-progress { margin-top: 14px; padding: 12px 14px; border: 1px solid #c9d1da; border-radius: 6px; background: #f8fafd; }
+  .fo-progress[hidden] { display: none; }
+  .fo-progress .track { position: relative; height: 8px; border-radius: 4px; background: #e3e8ee; overflow: hidden; margin: 8px 0; }
+  .fo-progress .bar { position: absolute; top: 0; left: -40%; width: 40%; height: 100%; border-radius: 4px; background: #2f6fb0; animation: fo-slide 1.4s ease-in-out infinite; }
+  @keyframes fo-slide { from { left: -40%; } to { left: 100%; } }
+  @media (prefers-reduced-motion: reduce) { .fo-progress .bar { animation: none; left: 0; width: 100%; opacity: .5; } }
+</style></head>
+<body>
+{% macro st(v) %}<span class="{{ 'ok' if v in ['completed', 'accepted', 'continued', 'pass', 'compliant', 'routine', 'overridden', 'none', 'no_adjustment', 'Engine score', 'Overridden by analyst', 'not_applicable', 'billed_revenue'] else 'bad' if v in ['failed', 'rejected', 'stopped', 'fail', 'escalated', 'breach', 'unresolved'] else 'warn' }}">{{ (v or '—')|replace('_', ' ') }}</span>{% endmacro %}
+<header><span class="badge">Financial Overview only</span><h1>Financial Overview workbench</h1>
+<p class="subtle">Financial scorecard from a 10-K's Inline XBRL. The pre-checks run first (going concern; covenants: breach, waiver or relief amendment; acquisitions and divestitures: DSO and Debt/EBITDAR adjusted for the year's deals; prepaid model: DSO on billed revenue or at a reduced weight; always interpreted by the Pre-check Agent), then facts are collected, ratios computed and scored 1–10, and combined into a composite risk score. Every number is computed by code; the agent only classifies the filing's passages, and its quotes are verified. Unresolved pre-checks are escalated to an analyst.</p>
+<div class="actions"><a href="/">All cases</a><a href="/fo">All Financial Overview runs</a><a href="/bo">Business Overview runs</a></div></header>
+<main>
+{% if error %}<section><p class="notice" id="fo-failed"><strong>Run failed{% if failed and failed.step %} during step {{ failed.number }}: {{ failed.step }}{% endif %}.</strong> {{ error }}</p>
+{% if failed and failed.done %}<details><summary>Steps completed before it ({{ failed.done|length }})</summary><ol>{% for d in failed.done %}<li>{{ d }}</li>{% endfor %}</ol></details>{% endif %}</section>{% endif %}
+{% if stopped %}<section><p class="notice" id="fo-stopped"><strong>Run stopped.</strong> {{ stopped }} Model calls already made are still logged (and billed); no run was recorded.</p></section>{% endif %}
+
+<section id="run"><h2>Run a Financial Overview</h2>
+{% if filings %}
+<form class="run" id="fo-run-form" method="post" action="/fo/run">
+<input type="hidden" name="run_token" id="fo-run-token" value="{{ run_token }}">
+<div><label for="folder">Filing folder in <code>edgar_filings/</code></label>
+<select id="folder" name="folder" required>{% for f in filings %}<option value="{{ f.name }}"{% if f.name == selected_folder %} selected{% endif %}{% if not (f.has_instance and f.has_schema) %} disabled{% endif %}>{{ f.name }} ({{ f.files }} files{% if not (f.has_instance and f.has_schema) %}; no .htm/.xsd{% endif %})</option>{% endfor %}</select></div>
+<div><label for="case_id">Case id <small>(optional)</small></label><input id="case_id" name="case_id" placeholder="e.g. HCA_FY2025" value="{{ case_id or '' }}"></div>
+<div>{% if agent_ok %}<label for="model">Pre-check Agent model</label><select id="model" name="model">{% for m in models %}<option value="{{ m }}"{% if m == selected_model %} selected{% endif %}>{{ m }}</option>{% endfor %}</select>{% else %}<span class="subtle">Pre-check Agent model</span><br><strong class="bad">Pre-check Agent not configured</strong>{% endif %}</div>
+<div><button class="primary-button" id="fo-run-button" type="submit"{% if not agent_ok %} disabled{% endif %}>Run</button></div>
+</form>
+<div class="fo-progress" id="fo-progress" role="status" aria-live="polite" hidden>
+<strong>Running the Financial Overview…</strong> <span class="subtle" id="fo-progress-time">0 s</span>
+<div class="track" aria-hidden="true"><div class="bar"></div></div>
+<div id="fo-progress-step"><strong>Starting…</strong></div>
+<details id="fo-progress-done-box" hidden><summary>Steps done (<span id="fo-progress-count">0</span>)</summary><ol id="fo-progress-done"></ol></details>
+<span class="subtle" id="fo-progress-detail">Reading the filing, then the Pre-check Agent (up to four model calls on <code id="fo-progress-model"></code>), then the measures. This usually takes 10–30 seconds; keep this page open.</span>
+<div style="margin-top:8px"><button type="button" id="fo-stop-button">Stop the analysis</button> <span class="subtle" id="fo-stop-note">Stops at the next step; a model call already under way finishes first. Nothing is recorded.</span></div>
+</div>
+<script>
+(function () {
+  var form = document.getElementById("fo-run-form");
+  if (!form) return;
+  var box = document.getElementById("fo-progress"), timer = null, poll = null;
+  var token = document.getElementById("fo-run-token").value;
+  function showProgress(p) {
+    if (!p || !p.step) return;
+    var step = document.getElementById("fo-progress-step");
+    step.textContent = "";
+    var label = document.createElement("strong");
+    label.textContent = "Step " + p.number + ": ";
+    step.appendChild(label);
+    step.appendChild(document.createTextNode(p.step));
+    var list = document.getElementById("fo-progress-done");
+    list.textContent = "";
+    p.done.forEach(function (d) { var li = document.createElement("li"); li.textContent = d; list.appendChild(li); });
+    document.getElementById("fo-progress-count").textContent = p.done.length;
+    document.getElementById("fo-progress-done-box").hidden = p.done.length === 0;
+  }
+  form.addEventListener("submit", function () {
+    var button = document.getElementById("fo-run-button"), model = document.getElementById("model");
+    document.getElementById("fo-progress-model").textContent = model ? model.value : "the configured model";
+    box.hidden = false;
+    if (button) { button.disabled = true; button.textContent = "Running…"; }
+    var start = Date.now(), time = document.getElementById("fo-progress-time");
+    timer = setInterval(function () { time.textContent = Math.round((Date.now() - start) / 1000) + " s"; }, 1000);
+    poll = setInterval(function () {
+      fetch("/fo/run/progress?run_token=" + encodeURIComponent(token))
+        .then(function (r) { return r.json(); }).then(showProgress).catch(function () {});
+    }, 1000);
+  });
+  var stop = document.getElementById("fo-stop-button");
+  stop.addEventListener("click", function () {
+    stop.disabled = true;
+    stop.textContent = "Stopping…";
+    document.getElementById("fo-stop-note").textContent = "Stop requested: the run ends after the current step.";
+    var body = new FormData();
+    body.append("run_token", document.getElementById("fo-run-token").value);
+    fetch("/fo/run/cancel", {method: "POST", body: body}).catch(function () {
+      stop.disabled = false;
+      stop.textContent = "Stop the analysis";
+      document.getElementById("fo-stop-note").textContent = "Couldn't reach the server to stop the run; try again.";
+    });
+  });
+  // Coming back with the browser's Back button: the run is over, so reset the form.
+  window.addEventListener("pageshow", function () {
+    if (timer) clearInterval(timer);
+    if (poll) clearInterval(poll);
+    box.hidden = true;
+    var button = document.getElementById("fo-run-button");
+    if (button && button.textContent === "Running…") { button.disabled = false; button.textContent = "Run"; }
+    stop.disabled = false;
+    stop.textContent = "Stop the analysis";
+  });
+})();
+</script>
+{% if agent_ok %}<p class="subtle">Models: the text-analysis models your Vertex key can use (checked with a free token count, refreshed every few hours); the default is <code>VERTEX_MODEL_NARROW</code> in <code>.env</code>. The pick applies to this run's four pre-checks only.{% if models_note %} <span class="warn">{{ models_note }}</span>{% endif %}</p>{% endif %}
+<p class="subtle">Leave the case id empty to use TICKER_FY&lt;year&gt; from the filing's cover page. Each run is recorded; earlier runs are kept. The Pre-check Agent always interprets the pre-checks: it reads the auditor's report for going concern, every covenant search hit, and the deal notes; the keyword rules only cross-check it.{% if not agent_ok %} <span class="bad">A run needs a live provider in <code>.env</code> (as BO's <code>--live</code>): {{ agent_reason }}</span>{% else %} Model cost per run: one going-concern call, one covenant call when the search hits, one acquisitions-and-divestitures call when a deal note or mention is found, and one prepaid-model call (Item 1 and the revenue note).{% endif %}</p>
+{% else %}
+<p>No filing folders found. Create <code>edgar_filings/</code> in the project root and add one sub-folder per 10-K holding its Inline XBRL files (the <code>.htm</code> document, <code>.xsd</code> schema and <code>_lab</code> / <code>_pre</code> / <code>_cal</code> linkbases), e.g. <code>edgar_filings/HCA 10-K FY2025/</code>.</p>
+{% endif %}
+<p class="subtle">Command line: <code>python -m app.cli run-fo-case [CASE_ID] --filing "HCA 10-K FY2025" --live</code> (or <code>--responses agent.json</code> offline)</p>
+</section>
+
+<section id="runs"><h2>Recorded runs</h2>
+{% if runs %}
+<div class="table-wrap"><table><thead><tr><th>Case</th><th>Company</th><th>Period end</th><th>Going concern</th><th>Covenants</th><th>Acquisitions</th><th>Prepaid model</th><th>Composite</th><th>Rating</th><th>Model</th><th>Run</th><th>Started</th><th>Status</th><th>Open</th></tr></thead><tbody>
+{% for r in runs %}<tr{% if view and r.run_id == view.run_id %} style="background:#eef3f8"{% endif %}><td>{{ r.case_id }}</td><td>{{ r.entity_name or r.filing_folder }}</td><td>{{ r.period_end or '' }}</td><td>{{ st(r.going_concern) if r.going_concern else '—' }}</td><td>{{ st(r.covenants) if r.covenants else '—' }}</td><td>{{ st(r.acquisitions) if r.acquisitions else '—' }}</td><td>{{ st(r.prepaid) if r.prepaid else '—' }}</td><td>{% if r.run_status == 'stopped' %}Not scored: going-concern fail{% elif r.run_status == 'awaiting_review' %}Awaiting decision{% else %}{{ r.composite_score if r.composite_score is not none else '—' }}{% endif %}</td><td>{{ r.credit_rating or '—' }}</td><td>{% if r.agent_model %}<code>{{ r.agent_model }}</code>{% else %}—{% endif %}</td><td><code>{{ r.run_id }}</code></td><td>{{ r.started_at }}</td><td>{{ st(r.run_status) }}</td><td><a href="/cases/{{ r.case_id }}/fo.html?run_id={{ r.run_id }}">Inspect</a></td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<p>No Financial Overview run has been recorded yet.</p>{% endif %}
+</section>
+
+{% if view %}
+{% set base = '/cases/' ~ view.case_id ~ '/fo/runs/' ~ view.run_id %}
+{% set o = view.overview %}
+<section id="filing"><h2>{{ o.meta.entity_name or view.filing_folder }} &mdash; run {{ view.run_id }}</h2>
+<dl>
+<dt>Case</dt><dd>{{ view.case_id }}</dd>
+<dt>Filing</dt><dd>{{ o.meta.document_type or '10-K' }}, period ending {{ o.meta.period_end or 'unknown' }} (fiscal year {{ o.meta.fiscal_year or '?' }}){% if o.meta.ticker %} · {{ o.meta.ticker }}{% endif %}{% if o.meta.cik %} · CIK {{ o.meta.cik }}{% endif %}</dd>
+<dt>Folder</dt><dd><code>edgar_filings/{{ o.filing.folder }}</code> · signature <code>{{ o.filing.signature[:16] }}</code></dd>
+<dt>Files used</dt><dd>{% for k, v in o.filing.files.items() %}{{ k }}: <code>{{ v }}</code>{{ ' · ' if not loop.last }}{% endfor %}</dd>
+<dt>Evidence</dt><dd>{{ o.filing.fact_count }} facts · {{ o.filing.context_count }} contexts · {{ o.filing.section_count }} presentation sections · {{ o.filing.working_capital_lines }} working-capital lines in the calculation linkbase</dd>
+<dt>Industry group</dt><dd>{% if o.industry.industry_group %}{{ o.industry.industry_group }} (matched by {{ o.industry.matched_by }} to {{ o.industry.ticker }} in {{ o.industry.mapping_file }}){% else %}Not classified. {{ o.industry.note }}{% endif %}</dd>
+<dt>Pre-check Agent model</dt><dd>{% if view.agent_model %}<code>{{ view.agent_model }}</code>{% else %}<span class="subtle">not recorded</span>{% endif %}</dd>
+<dt>Engine</dt><dd>{{ o.engine_version }} · reference data <code>{{ o.reference_hash[:16] }}</code> · run hash <code>{{ view.content_hash[:16] }}</code> {% if view.integrity_ok %}<span class="ok">verified</span>{% else %}<span class="bad">does not match the recorded payload</span>{% endif %}</dd>
+<dt>Run status</dt><dd>{{ st(view.run_status) }}</dd>
+<dt>Human review</dt><dd>{{ st(view.human_review_status) }}{% if view.review %} · {{ view.review.decision }} by {{ view.review.reviewer }} on {{ view.review.decided_at[:16]|replace('T', ' ') }}: {{ view.review.reason }}{% endif %}{% for ov in view.overrides %} · {{ ov.measure }}: {{ 'override to ' ~ ov.analyst_score if ov.decision == 'override' else 'engine score accepted' }} by {{ ov.reviewer }} on {{ ov.decided_at[:16]|replace('T', ' ') }}: {{ ov.reason }}{% endfor %}{% if view.human_review_status == 'pending' %} <span class="subtle">(nothing was escalated: no going-concern fail, no covenant breach and no unresolved deal)</span>{% endif %}</dd>
+</dl>
+{% set pending_override = o.gate.pending if o.gate.state in ['awaiting_override', 'awaiting_gc_decision'] else [] %}
+{% if o.gate.state in ['awaiting_gc_decision', 'awaiting_review'] or pending_override %}
+<div class="fo-gate" style="border-left:4px solid #EF4444;background:#fdf1f0;padding:12px 16px;border-radius:6px">
+<strong>&#9888; Waiting for an analyst.</strong> Each decision is in the agent check that raised it (marked &#9888; below):
+<ul style="margin:6px 0 0">{% if o.gate.state == 'awaiting_gc_decision' %}<li><a href="#review">Going concern: agent and verified evidence disagree</a></li>{% elif o.gate.state == 'awaiting_review' %}<li><a href="#review">Going concern: FAIL, continue or stop</a></li>{% endif %}{% for e in pending_override %}<li><a href="#override-{{ e.measure }}">{{ e.measure_name }}: {{ e.title or 'covenant breach' }}</a> · engine score {{ e.engine_score if e.engine_score is not none else 'none' }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% if o.settings.errors %}<p class="notice">{{ o.settings.errors|join(' ') }}</p>{% endif %}
+<div class="actions">{% if o.precheck %}<a href="#fo-precheck">Going concern</a>{% endif %}{% if o.covenants %}<a href="#fo-covenants">Covenants</a>{% endif %}{% if o.acquisitions %}<a href="#fo-acquisitions">Acquisitions</a>{% endif %}{% if o.prepaid %}<a href="#fo-prepaid">Prepaid model</a>{% endif %}{% if o.dscr_t2 %}<a href="#fo-dscr-t2">DSCR trigger T2</a>{% endif %}{% if o.dscr_t3 %}<a href="#fo-dscr-t3">DSCR trigger T3</a>{% endif %}{% if o.dscr_t1 %}<a href="#fo-dscr-t1">DSCR trigger T1</a>{% endif %}{% if o.icr_t2 %}<a href="#fo-icr-t2">ICR trigger T2</a>{% endif %}{% if o.icr_t3 %}<a href="#fo-icr-t3">ICR trigger T3</a>{% endif %}{% if o.icr_t1 %}<a href="#fo-icr-t1">ICR trigger T1</a>{% endif %}{% if o.leverage_t1 %}<a href="#fo-leverage-t1">Debt/EBITDAR trigger T1</a>{% endif %}{% if o.leverage_t2 %}<a href="#fo-leverage-t2">Debt/EBITDAR trigger T2</a>{% endif %}{% if o.leverage_t3 %}<a href="#fo-leverage-t3">Debt/EBITDAR trigger T3</a>{% endif %}{% if o.leverage_t4 %}<a href="#fo-leverage-t4">Debt/EBITDAR trigger T4</a>{% endif %}{% if o.rcf_t1 %}<a href="#fo-rcf-t1">RCF/Debt trigger T1</a>{% endif %}{% if o.rcf_t2 %}<a href="#fo-rcf-t2">RCF/Debt trigger T2</a>{% endif %}{% if o.rcf_t3 %}<a href="#fo-rcf-t3">RCF/Debt trigger T3</a>{% endif %}{% if o.rcf_t4 %}<a href="#fo-rcf-t4">RCF/Debt trigger T4</a>{% endif %}{% if o.margin_t1 %}<a href="#fo-margin-t1">EBITDAR Margin trigger T1</a>{% endif %}{% if o.margin_t2 %}<a href="#fo-margin-t2">EBITDAR Margin trigger T2</a>{% endif %}{% if o.dso_t1 %}<a href="#fo-dso-t1">DSO trigger T1</a>{% endif %}{% if o.liquidity_t1 %}<a href="#fo-liquidity-t1">Liquidity trigger T1</a>{% endif %}{% if o.liquidity_t2 %}<a href="#fo-liquidity-t2">Liquidity trigger T2</a>{% endif %}{% if o.liquidity_t3 %}<a href="#fo-liquidity-t3">Liquidity trigger T3</a>{% endif %}<a href="#fo-composite">Composite</a>{% for m in o.measures %}<a href="#fo-{{ m.key }}">{{ m.short }}</a>{% endfor %}</div>
+<p class="subtle">Downloads: <a href="{{ base }}/overview.json">overview JSON</a> · <a href="{{ base }}/overview.html">standalone scorecard HTML</a></p>
+<p class="subtle">{% if view.output_folder %}Saved files: <code>{{ view.output_folder }}</code> (financial_overview.json, financial_overview.html{% if (o.precheck and o.precheck.agent) or (o.covenants and o.covenants.agent) or (o.acquisitions and o.acquisitions.agent) or (o.prepaid and o.prepaid.agent) %}, precheck_transcript.json{% endif %}{% if view.review %}, review.json{% endif %}{% if view.overrides %}, overrides.json{% endif %}){% else %}No saved files for this run in this server's output folder (it may have been run with a different <code>--output</code>).{% endif %}</p>
+</section>
+{% set decision_run_id = view.run_id %}{% with view = o, decision_base = base %}{% include 'fo_scorecard.html.j2' %}{% endwith %}
+{% endif %}
+</main></body></html>
