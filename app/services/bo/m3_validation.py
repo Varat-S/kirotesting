@@ -103,6 +103,153 @@ def _identify_canonical_metric(claim_text: str) -> str | None:
     return next(iter(hits)) if len(hits) == 1 else None
 
 
+def _identified_metrics(text: str) -> set[str]:
+    """Every canonical metric a passage names (not just the unambiguous one).
+
+    Unlike :func:`_identify_canonical_metric`, which returns a single metric only
+    when exactly one is named, this reports the full set. It lets the
+    deterministic gate establish whether a claim and its cited passage talk about
+    the SAME metric before a difference in numbers is treated as a conflict.
+    """
+    blob = text.casefold()
+    return {metric_id for metric_id, aliases in _METRIC_ALIASES.items()
+            if any(alias in blob for alias in aliases)}
+
+
+# Scale/unit markers that make two bare numbers NON-comparable unless the scale
+# is the same. A claim in "$3 billion" and a passage reading "3000 (millions)"
+# describe the same magnitude but as different tokens; a blanket token-mismatch
+# rule would wrongly flag them. We therefore require a compatible scale before a
+# numeric difference may be read as a conflict, and never convert across scales
+# ourselves (no fabricated reconciliation).
+_SCALE_MARKERS = ("trillion", "billion", "million", "thousand", "bn", "mm")
+# Currency markers. USD vs SGD (etc.) are different measurement bases; a numeric
+# difference across currencies is not, by itself, a contradiction.
+_CURRENCY_MARKERS = ("usd", "sgd", "eur", "gbp", "jpy", "cny", "hkd", "aud", "€", "£", "¥")
+
+
+def _scales(text: str) -> set[str]:
+    blob = text.casefold()
+    return {m for m in _SCALE_MARKERS if m in blob}
+
+
+def _currencies(text: str) -> set[str]:
+    blob = text.casefold()
+    return {m for m in _CURRENCY_MARKERS if m in blob}
+
+
+# Reporting-scope vocabulary. A claim about a SUBSIDIARY, segment or standalone
+# entity is NOT on the same reporting scope as a CONSOLIDATED/group figure; a
+# value difference across scopes is not a contradiction (the subsidiary claim
+# simply stays unverified by the consolidated datum).
+_CONSOLIDATED_MARKERS = ("consolidated", "group ", "groupwide", "group-wide",
+                         "at the group")
+_SUBSIDIARY_MARKERS = ("subsidiary", "standalone", "stand-alone", "segment",
+                       "division", "operating company", "opco", "at the subsidiary",
+                       "entity level", "entity-level", "unconsolidated")
+
+
+def _claim_reporting_scope(claim_text: str) -> str | None:
+    """The reporting scope a claim asserts, if any: ``'consolidated'`` /
+    ``'subsidiary'`` / ``None`` (unstated). Conservative: a claim that names both
+    or neither returns ``None`` so scope is treated as UNKNOWN, never assumed.
+    """
+    blob = claim_text.casefold()
+    is_consol = any(m in blob for m in _CONSOLIDATED_MARKERS)
+    is_sub = any(m in blob for m in _SUBSIDIARY_MARKERS)
+    if is_consol and not is_sub:
+        return "consolidated"
+    if is_sub and not is_consol:
+        return "subsidiary"
+    return None
+
+
+def _scope_comparable(claim_text: str, datum_scope: str | None) -> tuple[bool, str]:
+    """Whether a claim and a canonical datum are on a comparable reporting scope.
+
+    Returns ``(comparable, reason_when_not)``. A subsidiary/standalone claim is
+    NOT comparable to a consolidated/group canonical datum. When the claim leaves
+    its scope unstated, scope is UNKNOWN: we do not assume equivalence, so a value
+    difference cannot be read as a contradiction (uncertainty is preserved).
+    """
+    datum_scope_norm = (datum_scope or "").casefold().strip()
+    claim_scope = _claim_reporting_scope(claim_text)
+    if claim_scope is None:
+        return (False, "the claim does not state its reporting scope, so it cannot "
+                       "be established to share the canonical metric's scope "
+                       f"({datum_scope_norm or 'unstated'}); equivalence is not assumed")
+    if not datum_scope_norm:
+        return (False, "the canonical metric's reporting scope is not recorded, so "
+                       "scope equivalence with the claim cannot be established")
+    # Treat 'group' as consolidated for comparison purposes.
+    datum_is_consol = datum_scope_norm in {"consolidated", "group"}
+    if claim_scope == "consolidated" and datum_is_consol:
+        return (True, "")
+    if claim_scope == "subsidiary" and not datum_is_consol:
+        return (True, "")
+    return (False, f"the claim is at the {claim_scope} level but the canonical "
+                   f"metric is reported on a {datum_scope_norm} basis; the two "
+                   "reporting scopes are not equivalent")
+
+
+def _comparable_basis(claim_text: str, passage_text: str) -> tuple[bool, str]:
+    """Whether a claim and a cited passage are on a comparable-enough basis for a
+    numeric difference between them to be read as a genuine contradiction.
+
+    The central rule: a different number is a contradiction ONLY when the two
+    statements are about the SAME metric, the SAME reporting period and a
+    compatible unit/currency/scale. This surface-level textual gate establishes
+    those preconditions conservatively; when it cannot, it returns ``False`` and
+    the caller downgrades to UNSUPPORTED rather than CONTRADICTED.
+
+    Returns ``(comparable, reason_when_not_comparable)``.
+    """
+    claim_metrics = _identified_metrics(claim_text)
+    passage_metrics = _identified_metrics(passage_text)
+    # Metric identity: both must name a metric and share at least one. If either
+    # side names no recognised metric, or they share none, we cannot establish
+    # that the numbers describe the same quantity.
+    if not claim_metrics or not passage_metrics:
+        return (False, "the metric of the claim and/or the cited passage could "
+                       "not be identified, so a numeric difference cannot be "
+                       "attributed to the same quantity")
+    if not (claim_metrics & passage_metrics):
+        return (False, f"the claim concerns {sorted(claim_metrics)} but the cited "
+                       f"passage concerns {sorted(passage_metrics)}; a different "
+                       "number describes a different metric, not a conflict")
+    # Period identity: if the claim names a period, the passage must assert the
+    # same one. A different fiscal period does not, by itself, disprove the claim.
+    claim_periods = {p.upper().replace(" ", "") for p in _PERIOD_RE.findall(claim_text)}
+    passage_periods = {p.upper().replace(" ", "") for p in _PERIOD_RE.findall(passage_text)}
+    if claim_periods and passage_periods and not (claim_periods & passage_periods):
+        return (False, f"the claim concerns period(s) {sorted(claim_periods)} but "
+                       f"the cited passage concerns {sorted(passage_periods)}; a "
+                       "different period is not a conflicting assertion")
+    # Scale/unit compatibility: a difference in stated scale (millions vs
+    # billions) or currency is not reconciled here, so a numeric difference
+    # across them is not treated as a conflict.
+    claim_scales, passage_scales = _scales(claim_text), _scales(passage_text)
+    if claim_scales and passage_scales and claim_scales != passage_scales:
+        return (False, f"the claim is stated in {sorted(claim_scales)} but the "
+                       f"cited passage in {sorted(passage_scales)}; the magnitudes "
+                       "are not on a comparable scale and are not converted here")
+    claim_ccy, passage_ccy = _currencies(claim_text), _currencies(passage_text)
+    if claim_ccy and passage_ccy and claim_ccy != passage_ccy:
+        return (False, f"the claim is in {sorted(claim_ccy)} but the cited passage "
+                       f"in {sorted(passage_ccy)}; a cross-currency difference is "
+                       "not a conflict without an established conversion")
+    # Reporting-scope identity: a subsidiary/standalone claim and a consolidated/
+    # group passage are different scopes; a value difference across them is not a
+    # conflict. When either side leaves scope unstated we do not assume equality.
+    claim_scope = _claim_reporting_scope(claim_text)
+    passage_scope = _claim_reporting_scope(passage_text)
+    if claim_scope and passage_scope and claim_scope != passage_scope:
+        return (False, f"the claim is at the {claim_scope} level but the cited "
+                       f"passage at the {passage_scope} level; a value difference "
+                       "across reporting scopes is not a conflict")
+    return (True, "")
+
+
 def _canonical_financial_checks(
     item: dict[str, Any], claim_text: str, *,
     canonical_metrics: dict[str, dict[str, Any]],
@@ -127,6 +274,27 @@ def _canonical_financial_checks(
     datum = canonical_metrics[metric_id]
     checks: list[DeterministicCheck] = []
 
+    # Reporting-scope comparability (Problem B). A value difference may be read as
+    # a CONTRADICTION only when the claim and the canonical datum share the same
+    # reporting scope. A subsidiary/standalone claim is NOT contradicted by a
+    # consolidated/group figure, and an unstated claim scope is UNKNOWN (never
+    # assumed equivalent). When scope is not comparable the value/period mismatch
+    # is downgraded to UNSUPPORTED (contradiction=False), preserving uncertainty.
+    scope_comparable, scope_reason = _scope_comparable(
+        claim_text, datum.get("reporting_scope"))
+    # Currency comparability. A claim in a currency other than the canonical
+    # datum's cannot be contradicted without an established conversion.
+    datum_ccy = {str(datum.get("currency")).casefold()} if datum.get("currency") else set()
+    claim_ccy = _currencies(claim_text)
+    ccy_comparable = not (claim_ccy and datum_ccy and not (claim_ccy & datum_ccy))
+    ccy_reason = (f"the claim is in {sorted(claim_ccy)} but the canonical metric "
+                  f"in {sorted(datum_ccy)}; a cross-currency difference is not a "
+                  "conflict without an established conversion")
+    # A difference may be a contradiction only on a fully comparable basis.
+    basis_comparable = scope_comparable and ccy_comparable
+    basis_reason = scope_reason if not scope_comparable else (
+        ccy_reason if not ccy_comparable else "")
+
     # pp vs % confusion — not machine-reconcilable; flag for review (no auto-pass).
     if _percentage_point_confusion(claim_text):
         checks.append(DeterministicCheck(
@@ -137,6 +305,9 @@ def _canonical_financial_checks(
             contradiction=False))
 
     # Fiscal period: if the claim names a period, it must match the canonical one.
+    # A period mismatch is only a CONTRADICTION on an otherwise comparable basis;
+    # otherwise it is UNSUPPORTED (a different-scope/currency datum does not
+    # disprove the claim's period).
     claimed_periods = {p.upper().replace(" ", "") for p in _PERIOD_RE.findall(claim_text)}
     datum_period = (datum.get("period") or "")
     datum_period_norm = datum_period.upper().replace(" ", "")
@@ -145,8 +316,10 @@ def _canonical_financial_checks(
             checks.append(DeterministicCheck(
                 name="canonical_fiscal_period_match", passed=False,
                 detail=(f"claim period {sorted(claimed_periods)} does not match the "
-                        f"canonical metric period {datum_period!r}"),
-                contradiction=True))
+                        f"canonical metric period {datum_period!r}"
+                        + ("" if basis_comparable
+                           else f"; not treated as a conflict because {basis_reason}")),
+                contradiction=basis_comparable))
 
     # Numerical value within tolerance (only when the claim states a number and
     # the canonical datum carries one). Percentages are compared as given.
@@ -166,13 +339,19 @@ def _canonical_financial_checks(
             tol = max(abs(datum_value) * 0.02, 0.5)
             return abs(claimed - float(datum_value)) <= tol
         if not any(_matches(n) for n in claimed_numbers):
+            # A value difference is a CONTRADICTION only on a demonstrably
+            # equivalent basis (same reporting scope and compatible currency);
+            # otherwise the claim is merely UNSUPPORTED by this datum.
             checks.append(DeterministicCheck(
                 name="canonical_numerical_value_match", passed=False,
                 detail=(f"claimed value(s) {claimed_numbers} do not match the "
                         f"canonical metric value {datum_value} (unit="
-                        f"{datum.get('units')!r}, period={datum_period!r}) within "
-                        "tolerance on a comparable basis"),
-                contradiction=True))
+                        f"{datum.get('units')!r}, period={datum_period!r}, scope="
+                        f"{datum.get('reporting_scope')!r})"
+                        + (" within tolerance on a comparable basis"
+                           if basis_comparable
+                           else f"; not treated as a conflict because {basis_reason}")),
+                contradiction=basis_comparable))
 
     return tuple(checks)
 
@@ -187,33 +366,42 @@ def _deterministic_claim_checks(
     disposition — citation-id existence is NOT entailment). No live model is
     called.
 
-    CRITICAL distinction (Priority 2): absence of support is NOT contradiction.
+    CRITICAL distinction (Priority 2): absence of support is NOT contradiction,
+    and a different number is NOT a contradiction unless the two statements are
+    on a comparable basis (same metric, period and compatible unit/currency/
+    scale). The central rule governs when CONTRADICTED may be used.
 
-    * A claimed value/period that is simply ABSENT from the cited evidence, with
-      NO conflicting value of the same token class present, fails with
+    * A claimed value/period simply ABSENT from the cited evidence fails with
       ``contradiction=False`` -> the caller downgrades to ``unverified``
-      (UNSUPPORTED). The cited passage does not substantiate the claim, but it
-      does not establish a conflicting fact either.
-    * A claimed value/period that is ABSENT while the cited evidence DOES assert
-      a DIFFERENT value of the same class (a different number when the claim
-      asserts a number; a different fiscal period when the claim asserts a
-      period) fails with ``contradiction=True`` -> the caller rejects it
-      (CONTRADICTED). Only here does admitted evidence conflict with the claim.
+      (UNSUPPORTED). The cited passage does not substantiate the claim; it does
+      not establish a conflicting fact either.
+    * A claimed value that is ABSENT while the cited evidence asserts a DIFFERENT
+      value FOR THE SAME METRIC, PERIOD and compatible unit/currency/scale fails
+      with ``contradiction=True`` -> the caller rejects it (CONTRADICTED). Only a
+      directly conflicting assertion on a comparable basis qualifies. A different
+      number for a different metric/period/scale is UNSUPPORTED, not a conflict.
+    * A claimed fiscal period that is absent is UNSUPPORTED (``contradiction=
+      False``): a citation covering a different period does not disprove a claim
+      about another period.
 
-    This is a conservative, surface-level token check. It does not establish
-    metric identity, entity, accounting basis or units, nor does it prove
-    semantic entailment or causation; those stay with the richer canonical
-    checks and with human review.
+    This is a conservative, surface-level textual gate. Comparability is
+    established only from metric/period/unit vocabulary present in the texts; it
+    does not establish entity, accounting basis or units with certainty, nor does
+    it prove semantic entailment or causation. The richer canonical checks and
+    human review carry anything this gate cannot settle.
     """
     corpus = " ".join(
         evidence_texts.get(eid, "") for eid in evidence_ids if eid in evidence_texts)
     if not corpus.strip():
         return ()
     corpus_numbers = {_normalise_number(t) for t in _NUMBER_RE.findall(corpus)}
-    corpus_periods = {p.upper().replace(" ", "") for p in _PERIOD_RE.findall(corpus)}
     checks: list[DeterministicCheck] = []
 
+    # Only a directly comparable claim/passage may yield a numeric CONTRADICTED.
+    comparable, incomparable_reason = _comparable_basis(claim_text, corpus)
+
     claimed_periods = {p.upper().replace(" ", "") for p in _PERIOD_RE.findall(claim_text)}
+    corpus_periods = {p.upper().replace(" ", "") for p in _PERIOD_RE.findall(corpus)}
     # Numbers in the claim that are not themselves a period token.
     claimed_numbers = {
         _normalise_number(t) for t in _NUMBER_RE.findall(claim_text)
@@ -221,16 +409,30 @@ def _deterministic_claim_checks(
             p.lstrip("FYQ") for p in claimed_periods}
     }
     for number in sorted(claimed_numbers):
-        present = number in corpus_numbers
-        # A conflicting number of the same class is present only when the cited
-        # corpus asserts SOME number but not the claimed one. Absence of any
-        # number is UNSUPPORTED, not CONTRADICTED.
-        conflicting = (not present) and bool(corpus_numbers)
+        # A claimed number counts as SUPPORTED only when it is present in the
+        # cited text AND that text is on a comparable basis (same metric/period/
+        # unit). A coincidental token match for a DIFFERENT metric is NOT support.
+        token_present = number in corpus_numbers
+        present = token_present and comparable
+        # A conflicting number is recorded ONLY when the cited corpus asserts a
+        # DIFFERENT number AND the two statements are on a comparable basis.
+        # Absence of any number, or a difference across metric/period/scale, is
+        # UNSUPPORTED — never CONTRADICTED.
+        conflicting = (not token_present) and bool(corpus_numbers) and comparable
         if present:
             detail = ""
+        elif token_present and not comparable:
+            detail = (f"claimed value {number} appears in the cited evidence but "
+                      f"that figure is not on a comparable basis ({incomparable_reason}), "
+                      "so a coincidental token match does not establish support")
         elif conflicting:
             detail = (f"claimed value {number} conflicts with the value(s) "
-                      f"{sorted(corpus_numbers)} in the cited evidence")
+                      f"{sorted(corpus_numbers)} asserted for the same metric and "
+                      "period on a comparable basis in the cited evidence")
+        elif corpus_numbers and not comparable:
+            detail = (f"claimed value {number} is not substantiated by the cited "
+                      f"evidence; the other value(s) {sorted(corpus_numbers)} are "
+                      f"not a conflicting assertion because {incomparable_reason}")
         else:
             detail = (f"claimed value {number} is not substantiated by the cited "
                       "evidence (absent; no conflicting value present)")
@@ -239,18 +441,18 @@ def _deterministic_claim_checks(
             detail=detail, contradiction=conflicting))
     for period in sorted(claimed_periods):
         present = period in corpus_periods
-        conflicting = (not present) and bool(corpus_periods)
+        # A different fiscal period in a citation does not, by itself, disprove a
+        # claim about another period: an absent claimed period is UNSUPPORTED,
+        # never CONTRADICTED.
         if present:
             detail = ""
-        elif conflicting:
-            detail = (f"claimed period {period} conflicts with the period(s) "
-                      f"{sorted(corpus_periods)} in the cited evidence")
         else:
             detail = (f"claimed period {period} is not substantiated by the cited "
-                      "evidence (absent; no conflicting period present)")
+                      "evidence; a citation covering a different period does not "
+                      "disprove a claim about this period")
         checks.append(DeterministicCheck(
             name="fiscal_period_present_in_cited_evidence", passed=present,
-            detail=detail, contradiction=conflicting))
+            detail=detail, contradiction=False))
     return tuple(checks)
 
 

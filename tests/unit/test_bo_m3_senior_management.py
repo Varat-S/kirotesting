@@ -98,10 +98,17 @@ def test_contradicted_numeric_value_is_rejected_not_accepted():
                for i in governed.validation_issues)
 
 
-def test_mismatched_reporting_period_is_rejected():
+def test_mismatched_reporting_period_is_unsupported_not_contradicted():
+    # A citation covering a DIFFERENT fiscal period (FY2024) does not disprove a
+    # claim about another period (FY2023). Under the central rule a different
+    # period is not, by itself, a conflicting assertion -> UNSUPPORTED, not
+    # rejected. (Corrects an earlier test that treated a period mismatch as a
+    # contradiction.)
     governed = _govern(_management(hypothesis="Leverage fell in FY2023."),
                        evidence_texts={"ev-1": "Leverage fell in FY2024."})
-    assert governed.management_assessments[0].disposition.value == "rejected"
+    obs = governed.management_assessments[0]
+    assert obs.disposition.value == "unverified"
+    assert obs.disposition.value != "rejected"
 
 
 def test_numerical_discrepancy_downgrades_even_with_valid_citation():
@@ -231,12 +238,13 @@ def test_validator_outcomes_accepted_qualified_rejected_human_review():
                     hypothesis="The CEO is well qualified.",
                     credit_mechanism="Reported qualifications over a long career."),  # qualified
         _management(observation_id="C", management_id="m-c",
-                    hypothesis="Revenue was 99% in FY2024."),  # rejected (contradicted)
+                    hypothesis="Revenue grew 99% in FY2024."),  # rejected (contradicted)
         _management(observation_id="D", management_id="m-d",
                     supporting_evidence_ids=["ev-unknown"]),  # unverified / invalid ref
-        # The cited evidence asserts a DIFFERENT value for C (a genuine
-        # contradiction, not mere absence), so C is rejected; A/B/D unchanged.
-        evidence_texts={"ev-1": "Revenue was 12% in FY2024; the CFO reduced net "
+        # The cited evidence asserts a DIFFERENT value for C on a COMPARABLE basis
+        # (same metric 'revenue growth', same FY2024 period: 12% vs the claimed
+        # 99%), so C is a genuine contradiction -> rejected; A/B/D unchanged.
+        evidence_texts={"ev-1": "Revenue grew 12% in FY2024; the CFO reduced net "
                                 "leverage as planned."})
     by_id = {m.observation_id: m.disposition.value
              for m in governed.management_assessments}
