@@ -86,6 +86,51 @@ Not validated: model quality beyond one model and one filing, the logical
 correctness of accepted findings (checks are lexical and structural), and the
 full BO path (orchestrator, challenger, memo) on HCA with a live model.
 
+### Module 4 specialist (debt structure, refinancing & stewardship)
+
+Module 4 is an **independent specialist** from the Business Overview
+Architecture (V5): Debt Structure, Refinancing History & Financial Stewardship.
+It reads the shared SEC 10-K and structured financial data and produces its own
+four deliverables. It does **not** consume the outputs of Modules 1/2/3
+(cross-module synthesis is a separate downstream concern) and it does **not**
+draft loan term sheets, covenants or security agreements (that belongs to the
+downstream Risk Mitigation & Structuring agent).
+
+The four schema-validated deliverables are:
+
+1. **Existing Debt & Creditor Priority Map** — itemized senior-notes and
+   non-note obligation schedules plus a creditor-priority / structural-
+   subordination framework (Tier 1 direct OpCo secured, Tier 2 senior unsecured
+   with upstream guarantees, Tier 3 unguaranteed HoldCo), the Structural
+   Subordination Drag Ratio, and prospective bank-loan placement under both a
+   secured and a senior-unsecured assumption.
+2. **Historical Refinancing & Debt Maturity Analysis** — an itemized refinancing
+   log plus the refinancing metrics (weighted-average lead time τ_ref, cost
+   spread delta ΔS, maturity-extension horizon ΔT, distress-event count).
+3. **Debt Utilisation & Financial Stewardship Assessment** — a macro capital-
+   deployment reconciliation and a three-pillar stewardship matrix.
+4. **Module 4 Credit Conclusion** — an evidence-driven synthesis matrix and an
+   executive credit summary box.
+
+Deliverables and columns are Pydantic + JSON Schema contracts in
+`app/schemas/module4.py`; the versioned agent prompt lives in
+`app/services/modules/module4/prompt.py` (registered in the prompt catalogue and
+driven via the existing `analyze` method, like the other BO specialist prompts);
+and `app/services/modules/module4/specialist.py` orchestrates the LLM call with
+fixed-schema validation before use.
+
+**Validator 8** (`app/services/modules/module4/validator8.py`) is a pure,
+deterministic re-check of the agent's output — it never calls an LLM. It covers
+five checks: (1) debt-tranche reconciliation to reported total indebtedness,
+(2) subordination-ratio recomputation, (3) chronological maturity ordering,
+(4) legal-entity / borrower-vs-guarantor attribution (e.g. an OpCo issuer
+distinct from its HoldCo guarantor), and (5) double-counting prevention (undrawn
+revolver limits and intercompany borrowings are excluded from totals). A
+Validator 8 failure raises a mandatory escalation rather than producing silent
+prose. Tests exercise the agent and validator against the HCA Healthcare FY2025
+10-K fixture (`tests/fixtures/hca_module4.py`), which reconciles to the reported
+$46,492M total indebtedness.
+
 ## Sector benchmarking (medical devices)
 
 A case can opt into contextual industry benchmarking by adding

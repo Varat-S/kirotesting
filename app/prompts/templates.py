@@ -70,6 +70,7 @@ from app.schemas.llm import (
     HYPOTHESIS_TESTING_JSON_SCHEMA,
     MODULE_RED_CHALLENGE_JSON_SCHEMA,
 )
+from app.services.modules.module4.prompt import MODULE4_PROMPT
 
 # Role identifiers map a prompt to the LLMClient method it drives.
 ROLE_EXTRACT = "extract"
@@ -490,4 +491,7 @@ PROMPT_CATALOGUE: list[dict] = [
         "response_schema": MODULE_RED_CHALLENGE_JSON_SCHEMA,
         "label": "Independent RED challenge prompt (Stage 13)",
     },
+    # Module 4 debt-structure specialist (independent; driven via ``analyze``
+    # with ``prompt_name="module4_debt_structure_specialist"``).
+    MODULE4_PROMPT,
 ]
