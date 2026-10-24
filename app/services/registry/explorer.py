@@ -175,11 +175,31 @@ def load_artifact(
     if not path.is_file():
         raise ArtifactAccessError(f"artifact file missing: {entry.file_location}")
     payload = json.loads(path.read_text(encoding="utf-8"))
-    # Per-agent entries index a slice of a shared recorded file (the BO audit).
-    # Return THAT agent's recorded output, not the whole audit report.
+    # Entries that index a slice of a shared recorded file (BO audit or memo)
+    # return THAT producer's own recorded output, not the whole file.
     if entry.audit_subpath:
-        payload = _extract_agent_slice(payload, entry)
+        payload = _extract_slice(payload, entry)
     return payload, manifest
+
+
+def _extract_slice(doc: Any, entry) -> Any:
+    """Resolve an ``audit_subpath`` to the producer's own recorded slice.
+
+    Two forms: ``agents[agent_id=<id>]`` (per-agent / synthesis / challenger from
+    the audit) or a dotted path (e.g. ``module_conclusions.M4.m4_debt_assessment``,
+    ``final_conclusion``, ``evidence_snapshot``) into the memo or audit.
+    """
+    subpath = entry.audit_subpath or ""
+    if subpath.startswith("agents[agent_id="):
+        return _extract_agent_slice(doc, entry)
+    node: Any = doc
+    for part in subpath.split("."):
+        if isinstance(node, dict) and part in node:
+            node = node[part]
+        else:
+            return {"error": f"recorded slice '{subpath}' not found",
+                    "artifact_id": entry.artifact_id}
+    return node
 
 
 def load_artifact_bytes(
@@ -341,8 +361,10 @@ def inspect_node(
         "evidence_ids": list(entry.evidence_ids),
     }
 
-    if not entry.file_location:
-        # Absent/skipped/failed-without-file: report the reason, never fabricate.
+    from app.schemas.artifact_manifest import ExecutionStatus
+    if not entry.file_location or entry.status in (
+            ExecutionStatus.ABSENT, ExecutionStatus.SKIPPED):
+        # Absent/skipped: report the reason, never fabricate or load a payload.
         return info
 
     # Original-bytes hash only for whole-file artifacts (slices have no own file).

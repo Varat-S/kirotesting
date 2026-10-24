@@ -152,6 +152,17 @@ class ArtifactEntry(BaseModel):
     # (e.g. one agent inside ``audit_report.json``): a human-readable locator.
     audit_subpath: Optional[str] = None
 
+    # Financial Overview facets (populated for FO artifacts). A composite/rating
+    # awaiting human approval is explicitly ``rating_provisional`` — the score is
+    # retained, but it must not be presented as final.
+    rating_provisional: bool = False
+    composite_score: Optional[float] = None
+    credit_rating: Optional[str] = None
+    risk_level: Optional[str] = None
+    fo_measures: list[str] = Field(default_factory=list)
+    fo_triggers_fired: list[str] = Field(default_factory=list)
+    fo_prechecks: list[str] = Field(default_factory=list)
+
     # Model / prompt provenance (when applicable).
     model_id: Optional[str] = None
     prompt_version: Optional[str] = None

@@ -1042,7 +1042,7 @@
 {% set c = view.composite %}
 {% if gate.show_composite %}
 <section id="fo-composite"><h2>Composite risk score{% if gate.provisional %} <span class="warn">(provisional)</span>{% elif c.after_override %} <span class="subtle">(after the analyst's decision)</span>{% endif %}</h2>
-{% if gate.provisional %}<p class="notice">Provisional: awaiting the analyst's decision on {% if gate.gc_decision %}going concern (keep the verified result or side with the agent's FAIL){{ ' and ' if gate.pending }}{% endif %}{% for e in gate.pending %}{{ e.measure_name }}{{ ', ' if not loop.last }}{% endfor %}{% if gate.pending %} (accept the engine's score or override it){% endif %}.</p>{% endif %}
+{% if gate.provisional and gate.awaiting_approval %}<p class="notice">{{ gate.message }}</p>{% elif gate.provisional %}<p class="notice">Provisional: awaiting the analyst's decision on {% if gate.gc_decision %}going concern (keep the verified result or side with the agent's FAIL){{ ' and ' if gate.pending }}{% endif %}{% for e in gate.pending %}{{ e.measure_name }}{{ ', ' if not loop.last }}{% endfor %}{% if gate.pending %} (accept the engine's score or override it){% endif %}.</p>{% endif %}
 <div class="fo-headline">
   <span class="fo-big"><span class="risk {{ c.css }}">{{ c.text }}</span>{% if c.label %} <span class="subtle">/ 10</span>{% endif %}</span>
   {% if c.rating %}<span class="fo-rating">{{ c.rating }}</span>{% endif %}

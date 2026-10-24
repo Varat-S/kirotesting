@@ -381,6 +381,163 @@ def _index_bo_agents(
     return entries
 
 
+def _module_status(status: Any) -> ExecutionStatus:
+    """Map a recorded module/validator/assessment status string onto the taxonomy."""
+    s = str(status or "").lower()
+    if s in {"validated", "complete", "completed", "accepted", "pass", "passed"}:
+        return ExecutionStatus.VALIDATED
+    if s in {"qualified", "accepted_with_qualification"}:
+        return ExecutionStatus.QUALIFIED
+    if s in {"failed", "rejected", "fail"}:
+        return ExecutionStatus.FAILED
+    if s in {"unavailable", "not_run", "not_executed", "absent"}:
+        return ExecutionStatus.ABSENT
+    if s in {"skipped"}:
+        return ExecutionStatus.SKIPPED
+    if s in {"incomplete", "partial"}:
+        return ExecutionStatus.INCOMPLETE
+    return ExecutionStatus.INCOMPLETE
+
+
+def _index_bo_module_artifacts(
+    memo: dict, audit: dict, run_dir: Path, root: Path, case_id: str, run_id: str
+) -> list[ArtifactEntry]:
+    """Extract the governed module/validator/governance/snapshot records.
+
+    These are the already-persisted outputs that live inside the memo's
+    ``module_conclusions`` and the audit (M4 debt assessment + its Validator 8,
+    the M4 strategy Validator 8, Validator 7, final governance, canonical
+    snapshot). Only stages that ACTUALLY executed and were persisted are indexed;
+    an absent stage is either omitted or recorded ``absent`` with a reason — never
+    fabricated. Each entry points into the recorded memo/audit file via
+    ``audit_subpath`` so it is inspectable from its Pipeline Explorer node.
+    """
+    entries: list[ArtifactEntry] = []
+    memo_loc = _rel(run_dir / "business_overview.json", root)
+    audit_loc = _rel(run_dir / "audit_report.json", root)
+    mc = memo.get("module_conclusions") if isinstance(
+        memo.get("module_conclusions"), dict) else {}
+
+    # --- M4: debt assessment + debt Validator 8 + strategy Validator 8 -------
+    m4 = mc.get("M4") if isinstance(mc.get("M4"), dict) else {}
+    debt = m4.get("m4_debt_assessment") if isinstance(
+        m4.get("m4_debt_assessment"), dict) else None
+    if debt is not None:
+        status = _module_status(debt.get("status"))
+        entries.append(ArtifactEntry(
+            artifact_id=f"bo.m4_debt.{run_id}",
+            artifact_type=ArtifactType.MODULE_OUTPUT,
+            case_id=case_id, run_id=run_id, producer_module="M4",
+            producer_agent="module4_debt_structure_specialist",
+            schema_name=debt.get("version"),
+            file_location=memo_loc, audit_subpath="module_conclusions.M4.m4_debt_assessment",
+            status=status,
+            status_reason=debt.get("reason"),
+            validation_status=("validated" if debt.get("validated") else "failed"),
+            evidence_ids=[str(e) for e in (debt.get("evidence_ids") or [])],
+            escalations=[debt["escalation_id"]] if debt.get("escalation_id") else [],
+            model_invoked=debt.get("model_invoked"),
+        ))
+        # The debt Validator 8 report (deterministic, five checks).
+        report = debt.get("validator_report") if isinstance(
+            debt.get("validator_report"), dict) else None
+        if report is not None:
+            passed = report.get("passed")
+            entries.append(ArtifactEntry(
+                artifact_id=f"bo.validator8_debt.{run_id}",
+                artifact_type=ArtifactType.VALIDATION_REPORT,
+                case_id=case_id, run_id=run_id, producer_module="M4",
+                producer_validator=debt.get("validator_id") or "validator_8_debt_structure",
+                file_location=memo_loc,
+                audit_subpath="module_conclusions.M4.m4_debt_assessment.validator_report",
+                status=(ExecutionStatus.VALIDATED if passed else ExecutionStatus.FAILED),
+                validation_status=("validated" if passed else "failed"),
+                validator_issues_count=len(debt.get("validator_issues") or []),
+                depends_on=[f"bo.m4_debt.{run_id}"],
+            ))
+
+    # Strategy Validator 8 = the m4_strategy_capital agent's own validation, read
+    # from the recorded audit agent block (validator_id declared in roster v3).
+    strat_agent = next(
+        (a for a in (audit.get("agents") or []) if isinstance(a, dict)
+         and a.get("agent_id") == "m4_strategy_capital"), None)
+    if strat_agent is not None:
+        runs = strat_agent.get("runs") or []
+        vstat = runs[-1].get("validation_status") if runs else None
+        entries.append(ArtifactEntry(
+            artifact_id=f"bo.validator8_strategy.{run_id}",
+            artifact_type=ArtifactType.VALIDATION_REPORT,
+            case_id=case_id, run_id=run_id, producer_module="M4",
+            producer_validator="validator_8",
+            file_location=audit_loc,
+            audit_subpath="agents[agent_id=m4_strategy_capital]",
+            status=_bo_status_from_audit(strat_agent.get("status"), vstat),
+            validation_status=vstat,
+            validator_issues_count=len(strat_agent.get("validation_issues") or []),
+            depends_on=[f"bo.agent.m4_strategy_capital.{run_id}"],
+        ))
+
+    # --- Validator 7 (M3 numeric binding) ------------------------------------
+    m3 = mc.get("M3") if isinstance(mc.get("M3"), dict) else {}
+    if "m3_assessment_status" in m3:
+        v7_status = str(m3.get("m3_assessment_status") or "")
+        entries.append(ArtifactEntry(
+            artifact_id=f"bo.validator7.{run_id}",
+            artifact_type=ArtifactType.VALIDATION_REPORT,
+            case_id=case_id, run_id=run_id, producer_module="M3",
+            producer_validator="validator_7",
+            file_location=memo_loc, audit_subpath="module_conclusions.M3.m3_assessment",
+            status=_module_status(v7_status),
+            status_reason=(None if v7_status == "validated"
+                           else "M3 assessment unavailable; Validator 7 did not bind numeric evidence"),
+            validation_status=v7_status or None,
+            depends_on=[f"bo.agent.m3_corporate_management.{run_id}"],
+        ))
+
+    # --- Final deterministic governance --------------------------------------
+    fc = audit.get("final_conclusion") if isinstance(audit.get("final_conclusion"), dict) else None
+    memo_status = memo.get("status") if isinstance(memo.get("status"), dict) else {}
+    conclusion_status = audit.get("conclusion_status") or memo_status.get("conclusion_status")
+    if fc is not None or conclusion_status:
+        review = str(memo_status.get("human_review_status") or "").lower()
+        status = _module_status(conclusion_status)
+        # A governed conclusion pending human review is qualified, not validated.
+        if status == ExecutionStatus.VALIDATED and review == "pending":
+            status = ExecutionStatus.QUALIFIED
+        entries.append(ArtifactEntry(
+            artifact_id=f"bo.governance.{run_id}",
+            artifact_type=ArtifactType.MODULE_OUTPUT,
+            case_id=case_id, run_id=run_id, producer_module="BO",
+            producer_agent="final_governance",
+            file_location=audit_loc, audit_subpath="final_conclusion",
+            status=status,
+            status_reason=memo_status.get("text"),
+            validation_status=conclusion_status,
+            human_review_status=(HumanReviewStatus.PENDING if review == "pending"
+                                 else HumanReviewStatus.ACCEPTED if review == "accepted"
+                                 else HumanReviewStatus.NOT_REQUIRED),
+            depends_on=[f"bo.challenger.{run_id}"],
+        ))
+
+    # --- Canonical evidence snapshot -----------------------------------------
+    snap = audit.get("evidence_snapshot") if isinstance(audit.get("evidence_snapshot"), dict) else None
+    if snap is not None:
+        ver = snap.get("snapshot_version")
+        entries.append(ArtifactEntry(
+            artifact_id=f"bo.snapshot.{run_id}",
+            artifact_type=ArtifactType.EVIDENCE_SNAPSHOT,
+            case_id=case_id, run_id=run_id, producer_module="BO",
+            producer_agent="canonical_evidence_snapshot",
+            schema_name=snap.get("schema_version"),
+            content_hash=snap.get("content_hash"),
+            file_location=audit_loc, audit_subpath="evidence_snapshot",
+            source_evidence_snapshot=(f"{case_id}@v{ver}" if ver is not None else None),
+            status=ExecutionStatus.VALIDATED,
+            validation_status="recorded",
+        ))
+    return entries
+
+
 def _index_bo_run(run_dir: Path, root: Path, case_id: str) -> list[ArtifactEntry]:
     run_id = run_dir.name
     entries: list[ArtifactEntry] = []
@@ -424,26 +581,149 @@ def _index_bo_run(run_dir: Path, root: Path, case_id: str) -> list[ArtifactEntry
     audit = _load_json(run_dir / "audit_report.json")
     if isinstance(audit, dict):
         entries.extend(_index_bo_agents(audit, run_dir, root, case_id, run_id))
+    # Governed module / validator / governance / snapshot records from the memo
+    # + audit (M4 debt + validators 7/8, final governance, canonical snapshot).
+    memo = _load_json(run_dir / "business_overview.json")
+    if isinstance(memo, dict) and isinstance(audit, dict):
+        entries.extend(_index_bo_module_artifacts(
+            memo, audit, run_dir, root, case_id, run_id))
     return entries
+
+
+def _fo_run_state(payload: dict) -> tuple[str, str]:
+    """(run_status, human_review_status) derived from the FO payload.
+
+    Mirrors ``app.services.fo.runner.run_state`` without importing it, so the
+    registry reads the FO payload the same way the producer does: an escalated
+    run (open escalations, or a going-concern fail flagged for review) awaits an
+    analyst; otherwise it is completed and pending the standard human approval.
+    """
+    escalated = payload.get("escalations")
+    if escalated is None:
+        escalated = (((payload.get("precheck") or {}).get("going_concern") or {})
+                     .get("review_required"))
+    if escalated:
+        return "awaiting_review", "escalated"
+    return "completed", "pending"
+
+
+def _fo_overview_status(payload: dict) -> tuple[ExecutionStatus, Optional[str], str, bool]:
+    """Map a completed/scored FO payload onto the taxonomy + provisional flag.
+
+    A completed FO run is NOT ``incomplete``: it is a produced, scored output
+    whose rating is awaiting human approval -> ``qualified`` (provisional). An
+    escalated run is also ``qualified`` (awaiting an analyst decision). Only a
+    genuinely unscored/failed payload is lower. Returns
+    ``(status, reason, human_review_status, rating_provisional)``.
+    """
+    run_status, review = _fo_run_state(payload)
+    composite = payload.get("composite") if isinstance(payload.get("composite"), dict) else {}
+    has_score = composite.get("score") is not None
+    if run_status == "awaiting_review":
+        return (ExecutionStatus.QUALIFIED,
+                "FO run escalated; composite withheld/provisional pending analyst decision",
+                review, True)
+    if has_score:
+        # Completed and scored, but the rating is provisional until an analyst
+        # approves it (default human_review_status is "pending").
+        return (ExecutionStatus.QUALIFIED,
+                "FO computed; rating provisional pending human approval",
+                review, True)
+    return (ExecutionStatus.INCOMPLETE, "FO payload carries no composite score",
+            review, False)
 
 
 def _index_fo_run(run_dir: Path, root: Path, case_id: str) -> list[ArtifactEntry]:
     run_id = run_dir.name
     entries: list[ArtifactEntry] = []
-    entries.append(_entry_for_file(
-        run_dir / "financial_overview.json", root,
+
+    overview_path = run_dir / "financial_overview.json"
+    payload = _load_json(overview_path)
+    overview = _entry_for_file(
+        overview_path, root,
         artifact_id=f"fo.overview.{run_id}", artifact_type=ArtifactType.FINANCIAL_OVERVIEW,
         case_id=case_id, run_id=run_id, producer_module="FO",
-    ))
+    )
+    # FO uses its own status fields (run_status / escalations / composite), NOT
+    # the BO completion_status fields, so a completed FO run must not be misread
+    # as "incomplete". Re-derive the status from the FO payload.
+    if isinstance(payload, dict):
+        status, reason, review, provisional = _fo_overview_status(payload)
+        overview.status = status
+        overview.status_reason = reason
+        overview.human_review_status = (
+            HumanReviewStatus.ESCALATED if review == "escalated"
+            else HumanReviewStatus.PENDING if review == "pending"
+            else HumanReviewStatus.NOT_REQUIRED)
+        overview.rating_provisional = provisional
+        composite = payload.get("composite") if isinstance(
+            payload.get("composite"), dict) else {}
+        overview.composite_score = composite.get("score")
+        overview.credit_rating = composite.get("rating")
+        overview.risk_level = composite.get("risk_level")
+        metrics = payload.get("metrics") if isinstance(payload.get("metrics"), list) else []
+        # The seven measures (metrics[0] is the composite row; the rest are measures).
+        overview.fo_measures = [m.get("key") for m in metrics[1:]
+                                if isinstance(m, dict) and m.get("key")]
+        triggers = payload.get("triggers") if isinstance(payload.get("triggers"), dict) else {}
+        overview.fo_triggers_fired = sorted(
+            k for k, t in triggers.items() if isinstance(t, dict) and t.get("fired"))
+        pre = payload.get("precheck") if isinstance(payload.get("precheck"), dict) else {}
+        overview.fo_prechecks = sorted(pre.keys())
+        overview.validation_status = "scored" if composite.get("score") is not None else "unscored"
+    entries.append(overview)
+
+    # Per-stage FO nodes so each executed stage is inspectable from its Explorer
+    # node. These index the recorded financial_overview.json (the transcripts are
+    # optional). A stage is marked validated only when the payload records it.
+    def _stage(aid: str, agent: str, present: bool, subpath: str) -> None:
+        entries.append(ArtifactEntry(
+            artifact_id=f"{aid}.{run_id}",
+            artifact_type=ArtifactType.MODULE_OUTPUT,
+            case_id=case_id, run_id=run_id, producer_module="FO",
+            producer_agent=agent,
+            file_location=(_rel(overview_path, root) if present else None),
+            audit_subpath=(subpath if present else None),
+            depends_on=[f"fo.overview.{run_id}"],
+            status=(ExecutionStatus.VALIDATED if present else ExecutionStatus.ABSENT),
+            status_reason=(None if present else "stage not recorded in FO payload"),
+        ))
+
+    if isinstance(payload, dict):
+        _stage("fo.precheck", "fo_precheck", "precheck" in payload, "precheck")
+        _stage("fo.measures", "fo_measures",
+               isinstance(payload.get("metrics"), list), "metrics")
+        _stage("fo.triggers", "fo_triggers",
+               bool(payload.get("triggers")), "triggers")
+        # FO scoring stage carries the (provisional) composite.
+        composite_present = isinstance(payload.get("composite"), dict)
+        scoring = ArtifactEntry(
+            artifact_id=f"fo.scoring.{run_id}",
+            artifact_type=ArtifactType.MODULE_OUTPUT,
+            case_id=case_id, run_id=run_id, producer_module="FO",
+            producer_agent="fo_scoring",
+            file_location=(_rel(overview_path, root) if composite_present else None),
+            audit_subpath=("composite" if composite_present else None),
+            depends_on=[f"fo.measures.{run_id}", f"fo.triggers.{run_id}"],
+            status=(ExecutionStatus.QUALIFIED if composite_present
+                    else ExecutionStatus.ABSENT),
+            status_reason=("rating provisional pending human approval"
+                           if composite_present else "no composite recorded"),
+        )
+        if composite_present:
+            scoring.rating_provisional = True
+        entries.append(scoring)
+
+    # Optional transcript files (present only when the run wrote them).
     entries.append(_entry_for_file(
         run_dir / "precheck_transcript.json", root,
-        artifact_id=f"fo.precheck.{run_id}", artifact_type=ArtifactType.TRANSCRIPT,
+        artifact_id=f"fo.precheck_transcript.{run_id}", artifact_type=ArtifactType.TRANSCRIPT,
         case_id=case_id, run_id=run_id, producer_module="FO",
         producer_agent="fo_precheck", depends_on=[f"fo.overview.{run_id}"],
     ))
     entries.append(_entry_for_file(
         run_dir / "trigger_transcript.json", root,
-        artifact_id=f"fo.triggers.{run_id}", artifact_type=ArtifactType.TRANSCRIPT,
+        artifact_id=f"fo.trigger_transcript.{run_id}", artifact_type=ArtifactType.TRANSCRIPT,
         case_id=case_id, run_id=run_id, producer_module="FO",
         producer_agent="fo_triggers", depends_on=[f"fo.overview.{run_id}"],
     ))

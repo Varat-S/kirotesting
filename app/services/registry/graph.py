@@ -93,7 +93,8 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     # Layer 0-2: linear spine.
     nodes.append(_node("raw_input", "Raw documents & structured data", 0, kind="input"))
     nodes.append(_node("evidence_admission", "Evidence admission", 1, kind="evidence"))
-    nodes.append(_node("canonical_snapshot", "CanonicalEvidenceSnapshot", 2, kind="snapshot"))
+    nodes.append(_node("canonical_snapshot", "CanonicalEvidenceSnapshot", 2,
+                       kind="snapshot", producer_agent="canonical_evidence_snapshot"))
     edge("raw_input", "evidence_admission", "pipeline_stage")
     edge("evidence_admission", "canonical_snapshot", "pipeline_stage")
 
@@ -126,7 +127,9 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                        kind="agent", group="M4", producer_agent="m4_strategy_capital",
                        prefer_artifact_type="agent_output"))
     nodes.append(_node("agent.m4_debt_structure", "M4 Debt Structure & Refinancing", 3,
-                       kind="agent", group="M4", producer_agent="module4_debt_structure_specialist"))
+                       kind="agent", group="M4",
+                       producer_agent="module4_debt_structure_specialist",
+                       prefer_artifact_type="module_output"))
     edge("canonical_snapshot", "agent.m4_strategy_capital", "declared_dependency")
     edge("canonical_snapshot", "agent.m4_debt_structure", "declared_dependency")
     # M4 may *consume* verified M3 entity relationships when available (never as fact).
@@ -145,18 +148,21 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     edge("canonical_snapshot", "fo.measures", "declared_dependency")
     edge("fo.measures", "fo.triggers", "declared_dependency")
 
-    # Layer 4: validators + module outputs.
+    # Layer 4: validators + module outputs. ``producer_validator`` ids match the
+    # artifact entries the indexer extracts from the recorded memo/audit so each
+    # node resolves to its own persisted validation record.
     validators = [
         ("validator.v7", "Validator 7 (M3 numeric binding)", "validator_7",
-         "agent.m3_corporate_management", "m3.validator_7"),
+         "agent.m3_corporate_management"),
         ("validator.v8_strategy", "Validator 8 (M4 strategy/capital)", "validator_8",
-         "agent.m4_strategy_capital", None),
+         "agent.m4_strategy_capital"),
         ("validator.v8_debt", "Validator 8 (M4 debt-structure reconciliation)",
-         "module4_validator8", "agent.m4_debt_structure", None),
+         "validator_8_debt_structure", "agent.m4_debt_structure"),
     ]
-    for vid, label, val_id, upstream, artifact_id in validators:
+    for vid, label, val_id, upstream in validators:
         nodes.append(_node(vid, label, 4, kind="validator",
-                           producer_validator=val_id, artifact_id=artifact_id))
+                           producer_validator=val_id,
+                           prefer_artifact_type="validation_report"))
         edge(upstream, vid, "declared_dependency")
 
     # FO scoring -> FO governed output (its own validation branch).
@@ -188,7 +194,9 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     edge("challenger", "synthesis_v2", "bounded_remediation")
 
     # Layer 8: final deterministic governance.
-    nodes.append(_node("governance", "Final deterministic governance", 8, kind="governance"))
+    nodes.append(_node("governance", "Final deterministic governance", 8,
+                       kind="governance", producer_agent="final_governance",
+                       prefer_artifact_type="module_output"))
     edge("synthesis_v2", "governance", "pipeline_stage")
 
     # Layer 9: governed outputs + BO/FO -> SO handoff.

@@ -2005,7 +2005,18 @@ def gate_view(gc: dict | None, run_status: str | None, review: dict | None, esca
             return {"state": "overridden", "show_composite": True, "show_measures": True, "message": " · ".join(lines),
                     "checks": sorted({c for e in escalations or [] if e.get("measure") in decided
                                       for c in e.get("checks") or [e["check"]]})}
-        return {"state": "clear", "show_composite": True, "show_measures": True, "message": None}
+        # A completed, scored run with no escalation is still awaiting the
+        # standard human approval: its composite/rating is PROVISIONAL until an
+        # analyst accepts it. The score is retained and shown; it is simply
+        # labelled provisional (no scoring change).
+        if run_status in (None, "completed", "awaiting_review") and not review:
+            return {"state": "clear", "show_composite": True, "show_measures": True,
+                    "provisional": True, "awaiting_approval": True,
+                    "message": "Composite and rating are PROVISIONAL pending human "
+                               "approval. The calculated score is shown but is not "
+                               "final until an analyst accepts it."}
+        return {"state": "clear", "show_composite": True, "show_measures": True,
+                "provisional": False, "message": None}
     if review and review["decision"] == "stop":
         return {"state": "stopped", "show_composite": False, "show_measures": False,
                 "message": f"Not scored: going-concern fail. Analysis stopped by {review['reviewer']} on "
