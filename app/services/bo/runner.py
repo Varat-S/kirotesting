@@ -210,6 +210,7 @@ class BusinessOverviewRunner:
         bo_roster: str = "v2",
         transaction_borrower_entity_id: str | None = None,
         investigation_mode: InvestigationMode = InvestigationMode.SINGLE_PASS,
+        enable_m4_debt_specialist: bool = False,
     ) -> None:
         settings = get_settings()
         # Sector profile: "auto" detects it from the admitted evidence, None
@@ -247,6 +248,11 @@ class BusinessOverviewRunner:
                       if max_rerun_rounds is None else max_rerun_rounds)
         self.max_rerun_rounds = max(0, min(1, int(configured)))
         self.prompt_versions = prompt_versions
+        # Opt-in: run Ernest's Module 4 debt-structure specialist inside the
+        # orchestrated BO path (v3 roster), alongside ``m4_strategy_capital``, so
+        # BOTH Module 4 capabilities feed one governed Module 4 output. Default
+        # off preserves the established v2/v3 behaviour and its recorded scripts.
+        self.enable_m4_debt_specialist = bool(enable_m4_debt_specialist)
 
     # -- entry points ---------------------------------------------------------
 
@@ -451,6 +457,9 @@ class _BoRun:
         self.conclusion_status = "unavailable"
         self.module_conclusions: dict[str, dict[str, Any]] = {}
         self.m3_assessments: dict[str, dict[str, Any]] = {}
+        self.enable_m4_debt = (runner.enable_m4_debt_specialist
+                               and self.roster_version == "v3")
+        self.m4_debt_result = None  # type: ignore[assignment]
         self.started_at = datetime.now(timezone.utc)
         self.completed_at: datetime | None = None
 
@@ -463,6 +472,8 @@ class _BoRun:
         self._follow_up_retrieval()
         self._coverage_follow_up()
         self._stage("resilience", {self.resilience_agent_id})
+        if self.enable_m4_debt:
+            self._module4_debt_phase()
         if self.roster_version == "v3":
             self._build_module_conclusions()
         self._score_business(authoritative=False)
@@ -753,6 +764,42 @@ class _BoRun:
     def _business_parameters(self) -> list[ParameterResult]:
         return [p for a in self.narrow_agent_ids for p in self.promoted.get(a, [])]
 
+    def _module4_debt_phase(self) -> None:
+        """Run Ernest's debt-structure specialist inside the orchestrated path.
+
+        Uses the run's existing LLM client and escalation engine (one invocation,
+        no duplicate model calls). Its governed result is stored and folded into
+        ``module_conclusions['M4']`` so cross-module synthesis and the challenger
+        consume it, and a Validator-8 failure keeps the mandatory escalation and
+        forces human review (via the M4 module status and the escalation engine).
+        """
+        from app.services.bo.m4_debt import run_debt_specialist
+
+        self.m4_debt_result = run_debt_specialist(
+            self.client, self.evidence,
+            case_id=self.case_id, snapshot_version=self.snapshot_version,
+            escalation_engine=self.escalation,
+            # M3 relationships are supplied read-only ONLY when M3 produced a
+            # validated assessment; otherwise the debt specialist relies on
+            # admitted source evidence and records unresolved identity questions.
+            verified_m3_relationships=self._verified_m3_relationships(),
+        )
+
+    def _verified_m3_relationships(self) -> list[dict] | None:
+        """Validated M3 entity relationships, read-only, or None when absent.
+
+        Only a VALIDATED M3 assessment may supply relationships; nothing
+        unverified is passed, preserving the independence contract.
+        """
+        for assessment in self.m3_assessments.values():
+            if not isinstance(assessment, dict):
+                continue
+            rels = assessment.get("verified_entity_relationships") or \
+                assessment.get("entity_relationships")
+            if isinstance(rels, list) and rels:
+                return [r for r in rels if isinstance(r, dict)]
+        return None
+
     def _build_module_conclusions(self) -> dict[str, dict[str, Any]]:
         """Deterministic governed views consumed by cross-module synthesis."""
         modules = {
@@ -804,8 +851,42 @@ class _BoRun:
                         *out[module]["missing_information"],
                         "Versioned M3 entity, cash-flow and management assessment unavailable.",
                     })
+            if module == "M4" and self.enable_m4_debt:
+                out[module] = self._apply_m4_debt(out[module])
         self.module_conclusions = out
         return out
+
+    def _apply_m4_debt(self, m4: dict[str, Any]) -> dict[str, Any]:
+        """Fold the orchestrated debt specialist into the M4 governed view.
+
+        Both Module 4 capabilities land under one governed Module 4 output:
+        ``strategy_capital`` (the roster-v3 ``m4_strategy_capital`` findings,
+        already present on ``m4``) and ``m4_debt_assessment`` (this specialist).
+        A non-validated debt result marks M4 incomplete so ``_finalize`` forces
+        human review; its mandatory escalation (if any) is already raised.
+        """
+        result = self.m4_debt_result
+        m4["m4_governed_output_version"] = "bo-m4-governed-1.0"
+        m4["capabilities"] = ["strategy_capital", "debt_structure_refinancing"]
+        if result is None:
+            m4["m4_debt_assessment"] = None
+            m4["m4_debt_status"] = "not_run"
+            return m4
+        block = result.to_module_conclusion()
+        m4["m4_debt_assessment"] = block
+        m4["m4_debt_status"] = result.status
+        # A debt result that is not validated must not leave M4 "complete".
+        if result.status != "validated":
+            m4["status"] = "incomplete"
+            note = {
+                "unavailable": "Module 4 debt-structure assessment is unavailable "
+                               "(no admitted debt evidence).",
+                "rejected": "Module 4 debt-structure output failed schema validation.",
+                "failed": "Module 4 debt-structure Validator 8 failed; mandatory "
+                          "escalation raised and unresolved.",
+            }.get(result.status, f"Module 4 debt-structure status: {result.status}.")
+            m4["missing_information"] = sorted({*m4["missing_information"], note})
+        return m4
 
     def _build_orchestrator(self, agent):
         modules = self._build_module_conclusions()

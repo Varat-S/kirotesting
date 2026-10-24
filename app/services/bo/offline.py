@@ -55,13 +55,20 @@ class ScriptedBoBackend(FakeLLMBackend):
         return self._calls.get(method, 0)
 
     def generate(self, request: LLMRequest) -> LLMRawResult:
+        # A call may be routed by an explicit ``key`` when the script registers
+        # one (e.g. the orchestrated Module 4 debt specialist uses key
+        # "m4_debt"). Existing scripts carry no such keys, so method-keyed
+        # sequence replay is unchanged for every other agent.
+        script_key = request.key if request.key and request.key in self._script \
+            else request.method
         with self._lock:
-            index = self._calls.get(request.method, 0)
-            self._calls[request.method] = index + 1
+            index = self._calls.get(script_key, 0)
+            self._calls[script_key] = index + 1
             self.requests.append((request.method, request.inputs))
-        responses = self._script.get(request.method)
+        responses = self._script.get(script_key)
         if not responses:
-            raise KeyError(f"No scripted response for {request.method!r}.")
+            raise KeyError(f"No scripted response for {request.method!r}"
+                           f" (key={request.key!r}).")
         response = responses[min(index, len(responses) - 1)]
         raw = (response if isinstance(response, str)
                else json.dumps(_resolve(response, request.inputs), sort_keys=True))
