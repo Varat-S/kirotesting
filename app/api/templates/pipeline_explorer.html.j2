@@ -107,6 +107,7 @@
   </aside>
 </div>
 
+<div class="legend" id="statusSummary"></div>
 <div class="legend" id="legend"></div>
 
 <script>
@@ -157,6 +158,19 @@ function draw(graph) {
   viewport.innerHTML = '';
   const {pos, maxY, byLayer} = layout(graph);
 
+  // Faint alternating column bands behind each layer, so the left-to-right
+  // stages read as distinct groups (readability only; no layout change).
+  Object.keys(graph.layers).map(Number).forEach(layer => {
+    if (layer % 2 === 0) return;
+    const x = 30 + layer * (LAYER_W + LAYER_GAP) - 12;
+    const band = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    band.setAttribute('x', x); band.setAttribute('y', 12);
+    band.setAttribute('width', NODE_W + 24); band.setAttribute('height', (maxY||900));
+    band.setAttribute('fill', '#ffffff'); band.setAttribute('opacity', '0.03');
+    band.setAttribute('rx', 8);
+    viewport.appendChild(band);
+  });
+
   // Layer labels
   Object.entries(graph.layers).forEach(([layer, name]) => {
     const x = 30 + Number(layer) * (LAYER_W + LAYER_GAP);
@@ -165,6 +179,16 @@ function draw(graph) {
     t.setAttribute('class','layerlabel'); t.textContent = name;
     viewport.appendChild(t);
   });
+
+  // Status-count summary strip (how many nodes are in each state this run).
+  const counts = {};
+  graph.nodes.forEach(n => { counts[n.status] = (counts[n.status]||0) + 1; });
+  const summary = document.getElementById('statusSummary');
+  if (summary) {
+    summary.innerHTML = Object.entries(counts)
+      .map(([k,v]) => `<span><span class="dot" style="background:${STATUS_COLORS[k]||'#394657'}"></span>${v} ${STATUS_LABEL[k]||k}</span>`)
+      .join('');
+  }
 
   // Edges
   graph.edges.forEach(e => {
@@ -259,8 +283,22 @@ async function selectNode(n) {
     const viewerHtml = vr.ok ? await vr.text() : '';
     const base = `/pipeline/${encodeURIComponent(currentCase)}/node/${encodeURIComponent(n.artifact_id)}`;
     const prod = info.producer || {};
+    const provisionalBanner = info.rating_provisional
+      ? `<p class="note" style="color:#d9a21b"><strong>Rating PROVISIONAL</strong> — composite ${esc(info.composite_score)} / rating ${esc(info.credit_rating)} is calculated but awaiting human approval; not final.</p>`
+      : '';
+    const foFacets = (info.fo_measures && info.fo_measures.length)
+      ? `<h3>Financial Overview</h3><div class="kv">
+           <div>Composite</div><div>${esc(info.composite_score)}${info.rating_provisional?' (provisional)':''}</div>
+           <div>Rating</div><div>${esc(info.credit_rating)}</div>
+           <div>Risk level</div><div>${esc(info.risk_level)}</div>
+           <div>Measures</div><div>${esc((info.fo_measures||[]).join(', '))}</div>
+           <div>Pre-checks</div><div>${esc((info.fo_prechecks||[]).join(', '))}</div>
+           <div>Triggers fired</div><div>${esc((info.fo_triggers_fired||[]).join(', ')) || 'none'}</div>
+         </div>`
+      : '';
     body.innerHTML = `
       <h2>${esc(info.artifact_id)}</h2>
+      ${provisionalBanner}
       <div class="kv">
         <div>Type</div><div>${esc(info.artifact_type)}</div>
         <div>Status</div><div><span class="pill" style="background:${STATUS_COLORS[info.status]}">${esc(STATUS_LABEL[info.status]||info.status)}</span></div>
@@ -279,6 +317,7 @@ async function selectNode(n) {
         <div>Original file hash</div><div style="word-break:break-all">${esc(info.original_file_sha256 || '(slice — no original file)')}</div>
         <div>Snapshot equivalence</div><div>${esc((info.provenance||{}).snapshot_equivalence)}</div>
       </div>
+      ${foFacets}
       <div class="actions">
         ${info.is_slice ? '' : `<a href="${base}/original.json" target="_blank"><button>Download original JSON</button></a>`}
         <a href="${base}/normalized.json" target="_blank"><button>Export normalized JSON</button></a>

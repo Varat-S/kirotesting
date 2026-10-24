@@ -215,3 +215,82 @@ suite is green (1892 passed, 0 failed), and the documentation now matches the
 implemented guarantees. The only open items are the documented environmental
 blocker and the explicitly-labelled provisional/illustration items — none require
 a new architectural decision.
+
+---
+
+## 10. PR #3 final acceptance remediation
+
+A follow-up review required four targeted fixes plus secondary tasks. All were
+closed on `feat/bo-fo-pipeline-integration`; no architecture was redesigned and
+no scoring methodology / weights changed.
+
+> Note: the referenced `PR3_LOCAL_ACCEPTANCE_REPORT.md` was not present in the
+> repository or workspace. The four fixes enumerated in the task brief were used
+> as the acceptance baseline.
+
+| # | Fix | Change | Tests |
+|---|-----|--------|-------|
+| 1 | Expose `enable_m4_debt_specialist` on `run-bo-case` | `--enable-m4-debt-specialist` CLI flag (default false); flows to `BusinessOverviewRunner`; effective flag (requested AND v3) recorded in run `model_configuration` + BO record and reported in the summary. | `tests/integration/test_bo_cli_m4_debt_flag.py` (3) |
+| 2 | Index M4 debt assessment, debt Validator 8, strategy Validator 8, Validator 7, final governance, canonical snapshot | Extracted from the persisted memo/audit (`_index_bo_module_artifacts`): `bo.m4_debt.<run>`, `bo.validator8_debt.<run>`, `bo.validator8_strategy.<run>`, `bo.validator7.<run>`, `bo.governance.<run>`, `bo.snapshot.<run>`. Absent stages shown ABSENT (no fabrication). Graph nodes resolve to these per-run records; explorer resolves dotted `audit_subpath`s. | `tests/integration/test_explorer_dual_m4_e2e.py` (4) |
+| 3 | Mark awaiting-approval composite/rating provisional | `rating_provisional` on the FO manifest entry (score retained); `(provisional)` label + notice in the rendered FO scorecard via `gate_view`; inspector shows a provisional banner. No weights/rules changed. | `tests/integration/test_fo_registry_indexing.py` (incl. provisional + escalated) |
+| 4 | Correct FO artifact status | FO status derived from FO payload (`run_state`/escalations/composite) — a completed+scored run is QUALIFIED, not falsely incomplete; exposes the seven measures, composite, pre-checks, triggers and review state; per-stage FO nodes (precheck/measures/triggers/scoring) indexed. | `tests/integration/test_fo_registry_indexing.py` (6) |
+
+**Secondary tasks.** Documented the `overlapping_facts` extraction limitation
+(reads only an explicit top-level block; does not yet deep-mine FO metrics / BO
+module conclusions — `one_sided` rather than guessed) in
+`app/services/registry/provenance.py` and `BO_FO_OUTPUT_CONTRACT.md`. Modest
+graph-readability improvements only (faint layer bands, a status-count summary
+strip) — no UI redesign.
+
+### Regression results
+
+* Full offline suite (excl. the environmental recorded-completion file):
+  **1905 passed · 131 skipped · 0 failed** (was 1892; +13 targeted tests).
+* Environment-dependent: `tests/integration/test_bo_recorded_completion.py`
+  still 1 passed / 12 errors — the git-ignored HCA R5 live artifact, unchanged.
+  Reported separately per the brief; not a regression.
+* **Original JSON byte integrity** and **PDF determinism** preserved (asserted in
+  `test_fo_registry_indexing.py::test_fo_pdf_and_json_integrity_preserved` and
+  the existing `test_json_export_integrity.py`).
+* No paid model invoked.
+
+### Reproduce
+
+```bash
+uv sync --locked --python 3.11 --extra dev
+DEBUG=false uv run --python 3.11 pytest -q \
+  --ignore=tests/integration/test_bo_recorded_completion.py
+# the remediation tests specifically:
+DEBUG=false uv run --python 3.11 pytest -q \
+  tests/integration/test_bo_cli_m4_debt_flag.py \
+  tests/integration/test_explorer_dual_m4_e2e.py \
+  tests/integration/test_fo_registry_indexing.py
+```
+
+### Explorer node evidence (screenshots)
+
+Captured against a deterministic dual-M4 BO run + a completed/scored FO run for
+case `DEMO_BOFO` (offline fixtures, clearly labelled):
+
+* `bo_m4_debt_node.png` — repaired BO Module 4 debt-structure node: status
+  **validated**, producer `module4_debt_structure_specialist`, debt Validator 8
+  all five checks PASS, reconciliation to $46,492M.
+* `fo_node_provisional.png` — repaired FO node: **RATING PROVISIONAL** banner
+  (composite 6.4 / BBB, score retained), all seven measures, pre-checks and the
+  fired trigger exposed, `human_review_status = pending`.
+
+> A live Pipeline Explorer screenshot from a running server was not possible: the
+> Playwright backend runs in a separate network namespace and cannot reach the
+> app's localhost, and `file://` is blocked. The screenshots above were rendered
+> from the exact inspector payloads the Explorer serves (same `inspect_node` /
+> generic JSON viewer code path), which is faithful to the live node content.
+
+### Final merge recommendation (updated)
+
+**Proceed to final merge review of PR #3; do not auto-merge.** All four fixes are
+closed with executable code and tests, the full offline suite is green (1905
+passed, 0 failed), JSON byte integrity and PDF determinism are preserved, and the
+documentation matches the implementation. The only open items remain the
+documented environmental blocker (HCA R5 live artifact) and the explicitly
+labelled provisional FO rating / illustration scaffolding — none require a new
+architectural decision.

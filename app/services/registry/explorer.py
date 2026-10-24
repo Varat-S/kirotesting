@@ -339,6 +339,14 @@ def inspect_node(
         },
         "status": entry.status.value,
         "status_reason": entry.status_reason,
+        # Financial Overview facets (populated for FO artifacts).
+        "rating_provisional": entry.rating_provisional,
+        "composite_score": entry.composite_score,
+        "credit_rating": entry.credit_rating,
+        "risk_level": entry.risk_level,
+        "fo_measures": list(entry.fo_measures),
+        "fo_triggers_fired": list(entry.fo_triggers_fired),
+        "fo_prechecks": list(entry.fo_prechecks),
         "schema_name": entry.schema_name,
         "content_hash": entry.content_hash,       # canonical SHA-256 of the payload
         "canonical_content_hash": entry.content_hash,

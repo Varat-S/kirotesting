@@ -273,6 +273,22 @@ def extract_overlapping_facts(payload: Any) -> dict[str, dict]:
     payload exposes at a readable location. Deliberately conservative: a fact is
     only included when both a numeric value and a unit are discoverable, so an
     ambiguous figure is treated as absent (``one_sided``) rather than guessed.
+
+    .. note:: **Known limitation (documented).**
+
+       This extractor reads only an explicit, top-level ``overlapping_facts``
+       block (``{key: {"value", "unit"}}``). It does **not** yet deep-mine the
+       FO metrics tree (``payload["metrics"][…]["columns"]``) or the BO memo's
+       ``module_conclusions`` / M4 debt deliverables to auto-derive overlapping
+       figures such as total indebtedness or cash. Consequently, unless a
+       producer (or caller) populates ``overlapping_facts``, the consistency
+       check reports those facts as ``one_sided`` (not compared) rather than
+       guessing them from heterogeneous nested structures. This is intentional
+       for correctness over coverage: a wrong auto-mapping would be worse than a
+       declared gap. Extending extraction to the native FO/M4 structures (with
+       per-fact metric-definition compatibility) is a follow-up; until then the
+       cross-module numeric check is exercised on declared/compatible facts and
+       flags — never overwrites — any inconsistency it can compare.
     """
     doc = payload if isinstance(payload, dict) else {}
     out: dict[str, dict] = {}

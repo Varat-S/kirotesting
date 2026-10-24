@@ -110,6 +110,13 @@ call, no fabricated analysis). A non-validated debt result (`unavailable` /
   indebtedness, cash, reporting period/entity, debt maturities) **only** when
   units and reporting bases are compatible, flags inconsistencies for review, and
   **never overwrites** either side or Alan's scoring.
+  * **Known limitation.** `extract_overlapping_facts` currently reads only an
+    explicit top-level `overlapping_facts` block; it does **not** yet deep-mine
+    the FO metrics tree or the BO `module_conclusions` / M4 debt deliverables to
+    auto-derive figures. Until a producer populates `overlapping_facts`, such
+    facts are reported `one_sided` (not compared) rather than guessed — a
+    deliberate correctness-over-coverage choice. Native FO/M4 extraction with
+    per-fact metric-definition compatibility is a documented follow-up.
 * **Deterministic measures preserved:** the seven measures, scoring engine,
   pre-checks and trigger agents are unchanged.
 * **Rating methodology is PROVISIONAL.** `composite_score` / `credit_rating` /

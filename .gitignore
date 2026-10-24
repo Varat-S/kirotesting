@@ -45,3 +45,4 @@ examples/healthcare/reference/*
 edgar_filings/*
 !edgar_filings/README.md
 .bo_fixture/
+explorer_evidence/

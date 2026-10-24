@@ -162,3 +162,45 @@ resolve to the correct per-agent record within the **same run**.
   hash (= the entry's `content_hash`) may differ from the original file hash when
   the recorded file is pretty-printed. The inspector surfaces both
   (`original_file_sha256`, `canonical_content_hash`).
+
+---
+
+## Addendum — PR #3 final acceptance remediation
+
+### Governed module / validator / governance / snapshot records (Fix 2)
+
+For a recorded BO run, the indexer now also extracts, from the persisted memo +
+audit, these per-run inspectable artifacts (no new write path; absent stages are
+`absent`, never fabricated):
+
+| Artifact id | Source slice | Producer |
+|-------------|-------------|----------|
+| `bo.m4_debt.<run>` | `module_conclusions.M4.m4_debt_assessment` | `module4_debt_structure_specialist` |
+| `bo.validator8_debt.<run>` | `…m4_debt_assessment.validator_report` | `validator_8_debt_structure` |
+| `bo.validator8_strategy.<run>` | `agents[agent_id=m4_strategy_capital]` | `validator_8` |
+| `bo.validator7.<run>` | `module_conclusions.M3.m3_assessment` | `validator_7` |
+| `bo.governance.<run>` | `final_conclusion` (+ memo `status`) | `final_governance` |
+| `bo.snapshot.<run>` | `evidence_snapshot` | `canonical_evidence_snapshot` |
+
+Graph nodes (`validator.v7/v8_strategy/v8_debt`, `governance`,
+`canonical_snapshot`, `agent.m4_debt_structure`) resolve to these per-run
+records. Clicking a node returns that producer's own slice (the explorer resolves
+both `agents[agent_id=…]` and dotted `audit_subpath`s).
+
+### FO status + provisional rating (Fixes 3 & 4)
+
+FO overview status is derived from the FO payload (`run_state` /
+`escalations` / `composite`) rather than BO completion fields: a completed+scored
+run is `qualified` (produced, pending approval), **not** `incomplete`. The FO
+entry exposes `composite_score` / `credit_rating` / `risk_level`, the seven
+`fo_measures`, `fo_triggers_fired`, `fo_prechecks`, and `human_review_status`.
+`rating_provisional=true` whenever the composite/rating awaits human approval
+(the score is retained); per-stage FO nodes `fo.precheck/measures/triggers/
+scoring.<run>` are indexed. No weights or scoring rules were changed.
+
+### Effective M4 debt flag (Fix 1)
+
+`run-bo-case --enable-m4-debt-specialist` (default false) is recorded in the run
+`model_configuration` as `m4_debt_specialist_requested` and
+`m4_debt_specialist_enabled` (the latter requires the v3 roster), so the manifest
+and summary report the real effective value.
