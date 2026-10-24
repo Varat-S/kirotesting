@@ -20,6 +20,7 @@ from app.api.health import router as health_router
 from app.api.workbench import router as workbench_router
 from app.api.inspection import router as inspection_router
 from app.api.financial_overview import router as financial_overview_router
+from app.api.pipeline_explorer import router as pipeline_explorer_router
 
 
 def create_app() -> FastAPI:
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
     app.include_router(browser_router)
     app.include_router(inspection_router)
     app.include_router(financial_overview_router)
+    app.include_router(pipeline_explorer_router)
     return app
 
 
