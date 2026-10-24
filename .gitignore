@@ -44,3 +44,4 @@ examples/healthcare/reference/*
 # Financial Overview input filings (large; one folder per 10-K), keep the README
 edgar_filings/*
 !edgar_filings/README.md
+.bo_fixture/

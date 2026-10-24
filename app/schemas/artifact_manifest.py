@@ -144,8 +144,13 @@ class ArtifactEntry(BaseModel):
     status: ExecutionStatus = ExecutionStatus.ABSENT
     status_reason: Optional[str] = None
     validation_status: Optional[str] = None      # free-form validator summary
+    validator_issues_count: int = 0
     human_review_status: HumanReviewStatus = HumanReviewStatus.NOT_REQUIRED
     escalations: list[str] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(default_factory=list)   # referenced by this artifact
+    # For per-agent entries that index a sub-section of a shared recorded file
+    # (e.g. one agent inside ``audit_report.json``): a human-readable locator.
+    audit_subpath: Optional[str] = None
 
     # Model / prompt provenance (when applicable).
     model_id: Optional[str] = None

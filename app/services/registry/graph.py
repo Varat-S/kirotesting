@@ -61,6 +61,7 @@ def _node(
     artifact_id: Optional[str] = None,
     producer_agent: Optional[str] = None,
     producer_validator: Optional[str] = None,
+    prefer_artifact_type: Optional[str] = None,
 ) -> dict[str, Any]:
     return {
         "id": node_id,
@@ -72,6 +73,10 @@ def _node(
         "artifact_id": artifact_id,
         "producer_agent": producer_agent,
         "producer_validator": producer_validator,
+        # Hint so manifest matching resolves to the right recorded artifact when
+        # several share a producer (e.g. synthesis vs memo both come from the
+        # orchestrator): prefer an entry of this ``artifact_type``.
+        "prefer_artifact_type": prefer_artifact_type,
         "status": ExecutionStatus.ABSENT.value,
         "status_reason": None,
     }
@@ -97,7 +102,7 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     for agent_id, label in _M1_AGENTS:
         nodes.append(_node(
             f"agent.{agent_id}", label, 3, kind="agent", group="M1",
-            producer_agent=agent_id,
+            producer_agent=agent_id, prefer_artifact_type="agent_output",
         ))
     for pid in _M1_PRIMARY_IDS:
         edge("canonical_snapshot", f"agent.{pid}", "declared_dependency")
@@ -106,18 +111,20 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 
     # Module 2.
     nodes.append(_node("agent.m2_industry", "M2 Industry & External", 3,
-                       kind="agent", group="M2", producer_agent="m2_industry"))
+                       kind="agent", group="M2", producer_agent="m2_industry",
+                       prefer_artifact_type="agent_output"))
     edge("canonical_snapshot", "agent.m2_industry", "declared_dependency")
 
     # Module 3 (authoritative for corporate/entity relationships).
     nodes.append(_node("agent.m3_corporate_management", "M3 Corporate Structure & Management", 3,
                        kind="agent", group="M3", producer_agent="m3_corporate_management",
-                       artifact_id="m3.analysis"))
+                       artifact_id="m3.analysis", prefer_artifact_type="agent_output"))
     edge("canonical_snapshot", "agent.m3_corporate_management", "declared_dependency")
 
     # Module 4: TWO internal specialists, one governed Module 4 output.
     nodes.append(_node("agent.m4_strategy_capital", "M4 Strategy & Capital Allocation", 3,
-                       kind="agent", group="M4", producer_agent="m4_strategy_capital"))
+                       kind="agent", group="M4", producer_agent="m4_strategy_capital",
+                       prefer_artifact_type="agent_output"))
     nodes.append(_node("agent.m4_debt_structure", "M4 Debt Structure & Refinancing", 3,
                        kind="agent", group="M4", producer_agent="module4_debt_structure_specialist"))
     edge("canonical_snapshot", "agent.m4_strategy_capital", "declared_dependency")
@@ -160,7 +167,8 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 
     # Layer 5: cross-module synthesis (orchestrator) = synthesis V1.
     nodes.append(_node("synthesis_v1", "Cross-module synthesis V1 (orchestrator)", 5,
-                       kind="synthesis", producer_agent="business_orchestrator"))
+                       kind="synthesis", producer_agent="business_orchestrator",
+                       prefer_artifact_type="module_output"))
     for agent_id, _ in _M1_AGENTS:
         edge(f"agent.{agent_id}", "synthesis_v1", "declared_dependency")
     edge("agent.m2_industry", "synthesis_v1", "declared_dependency")
@@ -170,7 +178,8 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 
     # Layer 6: challenger.
     nodes.append(_node("challenger", "Challenger", 6, kind="challenger",
-                       producer_agent="business_challenge"))
+                       producer_agent="business_challenge",
+                       prefer_artifact_type="module_output"))
     edge("synthesis_v1", "challenger", "declared_dependency")
 
     # Layer 7: revised synthesis V2.
@@ -206,12 +215,28 @@ def _apply_manifest(
     ``producer_validator``. Prefix-matches run-scoped ids (``bo.handoff.<run>``).
     """
     def find(node: dict[str, Any]):
+        prefer = node.get("prefer_artifact_type")
+        pa, pv = node.get("producer_agent"), node.get("producer_validator")
+
+        # 1. When a preferred artifact type is set, match producer + that type
+        #    first, so an agent node resolves to its per-agent record (not the
+        #    whole memo) and synthesis/challenger resolve to their own blocks.
+        if prefer:
+            for entry in manifest.artifacts:
+                if entry.artifact_type.value != prefer:
+                    continue
+                if (pv and entry.producer_validator == pv) or \
+                        (pa and entry.producer_agent == pa):
+                    return entry
+
+        # 2. Exact / prefix artifact-id match.
         aid = node.get("artifact_id")
         if aid:
             for entry in manifest.artifacts:
                 if entry.artifact_id == aid or entry.artifact_id.startswith(aid + "."):
                     return entry
-        pa, pv = node.get("producer_agent"), node.get("producer_validator")
+
+        # 3. Fall back to any producer match.
         for entry in manifest.artifacts:
             if pv and entry.producer_validator == pv:
                 return entry

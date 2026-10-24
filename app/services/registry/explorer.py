@@ -175,7 +175,48 @@ def load_artifact(
     if not path.is_file():
         raise ArtifactAccessError(f"artifact file missing: {entry.file_location}")
     payload = json.loads(path.read_text(encoding="utf-8"))
+    # Per-agent entries index a slice of a shared recorded file (the BO audit).
+    # Return THAT agent's recorded output, not the whole audit report.
+    if entry.audit_subpath:
+        payload = _extract_agent_slice(payload, entry)
     return payload, manifest
+
+
+def _extract_agent_slice(audit: Any, entry) -> dict[str, Any]:
+    """Pull one agent/validator/synthesis/challenger slice from a BO audit report.
+
+    Returns the recorded output for that producer only (its agent block + runs,
+    its hypotheses and parameters, or the synthesis/challenger block), so the
+    inspector shows the agent's actual output rather than the whole memo/audit.
+    """
+    if not isinstance(audit, dict):
+        return {"error": "audit report is not an object"}
+    agent_id = entry.producer_agent
+    out: dict[str, Any] = {"agent_id": agent_id, "run_id": entry.run_id,
+                           "schema_version": "bo-agent-record-1.0"}
+
+    agent_block = next(
+        (a for a in (audit.get("agents") or []) if isinstance(a, dict)
+         and a.get("agent_id") == agent_id), None)
+    if agent_block is not None:
+        out["agent"] = agent_block
+
+    if agent_id == "business_orchestrator":
+        out["synthesis"] = audit.get("orchestrator")
+        out["conclusion"] = audit.get("final_conclusion") or audit.get("conclusions")
+    elif agent_id == "business_challenge":
+        out["challenge"] = audit.get("challenger")
+    else:
+        records = (audit.get("hypotheses", {}) or {}).get("records", []) \
+            if isinstance(audit.get("hypotheses"), dict) else []
+        out["hypotheses"] = [r for r in records if r.get("agent_id") == agent_id]
+        out["parameters"] = [p for p in (audit.get("parameters") or [])
+                             if p.get("agent_id") == agent_id]
+        packets = audit.get("evidence_packets") or []
+        out["evidence_packet"] = next(
+            (p for p in packets if isinstance(p, dict) and p.get("agent_id") == agent_id),
+            None)
+    return out
 
 
 def _collect_evidence_ids(payload: Any) -> list[str]:

@@ -279,6 +279,108 @@ def _index_m3_dir(dir_path: Path, root: Path, case_id: str) -> list[ArtifactEntr
     return entries
 
 
+# BO specialist ids grouped by module, matching roster v3 (app/services/bo/roster_v3.py).
+_BO_AGENT_MODULE = {
+    "m1_revenue_quality": "M1", "m1_customer_stickiness": "M1",
+    "m1_pricing_power": "M1", "m1_operating_model": "M1",
+    "m1_competitive_durability": "M1", "m1_resilience_integration": "M1",
+    "m2_industry": "M2", "m3_corporate_management": "M3",
+    "m4_strategy_capital": "M4",
+}
+
+
+def _bo_status_from_audit(agent_status: Any, validation_status: Any) -> ExecutionStatus:
+    """Map a recorded BO agent status onto the manifest status taxonomy."""
+    a = str(agent_status or "").lower()
+    v = str(validation_status or "").lower()
+    if a in {"rejected", "failed"} or v in {"rejected", "invalid"}:
+        return ExecutionStatus.FAILED
+    if a == "skipped":
+        return ExecutionStatus.SKIPPED
+    if a == "validated" and v in {"valid", "validated", ""}:
+        return ExecutionStatus.VALIDATED
+    if a == "validated":
+        return ExecutionStatus.QUALIFIED
+    # Unknown recorded status -> incomplete, never a false green.
+    return ExecutionStatus.INCOMPLETE
+
+
+def _index_bo_agents(
+    audit: dict, run_dir: Path, root: Path, case_id: str, run_id: str
+) -> list[ArtifactEntry]:
+    """Per-agent / per-validator / synthesis / challenger entries from the audit.
+
+    These index the ALREADY-RECORDED per-agent data inside ``audit_report.json``
+    (no new write path). Each entry is run-scoped (``bo.agent.<agent_id>.<run>``)
+    so a node-to-artifact mapping always resolves within the same run. The parsed
+    output for an agent is its hypotheses + parameters, carried on the inspector
+    payload via the shared audit file + sub-locator.
+    """
+    entries: list[ArtifactEntry] = []
+    audit_loc = _rel(run_dir / "audit_report.json", root)
+    agents = audit.get("agents") if isinstance(audit.get("agents"), list) else []
+    records = (audit.get("hypotheses", {}) or {}).get("records", []) \
+        if isinstance(audit.get("hypotheses"), dict) else []
+    params = audit.get("parameters") if isinstance(audit.get("parameters"), list) else []
+
+    # Evidence ids per agent from hypothesis records + parameters.
+    ev_by_agent: dict[str, set] = {}
+    for rec in records:
+        aid = rec.get("agent_id")
+        if not aid:
+            continue
+        ids = ev_by_agent.setdefault(aid, set())
+        for e in (rec.get("supporting_evidence_ids") or []):
+            if isinstance(e, (str, int)):
+                ids.add(str(e))
+    for par in params:
+        aid = par.get("agent_id")
+        if aid:
+            ev_by_agent.setdefault(aid, set()).update(
+                str(e) for e in (par.get("evidence_ids") or []) if isinstance(e, (str, int)))
+
+    synthesis_ids = {"business_orchestrator"}
+    challenger_ids = {"business_challenge"}
+    for agent in agents:
+        aid = agent.get("agent_id")
+        if not aid:
+            continue
+        runs = agent.get("runs") or []
+        val_status = runs[-1].get("validation_status") if runs else None
+        status = _bo_status_from_audit(agent.get("status"), val_status)
+        if aid in synthesis_ids:
+            art_type, kind_id = ArtifactType.MODULE_OUTPUT, f"bo.synthesis.{run_id}"
+            module = "BO"
+        elif aid in challenger_ids:
+            art_type, kind_id = ArtifactType.MODULE_OUTPUT, f"bo.challenger.{run_id}"
+            module = "BO"
+        else:
+            art_type = ArtifactType.AGENT_OUTPUT
+            kind_id = f"bo.agent.{aid}.{run_id}"
+            module = _BO_AGENT_MODULE.get(aid, "BO")
+        entry = ArtifactEntry(
+            artifact_id=kind_id,
+            artifact_type=art_type,
+            case_id=case_id,
+            run_id=run_id,
+            producer_module=module,
+            producer_agent=aid,
+            schema_name="bo-agent-record-1.0",
+            file_location=audit_loc,            # points into the recorded audit
+            depends_on=[f"bo.agent.{d}.{run_id}" for d in (agent.get("dependencies") or [])],
+            status=status,
+            status_reason=agent.get("detail"),
+            validation_status=val_status,
+            validator_issues_count=len(agent.get("validation_issues") or []),
+            evidence_ids=sorted(ev_by_agent.get(aid, set())),
+            prompt_version=str(runs[-1].get("prompt_version")) if runs else None,
+            model_id=runs[-1].get("model_id") if runs else None,
+            audit_subpath=f"agents[agent_id={aid}]",
+        )
+        entries.append(entry)
+    return entries
+
+
 def _index_bo_run(run_dir: Path, root: Path, case_id: str) -> list[ArtifactEntry]:
     run_id = run_dir.name
     entries: list[ArtifactEntry] = []
@@ -300,8 +402,28 @@ def _index_bo_run(run_dir: Path, root: Path, case_id: str) -> list[ArtifactEntry
         case_id=case_id, run_id=run_id, producer_module="BO",
         depends_on=[f"bo.memo.{run_id}"],
     )
-    handoff.human_review_status = HumanReviewStatus.PENDING
+    # A BO handoff is recorded with human_review_status="pending" in the DB; the
+    # on-disk payload carries conclusion_status. Prefer that; otherwise a produced
+    # handoff awaiting review is QUALIFIED, not a false "incomplete"/"validated".
+    handoff_doc = _load_json(run_dir / "handoff.json")
+    if isinstance(handoff_doc, dict):
+        review = str(handoff_doc.get("human_review_status") or "").lower()
+        if review in {"", "pending"}:
+            handoff.human_review_status = HumanReviewStatus.PENDING
+            if handoff.status == ExecutionStatus.INCOMPLETE and \
+                    handoff.status_reason == "unknown_completion_status":
+                handoff.status = ExecutionStatus.QUALIFIED
+                handoff.status_reason = "handoff recorded, pending human review"
+        elif review == "accepted":
+            handoff.human_review_status = HumanReviewStatus.ACCEPTED
+        elif review == "rejected":
+            handoff.human_review_status = HumanReviewStatus.REJECTED
     entries.append(handoff)
+
+    # Per-agent / validator / synthesis / challenger entries from the audit.
+    audit = _load_json(run_dir / "audit_report.json")
+    if isinstance(audit, dict):
+        entries.extend(_index_bo_agents(audit, run_dir, root, case_id, run_id))
     return entries
 
 
