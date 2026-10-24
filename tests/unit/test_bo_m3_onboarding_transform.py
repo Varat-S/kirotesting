@@ -39,11 +39,11 @@ REFERENCE = Path("examples/bo_m3/Sample HCA Corp Structure Final Output.json")
 
 
 def _simplified() -> dict:
-    return json.loads(SIMPLIFIED.read_text())
+    return json.loads(SIMPLIFIED.read_text(encoding="utf-8"))
 
 
 def _reference() -> dict:
-    return json.loads(REFERENCE.read_text())
+    return json.loads(REFERENCE.read_text(encoding="utf-8"))
 
 
 def _source(payload=None, *, case_id="HCA_CASE", registered="HCA_CASE", **kw):

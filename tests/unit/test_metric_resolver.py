@@ -11,6 +11,8 @@ quality states.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from app.models.orm import Case, Metric
 from app.services.analysis.metric_resolver import AuthoritativeMetricResolver
 
@@ -19,13 +21,13 @@ CASE = "C1"
 
 def _metric(session, *, name, case_id=CASE, result=1.25,
             evidence_quality="verified", review_required=False,
-            explicit_state=None):
+            explicit_state=None, period="FY2026", created_at=None):
     session.add(Metric(
         case_id=case_id, metric_name=name, metric_definition_id="d",
         metric_definition_version=1, formula_id="f", engine_version="1.0.0",
         inputs={}, input_fact_ids=[], result=result, explicit_state=explicit_state,
-        period="FY2026", units="x", evidence_quality=evidence_quality,
-        review_required=review_required,
+        period=period, units="x", evidence_quality=evidence_quality,
+        review_required=review_required, created_at=created_at,
     ))
     session.flush()
 
@@ -103,3 +105,42 @@ def test_latest_metric_row_wins_for_a_name(db_session):
     resolution = resolver.resolve(["roe"], case_id=CASE)
     assert resolution.usable_ids == {"roe"}
     assert resolution.items[0].value == 0.2
+
+
+def test_latest_metric_timestamp_tie_uses_last_persisted_revision(db_session):
+    _case(db_session)
+    timestamp = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    for value in (0.1, 0.2, 0.3):
+        _metric(db_session, name="roe", result=value, created_at=timestamp)
+
+    resolver = AuthoritativeMetricResolver(db_session)
+    for _ in range(20):
+        assert resolver.resolve(["roe"], case_id=CASE).items[0].value == 0.3
+
+
+def test_latest_means_recorded_revision_not_largest_reporting_period(db_session):
+    _case(db_session)
+    older = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    newer = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    _metric(db_session, name="roe", result=0.1, period="FY2027", created_at=older)
+    _metric(db_session, name="roe", result=0.2, period="FY2025", created_at=newer)
+    # A later insert with an older creation timestamp is not a newer revision.
+    _metric(db_session, name="roe", result=0.3, period="FY2028", created_at=older)
+
+    item = AuthoritativeMetricResolver(db_session).resolve(["roe"], case_id=CASE).items[0]
+    assert (item.value, item.period) == (0.2, "FY2025")
+
+
+def test_latest_unverified_revision_does_not_fall_back_to_old_value(db_session):
+    _case(db_session)
+    timestamp = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    _metric(db_session, name="roe", result=0.1, created_at=timestamp)
+    _metric(db_session, name="roe", result=0.2, created_at=timestamp,
+            evidence_quality="unverified")
+
+    resolver = AuthoritativeMetricResolver(db_session)
+    for _ in range(5):
+        resolution = resolver.resolve(["roe"], case_id=CASE)
+        assert resolution.usable_ids == set()
+        assert resolution.items == []
+        assert "evidence_quality" in " ".join(resolution.rejected()[0].reasons)

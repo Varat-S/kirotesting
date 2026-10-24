@@ -96,10 +96,15 @@ class AuthoritativeMetricResolver:
                               reasons=["no Fact or Metric record with this id"])
 
     def _metric_by_name(self, name, case_id):
+        # Metrics are append-only revisions.  A creation timestamp identifies the
+        # latest recorded result; SQLite/Windows can assign the same timestamp to
+        # successive inserts, so use the monotonically increasing row id to
+        # choose the later revision in that case.  Period is metadata about what
+        # was measured, not the order in which results were recorded.
         return self._session.scalars(
             select(Metric).where(
                 Metric.metric_name == name, Metric.case_id == case_id
-            ).order_by(Metric.created_at.desc())
+            ).order_by(Metric.created_at.desc(), Metric.id.desc())
         ).first()
 
     # -- Fact-backed corroboration -------------------------------------------
