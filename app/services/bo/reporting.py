@@ -116,6 +116,9 @@ class BoReportBuilder:
             "stages": run.stage_log,
             "challenge_rounds": run.challenge_rounds,
             "remediation": run.remediation,
+            # Effective Module 4 debt-specialist flag for this run (requested AND
+            # v3 roster). Recorded so the summary/registry report the real value.
+            "m4_debt_specialist_enabled": bool(getattr(run, "enable_m4_debt", False)),
         }
         recorder = StageRecorder(self.session, run.case_id, run.snapshot_version)
         recorder.record(f"bo_memo:{run.analysis_run_id}", memo)

@@ -528,6 +528,12 @@ class _BoRun:
                 "coverage_checks": [c.check_id for c in self.checks],
                 "active_agents": list(self.active_agent_ids),
                 "bo_roster": self.roster_version,
+                # The effective M4 debt-specialist flag (requested AND v3 roster)
+                # is recorded so a run can never be misattributed: the requested
+                # value and whether it actually took effect are both auditable.
+                "m4_debt_specialist_requested": bool(
+                    self.runner.enable_m4_debt_specialist),
+                "m4_debt_specialist_enabled": bool(self.enable_m4_debt),
                 "investigation_mode": self.runner.investigation_mode.value,
                 "max_concurrency": self.runner.max_concurrency,
                 "max_rerun_rounds": self.runner.max_rerun_rounds,

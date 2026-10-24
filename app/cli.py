@@ -141,6 +141,14 @@ def main(argv=None):
               "stronger module-completeness and Agent 6 gates. The active roster is "
               "always reported in the run summary."),
     )
+    bo_run.add_argument(
+        "--enable-m4-debt-specialist", action="store_true",
+        help=("Also run the Module 4 debt-structure / refinancing specialist "
+              "inside the orchestrated BO run (v3 roster only), alongside "
+              "m4_strategy_capital, so both feed one governed Module 4 output. "
+              "Default off for backward compatibility. The effective flag is "
+              "recorded in the run metadata and reported in the summary."),
+    )
     bo_spec = commands.add_parser(
         "run-bo-specialists",
         help="Run the six BO specialists and validators only; write the demo reports",
@@ -746,9 +754,11 @@ def _run_bo_case(session, database, args):
         from app.services.bo.evaluation import load_manifest
 
         manifest = load_manifest(args.manifest)
+    roster = getattr(args, "roster", "v2")
+    enable_m4_debt = bool(getattr(args, "enable_m4_debt_specialist", False))
     result = BusinessOverviewRunner(
         session, backend=backend, data_root=database.parent, output_root=args.output,
-        bo_roster=getattr(args, "roster", "v2"),
+        bo_roster=roster, enable_m4_debt_specialist=enable_m4_debt,
     ).run_case(
         args.case_id, package=package, produce_pdf=args.pdf, manifest=manifest,
     )
@@ -767,8 +777,15 @@ def _run_bo_case(session, database, args):
         # A-1: report the roster that actually ran, taken from the recorded
         # registry version, so a run can never be silently misattributed to a
         # different architecture than the one that produced it.
-        "bo_roster": getattr(args, "roster", "v2"),
+        "bo_roster": roster,
         "agent_registry_version": (result.audit or {}).get("registry", {}).get("version"),
+        # Effective Module 4 debt-specialist flag: what was requested, and whether
+        # it actually took effect (only on the v3 roster). Reported from the
+        # recorded run metadata, not just the CLI arg.
+        "m4_debt_specialist_requested": enable_m4_debt,
+        "m4_debt_specialist_enabled": bool(
+            result.record.get("m4_debt_specialist_enabled",
+                              enable_m4_debt and roster == "v3")),
         "conclusion_status": result.conclusion_status,
         "human_review_status": "pending",
         "handoff_id": result.handoff["handoff_id"],
