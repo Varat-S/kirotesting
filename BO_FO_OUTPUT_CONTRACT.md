@@ -4,21 +4,35 @@
 existing governed artifacts plus the artifact-registry index that makes them
 discoverable as a single, case-coherent handoff for Structural Overview (SO).
 
-## 1. Case & evidence identity (shared anchor)
+## 1. Case & evidence identity (five-level provenance)
 
-BO, FO and M3 all attach to the same case through the canonical identity already
-used across the platform:
+The artifact registry makes an explicit, verifiable distinction between five
+levels of "same source" (see `ProvenanceRecord` in
+`app/schemas/artifact_manifest.py` and `app/services/registry/provenance.py`):
 
-* **Case id** — `Case.case_id`.
-* **Evidence snapshot** — the `(case_id, snapshot_version)` pair of the
-  `CanonicalEvidenceSnapshot` (`app/schemas/snapshots.py`). The manifest records
-  this as `source_evidence_snapshot = "<case>@v<N>"` on each entry.
+1. **Same borrower/case** — `Case.case_id`.
+2. **Same filing & fiscal period** — `filing_identifier` + `reporting_period`.
+3. **Same underlying source documents** — `source_signature` / `source_document_ids`.
+4. **Same canonical evidence snapshot** — `canonical_snapshot_version` +
+   `canonical_snapshot_hash`, classified by `snapshot_equivalence`.
+5. **Same numerical metric definition** — carried per-fact by the cross-module
+   consistency check, not assumed.
 
-SO already consumes this anchor: `app/schemas/structural_overview.py` requires
-`case_id`, `evidence_snapshot_version` and `source_bo_run_id` /
-`source_handoff_id`. The integration does **not** introduce a competing case
-identity or an independently authoritative version of a shared financial fact —
-FO is reconciled onto the same case/snapshot (see §4).
+**Important correction (hardening):** a matching `case_id` does **not** establish
+that BO and FO used the same canonical evidence snapshot. BO records a real
+canonical snapshot identity, so BO artifacts are `snapshot_equivalence=verified`.
+FO runs through an **independent filing loader** (`app/services/fo/loader.py`,
+keyed by filing folder + `folder_signature`) with **no recorded link** to the
+`CanonicalEvidenceSnapshot`; FO artifacts are therefore
+`snapshot_equivalence=unverified`, preserving their filing identity / source
+signature. SO must treat FO↔BO canonical-snapshot equivalence as **unverified**
+unless a recorded snapshot link exists — it is never inferred from the case id
+alone. `source_evidence_snapshot = "<case>@v<N>"` is populated only when a
+snapshot version is actually recorded.
+
+SO already consumes the case anchor: `app/schemas/structural_overview.py`
+requires `case_id`, `evidence_snapshot_version` and `source_bo_run_id` /
+`source_handoff_id`.
 
 ## 2. Business Overview handoff (authoritative BO output)
 
@@ -60,24 +74,42 @@ internal specialist capabilities. Neither was silently replaced:
 * **Mandatory escalation.** A debt-structure Validator 8 failure raises a
   **mandatory** escalation (`R-MODULE4-VALIDATOR8-01`, severity `MANDATORY`) via
   the existing `EscalationEngine`, which drives case status to `escalated`. The
-  failure is a queryable signal in the production path, never silent prose
-  (tested in `tests/integration/test_module4_specialist.py` and surfaced in the
-  manifest as `status=failed` + `escalations`).
+  failure is a queryable signal, never silent prose, and it marks
+  `module_conclusions["M4"]` **incomplete** so `_finalize` forces
+  `human_review_required` (tested in `tests/integration/test_bo_m4_dual_specialist.py`).
 
-Module 4's governed output (strategy + debt structure) is the Module 4 contract
-SO consumes; both capabilities appear under the single `module_conclusions["M4"]`
-umbrella and as distinct, inspectable nodes in the Pipeline Explorer.
+**Orchestration (hardening correction).** The debt specialist now executes
+**inside the normal BO run** (not only standalone): `_BoRun._module4_debt_phase`
+(`app/services/bo/runner.py`) runs `Module4Specialist` through the run's own
+`LLMClient` + `EscalationEngine` on **admitted snapshot evidence only**
+(`app/services/bo/m4_debt.py` selects debt-relevant passages/facts; no M1/2/3
+outputs), and folds its result into `module_conclusions["M4"]["m4_debt_assessment"]`
+alongside the strategy specialist's findings — one governed M4 output consumed by
+cross-module synthesis, the challenger and final governance.
+
+This is gated by the opt-in `enable_m4_debt_specialist` flag on
+`BusinessOverviewRunner` (**default off** preserves the previously-recorded v2/v3
+behaviour and scripts; turn it on for the combined-output path). When no admitted
+debt evidence exists, the debt assessment is reported `unavailable` (no model
+call, no fabricated analysis). A non-validated debt result (`unavailable` /
+`rejected` / `failed`) keeps M4 incomplete.
 
 ## 4. Financial Overview handoff (reconciled onto the same case)
 
 * **Artifact:** `<output>/fo/<case>/<run>/financial_overview.json` (+ transcripts),
   persisted as `FinancialOverviewRunRow`. Summary via `FoRunResult.summary()`.
-* **Identity reconciliation:** FO is keyed by the **same `case_id`** and derives
+* **Identity reconciliation:** FO is keyed by the **same `case_id`** and records
   its filing identity/provenance (`meta.entity_name`, `period_end`,
-  `filing.folder`) so it associates with the same case and source version as BO.
-  FO does **not** mint an independently authoritative copy of a shared financial
-  fact; where BO/M3 already hold a governed figure, FO's deterministic measures
-  are additive analysis over the same evidence.
+  `filing.folder`, `filing.signature`). This proves *same case* and lets SO check
+  *same filing/period*, but it does **not** prove *same canonical snapshot* —
+  FO's loader is independent of `CanonicalEvidenceSnapshot`, so the registry
+  marks FO `snapshot_equivalence=unverified` (see §1). FO does **not** mint an
+  independently authoritative copy of a shared fact.
+* **Cross-module consistency check.** `cross_module_consistency`
+  (`app/services/registry/provenance.py`) compares overlapping facts (total
+  indebtedness, cash, reporting period/entity, debt maturities) **only** when
+  units and reporting bases are compatible, flags inconsistencies for review, and
+  **never overwrites** either side or Alan's scoring.
 * **Deterministic measures preserved:** the seven measures, scoring engine,
   pre-checks and trigger agents are unchanged.
 * **Rating methodology is PROVISIONAL.** `composite_score` / `credit_rating` /
@@ -92,22 +124,40 @@ Registry ids: `fo.overview.<run>`, `fo.precheck.<run>`, `fo.triggers.<run>`.
    through `build_manifest(output_root, case_id, ...)` → `ArtifactManifest`
    (`artifact-manifest-1.0`), with producer, schema, content hash, evidence
    snapshot, dependencies and execution status per entry.
-2. **Integrity.** Each entry's `content_hash` is the canonical SHA-256 of the
-   exact recorded JSON; SO can verify it has the bytes BO/FO produced.
-3. **Case coherence.** BO, FO and M3 share `case_id` and
-   `source_evidence_snapshot`; FO carries no conflicting case identity.
+2. **Integrity (two guarantees).** Each entry's `content_hash` is the **canonical**
+   SHA-256 of the parsed payload. For whole-file artifacts the registry also
+   exposes the **original file SHA-256** of the exact recorded bytes
+   (`original.json` / `X-Original-SHA256`); the two hashes differ when the
+   recorded file is pretty-printed rather than canonical. Normalized export
+   (`normalized.json` / `X-Canonical-SHA256`) is semantically equivalent but
+   re-serialised. Per-agent slice artifacts have no independent original file, so
+   only normalized export is available for them.
+3. **Case coherence, not snapshot equivalence.** BO, FO and M3 share `case_id`.
+   BO/M3 carry a verified canonical-snapshot identity; FO is
+   `snapshot_equivalence=unverified`. SO must not assume BO and FO share a
+   canonical snapshot from the case id alone.
 4. **Honest status.** SO can filter on `is_successful()` (validated / qualified)
-   and must respect `failed` / `incomplete` / `absent` / `skipped` — no
-   fabricated success is ever registered.
-5. **Escalations & review.** Unresolved mandatory escalations and
+   and must respect `failed` / `incomplete` / `absent` / `skipped`. File
+   existence alone never yields `validated` — only an authoritative recorded
+   status does.
+5. **Per-agent discovery.** Each BO specialist, the synthesis and the challenger
+   are individually indexed (`bo.agent.<id>.<run>`, `bo.synthesis.<run>`,
+   `bo.challenger.<run>`) from the recorded `audit_report.json`; clicking one in
+   the Explorer returns that producer's own output. (The orchestrated M4 debt
+   specialist's output lives in `module_conclusions["M4"]`, not the audit agents
+   list, so its dedicated graph node is populated only when the debt phase runs.)
+6. **Escalations & review.** Unresolved mandatory escalations and
    `human_review_status` travel with each entry and remain visible.
-6. **Stability.** The manifest and graph are versioned (`artifact-manifest-1.0`,
+7. **Stability.** The manifest and graph are versioned (`artifact-manifest-1.0`,
    `pipeline-graph-1.0`); existing JSON contracts (`bo-memo-1.0`,
    `bo-audit-1.0`, `bo-m3-analysis-1.0`, FO payload) are unchanged.
 
 ## 6. Open items SO should account for
 
 * FO rating methodology is provisional.
+* **FO↔BO canonical-snapshot equivalence is unverified** by construction (FO's
+  independent loader). Where an overlapping fact matters, consult the
+  cross-module consistency report and treat `inconsistent` findings as unresolved.
 * Cross-module synthesis V2 and the BO+FO→SO handoff node are shown as
   illustration scaffolding in the Explorer until an end-to-end cross-module run
   is recorded; SO should consume the **BO handoff + FO overview** artifacts

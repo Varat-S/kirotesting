@@ -26,7 +26,8 @@ with a process-local `DEBUG=false` override (`.env` never edited).
 | Scope | Result |
 |-------|--------|
 | Clean `main` baseline (whole suite) | 1323 passed · 131 skipped · **12 errors (environmental)** |
-| Integrated branch, excl. environmental file | **1860 passed · 131 skipped · 0 failed** |
+| Integrated branch (initial), excl. environmental file | 1860 passed · 131 skipped · 0 failed |
+| **Integrated + hardening (PR #3 follow-up)** | **1892 passed · 131 skipped · 0 failed** |
 | New registry/render tests | 20 passed |
 | New explorer/integration tests | 11 passed |
 | `test_bo_recorded_completion.py` (integrated) | 1 passed · 12 errors (same environmental blocker as baseline) |
@@ -164,3 +165,53 @@ require a material architectural choice beyond those already resolved here.
   `tests/integration/test_pipeline_explorer.py`, and the four reports/specs
   (`BO_FO_INTEGRATION_MERGE_REPORT.md`, `ARTIFACT_MANIFEST_SPEC.md`,
   `BO_FO_OUTPUT_CONTRACT.md`, this file).
+
+---
+
+## 9. PR #3 hardening follow-up
+
+An independent review identified gaps between the documented architecture and
+the implemented guarantees. All five were closed on the same branch
+(`feat/bo-fo-pipeline-integration`); no architecture was redesigned and no
+scoring methodology changed.
+
+| # | Issue | Change made | Tests added | Verification |
+|---|-------|-------------|-------------|--------------|
+| P1 | Module 4 debt specialist ran only standalone; the BO roster registered only `m4_strategy_capital`, so "both specialists feed one governed M4 output" was not executable. | `app/services/bo/m4_debt.py` builds `Module4Inputs` from admitted snapshot evidence only; `_BoRun._module4_debt_phase` runs `Module4Specialist` via the run's `LLMClient`+`EscalationEngine`, folds it into `module_conclusions["M4"]` (consumed by synthesis/challenger/governance). Opt-in `enable_m4_debt_specialist` flag (default off preserves behaviour). Validator-8 failure → mandatory escalation + M4 incomplete → human review. `ScriptedBoBackend` routes a dedicated `m4_debt` key. | `tests/integration/test_bo_m4_dual_specialist.py` (4) | ✅ both specialists reach governed output, synthesis, challenger, governance; negative escalation stays unresolved; unavailable when no debt evidence; flag-off unchanged |
+| P2 | Matching case id did not prove same canonical snapshot; FO snapshot provenance not populated. | `ProvenanceRecord` five-level distinction; BO = verified snapshot, FO = `unverified` (independent loader) with preserved filing id + signature. `cross_module_consistency` compares overlapping facts only within compatible units/periods, flags, never overwrites. | `tests/unit/test_bo_fo_provenance.py` (12) | ✅ verified vs unverified; conflicting/period/unit/entity cases flagged, values preserved |
+| P3 | Agents appeared in the graph without an independently accessible recorded output. | Per-agent / synthesis / challenger entries indexed from the existing `audit_report.json` (`bo.agent.<id>.<run>`, `bo.synthesis.<run>`, `bo.challenger.<run>`); inspector returns the producer's own slice; graph `prefer_artifact_type` resolves nodes within the same run. | `tests/integration/test_registry_per_agent.py` (7) | ✅ each specialist discovered, same-run mapping, slice (not memo), absent debt node honest |
+| P4 | Indexer could default an existing JSON to `validated`. | Removed the `validated` default; absent authoritative signal → `incomplete`; pending review → `qualified`; M3 derived files inherit the run_manifest `validation` block; handoff pending → `qualified`. | added to `tests/unit/test_artifact_registry.py` (4) | ✅ no-metadata→incomplete, pending→qualified, explicit→validated |
+| P5 | `download.json` reconstructed canonical JSON, not original bytes. | `original.json` (exact bytes + `X-Original-SHA256` + ETag) vs `normalized.json` (canonical + `X-Canonical-SHA256`, labelled); `download.json` backwards-compatible (original for whole files, normalized for slices). | `tests/integration/test_json_export_integrity.py` (6) | ✅ byte-for-byte original; canonical distinct; slice handling |
+
+### Completion-criteria status
+
+* Both M4 capabilities participate in the intended BO path (opt-in flag) and
+  reach synthesis/governance — ✅.
+* Mandatory escalations cannot be silently bypassed (M4 debt failure → escalation
+  + incomplete module + forced human review) — ✅.
+* BO/FO evidence compatibility is explicitly verified or marked unresolved — ✅.
+* Recorded individual-agent outputs are inspectable; the graph reflects recorded
+  status; file existence cannot produce a false `validated` — ✅.
+* JSON exports have defined integrity guarantees (original vs normalized) — ✅.
+* Existing BO/FO functionality intact (1892 passed / 0 failed) — ✅.
+
+### Remaining limitations (operational vs analytical)
+
+*Operational blockers:* the 12 `test_bo_recorded_completion.py` errors still
+require the git-ignored HCA R5 artifact (unchanged, environmental). No live model
+was invoked; a true live HCA run remains pending behind the explicit opt-in paths
+(prepare the package/filing, run `run-bo-case ... --bo-roster v3` with
+`enable_m4_debt_specialist`, then `run-fo-case`; assert combined M4 output + FO
+overview + consistency report). *Analytical limitations:* FO rating methodology
+is provisional; FO↔BO canonical-snapshot equivalence is unverified by
+construction; cross-module synthesis V2 and the SO-handoff node remain labelled
+illustration scaffolding until an end-to-end cross-module run is recorded.
+
+### Final merge recommendation (updated)
+
+**Recommend proceeding to final merge review of PR #3; do not auto-merge.** All
+five hardening gaps are closed with executable code and tests, the full offline
+suite is green (1892 passed, 0 failed), and the documentation now matches the
+implemented guarantees. The only open items are the documented environmental
+blocker and the explicitly-labelled provisional/illustration items — none require
+a new architectural decision.

@@ -108,3 +108,57 @@ from guessed file naming. With no manifest the graph still renders (every node
 `absent`); with one, each node is annotated with its recorded status for the UI
 to colour. Illustration nodes (fixed scaffolding such as synthesis V2 and the
 SO handoff) are flagged `illustration=true` and never claim a successful run.
+
+---
+
+## Hardening addendum (PR #3 follow-up)
+
+### Status semantics corrected (Priority 4)
+
+File existence alone can **never** yield a `validated` status. `_entry_for_file`
+no longer seeds a default of `validated`; absent an authoritative recorded
+signal (`completion_status`, `specialist_validated`/`specialist_valid`,
+`requires_human_review`), an existing-but-unannotated JSON is `incomplete`
+(reason `unknown_completion_status`). A produced-but-pending-review artifact is
+`qualified`; a recorded validator failure is `failed`. M3 standalone demo files
+(structure, provenance, run_manifest) carry no completion metadata of their own
+and now **inherit** the authoritative status recorded in the run_manifest's
+`validation` sub-block, rather than being judged from existence. BO handoffs are
+`qualified` (pending review), never a false `validated`.
+
+### Five-level provenance (Priority 2)
+
+Each entry now carries a `ProvenanceRecord` (`provenance` field,
+`app/services/registry/provenance.py`) distinguishing: (1) case, (2) filing +
+period, (3) source documents, (4) canonical snapshot, (5) metric definition. BO
+artifacts record a verified canonical-snapshot identity
+(`snapshot_equivalence=verified`). FO artifacts come from an independent filing
+loader and are `snapshot_equivalence=unverified`, preserving `filing_identifier`
+and `source_signature` — equivalence is **never** assumed from a shared case id.
+`source_evidence_snapshot` is populated only when a snapshot version is recorded.
+
+`cross_module_consistency` compares overlapping BO/FO facts only within
+compatible units and reporting periods, flags inconsistencies (`requires_review`),
+and never overwrites either value or any scoring.
+
+### Per-agent artifact discovery (Priority 3)
+
+The indexer extends BO runs into per-producer entries read from the existing
+`audit_report.json` (no new write path): `bo.agent.<agent_id>.<run>` for each
+specialist, `bo.synthesis.<run>`, `bo.challenger.<run>`. Each carries recorded
+status (from the agent's `status` + run `validation_status`), evidence ids,
+declared dependencies and prompt/model provenance, and `audit_subpath` locating
+its slice. The node inspector returns that producer's **own** output slice (agent
+block + its hypotheses + parameters + evidence packet, or the synthesis/challenger
+block) — not the whole memo. Graph nodes carry `prefer_artifact_type` so they
+resolve to the correct per-agent record within the **same run**.
+
+### JSON export integrity — two operations (Priority 5)
+
+* **Original download** (`original.json`): exact recorded bytes, `X-Original-SHA256`
+  of those bytes, strong `ETag`. Not available for per-agent slices (no own file).
+* **Normalized export** (`normalized.json`): canonical serialization, labelled
+  `X-Export-Kind: normalized-canonical`, with `X-Canonical-SHA256`. The canonical
+  hash (= the entry's `content_hash`) may differ from the original file hash when
+  the recorded file is pretty-printed. The inspector surfaces both
+  (`original_file_sha256`, `canonical_content_hash`).

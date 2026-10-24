@@ -112,6 +112,14 @@ and does **not** consume M1/2/3 outputs; it may use verified M3 entity relations
 supplied but never treats unsupported relationships as fact (the `legal_entity` check
 enforces borrower-vs-guarantor attribution).
 
+> **Hardening update (PR #3 follow-up):** at initial merge the "both specialists feed
+> one governed Module 4 output" claim was **declarative only** — the debt specialist ran
+> solely standalone (scripts/tests). It is now **executable inside the normal BO run**
+> via `_BoRun._module4_debt_phase` (`app/services/bo/runner.py`) + `app/services/bo/m4_debt.py`,
+> gated by the opt-in `enable_m4_debt_specialist` flag (default off). Both outputs are
+> aggregated in `module_conclusions["M4"]` and consumed by synthesis, the challenger and
+> final governance. See `BO_FO_INTEGRATION_BASELINE_REPORT.md` §9 (P1).
+
 ### Financial Overview — integrated; rating methodology provisional
 Alan's seven financial measures, scoring engine, pre-checks, trigger agents,
 analyst-review (`fo-review`/`fo-override`), API/UI (`app/api/workbench` FO routes),
