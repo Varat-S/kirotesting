@@ -191,7 +191,14 @@ def _extract_slice(doc: Any, entry) -> Any:
     """
     subpath = entry.audit_subpath or ""
     if subpath.startswith("agents[agent_id="):
-        return _extract_agent_slice(doc, entry)
+        # The agent id is taken from the SUBPATH (authoritative), not from
+        # entry.producer_agent, so a validator node (whose producer_agent may be
+        # the agent it validates, or None) always resolves to the right block and
+        # never falls back to records with agent_id == None.
+        rest = subpath[len("agents[agent_id="):]
+        agent_id, _, view = rest.partition("]")
+        view = view.lstrip("#") or None
+        return _extract_agent_slice(doc, entry, agent_id=agent_id, view=view)
     node: Any = doc
     for part in subpath.split("."):
         if isinstance(node, dict) and part in node:
@@ -246,25 +253,56 @@ def load_artifact_bytes(
     return raw, original_sha256, manifest
 
 
-def _extract_agent_slice(audit: Any, entry) -> dict[str, Any]:
+def _extract_agent_slice(audit: Any, entry, *, agent_id: str | None = None,
+                         view: str | None = None) -> dict[str, Any]:
     """Pull one agent/validator/synthesis/challenger slice from a BO audit report.
 
-    Returns the recorded output for that producer only (its agent block + runs,
-    its hypotheses and parameters, or the synthesis/challenger block), so the
-    inspector shows the agent's actual output rather than the whole memo/audit.
+    ``agent_id`` is the authoritative producer id taken from the audit subpath.
+    ``view`` optionally narrows the slice: ``"validation"`` returns only the
+    agent's recorded validation record (status, issues, validator adjustments,
+    per-run validation outcomes) — used by validator nodes so they show their own
+    validation result, never another producer's hypotheses/parameters.
+
+    Returns the recorded output for that producer only, so the inspector shows
+    the agent's actual output rather than the whole memo/audit.
     """
     if not isinstance(audit, dict):
         return {"error": "audit report is not an object"}
-    agent_id = entry.producer_agent
+    if agent_id is None:
+        agent_id = entry.producer_agent
     out: dict[str, Any] = {"agent_id": agent_id, "run_id": entry.run_id,
                            "schema_version": "bo-agent-record-1.0"}
 
     agent_block = next(
         (a for a in (audit.get("agents") or []) if isinstance(a, dict)
          and a.get("agent_id") == agent_id), None)
-    if agent_block is not None:
-        out["agent"] = agent_block
 
+    if agent_block is None:
+        # The named producer is not in this run's audit -> report absence
+        # explicitly rather than selecting unrelated records.
+        out["error"] = (f"no recorded audit block for agent '{agent_id}' in this run")
+        return out
+
+    # VALIDATION view: a validator node for this agent shows the validation
+    # record only (the roster-v3 agent carries its validator's result).
+    if view == "validation":
+        out["view"] = "validation"
+        out["validator_id"] = entry.producer_validator
+        runs = agent_block.get("runs") or []
+        out["validation"] = {
+            "agent_id": agent_id,
+            "status": agent_block.get("status"),
+            "detail": agent_block.get("detail"),
+            "validation_issues": agent_block.get("validation_issues") or [],
+            "validator_adjustments": agent_block.get("validator_adjustments") or [],
+            "runs": [{"agent_run_id": r.get("agent_run_id"),
+                      "validation_status": r.get("validation_status"),
+                      "validation_detail": r.get("validation_detail")}
+                     for r in runs],
+        }
+        return out
+
+    out["agent"] = agent_block
     if agent_id == "business_orchestrator":
         out["synthesis"] = audit.get("orchestrator")
         out["conclusion"] = audit.get("final_conclusion") or audit.get("conclusions")

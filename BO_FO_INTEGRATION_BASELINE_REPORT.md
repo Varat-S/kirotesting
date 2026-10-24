@@ -294,3 +294,93 @@ documentation matches the implementation. The only open items remain the
 documented environmental blocker (HCA R5 live artifact) and the explicitly
 labelled provisional FO rating / illustration scaffolding — none require a new
 architectural decision.
+
+---
+
+## 11. PR #3 — two acceptance failures fixed (Strategy V8 node, FO PDF 500)
+
+Two independently reproduced acceptance failures on commit `c8eaa4e` were fixed
+without changing BO/FO scoring, agent architecture, or governance behaviour.
+
+### Task 1 — Strategy Validator 8 showed unrelated `agent_id: null` parameters
+
+**Root cause.** The `bo.validator8_strategy.<run>` artifact carried
+`audit_subpath="agents[agent_id=m4_strategy_capital]"` but **no `producer_agent`**.
+The inspector's slice resolver (`_extract_agent_slice`) selected the agent block
+and filtered hypotheses/parameters using `entry.producer_agent` — which was
+`None` — so it matched records whose `agent_id` was `null` (the deterministic /
+rubric parameters that carry no agent id). The node therefore displayed another
+producer's data.
+
+**Fix.** `_extract_slice` now parses the agent id **from the audit subpath**
+(authoritative), and a new `#validation` view (`agents[agent_id=…]#validation`)
+makes a validator node return only that agent's **validation record** (status,
+issues, validator adjustments, per-run validation outcomes) — never hypotheses
+or parameters. The strategy validator entry sets `producer_agent="m4_strategy_capital"`
+and this view. If `m4_strategy_capital` did not run (e.g. v2 roster), no entry is
+created and the node is `absent` — never substituted. Each validator node
+(strategy V8 / debt V8 / Validator 7) resolves to its own record within the
+selected run. (`app/services/registry/explorer.py`, `indexer.py`.)
+
+### Task 2 — completed, scored FO artifact → HTTP 500 on PDF export
+
+**Root cause.** `render_json_pdf` put every scalar/compact value into a fixed
+reportlab `Table` cell. A completed FO artifact can contain a cell (e.g. a long
+measure `reason`, or a large nested blob) whose rendered `Paragraph` is taller
+than a full A4 content frame (~727 pt). A table row cannot be split when its
+tallest cell exceeds the page, so reportlab raised `LayoutError`, which the
+`/export.pdf` route surfaced as HTTP 500. The existing guard only handled *wide*
+tables (`_MAX_TABLE_COLUMNS`), not *tall* cells.
+
+**Fix.** Oversized content is now rendered as page-flowing sections instead of
+fixed cells (nothing truncated):
+* scalars over a conservative per-cell character budget are pulled out of the
+  key/value table into their own full-width, paginating `Paragraph` section;
+* a uniform-object list with any oversized cell (or too many rows) renders as
+  per-record sections instead of one giant table;
+* a final `LayoutError` safety net re-renders the whole payload in text-flow mode
+  (paragraphs only), which cannot overflow — all keys/values preserved verbatim.
+The `/export.pdf` route additionally maps any residual error to 422, never a bare
+500. Output remains deterministic; BO PDFs with normal (short) content are
+unchanged in substance. (`app/services/registry/json_render.py`,
+`app/api/pipeline_explorer.py`.)
+
+### Tests & verification
+
+| Area | Tests |
+|------|-------|
+| Strategy vs Debt V8 identity, same-run mapping, absent-when-not-run | `tests/integration/test_validator_node_identity.py` (4) |
+| PDF robustness: long strings, nested JSON, wide/tall tables, huge cells, content preserved, determinism, normal unchanged | `tests/unit/test_json_pdf_oversized.py` (10) |
+
+* Full offline suite: **1919 passed · 131 skipped · 0 failed** (was 1905; +14).
+* Both cases verified through the **actual `/pipeline` HTTP interface**: strategy
+  V8 node returns its own validation record (`agent_id=m4_strategy_capital`,
+  `view=validation`, no null params); the previously-failing scored FO artifact
+  returns **HTTP 200** with a valid, complete PDF.
+* **JSON hash integrity preserved** (`test_json_export_integrity.py`, 6 passed —
+  no artifact bytes changed).
+* **Provisional FO ratings / pending-review labels preserved** (no change to FO
+  status or `gate_view`). No scoring, thresholds, or prompts changed. No paid
+  model invoked.
+* Environment-dependent `test_bo_recorded_completion.py` unchanged (1 passed / 12
+  errors — git-ignored HCA R5 live artifact).
+
+### Evidence
+* `strategy_v8_corrected.png` — corrected Strategy Validator 8 inspector (own
+  validation record; no `agent_id: null` data).
+* `fo_scored_export.pdf` — the previously-failing scored FO artifact rendered to
+  a readable, complete PDF.
+
+> Live-server screenshots remain infeasible (the Playwright backend cannot reach
+> the app's localhost; `file://` is blocked), so the inspector screenshot was
+> rendered from the exact `inspect_node` payload the `/pipeline` route serves —
+> the same payload verified over HTTP above.
+
+### Final merge recommendation (updated)
+
+**Proceed to final merge review of PR #3; do not auto-merge.** Both acceptance
+failures are fixed with executable code and regression tests, the full offline
+suite is green (1919 passed, 0 failed), JSON byte integrity and PDF determinism
+are preserved, provisional FO labels are intact, and no scoring/architecture/
+governance behaviour changed. The only remaining open item is the documented
+environmental blocker (HCA R5 live artifact).

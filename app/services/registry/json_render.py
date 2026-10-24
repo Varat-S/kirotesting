@@ -33,6 +33,7 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
+from reportlab.platypus.doctemplate import LayoutError
 
 HEAD = colors.HexColor("#1a3b5d")
 GRID = colors.HexColor("#d0d7de")
@@ -54,6 +55,31 @@ class _DeterministicCanvas(Canvas):
 # A uniform-object list wider than this renders as per-item sections, not a
 # single table, so it cannot overflow the A4 content frame.
 _MAX_TABLE_COLUMNS = 8
+# A single table cell cannot be taller than one page; reportlab cannot split a
+# row whose tallest cell exceeds the frame. Values whose rendered text would be
+# that tall are pulled OUT of the table and rendered as their own full-width,
+# page-flowing section instead. The threshold is a conservative character budget
+# for the usable A4 content frame (~68 lines x ~95 chars in the cell font),
+# chosen so a cell never overflows; content is re-presented, never truncated.
+_MAX_CELL_CHARS = 1600
+# A whole uniform-object list with more rows than this is paginated by rendering
+# each record as its own key/value section (still a splittable table per record)
+# rather than one giant table, which keeps very long lists robust.
+_MAX_TABLE_ROWS = 40
+
+
+def _text_len(value: Any) -> int:
+    """Approximate rendered length of a scalar/compact value, for the cell guard."""
+    if value is None or isinstance(value, bool):
+        return 4
+    if isinstance(value, (dict, list)):
+        return len(_compact(value))
+    return len(str(value))
+
+
+def _cell_too_tall(value: Any) -> bool:
+    """True when a value would make a table cell taller than a page can hold."""
+    return _text_len(value) > _MAX_CELL_CHARS
 
 
 # ---------------------------------------------------------------------------
@@ -212,33 +238,71 @@ def _records_table(items: list[dict], st: dict) -> Table:
     return table
 
 
+def _long_scalar_section(key: str, value: Any, st: dict, story: list) -> None:
+    """Render an oversized scalar as its own page-flowing section.
+
+    A standalone ``Paragraph`` flows and paginates across pages, so no content is
+    lost or truncated — unlike a fixed table cell, which cannot exceed one page.
+    """
+    story.append(Paragraph(f"<b>{escape(_humanize(key))}</b>", st["h"]))
+    text = value if isinstance(value, str) else _compact(value)
+    story.append(Paragraph(escape(str(text)), st["body"]))
+    story.append(Spacer(1, 4))
+
+
+def _records_as_sections(items: list[dict], st: dict, story: list) -> None:
+    """Render each record as its own key/value section (robust for any size)."""
+    for i, row in enumerate(items):
+        story.append(Paragraph(f"[{i}]", st["h"]))
+        _render_any_pdf(row, st, story)
+
+
 def _render_any_pdf(value: Any, st: dict, story: list, *,
                     heading: Optional[str] = None, level: int = 1) -> None:
     if heading:
         story.append(Paragraph(escape(heading), st["h"]))
     if isinstance(value, dict):
-        scalars = [(k, v) for k, v in value.items() if _scalar(v)]
-        if scalars:
-            story.append(_kv_table(scalars, st))
+        # Short scalars go in a compact key/value table; scalars whose rendered
+        # text would overflow a table cell are pulled out into their own
+        # page-flowing section so the PDF never raises on an oversized row.
+        short = [(k, v) for k, v in value.items() if _scalar(v) and not _cell_too_tall(v)]
+        long_scalars = [(k, v) for k, v in value.items()
+                        if _scalar(v) and _cell_too_tall(v)]
+        if short:
+            story.append(_kv_table(short, st))
             story.append(Spacer(1, 4))
+        for key, child in long_scalars:
+            _long_scalar_section(key, child, st, story)
         for key, child in value.items():
             if not _scalar(child):
                 _render_any_pdf(child, st, story, heading=_humanize(key), level=level + 1)
     elif isinstance(value, list):
         # A uniform-object list renders as a table only when it is narrow enough
-        # to fit A4; wider records fall back to per-item vertical sections so no
-        # arbitrary JSON ever overflows the page.
-        if _uniform_object_list(value) and len(value[0].keys()) <= _MAX_TABLE_COLUMNS:
+        # to fit A4, short enough to paginate cleanly, and has NO oversized cell;
+        # otherwise it falls back to per-item sections so no row ever overflows.
+        is_records = _uniform_object_list(value)
+        narrow = is_records and len(value[0].keys()) <= _MAX_TABLE_COLUMNS
+        short_enough = len(value) <= _MAX_TABLE_ROWS
+        no_tall_cell = is_records and not any(
+            _cell_too_tall(row.get(c)) for row in value for c in value[0].keys())
+        if narrow and short_enough and no_tall_cell:
             story.append(_records_table(value, st))
             story.append(Spacer(1, 4))
+        elif _uniform_object_list(value):
+            _records_as_sections(value, st, story)
         else:
             for i, child in enumerate(value):
-                if _scalar(child):
+                if _scalar(child) and not _cell_too_tall(child):
                     story.append(Paragraph(f"[{i}] {escape(str(child))}", st["body"]))
+                elif _scalar(child):
+                    _long_scalar_section(f"[{i}]", child, st, story)
                 else:
                     _render_any_pdf(child, st, story, heading=f"[{i}]", level=level + 1)
     else:
-        story.append(Paragraph(escape(str(value)), st["body"]))
+        if _cell_too_tall(value):
+            story.append(Paragraph(escape(str(value)), st["body"]))
+        else:
+            story.append(Paragraph(escape(str(value)), st["body"]))
 
 
 # Specialised ordering for known credit-memo schemas (top-level section order).
@@ -289,9 +353,11 @@ def render_json_pdf(
             if key in payload:
                 seen.add(key)
                 child = payload[key]
-                if _scalar(child):
+                if _scalar(child) and not _cell_too_tall(child):
                     story.append(_kv_table([(key, child)], st))
                     story.append(Spacer(1, 4))
+                elif _scalar(child):
+                    _long_scalar_section(key, child, st, story)
                 else:
                     _render_any_pdf(child, st, story, heading=_humanize(key))
         remaining = {k: v for k, v in payload.items() if k not in seen}
@@ -300,13 +366,66 @@ def render_json_pdf(
     else:
         _render_any_pdf(payload, st, story)
 
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer, pagesize=A4,
-        leftMargin=18 * mm, rightMargin=18 * mm,
-        topMargin=18 * mm, bottomMargin=18 * mm,
-        title=title, author="Pipeline Explorer (deterministic export)",
-        invariant=1,  # reportlab: pin the PDF /ID and producer for reproducibility
-    )
-    doc.build(story, canvasmaker=_DeterministicCanvas)
-    return buffer.getvalue()
+    def _build(flowables: list) -> bytes:
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer, pagesize=A4,
+            leftMargin=18 * mm, rightMargin=18 * mm,
+            topMargin=18 * mm, bottomMargin=18 * mm,
+            title=title, author="Pipeline Explorer (deterministic export)",
+            invariant=1,  # pin the PDF /ID and producer for reproducibility
+        )
+        doc.build(flowables, canvasmaker=_DeterministicCanvas)
+        return buffer.getvalue()
+
+    try:
+        return _build(story)
+    except LayoutError:
+        # Final safety net: no artifact may ever return HTTP 500 from the PDF
+        # route. If any residual flowable still overflows, re-render the whole
+        # payload as page-flowing paragraphs (no tables), which cannot overflow.
+        # All content is preserved — every key/value is emitted as flowing text.
+        fallback: list = [
+            Paragraph(escape(title), st["title"]),
+            Paragraph(escape(subtitle) if subtitle else "", st["body"]),
+            Paragraph("Rendered in text-flow mode (content preserved; a value "
+                      "exceeded the tabular layout).", st["body"]),
+            Spacer(1, 6),
+        ]
+        _render_text_flow(payload, st, fallback)
+        return _build(fallback)
+
+
+def _render_text_flow(value: Any, st: dict, story: list, *, prefix: str = "") -> None:
+    """Render any JSON as flowing, paginating paragraphs only (no tables).
+
+    Guaranteed never to overflow a page frame, so it is the safe fallback when
+    tabular layout cannot fit a value. Preserves every key and value verbatim.
+    """
+    if isinstance(value, dict):
+        for key, child in value.items():
+            label = f"{prefix}{_humanize(key)}"
+            if _scalar(child):
+                story.append(Paragraph(f"<b>{escape(label)}:</b> {escape(_scalar_text(child))}",
+                                       st["body"]))
+            else:
+                story.append(Paragraph(f"<b>{escape(label)}</b>", st["h"]))
+                _render_text_flow(child, st, story, prefix=prefix + "  ")
+    elif isinstance(value, list):
+        for i, child in enumerate(value):
+            if _scalar(child):
+                story.append(Paragraph(f"{escape(prefix)}[{i}] {escape(_scalar_text(child))}",
+                                       st["body"]))
+            else:
+                story.append(Paragraph(f"{escape(prefix)}[{i}]", st["h"]))
+                _render_text_flow(child, st, story, prefix=prefix + "  ")
+    else:
+        story.append(Paragraph(escape(_scalar_text(value)), st["body"]))
+
+
+def _scalar_text(value: Any) -> str:
+    if value is None:
+        return "—"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)

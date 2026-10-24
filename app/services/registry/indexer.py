@@ -468,9 +468,14 @@ def _index_bo_module_artifacts(
             artifact_id=f"bo.validator8_strategy.{run_id}",
             artifact_type=ArtifactType.VALIDATION_REPORT,
             case_id=case_id, run_id=run_id, producer_module="M4",
+            producer_agent="m4_strategy_capital",
             producer_validator="validator_8",
             file_location=audit_loc,
-            audit_subpath="agents[agent_id=m4_strategy_capital]",
+            # ``#validation`` selects the agent's VALIDATION record (status,
+            # issues, validator adjustments) — not its hypotheses/parameters —
+            # so the strategy Validator 8 node shows its own recorded output and
+            # never another producer's data (PR #3 Task 1).
+            audit_subpath="agents[agent_id=m4_strategy_capital]#validation",
             status=_bo_status_from_audit(strat_agent.get("status"), vstat),
             validation_status=vstat,
             validator_issues_count=len(strat_agent.get("validation_issues") or []),

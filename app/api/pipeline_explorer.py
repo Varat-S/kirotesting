@@ -200,7 +200,15 @@ def pipeline_node_pdf(case_id: str, artifact_id: str) -> Response:
     subtitle = f"Case {case_id} · {artifact_id}"
     if entry is not None and entry.schema_name:
         subtitle += f" · schema {entry.schema_name}"
-    pdf = render_json_pdf(payload, title=artifact_id, subtitle=subtitle)
+    # render_json_pdf is robust to oversized content (it paginates / falls back to
+    # text flow and never truncates). Any residual rendering error is surfaced as
+    # a clear 422 rather than a bare 500, so the Explorer degrades gracefully.
+    try:
+        pdf = render_json_pdf(payload, title=artifact_id, subtitle=subtitle)
+    except Exception as exc:  # pragma: no cover - defensive; renderer is robust
+        raise HTTPException(
+            status_code=422,
+            detail=f"PDF rendering failed for '{artifact_id}': {exc}") from exc
     return Response(
         content=pdf,
         media_type="application/pdf",
