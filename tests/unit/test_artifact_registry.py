@@ -65,9 +65,11 @@ def test_status_taxonomy_distinguishes_validated_and_qualified():
     m = _manifest()
     struct = m.by_id("m3.corporate_structure")
     analysis = m.by_id("m3.analysis")
-    # The corporate structure is available; the analysis for this fixture
-    # requires human review -> qualified (not silently promoted to validated).
-    assert struct.status == ExecutionStatus.VALIDATED
+    # This fixture's run requires human review -> every M3 artifact is QUALIFIED,
+    # NOT silently promoted to validated from file existence. The structure file
+    # (no self-governing completion metadata) inherits the run's authoritative
+    # qualified status rather than defaulting to validated.
+    assert struct.status == ExecutionStatus.QUALIFIED
     assert analysis.status == ExecutionStatus.QUALIFIED
     assert analysis.human_review_status.value == "pending"
 
@@ -104,6 +106,39 @@ def test_unreadable_artifact_is_error_not_success(tmp_path):
     fo = m.by_id("fo.overview.runC")
     assert fo.status == ExecutionStatus.ERROR
     assert not fo.is_successful()
+
+
+def test_existing_json_without_validation_metadata_is_not_validated(tmp_path):
+    # Priority 4: file existence alone must NOT yield a ``validated`` status.
+    run = tmp_path / "bo" / "CASE_P4" / "runP"
+    run.mkdir(parents=True)
+    (run / "business_overview.json").write_text(
+        json.dumps({"document": "memo", "sections": []}), encoding="utf-8")
+    m = build_manifest(tmp_path, "CASE_P4")
+    memo = m.by_id("bo.memo.runP")
+    assert memo.status == ExecutionStatus.INCOMPLETE
+    assert not memo.is_successful()
+
+
+def test_schema_valid_but_pending_review_is_qualified(tmp_path):
+    run = tmp_path / "bo" / "CASE_Q" / "runQ"
+    run.mkdir(parents=True)
+    (run / "business_overview.json").write_text(
+        json.dumps({"completion_status": "complete",
+                    "requires_human_review": True}), encoding="utf-8")
+    m = build_manifest(tmp_path, "CASE_Q")
+    memo = m.by_id("bo.memo.runQ")
+    assert memo.status == ExecutionStatus.QUALIFIED
+
+
+def test_explicit_validated_is_honoured(tmp_path):
+    run = tmp_path / "bo" / "CASE_V" / "runV"
+    run.mkdir(parents=True)
+    (run / "business_overview.json").write_text(
+        json.dumps({"completion_status": "accepted",
+                    "requires_human_review": False}), encoding="utf-8")
+    m = build_manifest(tmp_path, "CASE_V")
+    assert m.by_id("bo.memo.runV").status == ExecutionStatus.VALIDATED
 
 
 def test_counts_by_status_and_successful_filter():

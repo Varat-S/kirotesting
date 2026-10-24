@@ -72,6 +72,46 @@ class ArtifactType(str, Enum):
     OTHER = "other"
 
 
+class SnapshotEquivalence(str, Enum):
+    """Whether an artifact is proven to derive from the canonical snapshot.
+
+    ``verified`` requires a recorded canonical snapshot identity (version +
+    content hash). ``unverified`` means the producer used its own evidence path
+    (e.g. FO's filing loader) with no recorded link to the canonical snapshot —
+    equivalence must NOT be assumed from a shared case id. ``not_applicable`` for
+    artifacts that are not evidence-derived (run manifests, evaluations).
+    """
+
+    VERIFIED = "verified"
+    UNVERIFIED = "unverified"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class ProvenanceRecord(BaseModel):
+    """Verifiable provenance for one artifact, distinguishing the five levels.
+
+    These answer, in increasing strength:
+      1. same borrower/case            -> ``case_id``
+      2. same filing & fiscal period   -> ``filing_identifier`` + ``reporting_period``
+      3. same underlying source docs   -> ``source_signature`` / ``source_document_ids``
+      4. same canonical snapshot       -> ``canonical_snapshot_version`` + ``..._hash``
+                                          and ``snapshot_equivalence``
+      5. same numerical metric defn    -> carried per-fact by the consistency check,
+                                          not on the artifact itself
+    """
+
+    case_id: Optional[str] = None
+    reporting_period: Optional[str] = None
+    reporting_entity: Optional[str] = None
+    filing_identifier: Optional[str] = None       # e.g. FO filing folder
+    source_signature: Optional[str] = None        # e.g. FO folder_signature hash
+    source_document_ids: list[str] = Field(default_factory=list)
+    canonical_snapshot_version: Optional[int] = None
+    canonical_snapshot_hash: Optional[str] = None
+    snapshot_equivalence: SnapshotEquivalence = SnapshotEquivalence.NOT_APPLICABLE
+    equivalence_note: Optional[str] = None
+
+
 class ArtifactEntry(BaseModel):
     """One indexed artifact (or a deliberately absent/skipped producer)."""
 
@@ -97,6 +137,7 @@ class ArtifactEntry(BaseModel):
 
     # Lineage.
     source_evidence_snapshot: Optional[str] = None   # "case_id@vN" or snapshot hash
+    provenance: Optional[ProvenanceRecord] = None     # verifiable five-level provenance
     depends_on: list[str] = Field(default_factory=list)  # parent artifact_ids
 
     # Execution + governance status.

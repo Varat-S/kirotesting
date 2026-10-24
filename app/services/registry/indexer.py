@@ -33,6 +33,7 @@ from app.schemas.artifact_manifest import (
     ExecutionStatus,
     HumanReviewStatus,
 )
+from app.services.registry.provenance import provenance_from_payload
 
 
 def _load_json(path: Path) -> Optional[Any]:
@@ -94,9 +95,14 @@ def _entry_for_file(
     producer_agent: Optional[str] = None,
     producer_validator: Optional[str] = None,
     depends_on: Optional[list[str]] = None,
-    default_status: ExecutionStatus = ExecutionStatus.VALIDATED,
 ) -> ArtifactEntry:
-    """Build one entry for an on-disk JSON file (or ABSENT if missing)."""
+    """Build one entry for an on-disk JSON file (or ABSENT if missing).
+
+    Status is NEVER defaulted to ``validated`` merely because the file exists:
+    absent explicit authoritative status, the entry is ``incomplete``. Only a
+    recorded completion/validation signal can raise it to ``validated`` /
+    ``qualified`` (see :func:`_status_from_completion`).
+    """
     if not path.is_file():
         return ArtifactEntry(
             artifact_id=artifact_id,
@@ -136,11 +142,15 @@ def _entry_for_file(
     )
     validated = doc.get("specialist_validated")
 
-    status, reason = default_status, None
-    if completion is not None or validated is not None or requires_review:
-        status, reason = _status_from_completion(
-            completion, requires_review=requires_review, validated=validated
-        )
+    status, reason = _status_from_completion(
+        completion, requires_review=requires_review, validated=validated
+    )
+
+    provenance = provenance_from_payload(
+        payload, case_id=case_id, producer_module=producer_module)
+    source_snapshot = None
+    if provenance.canonical_snapshot_version is not None:
+        source_snapshot = f"{case_id}@v{provenance.canonical_snapshot_version}"
 
     return ArtifactEntry(
         artifact_id=artifact_id,
@@ -154,6 +164,8 @@ def _entry_for_file(
         schema_version=doc.get("schema_version"),
         file_location=_rel(path, root),
         content_hash=content_hash(payload),
+        source_evidence_snapshot=source_snapshot,
+        provenance=provenance,
         status=status,
         status_reason=reason,
         validation_status=(
@@ -178,8 +190,38 @@ def _index_m3_dir(dir_path: Path, root: Path, case_id: str) -> list[ArtifactEntr
     if isinstance(manifest.get("evidence"), dict):
         snapshot_v = manifest["evidence"].get("snapshot_version")
     snapshot_ref = f"{case_id}@v{snapshot_v}" if snapshot_v is not None else None
+    # The run_manifest is the AUTHORITATIVE status record for the standalone M3
+    # run. Its real status lives in the ``validation`` sub-block (top-level keys
+    # are absent). Derived files (structure, provenance, the manifest itself)
+    # carry no completion metadata of their own, so their status is inherited
+    # from here rather than judged from file existence (Priority 4: no false
+    # "validated").
+    val_block = manifest.get("validation") if isinstance(
+        manifest.get("validation"), dict) else {}
+    authoritative = _status_from_completion(
+        val_block.get("completion_status"),
+        requires_review=bool(val_block.get("requires_human_review")),
+        validated=val_block.get("specialist_valid",
+                                val_block.get("specialist_validated")),
+    )
 
     entries: list[ArtifactEntry] = []
+
+    def _apply_snapshot(entry: ArtifactEntry) -> None:
+        entry.source_evidence_snapshot = snapshot_ref or entry.source_evidence_snapshot
+        entry.model_id, entry.model_invoked = model_id, model_invoked
+        if entry.provenance is not None and snapshot_v is not None:
+            entry.provenance.canonical_snapshot_version = snapshot_v
+            from app.schemas.artifact_manifest import SnapshotEquivalence
+            entry.provenance.snapshot_equivalence = SnapshotEquivalence.VERIFIED
+            entry.provenance.equivalence_note = (
+                "Standalone M3 run recorded its canonical snapshot version.")
+
+    def _inherit_status(entry: ArtifactEntry) -> None:
+        # Only inherit when the file carries no self-governing completion signal.
+        if entry.status == ExecutionStatus.INCOMPLETE and \
+                entry.status_reason == "unknown_completion_status":
+            entry.status, entry.status_reason = authoritative
 
     struct = _entry_for_file(
         dir_path / "m3_corporate_structure.json", root,
@@ -187,8 +229,8 @@ def _index_m3_dir(dir_path: Path, root: Path, case_id: str) -> list[ArtifactEntr
         case_id=case_id, run_id=run_id, producer_module="M3",
         producer_agent="m3_corporate_management",
     )
-    struct.source_evidence_snapshot = snapshot_ref
-    struct.model_id, struct.model_invoked = model_id, model_invoked
+    _apply_snapshot(struct)
+    _inherit_status(struct)
     entries.append(struct)
 
     analysis = _entry_for_file(
@@ -198,16 +240,18 @@ def _index_m3_dir(dir_path: Path, root: Path, case_id: str) -> list[ArtifactEntr
         producer_agent="m3_corporate_management",
         depends_on=["m3.corporate_structure"],
     )
-    analysis.source_evidence_snapshot = snapshot_ref
-    analysis.model_id, analysis.model_invoked = model_id, model_invoked
+    _apply_snapshot(analysis)
     entries.append(analysis)
 
-    entries.append(_entry_for_file(
+    provenance_entry = _entry_for_file(
         dir_path / "m3_structure_provenance.json", root,
         artifact_id="m3.structure_provenance", artifact_type=ArtifactType.OTHER,
         case_id=case_id, run_id=run_id, producer_module="M3",
         producer_agent="m3_corporate_management", depends_on=["m3.corporate_structure"],
-    ))
+    )
+    _apply_snapshot(provenance_entry)
+    _inherit_status(provenance_entry)
+    entries.append(provenance_entry)
 
     val = _entry_for_file(
         dir_path / "validation_report.json", root,
@@ -224,11 +268,14 @@ def _index_m3_dir(dir_path: Path, root: Path, case_id: str) -> list[ArtifactEntr
         depends_on=["m3.validator_7"],
     ))
 
-    entries.append(_entry_for_file(
+    run_manifest_entry = _entry_for_file(
         dir_path / "run_manifest.json", root,
         artifact_id="m3.run_manifest", artifact_type=ArtifactType.RUN_MANIFEST,
         case_id=case_id, run_id=run_id, producer_module="M3",
-    ))
+    )
+    _apply_snapshot(run_manifest_entry)
+    _inherit_status(run_manifest_entry)
+    entries.append(run_manifest_entry)
     return entries
 
 
