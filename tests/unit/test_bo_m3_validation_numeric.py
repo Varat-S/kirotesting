@@ -35,6 +35,9 @@ from app.services.bo.m3_validation import (
     _comparable_basis,
     _deterministic_claim_checks,
     _identify_canonical_metric,
+    _metric_bound_values,
+    _period_value_tokens,
+    _scope_comparable,
     validate_m3_assessment,
 )
 
@@ -398,3 +401,285 @@ def test_revenue_growth_vs_ebitda_growth_not_conflated():
     # claim about EBITDA growth does not borrow the revenue canonical datum.
     assert _identify_canonical_metric("Revenue grew 10% in FY2024.") == "revenue_growth"
     assert _identify_canonical_metric("EBITDA grew 10% in FY2024.") is None
+
+
+# ===========================================================================
+# V7 — final numerical evidence binding corrections (Problems A/B/C/D).
+#
+# These adversarial cases exercise the ACTUAL Validator 7 functions and cover
+# both SUCCESSFUL matching (genuine support/contradiction preserved) and
+# UNSUCCESSFUL matching (false support / false contradiction eliminated). The
+# governing principle: a number in a cited passage is not sufficient — it must
+# be demonstrably associated with the SAME financial assertion (metric, entity,
+# period, basis, units).
+# ===========================================================================
+
+
+# -- Problem A1: a value bound to an UNRELATED metric must not verify ----------
+
+
+def test_v7_A1_net_debt_number_does_not_verify_revenue_growth():
+    # Passage: 'Revenue grew 8%, while net debt was 12 million'. The claimed 12%
+    # revenue growth must NOT be verified by the net-debt 12 (a different metric),
+    # and because revenue actually grew 8% the claim is CONTRADICTED on revenue.
+    obs, _ = _govern(
+        _management(hypothesis="Revenue grew 12% in FY2024.",
+                    credit_mechanism="Top-line growth supports debt service."),
+        evidence_texts={
+            "ev-1": "Revenue grew 8% in FY2024, while net debt was 12 million."})
+    assert obs.disposition.value == "rejected"
+    assert any("contradicted" in r.casefold() for r in obs.validation_reasons)
+
+
+def test_v7_A1_binding_isolates_the_relevant_metric_value():
+    # Direct binding check: in the mixed passage only '8' is bound to revenue
+    # growth; the net-debt '12' is NOT in the revenue-growth value set.
+    bound = _metric_bound_values(
+        "Revenue grew 8% in FY2024, while net debt was 12 million.",
+        "revenue_growth")
+    assert "8" in bound
+    assert "12" not in bound
+
+
+def test_v7_A1_net_debt_claim_binds_to_net_debt_value_only():
+    # The complementary binding: a net-debt claim binds to the net-debt 12, not
+    # the revenue 8. A net-debt claim of 50 therefore conflicts with 12 (same
+    # metric) and is CONTRADICTED; the revenue 8 is irrelevant.
+    bound = _metric_bound_values(
+        "Revenue grew 8% in FY2024, while net debt was 12 million.", "net_debt")
+    assert "12" in bound and "8" not in bound
+    checks = _deterministic_claim_checks(
+        "Net debt was 50 million in FY2024.", ["ev-1"],
+        {"ev-1": "Revenue grew 8% in FY2024, while net debt was 12 million."})
+    failed = [c for c in checks if not c.passed]
+    assert failed and any(c.contradiction for c in failed)
+
+
+# -- Problem A2: identical value, different metric -> UNSUPPORTED --------------
+
+
+def test_v7_A2_identical_value_different_metric_is_unsupported():
+    obs, _ = _govern(
+        _management(hypothesis="Revenue grew 12% in FY2024.",
+                    credit_mechanism="Top-line growth supports debt service."),
+        evidence_texts={"ev-1": "EBITDA grew 12% in FY2024."})
+    assert obs.disposition.value == "unverified"
+    assert obs.disposition.value != "rejected"
+    assert not any("contradicted" in r.casefold() for r in obs.validation_reasons)
+
+
+# -- Problem B: a reporting YEAR must not be a conflicting financial value ------
+
+
+def test_v7_B_year_token_is_not_a_financial_value():
+    # 'Revenue increased during FY2024' states no growth %. The FY2024 year must
+    # not be read as a figure that conflicts with the claimed 12% -> UNSUPPORTED.
+    obs, _ = _govern(
+        _management(hypothesis="Revenue grew 12% in FY2024.",
+                    credit_mechanism="Top-line growth supports debt service."),
+        evidence_texts={"ev-1": "Revenue increased during FY2024."})
+    assert obs.disposition.value == "unverified"
+    assert obs.disposition.value != "rejected"
+    assert not any("contradicted" in r.casefold() for r in obs.validation_reasons)
+
+
+def test_v7_B_period_year_tokens_are_identified():
+    # The 2024 inside FY2024 is a period token, excluded from the value set.
+    assert "2024" in _period_value_tokens("Revenue increased during FY2024.")
+    # A genuine four-digit amount NOT part of a period phrase is NOT excluded.
+    assert "3000" not in _period_value_tokens("Net debt was 3000 in FY2024.")
+
+
+def test_v7_B_four_digit_financial_amount_still_compared():
+    # A legitimate four-digit amount (3000) is still a comparable value: a claim
+    # of 9000 conflicts with the cited 3000 for the same metric/period.
+    checks = _deterministic_claim_checks(
+        "Net debt was 9000 in FY2024.", ["ev-1"],
+        {"ev-1": "Net debt was 3000 in FY2024."})
+    failed = [c for c in checks if not c.passed]
+    assert failed and any(c.contradiction for c in failed)
+
+
+# -- Problem C: cross-period canonical comparison is not a contradiction -------
+
+
+def test_v7_C_fy2023_claim_vs_fy2024_canonical_is_unsupported():
+    canonical = {"net_debt": {
+        "value": 150.0, "raw_value": 150.0, "units": "currency", "period": "FY2024",
+        "accounting_basis": None, "currency": "USD", "reporting_scope": "consolidated"}}
+    obs, _ = _govern(
+        _management(hypothesis="Consolidated net debt was 100 million in FY2023.",
+                    credit_mechanism="Historical leverage read-across."),
+        evidence_texts={"ev-1": "Consolidated net debt was 100 million in FY2023."},
+        canonical_metrics=canonical)
+    assert obs.disposition.value in {"unverified", "qualified"}
+    assert obs.disposition.value != "rejected"
+
+
+def test_v7_C_cross_period_canonical_checks_are_not_contradiction():
+    canonical = {"net_debt": {
+        "value": 150.0, "raw_value": 150.0, "units": "currency", "period": "FY2024",
+        "accounting_basis": None, "currency": "USD", "reporting_scope": "consolidated"}}
+    checks = _canonical_financial_checks(
+        {"supporting_evidence_ids": ["ev-1"]},
+        "Consolidated net debt was 100 million in FY2023.",
+        canonical_metrics=canonical)
+    failed = [c for c in checks if not c.passed]
+    assert failed
+    assert not any(c.contradiction for c in failed)
+
+
+# -- Problem D: different named subsidiaries are not comparable ----------------
+
+
+def test_v7_D_different_subsidiary_without_entity_id_is_not_contradicted():
+    # Canonical subsidiary datum carries NO entity identifier -> identity cannot
+    # be established, so a value difference is UNSUPPORTED, not a contradiction.
+    canonical = {"net_debt": {
+        "value": 500.0, "raw_value": 500.0, "units": "currency", "period": "FY2024",
+        "accounting_basis": None, "currency": "USD", "reporting_scope": "subsidiary"}}
+    checks = _canonical_financial_checks(
+        {"supporting_evidence_ids": ["ev-1"]},
+        "Subsidiary A reported net debt of 100 million in FY2024.",
+        canonical_metrics=canonical)
+    failed = [c for c in checks if not c.passed]
+    assert failed
+    assert not any(c.contradiction for c in failed)
+
+
+def test_v7_D_mismatched_entity_id_is_not_contradicted():
+    # The canonical datum identifies Subsidiary B; the claim is about Subsidiary
+    # A. Different legal entities -> NOT comparable -> UNSUPPORTED.
+    comparable, reason = _scope_comparable(
+        "Subsidiary A reported net debt of 100 million in FY2024.",
+        "subsidiary", datum_entity_id="subsidiary-b", datum_entity_name="Subsidiary B")
+    assert comparable is False
+    assert "same legal entity" in reason or "different subsidiaries" in reason
+
+
+def test_v7_D_matching_entity_id_is_comparable():
+    # When the claim explicitly identifies the SAME subsidiary the datum records,
+    # the subsidiary-level comparison IS admissible (genuine detection preserved).
+    comparable, _ = _scope_comparable(
+        "Subsidiary B reported net debt of 100 million in FY2024.",
+        "subsidiary", datum_entity_id="subsidiary-b", datum_entity_name="Subsidiary B")
+    assert comparable is True
+
+
+def test_v7_D_consolidated_datum_does_not_contradict_subsidiary_claim():
+    # A consolidated/group figure must never auto-contradict an individual
+    # subsidiary claim (keep correct consolidated-metric handling).
+    canonical = {"net_debt": {
+        "value": 5000.0, "raw_value": 5000.0, "units": "currency", "period": "FY2024",
+        "accounting_basis": None, "currency": "USD", "reporting_scope": "consolidated"}}
+    checks = _canonical_financial_checks(
+        {"supporting_evidence_ids": ["ev-1"]},
+        "Subsidiary A reported net debt of 100 million in FY2024.",
+        canonical_metrics=canonical)
+    failed = [c for c in checks if not c.passed]
+    assert not any(c.contradiction for c in failed)
+
+
+# -- Problem C/D preserved detection: same entity + period IS contradicted -----
+
+
+def test_v7_same_entity_same_period_subsidiary_conflict_is_contradicted():
+    # Same named subsidiary (identified on the datum) and same FY2024 period, a
+    # conflicting value -> genuine CONTRADICTION is preserved.
+    canonical = {"net_debt": {
+        "value": 500.0, "raw_value": 500.0, "units": "currency", "period": "FY2024",
+        "accounting_basis": None, "currency": "USD", "reporting_scope": "subsidiary",
+        "entity_id": "subsidiary-b", "entity_name": "Subsidiary B"}}
+    checks = _canonical_financial_checks(
+        {"supporting_evidence_ids": ["ev-1"]},
+        "Subsidiary B reported net debt of 100 million in FY2024.",
+        canonical_metrics=canonical)
+    failed = [c for c in checks if not c.passed]
+    assert failed and any(c.contradiction for c in failed)
+
+
+# -- several metrics/years/values in one passage: bind to the relevant only ----
+
+
+def test_v7_multi_metric_passage_binds_only_the_relevant_metric():
+    passage = ("Revenue grew 12% in FY2024; operating cash flow was 250 million; "
+               "net debt was 3000 million.")
+    assert _metric_bound_values(passage, "revenue_growth") == {"12"}
+    assert "3000" in _metric_bound_values(passage, "net_debt")
+    # A revenue claim of 20% conflicts only with the revenue 12, not the other
+    # figures.
+    checks = _deterministic_claim_checks(
+        "Revenue grew 20% in FY2024.", ["ev-1"], {"ev-1": passage})
+    failed = [c for c in checks if not c.passed]
+    assert failed and any(c.contradiction for c in failed)
+
+
+# -- numeric outcome correct but causal attribution unsupported ---------------
+
+
+def test_v7_correct_number_but_unsupported_causal_attribution_is_capped():
+    canonical = {"revenue_growth": {
+        "value": 12.0, "raw_value": 0.12, "units": "ratio", "period": "FY2024",
+        "accounting_basis": None, "currency": None, "reporting_scope": "consolidated"}}
+    obs, governed = _govern(
+        _management(
+            hypothesis="Consolidated revenue grew 12% in FY2024 because of management's strategy.",
+            credit_mechanism="Growth attributed to management execution."),
+        evidence_texts={"ev-1": "Consolidated revenue grew 12% in FY2024."},
+        canonical_metrics=canonical)
+    # The numeric outcome verifies, but the causal attribution is capped at human
+    # review (qualified), never auto-promoted to supported.
+    assert obs.disposition.value != "supported"
+    assert any(i.rule_id == "m3.requires_human_review"
+               for i in governed.validation_issues)
+
+
+# -- currency mismatch without supported conversion ---------------------------
+
+
+def test_v7_currency_mismatch_same_metric_period_is_not_contradicted():
+    canonical = {"net_debt": {
+        "value": 5000.0, "raw_value": 5000.0, "units": "currency", "period": "FY2024",
+        "accounting_basis": None, "currency": "SGD", "reporting_scope": "consolidated"}}
+    checks = _canonical_financial_checks(
+        {"supporting_evidence_ids": ["ev-1"]},
+        "Consolidated net debt was 100 million USD in FY2024.",
+        canonical_metrics=canonical)
+    failed = [c for c in checks if not c.passed]
+    assert failed
+    assert not any(c.contradiction for c in failed)
+
+
+# -- percentage-point vs percentage confusion is not auto-verified -------------
+
+
+def test_v7_percentage_point_confusion_is_not_auto_verified():
+    canonical = {"operating_margin": {
+        "value": 12.0, "raw_value": 0.12, "units": "ratio", "period": "FY2024",
+        "accounting_basis": None, "currency": None, "reporting_scope": "consolidated"}}
+    obs, _ = _govern(
+        _management(
+            hypothesis="Operating margin improved 2% (2 percentage points) in FY2024.",
+            credit_mechanism="Margin expansion supports debt service."),
+        evidence_texts={"ev-1": "Operating margin improved in FY2024."},
+        canonical_metrics=canonical)
+    assert obs.disposition.value != "supported"
+
+
+# -- metric alias outside the known vocabulary -> conservative, not fabricated -
+
+
+def test_v7_unknown_metric_alias_is_conservative_not_fabricated():
+    # 'gross margin' is outside the alias vocabulary -> no canonical match and no
+    # metric binding; the claim stays conservative (not falsely verified).
+    assert _identify_canonical_metric("Gross margin was 40% in FY2024.") is None
+    assert _metric_bound_values("Gross margin was 40% in FY2024.", "operating_margin") == set()
+    checks = _canonical_financial_checks(
+        {"supporting_evidence_ids": ["ev-1"]},
+        "Gross margin was 40% in FY2024.",
+        canonical_metrics={"operating_margin": {
+            "value": 12.0, "raw_value": 0.12, "units": "ratio", "period": "FY2024",
+            "accounting_basis": None, "currency": None,
+            "reporting_scope": "consolidated"}})
+    # No recognised metric in the claim -> no canonical check fabricated.
+    assert checks == ()

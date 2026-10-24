@@ -116,6 +116,101 @@ def _identified_metrics(text: str) -> set[str]:
             if any(alias in blob for alias in aliases)}
 
 
+# A number is "period-like" when it is matched by :data:`_PERIOD_RE` (a fiscal
+# year, quarter or reporting year), i.e. it plays the ROLE of a reporting
+# period, not a financial value. Problem B: such a token must never enter the
+# value-comparison set. We do NOT drop every four-digit number — only the ones
+# contextually matched as a period — so a legitimate four-digit amount (e.g. a
+# $3000 figure) is still compared.
+def _period_value_tokens(text: str) -> set[str]:
+    """Normalised numeric forms that are actually reporting-period tokens.
+
+    Derived from the fiscal-period matches in ``text`` (e.g. ``FY2024`` ->
+    ``2024``, ``Q3 2022`` -> ``2022``) so they can be excluded from the financial
+    value set. A bare four-digit financial amount that is NOT part of a period
+    phrase is not captured here and remains a comparable value.
+    """
+    out: set[str] = set()
+    for token in _PERIOD_RE.findall(text):
+        for num in _NUMBER_RE.findall(token):
+            norm = _normalise_number(num)
+            if norm:
+                out.add(norm)
+    return out
+
+
+def _metric_bound_values(text: str, metric_id: str) -> set[str]:
+    """The numeric values in ``text`` that belong to ``metric_id`` specifically.
+
+    Problem A: a number appearing anywhere in a passage is not evidence for a
+    claim unless it is the value OF THE CLAIM'S METRIC. This isolates the
+    relevant metric-value relationship by scanning each metric-alias occurrence
+    and collecting the numeric tokens in its local window, stopping at the next
+    (different) metric mention so an unrelated metric's figure (e.g. ``net debt
+    was 12``) is not attributed to the metric under test (e.g. ``revenue grew
+    8%``). Period-role tokens (years) are excluded.
+
+    Returns an empty set when the metric is not named, or is named but carries no
+    adjacent value — in which case the claim stays UNSUPPORTED rather than being
+    matched to an arbitrary number elsewhere in the passage.
+    """
+    aliases = _METRIC_ALIASES.get(metric_id, ())
+    if not aliases:
+        return set()
+    blob = text.casefold()
+    period_tokens = _period_value_tokens(text)
+    # Boundaries of every recognised metric mention, so a window for one metric
+    # never bleeds into another metric's clause.
+    all_alias_spans: list[tuple[int, int, str]] = []
+    for mid, mid_aliases in _METRIC_ALIASES.items():
+        for alias in mid_aliases:
+            start = 0
+            while True:
+                idx = blob.find(alias, start)
+                if idx == -1:
+                    break
+                all_alias_spans.append((idx, idx + len(alias), mid))
+                start = idx + 1
+    all_alias_spans.sort()
+
+    values: set[str] = set()
+    for idx, end, mid in all_alias_spans:
+        if mid != metric_id:
+            continue
+        # The clause for this mention runs until the next DIFFERENT-metric
+        # mention (or a hard clause break), so adjacent unrelated figures are
+        # not captured. A generous window still bounds run-on sentences.
+        next_boundary = len(text)
+        for n_idx, _n_end, n_mid in all_alias_spans:
+            if n_idx > idx and n_mid != metric_id:
+                next_boundary = min(next_boundary, n_idx)
+                break
+        window = text[idx:min(next_boundary, idx + 80)]
+        # Stop the window at an explicit clause separator to avoid pulling in a
+        # figure from a following clause of the same sentence.
+        for sep in (";", ",", " while ", " whereas ", " and net ", " and "):
+            cut = window.casefold().find(sep, len(_nearest_alias(window, aliases)))
+            if cut != -1:
+                window = window[:cut]
+                break
+        for num in _NUMBER_RE.findall(window):
+            norm = _normalise_number(num)
+            if norm and norm not in period_tokens:
+                values.add(norm)
+    return values
+
+
+def _nearest_alias(window: str, aliases: tuple[str, ...]) -> str:
+    """The metric alias at the start of ``window`` (to anchor separator search
+    past the alias phrase itself). Returns the matched alias or an empty string.
+    """
+    low = window.casefold()
+    for alias in aliases:
+        if low.startswith(alias):
+            return alias
+    return ""
+
+
 # Scale/unit markers that make two bare numbers NON-comparable unless the scale
 # is the same. A claim in "$3 billion" and a passage reading "3000 (millions)"
 # describe the same magnitude but as different tokens; a blanket token-mismatch
@@ -164,13 +259,43 @@ def _claim_reporting_scope(claim_text: str) -> str | None:
     return None
 
 
-def _scope_comparable(claim_text: str, datum_scope: str | None) -> tuple[bool, str]:
+def _claim_mentions_entity(claim_text: str, entity_id: str | None,
+                           entity_name: str | None) -> bool:
+    """Whether the claim text explicitly identifies the canonical datum's entity.
+
+    Problem D: a subsidiary-level figure may only be compared to a claim about
+    the SAME legal entity. Identity must be established from a canonical
+    legal-entity identifier or a verified entity name recorded on the datum — NOT
+    from loose string similarity or the generic word "subsidiary". A whole-token
+    match of the identifier/name in the claim is required; otherwise identity is
+    treated as NOT established.
+    """
+    blob = claim_text.casefold()
+    for candidate in (entity_id, entity_name):
+        if not candidate:
+            continue
+        cand = str(candidate).casefold().strip()
+        if cand and re.search(rf"(?<!\w){re.escape(cand)}(?!\w)", blob):
+            return True
+    return False
+
+
+def _scope_comparable(claim_text: str, datum_scope: str | None, *,
+                      datum_entity_id: str | None = None,
+                      datum_entity_name: str | None = None) -> tuple[bool, str]:
     """Whether a claim and a canonical datum are on a comparable reporting scope.
 
     Returns ``(comparable, reason_when_not)``. A subsidiary/standalone claim is
     NOT comparable to a consolidated/group canonical datum. When the claim leaves
     its scope unstated, scope is UNKNOWN: we do not assume equivalence, so a value
     difference cannot be read as a contradiction (uncertainty is preserved).
+
+    Problem D: for a SUBSIDIARY-level comparison, matching reporting scope is not
+    enough — two different named subsidiaries share the subsidiary scope yet are
+    different legal persons. A subsidiary datum is therefore comparable only when
+    the datum carries a canonical legal-entity identifier (or verified entity
+    name) that the claim explicitly identifies. Without an established entity
+    identity, scope is NOT comparable (so a value difference stays UNSUPPORTED).
     """
     datum_scope_norm = (datum_scope or "").casefold().strip()
     claim_scope = _claim_reporting_scope(claim_text)
@@ -186,6 +311,18 @@ def _scope_comparable(claim_text: str, datum_scope: str | None) -> tuple[bool, s
     if claim_scope == "consolidated" and datum_is_consol:
         return (True, "")
     if claim_scope == "subsidiary" and not datum_is_consol:
+        # Require an established legal-entity identity, not merely a shared
+        # subsidiary classification.
+        if not (datum_entity_id or datum_entity_name):
+            return (False, "the claim and the canonical metric are both at the "
+                           "subsidiary level, but the canonical datum carries no "
+                           "legal-entity identifier, so the two cannot be "
+                           "established as the same legal entity")
+        if not _claim_mentions_entity(claim_text, datum_entity_id, datum_entity_name):
+            return (False, "the claim does not identify the same legal entity as the "
+                           f"canonical subsidiary datum ({datum_entity_id or datum_entity_name!r}); "
+                           "two different subsidiaries are not comparable merely "
+                           "because both are subsidiaries")
         return (True, "")
     return (False, f"the claim is at the {claim_scope} level but the canonical "
                    f"metric is reported on a {datum_scope_norm} basis; the two "
@@ -274,14 +411,18 @@ def _canonical_financial_checks(
     datum = canonical_metrics[metric_id]
     checks: list[DeterministicCheck] = []
 
-    # Reporting-scope comparability (Problem B). A value difference may be read as
+    # Reporting-scope comparability (Problem D). A value difference may be read as
     # a CONTRADICTION only when the claim and the canonical datum share the same
-    # reporting scope. A subsidiary/standalone claim is NOT contradicted by a
-    # consolidated/group figure, and an unstated claim scope is UNKNOWN (never
+    # reporting scope AND, for subsidiary-level data, the same established legal
+    # entity. A subsidiary/standalone claim is NOT contradicted by a consolidated
+    # group figure, and a claim about one named subsidiary is NOT contradicted by
+    # a different subsidiary's figure; an unstated claim scope is UNKNOWN (never
     # assumed equivalent). When scope is not comparable the value/period mismatch
     # is downgraded to UNSUPPORTED (contradiction=False), preserving uncertainty.
     scope_comparable, scope_reason = _scope_comparable(
-        claim_text, datum.get("reporting_scope"))
+        claim_text, datum.get("reporting_scope"),
+        datum_entity_id=datum.get("entity_id"),
+        datum_entity_name=datum.get("entity_name"))
     # Currency comparability. A claim in a currency other than the canonical
     # datum's cannot be contradicted without an established conversion.
     datum_ccy = {str(datum.get("currency")).casefold()} if datum.get("currency") else set()
@@ -290,10 +431,35 @@ def _canonical_financial_checks(
     ccy_reason = (f"the claim is in {sorted(claim_ccy)} but the canonical metric "
                   f"in {sorted(datum_ccy)}; a cross-currency difference is not a "
                   "conflict without an established conversion")
-    # A difference may be a contradiction only on a fully comparable basis.
-    basis_comparable = scope_comparable and ccy_comparable
-    basis_reason = scope_reason if not scope_comparable else (
-        ccy_reason if not ccy_comparable else "")
+
+    # Fiscal-period comparability (Problem C). A canonical datum for a DIFFERENT
+    # reporting period than the claim cannot verify or contradict the claim: both
+    # values may be correct for their respective periods. When the claim names a
+    # period and the canonical datum carries a DIFFERENT one, period is NOT
+    # comparable and a value difference stays UNSUPPORTED (never CONTRADICTED).
+    # The latest canonical metric does not supersede a historical-period claim.
+    claimed_periods = {p.upper().replace(" ", "") for p in _PERIOD_RE.findall(claim_text)}
+    datum_period = (datum.get("period") or "")
+    datum_period_norm = datum_period.upper().replace(" ", "")
+    period_comparable = not (
+        claimed_periods and datum_period_norm
+        and datum_period_norm not in claimed_periods)
+    period_reason = (f"the claim concerns period(s) {sorted(claimed_periods)} but the "
+                     f"canonical metric is for {datum_period!r}; a figure for a "
+                     "different reporting period does not verify or contradict the "
+                     "claim, and a later period does not supersede a historical one")
+
+    # A difference may be a contradiction only on a FULLY comparable basis:
+    # scope + entity, currency AND reporting period must all line up.
+    basis_comparable = scope_comparable and ccy_comparable and period_comparable
+    if not scope_comparable:
+        basis_reason = scope_reason
+    elif not ccy_comparable:
+        basis_reason = ccy_reason
+    elif not period_comparable:
+        basis_reason = period_reason
+    else:
+        basis_reason = ""
 
     # pp vs % confusion — not machine-reconcilable; flag for review (no auto-pass).
     if _percentage_point_confusion(claim_text):
@@ -304,31 +470,29 @@ def _canonical_financial_checks(
                     "cannot be reconciled deterministically"),
             contradiction=False))
 
-    # Fiscal period: if the claim names a period, it must match the canonical one.
-    # A period mismatch is only a CONTRADICTION on an otherwise comparable basis;
-    # otherwise it is UNSUPPORTED (a different-scope/currency datum does not
-    # disprove the claim's period).
-    claimed_periods = {p.upper().replace(" ", "") for p in _PERIOD_RE.findall(claim_text)}
-    datum_period = (datum.get("period") or "")
-    datum_period_norm = datum_period.upper().replace(" ", "")
-    if claimed_periods and datum_period_norm:
-        if datum_period_norm not in claimed_periods:
-            checks.append(DeterministicCheck(
-                name="canonical_fiscal_period_match", passed=False,
-                detail=(f"claim period {sorted(claimed_periods)} does not match the "
-                        f"canonical metric period {datum_period!r}"
-                        + ("" if basis_comparable
-                           else f"; not treated as a conflict because {basis_reason}")),
-                contradiction=basis_comparable))
+    # Fiscal period: if the claim names a period that differs from the canonical
+    # one, record a non-match. This is UNSUPPORTED (a different-period datum does
+    # not disprove the claim's period), never CONTRADICTED — so the check always
+    # carries contradiction=False.
+    if claimed_periods and datum_period_norm and not period_comparable:
+        checks.append(DeterministicCheck(
+            name="canonical_fiscal_period_match", passed=False,
+            detail=(f"claim period {sorted(claimed_periods)} does not match the "
+                    f"canonical metric period {datum_period!r}; a figure for a "
+                    "different reporting period does not verify or contradict the "
+                    "claim"),
+            contradiction=False))
 
     # Numerical value within tolerance (only when the claim states a number and
-    # the canonical datum carries one). Percentages are compared as given.
+    # the canonical datum carries one). Compared ONLY on a comparable period —
+    # a cross-period datum is not compared at all (Problem C). Percentages are
+    # compared as given.
     datum_value = datum.get("value")
     claimed_numbers = sorted({
         _normalise_number(t) for t in _NUMBER_RE.findall(claim_text)
         if _normalise_number(t)
-        and _normalise_number(t) not in {p.lstrip("FYQ") for p in claimed_periods}})
-    if claimed_numbers and isinstance(datum_value, (int, float)):
+        and _normalise_number(t) not in _period_value_tokens(claim_text)})
+    if claimed_numbers and isinstance(datum_value, (int, float)) and period_comparable:
         # Compare each claimed number to the canonical value within a relative
         # tolerance that also tolerates ordinary rounding of a percentage.
         def _matches(n: str) -> bool:
@@ -340,8 +504,8 @@ def _canonical_financial_checks(
             return abs(claimed - float(datum_value)) <= tol
         if not any(_matches(n) for n in claimed_numbers):
             # A value difference is a CONTRADICTION only on a demonstrably
-            # equivalent basis (same reporting scope and compatible currency);
-            # otherwise the claim is merely UNSUPPORTED by this datum.
+            # equivalent basis (same reporting scope/entity, compatible currency
+            # and the same reporting period); otherwise it is UNSUPPORTED.
             checks.append(DeterministicCheck(
                 name="canonical_numerical_value_match", passed=False,
                 detail=(f"claimed value(s) {claimed_numbers} do not match the "
@@ -352,6 +516,15 @@ def _canonical_financial_checks(
                            if basis_comparable
                            else f"; not treated as a conflict because {basis_reason}")),
                 contradiction=basis_comparable))
+    elif claimed_numbers and isinstance(datum_value, (int, float)) and not period_comparable:
+        # The claim states a value but the only canonical datum is for a
+        # different period; it neither verifies nor contradicts the claim.
+        checks.append(DeterministicCheck(
+            name="canonical_numerical_value_match", passed=False,
+            detail=(f"claimed value(s) {claimed_numbers} are not substantiated by the "
+                    f"canonical metric value {datum_value} for period {datum_period!r}; "
+                    f"{period_reason}"),
+            contradiction=False))
 
     return tuple(checks)
 
@@ -394,7 +567,6 @@ def _deterministic_claim_checks(
         evidence_texts.get(eid, "") for eid in evidence_ids if eid in evidence_texts)
     if not corpus.strip():
         return ()
-    corpus_numbers = {_normalise_number(t) for t in _NUMBER_RE.findall(corpus)}
     checks: list[DeterministicCheck] = []
 
     # Only a directly comparable claim/passage may yield a numeric CONTRADICTED.
@@ -402,40 +574,80 @@ def _deterministic_claim_checks(
 
     claimed_periods = {p.upper().replace(" ", "") for p in _PERIOD_RE.findall(claim_text)}
     corpus_periods = {p.upper().replace(" ", "") for p in _PERIOD_RE.findall(corpus)}
-    # Numbers in the claim that are not themselves a period token.
+
+    # Problem B: a reporting-year token (e.g. the 2024 inside FY2024) plays the
+    # role of a period, not a financial value, and must never count as a
+    # conflicting figure. Exclude the period-role tokens from BOTH the claim and
+    # corpus value sets (but keep genuine four-digit amounts that are not part of
+    # a period phrase).
+    claim_period_tokens = _period_value_tokens(claim_text)
     claimed_numbers = {
         _normalise_number(t) for t in _NUMBER_RE.findall(claim_text)
-        if _normalise_number(t) and _normalise_number(t) not in {
-            p.lstrip("FYQ") for p in claimed_periods}
+        if _normalise_number(t) and _normalise_number(t) not in claim_period_tokens
     }
+
+    # Problem A: the numbers that can SUPPORT or CONTRADICT the claim are the
+    # value(s) bound to the SAME metric in the passage — not every number in it.
+    # We bind by metric when the claim names exactly one recognised metric and
+    # the passage also names it; otherwise we fall back to the whole (period-
+    # stripped) corpus number set, which is still gated by ``comparable`` (so an
+    # unmatched-metric passage can never establish support/contradiction).
+    claim_metric = _identify_canonical_metric(claim_text)
+    corpus_period_tokens = _period_value_tokens(corpus)
+    corpus_numbers = {
+        _normalise_number(t) for t in _NUMBER_RE.findall(corpus)
+        if _normalise_number(t) and _normalise_number(t) not in corpus_period_tokens
+    }
+    metric_bound = (
+        _metric_bound_values(corpus, claim_metric) if claim_metric else set())
+    # Use the metric-bound subset when we could identify the claim's metric and
+    # that metric is actually named in the passage; this isolates the relevant
+    # metric-value relationship and discards figures belonging to other metrics.
+    use_bound = bool(claim_metric) and claim_metric in _identified_metrics(corpus)
+    relevant_numbers = metric_bound if use_bound else corpus_numbers
+
     for number in sorted(claimed_numbers):
-        # A claimed number counts as SUPPORTED only when it is present in the
-        # cited text AND that text is on a comparable basis (same metric/period/
-        # unit). A coincidental token match for a DIFFERENT metric is NOT support.
-        token_present = number in corpus_numbers
+        # A claimed number counts as SUPPORTED only when it is present AMONG THE
+        # VALUES OF THE CLAIM'S METRIC and the passage is on a comparable basis.
+        # A coincidental token match for a DIFFERENT metric is NOT support.
+        token_present = number in relevant_numbers
         present = token_present and comparable
-        # A conflicting number is recorded ONLY when the cited corpus asserts a
-        # DIFFERENT number AND the two statements are on a comparable basis.
-        # Absence of any number, or a difference across metric/period/scale, is
-        # UNSUPPORTED — never CONTRADICTED.
-        conflicting = (not token_present) and bool(corpus_numbers) and comparable
+        # A conflicting number is recorded ONLY when the passage asserts a
+        # DIFFERENT value FOR THE SAME METRIC on a comparable basis. Absence of
+        # any metric-bound value, or a difference across metric/period/scale, is
+        # UNSUPPORTED — never CONTRADICTED. When binding is unavailable we fall
+        # back to the whole corpus but keep the same comparability gate.
+        conflicting = (not token_present) and bool(relevant_numbers) and comparable
         if present:
             detail = ""
+        elif number in corpus_numbers and not token_present and use_bound:
+            # The number appears in the passage but bound to a DIFFERENT metric
+            # than the claim's (e.g. the net-debt 12 for a revenue claim). That
+            # coincidental token must not establish support, and because the
+            # claim's own metric carries a different value it does not silently
+            # pass either.
+            detail = (f"claimed value {number} appears in the cited evidence but "
+                      f"only as the value of a different metric, not of "
+                      f"{claim_metric!r}; a coincidental token match does not "
+                      "establish support for this metric")
         elif token_present and not comparable:
             detail = (f"claimed value {number} appears in the cited evidence but "
                       f"that figure is not on a comparable basis ({incomparable_reason}), "
                       "so a coincidental token match does not establish support")
         elif conflicting:
+            bound_note = (f" (bound to {claim_metric})" if use_bound else "")
             detail = (f"claimed value {number} conflicts with the value(s) "
-                      f"{sorted(corpus_numbers)} asserted for the same metric and "
-                      "period on a comparable basis in the cited evidence")
-        elif corpus_numbers and not comparable:
+                      f"{sorted(relevant_numbers)}{bound_note} asserted for the "
+                      "same metric and period on a comparable basis in the cited "
+                      "evidence")
+        elif relevant_numbers and not comparable:
             detail = (f"claimed value {number} is not substantiated by the cited "
-                      f"evidence; the other value(s) {sorted(corpus_numbers)} are "
+                      f"evidence; the other value(s) {sorted(relevant_numbers)} are "
                       f"not a conflicting assertion because {incomparable_reason}")
         else:
             detail = (f"claimed value {number} is not substantiated by the cited "
-                      "evidence (absent; no conflicting value present)")
+                      "evidence (absent; no conflicting value present for this "
+                      "metric)")
         checks.append(DeterministicCheck(
             name="numeric_value_present_in_cited_evidence", passed=present,
             detail=detail, contradiction=conflicting))
