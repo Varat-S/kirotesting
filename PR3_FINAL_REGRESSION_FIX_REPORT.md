@@ -28,13 +28,14 @@ Both JSON fixture reads now explicitly use UTF-8. The test still compares the co
 | Metric resolver file plus previously failing M3 test, repeated five times | 9 passed on each run |
 | M3 numeric validation, FO runner/registry, BO governance focused group | 92 passed; 1 Starlette `TestClient` deprecation warning |
 | Full offline suite, excluding the HCA R5 recorded-completion file | **1,930 passed, 123 skipped, 0 failed**, 1 Starlette `TestClient` deprecation warning; Python 3.11.15; 6m 07s |
+| Full suite, including the recorded-completion file | **1,931 passed, 135 skipped, 0 failed**, 1 Starlette `TestClient` deprecation warning; Python 3.11.15; 5m 19s |
 | Diff check | `git diff --check` clean |
 
 The new PR #3 Validator 8 identity and oversized PDF tests are included in the passing full suite. All runs used offline fixtures or scripted responses; no paid model was invoked.
 
 ## Remaining limitation
 
-The git-ignored genuine HCA R5 `specialists_run.json` artifact is not in the reviewed worktrees. The recorded-completion test file therefore remains excluded from the full offline command; its earlier standalone run yielded 1 passed and 12 setup errors caused solely by the missing artifact. The 123 skips include optional local workbooks and optional dependencies.
+The git-ignored genuine HCA R5 `specialists_run.json` artifact is not in the reviewed worktrees or clean GitHub runners. The recorded-completion file now explicitly skips its 12 artifact-dependent tests with that reason when the file is absent, while retaining its one independent test. If the genuine artifact is present, those 12 tests run normally and still validate it. This keeps the CI workflow's full-suite command intact. The other skips include optional local workbooks and optional dependencies.
 
 ## Recommendation
 
