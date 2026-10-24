@@ -92,6 +92,11 @@ class PreparedSpecialist:
     checks: list
     snapshot_version: int
     entity_aliases: tuple[str, ...] = ()
+    # Optional compact, provenance-preserving corporate-structure facts (Module
+    # 3 Layer 2). When present it is injected into the specialist's single-pass
+    # input context BEFORE the pass runs; default None leaves other specialists'
+    # inputs unchanged.
+    structural_facts: dict[str, Any] | None = None
 
     def fingerprint(self) -> str:
         return content_hash({
@@ -236,7 +241,7 @@ def _client(session: Session, backend) -> tuple[LLMClient, PromptRegistry]:
 
 def _single_pass_inputs(prep: PreparedSpecialist) -> dict[str, Any]:
     spec = prep.spec
-    return {
+    inputs: dict[str, Any] = {
         "data_notice": DATA_NOTICE,
         "agent": {"code": spec.code, "agent_id": spec.agent_id, "title": spec.title,
                   "owned_parameters": list(spec.owned_parameters),
@@ -247,6 +252,12 @@ def _single_pass_inputs(prep: PreparedSpecialist) -> dict[str, Any]:
         "checklist": [c.as_prompt() for c in prep.checks],
         "evidence": packet_view(prep.passages),
     }
+    # Module 3 Layer 2: include the validated corporate-structure facts in the
+    # specialist's ACTUAL input context (only when prepared). It inherits the
+    # data_notice guard above; it is data, never an instruction.
+    if prep.structural_facts is not None:
+        inputs["corporate_structure"] = prep.structural_facts
+    return inputs
 
 
 def run_single_pass(session: Session, prep: PreparedSpecialist,

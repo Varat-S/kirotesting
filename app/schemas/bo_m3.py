@@ -6,12 +6,26 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.schemas.bo import Admissibility, Confidence, Disposition
+from app.schemas.bo import Admissibility, Confidence, Direction, Disposition
 from app.schemas.agentic import Materiality
 
 
-M3_ASSESSMENT_VERSION = "bo-m3-corporate-assessment-1.0"
-M3_VALIDATOR_VERSION = "validator-7-1.0.0"
+M3_ASSESSMENT_VERSION = "bo-m3-corporate-assessment-1.1"
+M3_VALIDATOR_VERSION = "validator-7-1.1.0"
+
+# The 1.0 contract (and its validator stamp) remain accepted so scripted
+# proposals authored before the Layer-2 additive extension still validate.
+M3_ASSESSMENT_VERSIONS = (
+    "bo-m3-corporate-assessment-1.0", "bo-m3-corporate-assessment-1.1")
+M3_VALIDATOR_VERSIONS = ("validator-7-1.0.0", "validator-7-1.1.0")
+
+# The six Layer-2 analytical dimensions the specialist may address. Kept as a
+# small, closed vocabulary so a finding always declares which structural credit
+# question it answers; ``None`` (legacy) stays permitted.
+StructuralAnalyticalDimension = Literal[
+    "borrower_position", "guarantor_coverage", "cash_flow_access",
+    "operating_debt_structure", "minority_or_jv", "structural_complexity",
+]
 
 
 class _Strict(BaseModel):
@@ -115,6 +129,25 @@ class StructuralCreditFinding(_Strict):
     downstream_verification_requirements: list[str] = Field(default_factory=list)
     borrower_specific: bool = False
     validation_reasons: list[str] = Field(default_factory=list)
+    # --- Layer 2 additive structural-credit linkage (all OPTIONAL; safe
+    #     defaults so 1.0 proposals still validate). ------------------------
+    # Which structural credit question this finding answers.
+    analytical_dimension: StructuralAnalyticalDimension | None = None
+    # The factual structural observation the finding rests on (kept distinct
+    # from the analytical credit_hypothesis / causal_mechanism).
+    structural_observation: str | None = None
+    # Exact stable corporate facts the finding references.
+    referenced_node_ids: list[str] = Field(default_factory=list)
+    referenced_link_ids: list[str] = Field(default_factory=list)
+    # The onboarding source the structural facts come from (doc id and/or hash).
+    onboarding_source_reference: str | None = None
+    # Credit direction is kept SEPARATE from disposition: neutral is the safe
+    # default and never forces a positive/negative stance.
+    credit_direction: Direction = Direction.NEUTRAL
+    # insufficient_evidence is represented SEPARATELY from a neutral direction.
+    assessment_availability: Literal["sufficient", "insufficient_evidence"] = "sufficient"
+    qualifications: list[str] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
 
 
 class ManagementObservation(_Strict):
@@ -145,6 +178,10 @@ class ManagementObservation(_Strict):
     admissibility: Admissibility
     confidence: Confidence = Confidence.MEDIUM
     materiality: Materiality = Materiality.MEDIUM
+    # Credit direction is kept SEPARATE from disposition (credibility): a credible
+    # explanation of an adverse development never flips the direction positive.
+    credit_direction: Direction = Direction.NEUTRAL
+    credibility_vs_direction_note: str | None = None
     missing_information: list[str] = Field(default_factory=list)
     validation_reasons: list[str] = Field(default_factory=list)
 
@@ -172,9 +209,13 @@ class M3ValidationIssue(_Strict):
 
 
 class M3CorporateAssessment(_Strict):
-    schema_version: Literal["bo-m3-corporate-assessment-1.0"] = M3_ASSESSMENT_VERSION
+    schema_version: Literal[
+        "bo-m3-corporate-assessment-1.0", "bo-m3-corporate-assessment-1.1",
+    ] = M3_ASSESSMENT_VERSION
     validator_id: Literal["validator_7"] = "validator_7"
-    validator_version: Literal["validator-7-1.0.0"] = M3_VALIDATOR_VERSION
+    validator_version: Literal[
+        "validator-7-1.0.0", "validator-7-1.1.0",
+    ] = M3_VALIDATOR_VERSION
     borrower_identification: BorrowerIdentification
     legal_entities: list[LegalEntity] = Field(default_factory=list)
     ownership_relationships: list[OwnershipRelationship] = Field(default_factory=list)
