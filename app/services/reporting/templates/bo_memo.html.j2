@@ -91,7 +91,7 @@
 {% if m.d4 %}
 {% set box = m.d4.executive_credit_summary_box %}
 <h4>Debt structure credit conclusion</h4>
-<p><strong>{{ box.overall_credit_rating_verdict|replace('_', ' ') }}</strong> &middot; recommended loan placement: {{ box.recommended_loan_placement|replace('_', ' ') }} &middot; {{ box.target_entity_and_period }}</p>
+<p><strong>{{ box.overall_credit_rating_verdict|replace('_', ' ') }}</strong> &middot; {{ box.target_entity_and_period }}</p>
 {{ list_or_none(box.executive_takeaways, 'No takeaways recorded.') }}
 <p>{{ m.d4.core_credit_assessment }}</p>
 {% endif %}
