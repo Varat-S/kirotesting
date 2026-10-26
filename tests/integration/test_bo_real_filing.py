@@ -116,7 +116,7 @@ def test_stryker_real_filing_runs_the_full_bo_path_offline(db_session, tmp_path)
     assert "no pricing benefit is evidenced" in memo_text
     follow_up = result.audit["retrieval"]["follow_up"]
     assert follow_up[0]["origin"] == "agent_request"
-    assert result.memo["score"]["status"] in ("provisional", "unavailable")
+    assert "score" not in result.memo
 
 
 @needs_hca

@@ -62,8 +62,6 @@ from app.services.bo.roster_v3 import (
     v3_coverage_checks,
 )
 from app.services.bo.sectors import SECTOR_PROFILES
-from app.services.bo.synthesis import rubric_signals
-from app.services.scoring.engine import ScoringConfig, ScoringEngine
 
 # Registry hashes of the untouched baseline (feat/bo-quality-remediation 0ccb429).
 V1_HASH = "e16f08ad710d85e0eadb1af3e2226860e26ca898799ca1c424485f738a55869e"
@@ -182,42 +180,6 @@ def test_a_not_assessed_result_cannot_carry_a_value_or_a_run():
         ParameterResult(**base, value="strong")
     with pytest.raises(ValueError):
         ParameterResult(**base, agent_run_id="invented_run")
-
-
-def test_not_assessed_management_does_not_silently_change_the_business_score(db_session):
-    """M3 not assessed -> its rubric signal is missing; the score is never final.
-
-    Weights and coverage rules are the existing illustrative config, unchanged.
-    """
-    from app.core.bootstrap import bootstrap_config  # noqa: PLC0415
-    from app.core.config_registry import ConfigRegistry  # noqa: PLC0415
-
-    registry = ConfigRegistry(db_session)
-    bootstrap_config(registry)
-    cfg = ScoringConfig.from_registry(registry)
-    assert cfg.content["business_weights"] == {
-        "customer_hhi": 0.3, "competitive_position_risk_signal": 0.4,
-        "management_governance_risk_signal": 0.3}
-
-    def ok(pid, value):
-        return ParameterResult(
-            parameter_result_id=f"pr_{pid}", analysis_run_id="ar", parameter_id=pid,
-            topic=Topic.BUSINESS, value=value, value_type="category",
-            method=Method.LLM, status=ParameterStatus.OK, agent_id="m1_competitive_durability",
-            agent_run_id="run_1")
-
-    competitive = [ok("competitive_position_assessment", "strong"),
-                   ok("pricing_power_assessment", "moderate"),
-                   ok("switching_cost_assessment", "moderate"),
-                   ok("competitive_pressure_assessment", "moderate")]
-    signals, _ = rubric_signals(
-        cfg, competitive + not_assessed_parameter_results("ar"), analysis_run_id="ar")
-    by_id = {s.parameter_id: s for s in signals}
-    management = by_id["management_governance_risk_signal"]
-    assert management.status is not ParameterStatus.OK or management.value is None
-    score = ScoringEngine(cfg).score_business(signals, analysis_run_id="ar")
-    assert score.status.value != "final"
-    assert "management_governance_risk_signal" in score.missing_required_parameter_ids
 
 
 # -- prompts -----------------------------------------------------------------

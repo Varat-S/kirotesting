@@ -19,9 +19,7 @@
     Case {{ assessment.borrower.case_id }} · As of {{ assessment.borrower.as_of_date or "unavailable" }}<br>
     Source BO run <code>{{ assessment.source_bo_run_id }}</code> · Handoff <code>{{ assessment.source_handoff_id }}</code>
   </div>
-  <p class="warning">Status: <strong>{{ assessment.status }}</strong>. BO score band
-    <strong>{{ assessment.governance.provisional_business_risk_band }}</strong> is
-    <strong>{{ assessment.governance.business_risk_score_status }}</strong>; it is not a final credit rating.
+  <p class="warning">Status: <strong>{{ assessment.status }}</strong>.
     Human review is {{ assessment.governance.human_review_status }}.</p>
 
   <h2>Transaction borrower and corporate structure</h2>

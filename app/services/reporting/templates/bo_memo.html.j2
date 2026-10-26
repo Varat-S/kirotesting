@@ -216,15 +216,6 @@
 {% for f in o.unresolved_challenges %}<tr><td>{{ f.severity }}</td><td>{{ f.issue_type|replace('_', ' ') }}</td><td>{{ f.reason }}</td><td>{{ f.target or '' }}</td></tr>{% endfor %}
 </table>{% else %}<p class="notice">None. Challenger outcome: {{ memo.status.challenge|replace('_', ' ') }}.</p>{% endif %}
 
-<h2>BusinessRiskScore</h2>
-<p><strong>Status: {{ memo.score.status }}</strong>{% if memo.score.band is not none %} &middot; band {{ memo.score.band }} ({{ memo.score.scale[memo.score.band|string] }}){% else %} &middot; no band is shown because the score is {{ memo.score.status }}{% endif %} &middot; coverage {{ memo.score.coverage_weight }}</p>
-<p class="small">{{ memo.score.explanation }} Scoring configuration v{{ memo.score.scoring_config_version }}{% if memo.score.label %} ({{ memo.score.label }}){% endif %}.</p>
-<table><tr><th>Dimension</th><th>Weight</th><th>Input</th><th>Band</th></tr>
-{% for pid, w in memo.score.weights.items() %}<tr><td>{{ pid }}</td><td>{{ w }}</td>
-{% if pid in memo.score.components %}<td>{{ memo.score.components[pid].value }}</td><td>{{ memo.score.components[pid].band }}</td>{% else %}<td colspan="2">not available</td>{% endif %}</tr>{% endfor %}
-</table>
-{% for n in memo.score.notes %}<p class="small">{{ n }}</p>{% endfor %}
-
 {% if memo.calculations %}
 <h2>Deterministic Calculations Referenced</h2>
 <table><tr><th>Indicator</th><th>Value</th><th>Unit</th><th>Period</th><th>Numerator</th><th>Denominator</th><th>Formula</th><th>State</th></tr>

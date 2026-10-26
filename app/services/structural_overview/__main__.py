@@ -11,7 +11,7 @@ from app.services.structural_overview import adapt_business_overview, write_arti
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build a governed Structural Overview assessment")
-    parser.add_argument("handoff", type=Path, help="Path to a bo-handoff-1.2 JSON artifact")
+    parser.add_argument("handoff", type=Path, help="Path to a bo-handoff-1.2 or 1.3 JSON artifact")
     parser.add_argument("output_dir", type=Path, help="Directory for assessment.json and assessment.html")
     parser.add_argument("--expected-case-id", help="Reject a handoff for any other case")
     args = parser.parse_args()

@@ -26,11 +26,10 @@ REQUIRED_HANDOFF_FIELDS = {
     "borrower_name", "borrower_entity_id", "as_of_date",
     "evidence_cutoff_timestamp",
     "evidence_snapshot_version", "business_topic_conclusion_id", "conclusion_status",
-    "business_risk_score_id", "business_risk_score_status", "business_risk_band",
     "accepted_finding_ids", "material_risk_ids", "business_strengths",
     "operational_vulnerabilities", "validated_mitigants", "unproven_mitigants",
     "unresolved_challenges", "open_questions", "module_conclusions",
-    "compound_business_risks", "fo_handoffs", "score_limitations",
+    "compound_business_risks", "fo_handoffs",
     "evidence_limitations",
     "escalations", "canonical_references", "human_review_status",
     "execution_mode", "agent_registry_version", "agent_registry_hash",
@@ -97,7 +96,7 @@ def test_handoff_content_hash_is_tamper_evident(db_session, tmp_path):
     assert recomputed == handoff["content_hash"]
     # Changing analytical content changes the hash...
     mutated = dict(handoff)
-    mutated["business_risk_band"] = (handoff.get("business_risk_band") or 0) + 99
+    mutated["material_risk_ids"] = [*handoff["material_risk_ids"], "tampered"]
     assert handoff_content_hash(mutated) != handoff["content_hash"]
     # ...but changing only the human-review fields does NOT (they are excluded).
     review_only = dict(handoff)

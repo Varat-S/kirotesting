@@ -33,7 +33,8 @@ from app.schemas.structural_overview import (
 from app.services.bo.reporting import handoff_content_hash
 
 
-SUPPORTED_HANDOFF_VERSION = "bo-handoff-1.2"
+# 1.3 dropped the BusinessRiskScore fields; 1.2 handoffs still map (those fields are ignored).
+SUPPORTED_HANDOFF_VERSIONS = ("bo-handoff-1.2", "bo-handoff-1.3")
 _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
 _MODULE_BUCKETS = {
     "M1": "business_model_and_revenue_drivers",
@@ -196,11 +197,13 @@ def adapt_business_overview(
         handoff = payload if isinstance(payload, AcceptedBusinessOverview) else AcceptedBusinessOverview.model_validate(payload)
     except ValidationError as exc:
         raise StructuralOverviewInputError(f"Invalid BO handoff: {exc}") from exc
-    source = handoff.model_dump(mode="json")
+    # The content hash covers the handoff as stored, including fields that
+    # older schema versions carried and the model now ignores.
+    source = payload if isinstance(payload, dict) else handoff.model_dump(mode="json")
 
-    if handoff.schema_version != SUPPORTED_HANDOFF_VERSION:
+    if handoff.schema_version not in SUPPORTED_HANDOFF_VERSIONS:
         raise StructuralOverviewInputError(
-            f"Unsupported BO handoff schema {handoff.schema_version!r}; expected {SUPPORTED_HANDOFF_VERSION!r}."
+            f"Unsupported BO handoff schema {handoff.schema_version!r}; expected one of {list(SUPPORTED_HANDOFF_VERSIONS)!r}."
         )
     for value, label in ((handoff.handoff_id, "handoff ID"), (handoff.analysis_run_id, "analysis run ID"), (handoff.case_id, "case ID")):
         _valid_id(value, label)
@@ -464,9 +467,6 @@ def adapt_business_overview(
             open_questions=handoff.open_questions,
             missing_information=handoff.evidence_limitations,
             human_review_status=handoff.human_review_status,
-            provisional_business_risk_band=handoff.business_risk_band,
-            business_risk_score_status=handoff.business_risk_score_status,
-            scoring_limitations=handoff.score_limitations,
         ),
         downstream_dependencies=DownstreamDependencies(
             bo_to_fo_handoffs=handoff.fo_handoffs,

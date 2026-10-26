@@ -436,7 +436,7 @@ class TopicConclusion(BaseModel):
     material_risks: list[ConclusionClaim] = Field(default_factory=list)
     open_questions: list[str] = Field(default_factory=list)
     unresolved_contradictions: list[str] = Field(default_factory=list)
-    score_reference: str  # RiskScore id/version
+    score_reference: str | None = None  # RiskScore id/version; None for Business Overview
     orchestrator_run_id: str
     challenge_status: Literal["clean", "reran", "escalated"] = "clean"
     # append-only lineage

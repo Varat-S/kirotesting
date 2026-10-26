@@ -118,7 +118,7 @@ def _run(db_session, tmp_path, *, script=None, sector=None):
         h.CASE, h.evidence_snapshot(), h.metrics(), write_outputs=True), backend
 
 
-def test_all_four_modules_agent6_synthesis_challenge_score_and_report(db_session,
+def test_all_four_modules_agent6_synthesis_challenge_and_report(db_session,
                                                                        tmp_path):
     result, backend = _run(db_session, tmp_path)
     rows = db_session.query(AgentRunRow).filter_by(
@@ -141,10 +141,8 @@ def test_all_four_modules_agent6_synthesis_challenge_score_and_report(db_session
         spec.agent_id for spec in V3_SPECS}
     # Agent 6 is resealed after its validated component evidence is admitted.
     assert len(packets) >= len(V3_SPECS)
-    scores = db_session.query(RiskScoreRow).filter_by(
-        analysis_run_id=result.analysis_run_id).all()
-    assert scores[-1].detail["stage"] == "authoritative_post_challenge"
-    assert scores[-1].status != "final"
+    assert db_session.query(RiskScoreRow).filter_by(
+        analysis_run_id=result.analysis_run_id).count() == 0
     assert result.output_paths["business_overview.json"].exists()
     assert len(backend.requests) >= 11
 

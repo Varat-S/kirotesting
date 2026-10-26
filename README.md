@@ -55,7 +55,7 @@ before anything is accepted.
 | Command | Runs | Produces |
 |---|---|---|
 | `run-bo-specialists` | six specialists + validators | executive summary, six-specialist comparison (HTML/PDF), validation audit, old-versus-new benchmark, JSON |
-| `run-bo-case` | specialists, Business Orchestrator, Business Challenger, one bounded rerun, BusinessRiskScore | analyst memo, audit report, handoff pending human review |
+| `run-bo-case` | specialists, Business Orchestrator, Business Challenger, one bounded rerun | analyst memo, audit report, handoff pending human review |
 
 ```powershell
 python -m app.cli run-bo-specialists <CASE_ID> --package <package.json> --live

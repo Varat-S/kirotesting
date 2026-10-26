@@ -109,7 +109,7 @@ def _orchestrator_without_conclusion():
     return answer
 
 
-def test_handoff_reports_unavailable_score_when_no_conclusion(db_session, tmp_path):
+def test_handoff_explains_a_missing_conclusion(db_session, tmp_path):
     script = h.good_script()
     script["orchestrate"] = _orchestrator_without_conclusion()
     result, _ = h.run(db_session, tmp_path, script=script)
@@ -117,11 +117,7 @@ def test_handoff_reports_unavailable_score_when_no_conclusion(db_session, tmp_pa
     handoff = result.handoff
     if result.conclusion_status in ("unavailable", "human_review_required") and (
             handoff.get("business_topic_conclusion_id") is None):
-        # A-3: a run with no validated conclusion must not advertise a usable score.
-        assert handoff["business_risk_score_id"] is None
-        assert handoff["business_risk_score_status"] == "unavailable"
-        assert handoff.get("business_risk_band") is None
-        # The explanatory unresolved-challenge entry is still present.
+        # The explanatory unresolved-challenge entry is present.
         assert any(c.get("issue_type") == "no_validated_conclusion"
                    for c in handoff.get("unresolved_challenges", []))
     else:

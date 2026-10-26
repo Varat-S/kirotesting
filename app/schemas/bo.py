@@ -22,7 +22,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.agentic import AcceptanceState, Materiality
 
@@ -205,13 +205,19 @@ class CalculationTrace(BaseModel):
     group: str = "general"
 
 
+_LEGACY_SCORE_FIELDS = frozenset({
+    "business_risk_score_id", "business_risk_score_status", "business_risk_band",
+    "score_limitations",
+})
+
+
 class AcceptedBusinessOverview(BaseModel):
     """Structured BO handoff for Structuring and the Credit Orchestrator."""
 
     model_config = ConfigDict(extra="forbid")
 
     handoff_id: str
-    schema_version: str = "bo-handoff-1.2"
+    schema_version: str = "bo-handoff-1.3"
     analysis_run_id: str
     case_id: str
     borrower_name: str | None = None
@@ -221,9 +227,6 @@ class AcceptedBusinessOverview(BaseModel):
     evidence_snapshot_version: int
     business_topic_conclusion_id: str | None
     conclusion_status: str  # accepted | accepted_with_qualification | human_review_required | unavailable
-    business_risk_score_id: str | None
-    business_risk_score_status: str
-    business_risk_band: int | None = None
     accepted_finding_ids: list[str] = Field(default_factory=list)
     material_risk_ids: list[str] = Field(default_factory=list)
     business_strengths: list[dict[str, Any]] = Field(default_factory=list)
@@ -235,7 +238,6 @@ class AcceptedBusinessOverview(BaseModel):
     module_conclusions: dict[str, dict[str, Any]] = Field(default_factory=dict)
     compound_business_risks: list[dict[str, Any]] = Field(default_factory=list)
     fo_handoffs: list[dict[str, Any]] = Field(default_factory=list)
-    score_limitations: list[str] = Field(default_factory=list)
     evidence_limitations: list[str] = Field(default_factory=list)
     escalations: list[dict[str, Any]] = Field(default_factory=list)
     canonical_references: dict[str, Any] = Field(default_factory=dict)
@@ -250,3 +252,11 @@ class AcceptedBusinessOverview(BaseModel):
     scoring_config_hash: str
     config_versions: dict[str, int] = Field(default_factory=dict)
     content_hash: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_legacy_score_fields(cls, data: Any) -> Any:
+        """Handoffs before 1.3 carried a BusinessRiskScore; it is no longer part of the BO."""
+        if isinstance(data, dict) and _LEGACY_SCORE_FIELDS & data.keys():
+            data = {k: v for k, v in data.items() if k not in _LEGACY_SCORE_FIELDS}
+        return data

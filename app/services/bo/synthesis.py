@@ -2,8 +2,8 @@
 
 Nothing here calls a model. This module:
 
-* derives the two rubric risk signals the BusinessRiskScore needs from accepted
-  categorical parameters, using the EXISTING ``RubricEngine`` and scoring config;
+* maps rubric-backed categorical parameters to their permitted values, from
+  the versioned scoring config;
 * builds the structured inputs both agents receive (validated artifacts only);
 * validates the orchestrator's answer (admissible hypotheses only,
   claim-specific evidence, quote-not-calculate, no score, no double counting);
@@ -17,23 +17,16 @@ import re
 from typing import Any
 
 from app.prompts.bo_prompts import BO_CHALLENGE_JSON_SCHEMA, BO_ORCHESTRATOR_JSON_SCHEMA
-from app.schemas.agentic import (
-    ChallengeSeverity,
-    ParameterResult,
-    ParameterStatus,
-    RiskScore,
-    Topic,
-)
+from app.schemas.agentic import ChallengeSeverity
 from app.schemas.bo import Admissibility, HypothesisRecord
 from app.services.agents.validation import DeterministicValidator
 from app.services.bo.hypotheses import score_key_paths, unbound_numbers
 from app.services.bo.indicators import IndicatorSet
 from app.services.bo.plans import BO_ACTIVE_AGENT_IDS, BO_AGENT_SPECS
 from app.services.bo.reconcile import Reconciliation, similarity
-from app.services.scoring.rubric import RubricError
 
-# Accepted categorical parameter -> (rubric signal, rubric dimension). The
-# rubric tables themselves live in the versioned scoring config, unchanged.
+# Categorical parameter -> (rubric signal, rubric dimension). The rubric tables
+# in the versioned scoring config supply each parameter's permitted values.
 RUBRIC_SOURCES: dict[str, tuple[str, str]] = {
     "competitive_position_assessment": ("competitive_position_risk_signal", "market_position"),
     "switching_cost_assessment": ("competitive_position_risk_signal", "switching_costs"),
@@ -45,7 +38,6 @@ RUBRIC_SOURCES: dict[str, tuple[str, str]] = {
 }
 
 CLAIM_LISTS = ("strengths", "weaknesses", "key_drivers", "material_risks")
-_USABLE_STATUS = (ParameterStatus.OK, ParameterStatus.PROVISIONAL)
 _DEFINITIVE = re.compile(
     r"\brecession[- ]proof\b|\bno (?:material |meaningful )?risk\b|\bguarantee[sd]?\b|"
     r"\bwill (?:certainly|always)\b|\bimmune\b|\bshould be approved\b|"
@@ -61,57 +53,6 @@ def parameter_value_sets(scoring_content: dict[str, Any]) -> dict[str, list[str]
         parameter_id: sorted(rubrics[signal]["dimensions"][dimension])
         for parameter_id, (signal, dimension) in RUBRIC_SOURCES.items()
         if dimension in rubrics.get(signal, {}).get("dimensions", {})
-    }
-
-
-def rubric_signals(scoring_cfg, parameters: list[ParameterResult], *,
-                   analysis_run_id: str) -> tuple[list[ParameterResult], list[str]]:
-    """Derive rubric risk signals; an out-of-rubric value is skipped and noted."""
-    engine = scoring_cfg.rubric_engine()
-    values = parameter_value_sets(scoring_cfg.content)
-    grouped: dict[str, dict[str, Any]] = {}
-    sources: dict[str, list[str]] = {}
-    evidence: dict[str, set[str]] = {}
-    notes: list[str] = []
-    for p in parameters:
-        target = RUBRIC_SOURCES.get(p.parameter_id)
-        if target is None or p.status not in _USABLE_STATUS or p.value is None:
-            continue
-        signal, dimension = target
-        if str(p.value) not in values.get(p.parameter_id, []):
-            notes.append(
-                f"{p.parameter_id}={p.value!r} is not a rubric value for "
-                f"{signal}.{dimension}; the dimension was left unscored.")
-            continue
-        grouped.setdefault(signal, {})[dimension] = p.value
-        sources.setdefault(signal, []).append(p.parameter_result_id)
-        evidence.setdefault(signal, set()).update(p.evidence_ids)
-    results = []
-    for signal in sorted(engine.available() & {s for s, _ in RUBRIC_SOURCES.values()}):
-        try:
-            results.append(engine.score(
-                signal, grouped.get(signal, {}), analysis_run_id=analysis_run_id,
-                topic=Topic.BUSINESS,
-                source_parameter_ids=sorted(sources.get(signal, [])),
-                evidence_ids=sorted(evidence.get(signal, set()))))
-        except RubricError as exc:  # defensive: values are pre-filtered above
-            notes.append(str(exc))
-    return results, notes
-
-
-def score_explanation(score: RiskScore, notes: list[str]) -> dict[str, Any]:
-    return {
-        "score_id": score.score_id,
-        "kind": score.kind.value,
-        "status": score.status.value,
-        "band": score.band,
-        "coverage_weight": score.coverage_weight,
-        "contributing_parameter_ids": list(score.contributing_parameter_ids),
-        "missing_required_parameter_ids": list(score.missing_required_parameter_ids),
-        "critical_missing_parameter_ids": list(score.critical_missing_parameter_ids),
-        "components": score.detail.get("components", {}),
-        "notes": notes,
-        "method": "deterministic",
     }
 
 
@@ -170,7 +111,7 @@ def validate_orchestrator_output(
         return issues
     issues += [
         f"official_score_assignment: {path!r} is not permitted; the "
-        "BusinessRiskScore is deterministic."
+        "Business Overview assigns no score."
         for path in score_key_paths(parsed)
     ]
 

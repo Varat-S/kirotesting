@@ -964,10 +964,6 @@ def _run_bo_case(session, database, args):
         "conclusion_status": result.conclusion_status,
         "human_review_status": "pending",
         "handoff_id": result.handoff["handoff_id"],
-        "business_risk_score": {
-            "status": result.memo["score"]["status"],
-            "band": result.memo["score"]["band"],
-        },
         "agents": {a: o["status"] for a, o in result.record["agents"].items()},
         "ai_calls": result.audit["execution"]["ai_calls"],
         "challenge_rounds": [

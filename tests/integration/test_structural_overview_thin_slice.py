@@ -52,7 +52,7 @@ def _handoff() -> dict:
     }
     payload = {
         "handoff_id": "bo_test001",
-        "schema_version": "bo-handoff-1.2",
+        "schema_version": "bo-handoff-1.3",
         "analysis_run_id": "ar_test001",
         "case_id": "TEST_CASE",
         "borrower_name": "Test Borrower, Inc.",
@@ -62,9 +62,6 @@ def _handoff() -> dict:
         "evidence_snapshot_version": 3,
         "business_topic_conclusion_id": "tc_test001",
         "conclusion_status": "accepted_with_qualification",
-        "business_risk_score_id": "score_test001",
-        "business_risk_score_status": "provisional",
-        "business_risk_band": 3,
         "accepted_finding_ids": [x["hypothesis_id"] for x in findings.values()],
         "material_risk_ids": ["R-001"],
         "business_strengths": [{
@@ -92,7 +89,6 @@ def _handoff() -> dict:
             "evidence_ids": ["EV-M1-1"],
         }],
         "fo_handoffs": [],
-        "score_limitations": ["BO score is provisional."],
         "evidence_limitations": ["Independent confirmation is unavailable."],
         "escalations": [],
         "canonical_references": {"analysis_run_id": "ar_test001", "audit_stage": "bo_audit:ar_test001"},
@@ -194,8 +190,6 @@ def test_qualified_handoff_stays_partial_and_does_not_manufacture_credit_outputs
     assert finding.provenance.source_hypothesis_id == "M1-H001"
     assert finding.supporting_evidence_ids == ["EV-M1-1"]
     assert assessment.status == "partial"
-    assert assessment.governance.provisional_business_risk_band == 3
-    assert assessment.governance.business_risk_score_status == "provisional"
     assert assessment.final_credit_score is None
     assert assessment.facility_approval is None
     assert assessment.downstream_dependencies.bo_to_fo_handoffs == []
@@ -347,13 +341,17 @@ def test_tampered_source_handoff_is_rejected():
         adapt_business_overview(payload)
 
 
-def test_missing_bo_score_remains_unavailable():
+def test_legacy_handoff_with_a_business_risk_score_still_maps():
     payload = _handoff()
-    payload.update(business_risk_score_id=None, business_risk_score_status="unavailable", business_risk_band=None)
+    payload.update(schema_version="bo-handoff-1.2", business_risk_score_id="score_test001",
+                   business_risk_score_status="provisional", business_risk_band=3,
+                   score_limitations=["BO score is provisional."])
     assessment = adapt_business_overview(_rehash(payload))
-    assert assessment.governance.provisional_business_risk_band is None
-    assert assessment.governance.business_risk_score_status == "unavailable"
+    assert "business_risk_band" not in assessment.governance.model_dump()
     assert assessment.final_credit_score is None
+    payload["business_risk_band"] = 1  # still covered by the content hash
+    with pytest.raises(StructuralOverviewInputError, match="content hash"):
+        adapt_business_overview(payload)
 
 
 @pytest.mark.skipif(not REAL_HCA_HANDOFF.exists(), reason="local genuine HCA BO artifact is not present")

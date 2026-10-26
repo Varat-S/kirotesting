@@ -149,9 +149,6 @@ class GovernanceState(StrictModel):
     open_questions: list[str] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list)
     human_review_status: str
-    provisional_business_risk_band: int | None = None
-    business_risk_score_status: str
-    scoring_limitations: list[str] = Field(default_factory=list)
 
 
 class DownstreamSection(StrictModel):

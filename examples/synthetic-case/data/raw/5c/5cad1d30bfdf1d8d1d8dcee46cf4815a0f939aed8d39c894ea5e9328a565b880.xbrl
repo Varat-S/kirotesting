@@ -1,0 +1,33 @@
+<xbrli:xbrl xmlns:xbrli="http://www.xbrl.org/2003/instance" xmlns:us-gaap="http://fasb.org/us-gaap/2023" xmlns:poc="http://example.com/poc">
+<xbrli:context id="FY2022"><xbrli:entity><xbrli:identifier scheme="synthetic">DAL</xbrli:identifier></xbrli:entity><xbrli:period><xbrli:startDate>2022-01-01</xbrli:startDate><xbrli:endDate>2022-12-31</xbrli:endDate></xbrli:period></xbrli:context>
+<xbrli:context id="FY2023"><xbrli:entity><xbrli:identifier scheme="synthetic">DAL</xbrli:identifier></xbrli:entity><xbrli:period><xbrli:startDate>2023-01-01</xbrli:startDate><xbrli:endDate>2023-12-31</xbrli:endDate></xbrli:period></xbrli:context>
+<xbrli:context id="FY2024"><xbrli:entity><xbrli:identifier scheme="synthetic">DAL</xbrli:identifier></xbrli:entity><xbrli:period><xbrli:startDate>2024-01-01</xbrli:startDate><xbrli:endDate>2024-12-31</xbrli:endDate></xbrli:period></xbrli:context>
+<xbrli:unit id="USD"><xbrli:measure>USD</xbrli:measure></xbrli:unit>
+<us-gaap:Revenues contextRef="FY2022" unitRef="USD" scale="6">800</us-gaap:Revenues>
+<us-gaap:Revenues contextRef="FY2023" unitRef="USD" scale="6">900</us-gaap:Revenues>
+<us-gaap:Revenues contextRef="FY2024" unitRef="USD" scale="6">1000</us-gaap:Revenues>
+<us-gaap:OperatingIncomeLoss contextRef="FY2022" unitRef="USD" scale="6">160</us-gaap:OperatingIncomeLoss>
+<us-gaap:OperatingIncomeLoss contextRef="FY2023" unitRef="USD" scale="6">180</us-gaap:OperatingIncomeLoss>
+<us-gaap:OperatingIncomeLoss contextRef="FY2024" unitRef="USD" scale="6">200</us-gaap:OperatingIncomeLoss>
+<poc:TotalDebt contextRef="FY2022" unitRef="USD" scale="6">500</poc:TotalDebt>
+<poc:TotalDebt contextRef="FY2023" unitRef="USD" scale="6">600</poc:TotalDebt>
+<poc:TotalDebt contextRef="FY2024" unitRef="USD" scale="6">700</poc:TotalDebt>
+<poc:UnrestrictedCash contextRef="FY2022" unitRef="USD" scale="6">100</poc:UnrestrictedCash>
+<poc:UnrestrictedCash contextRef="FY2023" unitRef="USD" scale="6">100</poc:UnrestrictedCash>
+<poc:UnrestrictedCash contextRef="FY2024" unitRef="USD" scale="6">100</poc:UnrestrictedCash>
+<poc:EBITDA contextRef="FY2022" unitRef="USD" scale="6">200</poc:EBITDA>
+<poc:EBITDA contextRef="FY2023" unitRef="USD" scale="6">200</poc:EBITDA>
+<poc:EBITDA contextRef="FY2024" unitRef="USD" scale="6">200</poc:EBITDA>
+<poc:InterestExpense contextRef="FY2022" unitRef="USD" scale="6">40</poc:InterestExpense>
+<poc:InterestExpense contextRef="FY2023" unitRef="USD" scale="6">40</poc:InterestExpense>
+<poc:InterestExpense contextRef="FY2024" unitRef="USD" scale="6">40</poc:InterestExpense>
+<poc:OperatingCashFlow contextRef="FY2022" unitRef="USD" scale="6">150</poc:OperatingCashFlow>
+<poc:OperatingCashFlow contextRef="FY2023" unitRef="USD" scale="6">160</poc:OperatingCashFlow>
+<poc:OperatingCashFlow contextRef="FY2024" unitRef="USD" scale="6">170</poc:OperatingCashFlow>
+<poc:CapitalExpenditures contextRef="FY2022" unitRef="USD" scale="6">60</poc:CapitalExpenditures>
+<poc:CapitalExpenditures contextRef="FY2023" unitRef="USD" scale="6">70</poc:CapitalExpenditures>
+<poc:CapitalExpenditures contextRef="FY2024" unitRef="USD" scale="6">80</poc:CapitalExpenditures>
+<poc:UndrawnRevolver contextRef="FY2022" unitRef="USD" scale="6">100</poc:UndrawnRevolver>
+<poc:UndrawnRevolver contextRef="FY2023" unitRef="USD" scale="6">100</poc:UndrawnRevolver>
+<poc:UndrawnRevolver contextRef="FY2024" unitRef="USD" scale="6">100</poc:UndrawnRevolver>
+</xbrli:xbrl>

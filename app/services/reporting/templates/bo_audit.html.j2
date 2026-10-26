@@ -29,7 +29,7 @@
 <div class="muted">{{ audit.case.borrower or '' }} &middot; case {{ audit.case.case_id }} &middot; run <span class="mono">{{ audit.run.analysis_run_id }}</span> &middot; {{ audit.document }} {{ audit.version }}</div>
 {% if audit.run.execution_mode == 'offline_simulation' %}<div class="banner sim">{{ audit.run.execution_label }}</div>{% else %}<div class="banner">{{ audit.run.execution_label }}</div>{% endif %}
 <div class="banner">{{ audit.notice }} Conclusion status: {{ st(audit.conclusion_status) }}.</div>
-<nav>{% for n, t in [(1,'Sources'),(2,'Snapshot'),(3,'Registry'),(4,'Agents'),(5,'Execution'),(6,'Prompts'),(7,'Evidence packets'),(8,'Hypotheses'),(10,'Retrieval'),(12,'Calculations'),(13,'Reconciliation'),(14,'BO6'),(15,'Orchestrator'),(16,'Challenger'),(17,'Rerun'),(18,'Missing'),(19,'Score'),(20,'Conclusion')] %}<a href="#s{{ n }}">{{ n }}. {{ t }}</a>{% endfor %}</nav>
+<nav>{% for n, t in [(1,'Sources'),(2,'Snapshot'),(3,'Registry'),(4,'Agents'),(5,'Execution'),(6,'Prompts'),(7,'Evidence packets'),(8,'Hypotheses'),(10,'Retrieval'),(12,'Calculations'),(13,'Reconciliation'),(14,'BO6'),(15,'Orchestrator'),(16,'Challenger'),(17,'Rerun'),(18,'Missing'),(20,'Conclusion')] %}<a href="#s{{ n }}">{{ n }}. {{ t }}</a>{% endfor %}</nav>
 
 <h2 id="s1">1. Case and source metadata</h2>
 <p>As of {{ audit.case.as_of_date }} &middot; evidence cut-off {{ audit.case.evidence_cutoff }}</p>
@@ -132,7 +132,7 @@
 <p>Round {{ audit.rerun.round }} &middot; executed scope <span class="mono">{{ audit.rerun.executed_scope|join(', ') }}</span><br>
 Requested scope incl. descendants: <span class="mono">{{ audit.rerun.requested_scope|join(', ') }}</span><br>
 Invalidated but outside a BO-only run (not executed): <span class="mono">{{ audit.rerun.deferred_descendants|join(', ') or 'none' }}</span><br>
-Superseded: {{ audit.rerun.superseded.parameters|length }} parameter results, {{ audit.rerun.superseded.hypotheses|length }} hypothesis records, {{ audit.rerun.superseded.scores|length }} score(s), {{ audit.rerun.superseded.conclusions|length }} conclusion(s). Prior versions remain stored.</p>{% endif %}
+Superseded: {{ audit.rerun.superseded.parameters|length }} parameter results, {{ audit.rerun.superseded.hypotheses|length }} hypothesis records, {{ audit.rerun.superseded.conclusions|length }} conclusion(s). Prior versions remain stored.</p>{% endif %}
 <table><tr><th>Conclusion</th><th>Orchestrator run</th><th>Supersedes</th><th>Challenge status</th><th>State</th></tr>
 {% for c in audit.conclusions %}<tr><td class="mono">{{ c.conclusion_id }}</td><td>{{ short(c.orchestrator_run_id) }}</td><td class="mono">{{ c.supersedes_id or '' }}</td><td>{{ c.challenge_status }}</td><td>{{ st(c.acceptance_state) }}</td></tr>{% else %}<tr><td colspan="5">No conclusion was persisted.</td></tr>{% endfor %}
 </table>
@@ -141,14 +141,8 @@ Superseded: {{ audit.rerun.superseded.parameters|length }} parameter results, {{
 {% if audit.missing_information %}<ul>{% for m in audit.missing_information %}<li>{{ m }}</li>{% endfor %}</ul>{% else %}<p>None recorded.</p>{% endif %}
 <p>Retrieval gaps: {{ audit.retrieval.gaps|length }}{% for g in audit.retrieval.gaps %} &middot; <span class="mono">{{ g.query_id }}</span> ({{ g.purpose }}){% endfor %}</p>
 
-<h2 id="s19">19. BusinessRiskScore coverage and status</h2>
-<p>Status {{ st(audit.score.status) }} &middot; band {{ audit.score.band if audit.score.band is not none else 'none' }} &middot; coverage {{ audit.score.coverage_weight }} &middot; config v{{ audit.score.scoring_config_version }} <span class="mono">{{ audit.score.scoring_config_hash[:14] }}</span><br>{{ audit.score.explanation }}</p>
-<table><tr><th>Score</th><th>Status</th><th>Band</th><th>Contributing</th><th>Missing</th><th>Supersedes</th><th>State</th></tr>
-{% for s in audit.scores_history %}<tr><td class="mono">{{ s.score_id }}</td><td>{{ s.status }}</td><td>{{ s.band }}</td><td class="mono">{{ s.contributing_parameter_ids|join(', ') }}</td><td class="mono">{{ s.missing_required_parameter_ids|join(', ') }}</td><td class="mono">{{ s.supersedes_id or '' }}</td><td>{{ st(s.acceptance_state) }}</td></tr>{% endfor %}
-</table>
-
 <h2 id="s20">20. Final BO conclusion provenance</h2>
 {% if audit.final_conclusion is string %}<p>{{ st(audit.final_conclusion) }}</p>{% else %}
-<p>Conclusion <span class="mono">{{ audit.final_conclusion.conclusion_id }}</span> &middot; orchestrator run {{ short(audit.final_conclusion.orchestrator_run_id) }} &middot; score reference <span class="mono">{{ audit.final_conclusion.score_reference }}</span> &middot; challenge status {{ audit.final_conclusion.challenge_status }} &middot; supersedes {{ audit.final_conclusion.supersedes_id or 'nothing' }}. Claim-level references are listed in section 15.</p>{% endif %}
+<p>Conclusion <span class="mono">{{ audit.final_conclusion.conclusion_id }}</span> &middot; orchestrator run {{ short(audit.final_conclusion.orchestrator_run_id) }} &middot; challenge status {{ audit.final_conclusion.challenge_status }} &middot; supersedes {{ audit.final_conclusion.supersedes_id or 'nothing' }}. Claim-level references are listed in section 15.</p>{% endif %}
 </body>
 </html>

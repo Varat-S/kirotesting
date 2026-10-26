@@ -136,5 +136,4 @@ def bo_view(session: Session, analysis_run_id: str) -> dict[str, Any]:
         "open_questions": memo["outstanding"],
         "challenger": audit["challenger"],
         "rerun": audit["rerun"],
-        "score": memo["score"],
     }

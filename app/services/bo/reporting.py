@@ -7,7 +7,7 @@ Same rule as the main memo generator: JSON is the source of truth and the HTML
   accepted or appropriately qualified findings with citations. Rejected and
   unverified hypotheses are not in it.
 * The AUDIT REPORT is assembled from RECORDED rows (agent runs, evidence
-  packets, retrieval attempts, hypothesis versions, parameter results, scores,
+  packets, retrieval attempts, hypothesis versions, parameter results,
   conclusions, challenge findings). Nothing is reconstructed after the fact: an
   agent with no recorded run reads ``not_executed`` and a step that did not
   happen reads ``not_performed``. It shows structured outputs, validations and
@@ -35,7 +35,6 @@ from app.models.orm import (
     HypothesisRecordRow,
     ParameterResultRow,
     RetrievalAttemptRow,
-    RiskScoreRow,
     TopicConclusionRow,
 )
 from app.schemas.bo import AcceptedBusinessOverview
@@ -47,7 +46,7 @@ from app.services.bo.plans import (
     BO_SPEC_BY_AGENT,
     BO_V1_TO_V2_AGENT,
 )
-from app.services.bo.synthesis import iter_claims, score_explanation
+from app.services.bo.synthesis import iter_claims
 from app.services.llm.client import FakeLLMBackend
 from app.services.pipeline.artifacts import StageRecorder
 
@@ -328,28 +327,6 @@ class BoReportBuilder:
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,
         }
 
-    def _score_block(self, run) -> dict[str, Any]:
-        block = score_explanation(run.score, run.rubric_notes)
-        block["label"] = run.scoring_cfg.content.get("label")
-        block["scale"] = run.scoring_cfg.content.get("scale")
-        block["scoring_config_version"] = run.scoring_cfg.version
-        block["scoring_config_hash"] = run.scoring_cfg.content_hash
-        weights = run.scoring_cfg.content.get("business_weights", {})
-        block["weights"] = weights
-        reasons = []
-        for pid in block["missing_required_parameter_ids"]:
-            reasons.append(
-                f"{pid} is not available"
-                + (" (critical dimension)" if pid in block["critical_missing_parameter_ids"]
-                   else "")
-                + (": no customer-level revenue disclosure was admitted, so no "
-                   "customer concentration index was computed."
-                   if pid == "customer_hhi" else "."))
-        block["explanation"] = (
-            "The BusinessRiskScore is computed deterministically from rubric "
-            "signals; no model assigns it. " + " ".join(reasons)).strip()
-        return block
-
     # -- memo -----------------------------------------------------------------
 
     def _memo(self, run, mode, sources) -> dict[str, Any]:
@@ -527,7 +504,6 @@ class BoReportBuilder:
                 "data_limitations": limitations,
                 "unresolved_challenges": open_findings,
             },
-            "score": self._score_block(run),
             "calculations": [
                 traces[i].model_dump(mode="json")
                 for i in dict.fromkeys(used_calcs) if i in traces],
@@ -627,14 +603,6 @@ class BoReportBuilder:
              "source_parameter_ids": p.source_parameter_ids,
              "supersedes_id": p.supersedes_id, "acceptance_state": p.acceptance_state}
             for p in self._rows(ParameterResultRow, rid, ParameterResultRow.created_at)]
-        scores = [
-            {"score_id": s.score_id, "kind": s.kind, "status": s.status,
-             "band": s.band, "coverage_weight": s.coverage_weight,
-             "contributing_parameter_ids": s.contributing_parameter_ids,
-             "missing_required_parameter_ids": s.missing_required_parameter_ids,
-             "critical_missing_parameter_ids": s.critical_missing_parameter_ids,
-             "supersedes_id": s.supersedes_id, "acceptance_state": s.acceptance_state}
-            for s in self._rows(RiskScoreRow, rid, RiskScoreRow.created_at)]
         conclusions = [
             {"conclusion_id": c.id, "orchestrator_run_id": c.orchestrator_run_id,
              "challenge_status": c.challenge_status, "supersedes_id": c.supersedes_id,
@@ -782,13 +750,10 @@ class BoReportBuilder:
             },
             "rerun": run.remediation or "not_performed",
             "missing_information": missing,
-            "score": self._score_block(run),
-            "scores_history": scores,
             "conclusions": conclusions,
             "final_conclusion": (
                 {"conclusion_id": final["conclusion_id"],
                  "orchestrator_run_id": final["orchestrator_run_id"],
-                 "score_reference": final["payload"].get("score_reference"),
                  "challenge_status": final["challenge_status"],
                  "supersedes_id": final["supersedes_id"]}
                 if final else "unavailable"),
@@ -855,16 +820,6 @@ class BoReportBuilder:
             business_topic_conclusion_id=run.conclusion_row_id
             if run.conclusion is not None else None,
             conclusion_status=run.conclusion_status,
-            # A-3: do not advertise a risk score next to a run that produced no
-            # validated conclusion. The score id/status/band are only meaningful
-            # when there is a conclusion they belong to; otherwise report them as
-            # unavailable so a downstream consumer cannot read a score as endorsed.
-            business_risk_score_id=run.score.score_id
-            if run.conclusion is not None else None,
-            business_risk_score_status=run.score.status.value
-            if run.conclusion is not None else "unavailable",
-            business_risk_band=run.score.band
-            if run.conclusion is not None else None,
             accepted_finding_ids=sorted(
                 {h for _, c in claims for h in c.get("hypothesis_ids") or []
                  if h in by_id}),
@@ -893,7 +848,6 @@ class BoReportBuilder:
                 {**handoff, "hypothesis_id": hypothesis.hypothesis_id}
                 for hypothesis in by_id.values()
                 for handoff in hypothesis.fo_handoffs],
-            score_limitations=list(run.rubric_notes),
             evidence_limitations=sorted({
                 m for h in by_id.values() for m in h.missing_information}),
             escalations=unresolved,
@@ -901,7 +855,6 @@ class BoReportBuilder:
                 "analysis_run_id": run.analysis_run_id,
                 "evidence_snapshot_version": run.snapshot_version,
                 "topic_conclusion_id": run.conclusion_row_id,
-                "score_id": run.score.score_id,
                 "audit_stage": f"bo_audit:{run.analysis_run_id}",
             },
             execution_mode=mode,

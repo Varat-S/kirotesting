@@ -71,7 +71,6 @@ def main(argv=None) -> None:
         "source_sha256": packet["source"]["sha256"],
         "conclusion_status": packet["handoff"]["conclusion_status"],
         "human_review_status": packet["handoff"]["human_review_status"],
-        "business_risk_score_status": packet["handoff"]["business_risk_score_status"],
         "incremental_usage": packet["incremental_usage"],
         "packet_hash": packet["packet_hash"],
         "handoff_content_hash": packet["handoff"]["content_hash"],

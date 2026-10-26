@@ -5,15 +5,15 @@ Structuring, mitigant or cross-topic agents, and without constructing empty
 FO/SO results. It is a composition of the shared infrastructure, not a parallel
 platform: ``CreditMemoPipeline.prepare_case`` (deterministic foundation),
 ``EvidenceRouter``, ``DagExecutor`` / ``AgentRuntime`` / ``LLMClient``,
-``DeterministicValidator``, ``ParameterPromoter``, ``RubricEngine`` /
-``ScoringEngine``, ``ConclusionStore``, ``ChallengeLoop`` and ``RerunController``.
+``DeterministicValidator``, ``ParameterPromoter``, ``ConclusionStore``,
+``ChallengeLoop`` and ``RerunController``.
 
 Six logical phases:
 
 1. deterministic foundation (snapshot, metrics, indicators) — no LLM;
 2. BO1-BO5 concurrently, plus at most one bounded follow-up retrieval pass;
 3. BO6 over the VALIDATED primary output;
-4. rubric signals + deterministic BusinessRiskScore, then the orchestrator;
+4. reconciliation of the validated findings, then the orchestrator;
 5. the challenger and at most one targeted remediation round;
 6. memo, audit report and handoff (human acceptance stays mandatory).
 
@@ -59,7 +59,6 @@ from app.schemas.agentic import (
     AgentTask,
     AgenticAnalysisRun,
     ParameterResult,
-    ScoreStatus,
     Topic,
 )
 from app.schemas.bo import Disposition, HypothesisRecord
@@ -97,14 +96,11 @@ from app.services.bo.retrieval import (
     packet_view,
 )
 from app.services.bo.synthesis import (
-    RUBRIC_SOURCES,
     challenge_outcome,
     conclusion_prechecks,
     hypothesis_view,
     iter_claims,
     parameter_value_sets,
-    rubric_signals,
-    score_explanation,
     validate_challenger_output,
     validate_orchestrator_output,
 )
@@ -130,8 +126,7 @@ from app.services.orchestration.promotion import (
     promote_narrow_output,
 )
 from app.services.orchestration.rerun import RerunController
-from app.services.pipeline.agentic_runner import _score_row
-from app.services.scoring.engine import ScoringConfig, ScoringEngine
+from app.services.scoring.engine import ScoringConfig
 from app.services.bo.hybrid import InvestigationMode
 
 DATA_NOTICE = (
@@ -299,7 +294,7 @@ class BusinessOverviewRunner:
     def run_specialists(self, case_id: str, *, package=None, prepared=None) -> "_BoRun":
         """Run ONLY the six specialists and their validators (phases 1-3).
 
-        No orchestrator, challenger, score, memo or handoff is produced. The
+        No orchestrator, challenger, memo or handoff is produced. The
         returned run object carries the recorded outcomes for reporting.
         """
         from app.services.pipeline.runner import CreditMemoPipeline
@@ -391,7 +386,6 @@ class _BoRun:
         if cfg_registry.latest("scoring") is None:
             bootstrap_config(cfg_registry)
         self.scoring_cfg = ScoringConfig.from_registry(cfg_registry)
-        self.scorer = ScoringEngine(self.scoring_cfg)
         # Permitted categorical values: rubric-scored parameters take theirs
         # from the scoring config, the rest from the roster data.
         self.value_sets = {
@@ -439,9 +433,6 @@ class _BoRun:
         self.hypotheses: dict[str, list[HypothesisRecord]] = {}
         self.retrieval_requests: dict[str, list[dict]] = {}
         self.followups: dict[str, str] = {}
-        self.rubric_results: list[ParameterResult] = []
-        self.rubric_notes: list[str] = []
-        self.score = None
         self.reconciliation = Reconciliation()
         self.conclusion = None
         self.conclusion_row_id: str | None = None
@@ -476,7 +467,7 @@ class _BoRun:
             self._module4_debt_phase()
         if self.roster_version == "v3":
             self._build_module_conclusions()
-        self._score_business(authoritative=False)
+        self._reconcile()
         self._stage("orchestrator", {BO_ORCHESTRATOR_ID})
         if (self.conclusion is None
                 and self.agents[BO_ORCHESTRATOR_ID].status == "rejected"):
@@ -492,9 +483,6 @@ class _BoRun:
             self.rerun_reason = None
             self.orchestrator_validation_feedback = []
         self._challenge_phase()
-        if self.roster_version == "v3":
-            self._score_business(authoritative=True)
-            self._link_final_score()
         self._finalize()
 
     def execute_specialists(self) -> None:
@@ -936,7 +924,6 @@ class _BoRun:
             "resilience_findings": [hypothesis_view(h) for h in resilience],
             "indicators": self.indicators.agent_view(),
             "coverage": self._coverage(),
-            "score_explanation": score_explanation(self.score, self.rubric_notes),
         }
         if self.roster_version == "v3":
             extras.update(
@@ -956,8 +943,7 @@ class _BoRun:
             }
         orchestrator_input = build_business_orchestrator_input(
             analysis_run_id=self.analysis_run_id,
-            parameters=[*self._business_parameters(), *self.rubric_results],
-            business_score=self.score,
+            parameters=self._business_parameters(),
             data_limitations=limitations,
             extras=extras,
         )
@@ -996,7 +982,6 @@ class _BoRun:
             "indicators": self.indicators.agent_view(),
             "deterministic_prechecks": conclusion_prechecks(
                 self.orchestrator_output, by_id),
-            "score": score_explanation(self.score, self.rubric_notes),
             "coverage": self._coverage(),
         }
         evidence_ids = {e for h in by_id.values() for e in h.evidence_ids()}
@@ -1170,7 +1155,7 @@ class _BoRun:
             for handoff in h.fo_handoffs]
 
     def _close_run(self) -> None:
-        """Finish a specialists-only run (no conclusion, score or handoff)."""
+        """Finish a specialists-only run (no conclusion or handoff)."""
         runs = self.session.execute(
             select(AgentRunRow).where(
                 AgentRunRow.analysis_run_id == self.analysis_run_id)
@@ -1268,52 +1253,12 @@ class _BoRun:
             self._stage("follow_up_retrieval", again)
             self.rerun_reason = None
 
-    def _score_business(self, *, authoritative: bool = False) -> None:
-        """Rubric signals + deterministic BusinessRiskScore (existing engines)."""
-        prior = self.score
-        if prior is not None:
-            self.rerun.supersede_parameters({s for s, _ in RUBRIC_SOURCES.values()})
-            self.rerun.supersede_scores({"business"})
-        self.rubric_results, self.rubric_notes = rubric_signals(
-            self.scoring_cfg, self._business_parameters(),
-            analysis_run_id=self.analysis_run_id)
-        for result in self.rubric_results:
-            self.promoter.persist(result, case_id=self.case_id,
-                                  snapshot_version=self.snapshot_version)
-        score = self.scorer.score_business(
-            self.rubric_results, analysis_run_id=self.analysis_run_id)
-        illustrative = (self.roster_version == "v3"
-                        and str(self.scoring_cfg.content.get("label", "")).startswith(
-                            "ILLUSTRATIVE"))
-        if illustrative and score.status is ScoreStatus.FINAL:
-            score = score.model_copy(update={"status": ScoreStatus.PROVISIONAL})
-        if self.roster_version == "v3":
-            score = score.model_copy(update={"detail": {
-                **score.detail,
-                "stage": "authoritative_post_challenge" if authoritative
-                         else "preliminary_pre_challenge",
-                "policy_status": "illustrative_not_bank_policy" if illustrative
-                                 else "approved_policy",
-            }})
-        if prior is not None:
-            score = score.model_copy(update={"supersedes_id": prior.score_id})
-        self.session.add(_score_row(score, self.case_id, self.snapshot_version))
-        self.session.flush()
-        self.score = score
+    def _reconcile(self) -> None:
+        """Group duplicate and contradictory validated findings for synthesis."""
         usable = self._usable()
         rejected = [h for h in self._audit_only()
                     if h.disposition is Disposition.REJECTED]
         self.reconciliation = reconcile(usable, rejected)
-
-    def _link_final_score(self) -> None:
-        """Point the accepted structured conclusion at the post-challenge score."""
-        if self.conclusion is None or self.conclusion_row_id is None or self.score is None:
-            return
-        self.conclusion = self.conclusion.model_copy(
-            update={"score_reference": self.score.score_id})
-        row = self.session.get(TopicConclusionRow, self.conclusion_row_id)
-        row.payload = self.conclusion.model_dump(mode="json")
-        self.session.flush()
 
     def _on_orchestrator(self, agent, parsed, run_id) -> None:
         by_id = {h.hypothesis_id: h for h in self._usable()}
@@ -1322,7 +1267,6 @@ class _BoRun:
         accepted_ids = {
             *(r.parameter_result_id for r in self.indicators.results),
             *(p.parameter_result_id for p in self._business_parameters()),
-            *(r.parameter_result_id for r in self.rubric_results),
         }
         issues = validate_orchestrator_output(
             parsed, hypotheses=all_by_id, reconciliation=self.reconciliation,
@@ -1368,7 +1312,7 @@ class _BoRun:
         if not issues:
             conclusion = build_topic_conclusion(
                 Topic.BUSINESS, parsed, analysis_run_id=self.analysis_run_id,
-                orchestrator_run_id=run_id, score_reference=self.score.score_id)
+                orchestrator_run_id=run_id, score_reference=None)
             try:
                 validate_conclusion_provenance(
                     conclusion, accepted_parameter_ids=accepted_ids)
@@ -1496,8 +1440,7 @@ class _BoRun:
         # Descendant invalidation, append-only: everything in scope is
         # superseded BEFORE re-execution, so a failed rerun cannot leave the
         # challenged artifacts standing as accepted.
-        superseded = {"parameters": [], "hypotheses": [], "scores": [],
-                      "conclusions": []}
+        superseded = {"parameters": [], "hypotheses": [], "conclusions": []}
         for agent_id in narrow:
             spec = self.spec_by_agent[agent_id]
             superseded["parameters"] += self.rerun.supersede_parameters(
@@ -1526,8 +1469,7 @@ class _BoRun:
             self._stage("rerun_primary_specialists", primary, force=True)
         if self.resilience_agent_id in narrow:
             self._stage("rerun_resilience", {self.resilience_agent_id}, force=True)
-        self._score_business(authoritative=False)
-        superseded["scores"] = [self.score.supersedes_id] if self.score.supersedes_id else []
+        self._reconcile()
         self.conclusion, self.orchestrator_output = None, None
         self._stage("rerun_orchestrator", {BO_ORCHESTRATOR_ID}, force=True)
         self._stage("rerun_challenger", {BO_CHALLENGER_ID}, force=True)

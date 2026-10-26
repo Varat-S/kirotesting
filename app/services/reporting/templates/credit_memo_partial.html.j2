@@ -31,8 +31,7 @@ code { font: 7pt/1.3 Consolas, monospace; overflow-wrap: anywhere; }
 <div class="meta"><strong>{{ a.borrower.reporting_entity_name }}</strong><br>
 As of {{ a.borrower.as_of_date }} · Case {{ a.borrower.case_id }}<br>
 Assessment status: <strong>{{ a.status }}</strong> · Human review: <strong>{{ a.governance.human_review_status }}</strong><br>
-Transaction borrower: <strong>{{ a.borrower.legal_name or a.borrower.identification_status }}</strong><br>
-Provisional BO risk band: <strong>{{ a.governance.provisional_business_risk_band }}</strong> ({{ a.governance.business_risk_score_status }})</div>
+Transaction borrower: <strong>{{ a.borrower.legal_name or a.borrower.identification_status }}</strong></div>
 <h2>Business strengths</h2>{% for f in a.business_assessment.business_strengths %}<article><strong>{{ f.title }}</strong><p>{{ f.text }}</p><span class="tag">{{ f.qualification }} · {{ evidence(f.evidence_ids) }}</span></article>{% endfor %}
 <h2>Material vulnerabilities</h2>{% for f in a.business_assessment.material_business_vulnerabilities %}<article><strong>{{ f.title }}</strong><p>{{ f.text }}</p><span class="tag">{{ f.qualification }} · {{ evidence(f.evidence_ids) }}</span></article>{% endfor %}
 <h2>Assessment limitations</h2><p>{{ a.financial_overview.notice }}</p><p>{{ a.downstream_dependencies.sections.final_credit_synthesis.reason }}</p>

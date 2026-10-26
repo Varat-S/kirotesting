@@ -144,7 +144,6 @@ def test_real_bo_synthetic_fo_pdf_and_lineage(tmp_path):
     findings = [f for bucket in buckets for f in bucket]
     assert len(findings) == 28 and sum(f.accepted_for_handoff for f in findings) == 8
     assert a.governance.human_review_status == "pending"
-    assert a.governance.provisional_business_risk_band == 3
     assert a.governance.unresolved_challenges == bo["unresolved_challenges"]
     risk = next(f for f in findings if f.provenance.source_hypothesis_id == "M1A6-H001")
     assert risk.disposition == "qualified" and risk.admissibility == "qualified_narrative"

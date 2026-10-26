@@ -15,7 +15,7 @@ evidence. Deterministic code validates everything they return. Two entry points:
 | Command | Runs | Produces |
 |---|---|---|
 | `run-bo-specialists` | BO1–BO6 + validators | executive summary, six-specialist comparison (HTML/PDF), validation audit, benchmark, JSON |
-| `run-bo-case` | BO1–BO6, Business Orchestrator, Business Challenger, one bounded rerun, BusinessRiskScore | analyst memo, audit report, handoff (pending human review) |
+| `run-bo-case` | BO1–BO6, Business Orchestrator, Business Challenger, one bounded rerun | analyst memo, audit report, handoff (pending human review) |
 
 Neither runs Financial, Structuring, mitigant or cross-topic agents.
 
@@ -39,7 +39,7 @@ BO1..BO5 (concurrent)
   -> retrieval follow-up             once, only if an agent asked for a search
   -> coverage follow-up              once, only for unanswered coverage questions
 BO6                                  receives usable BO1..BO5 hypotheses only
-[run-bo-case only] score -> orchestrator -> challenger -> at most one rerun
+[run-bo-case only] orchestrator -> challenger -> at most one rerun
 reports
 ```
 
@@ -57,7 +57,7 @@ Each phase is one `DagExecutor.run(only=...)` call over `default_registry("v2")`
 | `inference_rules.py` | Layer C: lexical rules for known unsupported inferences |
 | `hypotheses.py` | `HypothesisValidator` (all per-hypothesis checks), `gate_parameters`, `HypothesisStore` |
 | `reconcile.py` | Cross-agent duplicates and contradictions (lexical) |
-| `synthesis.py` | Rubric signals, orchestrator/challenger input views and output validation |
+| `synthesis.py` | Rubric value sets, orchestrator/challenger input views and output validation |
 | `runner.py` | `BusinessOverviewRunner` (`run_case`, `run_prepared`, `run_specialists`) and `_BoRun` phase logic |
 | `reporting.py` | Memo, audit report, handoff for `run-bo-case` |
 | `handoff.py` | Human accept/reject of the handoff; immutability guard |
@@ -196,10 +196,8 @@ VERTEX_MODEL_CHALLENGE=gemini-3.1-flash-lite
    `review_flags` and `fo_handoffs`; these are not yet passed to them or shown
    in the `run-bo-case` memo.
 4. FO handoffs are recorded on hypotheses; nothing consumes them.
-5. Rubric-scored parameters are now often `not_established`, so
-   BusinessRiskScore is more often `unavailable`.
-6. One sector profile (healthcare provider). Retrieval is keyword-based.
-7. `examples/healthcare/hca-2025/review_manifest.json` is an unverified template.
+5. One sector profile (healthcare provider). Retrieval is keyword-based.
+6. `examples/healthcare/hca-2025/review_manifest.json` is an unverified template.
 8. The full agentic runner (FO/SO/credit) still uses the v1 BO roster.
 
 ## M3 readiness services (offline)

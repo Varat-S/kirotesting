@@ -34,7 +34,7 @@ def build_topic_conclusion(
     *,
     analysis_run_id: str,
     orchestrator_run_id: str,
-    score_reference: str,
+    score_reference: str | None,
     selected_candidate_id: str | None = None,
 ) -> TopicConclusion:
     """Convert a validated orchestrator output into a typed TopicConclusion."""

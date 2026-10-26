@@ -42,7 +42,6 @@
 {% for a in view.agents %}<tr><td>{{ a.code or '' }}</td><td><code>{{ a.agent_id }}</code></td><td>{{ a.role }}</td><td>{{ st(a.status) }}</td><td>{{ a.runs }}</td><td>{{ a.detail or '' }}{% for i in a.validation_issues %}<br>{{ i }}{% endfor %}</td></tr>{% endfor %}
 </tbody></table></div>
 <p>Challenger: {% if view.challenger.rounds is string %}{{ st(view.challenger.rounds) }}{% else %}{% for r in view.challenger.rounds %}round {{ r.round }} {{ st(r.outcome) }} ({{ r.findings|length }} finding(s)){{ '; ' if not loop.last }}{% endfor %}{% endif %}. Rerun: {% if view.rerun is string %}{{ view.rerun|replace('_', ' ') }}{% else %}one round, scope {{ view.rerun.executed_scope|join(', ') }}{% endif %}.</p>
-<p>BusinessRiskScore: {{ st(view.score.status) }}{% if view.score.band is not none %}, band {{ view.score.band }}{% else %}, no band{% endif %}. {{ view.score.explanation }}</p>
 </section>
 
 {% macro hypotheses(items) %}

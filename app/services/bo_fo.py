@@ -225,9 +225,6 @@ def bo_summary(result, roster: str) -> dict:
         "conclusion_status": result.conclusion_status,
         "human_review_status": "pending",
         "handoff_id": (result.handoff or {}).get("handoff_id"),
-        "business_risk_score": {
-            "status": result.memo["score"]["status"], "band": result.memo["score"]["band"],
-        } if result.memo else None,
         "outputs": sorted({str(Path(p).parent) for p in result.output_paths.values()}),
         "handoff_path": str(result.output_paths["handoff.json"]) if "handoff.json" in result.output_paths else None,
     }

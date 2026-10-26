@@ -111,7 +111,8 @@ def test_waves_dependencies_and_same_run_persistence(db_session, tmp_path):
     assert result.record["stages"][0]["peak_concurrency"] > 1
     bo6 = _runs(db_session, rid, "bo_resilience_interactions")[0]
     assert len(bo6.parent_run_ids) == 5
-    for model in (ParameterResultRow, HypothesisRecordRow, RiskScoreRow,
+    assert db_session.query(RiskScoreRow).count() == 0
+    for model in (ParameterResultRow, HypothesisRecordRow,
                   TopicConclusionRow, EvidencePacketRow, RetrievalAttemptRow,
                   AcceptedBusinessOverviewRow):
         assert db_session.query(model).filter_by(analysis_run_id=rid).count() > 0
@@ -153,9 +154,6 @@ def test_invalid_evidence_reference_promotes_nothing_for_that_agent(db_session, 
     assert result.conclusion_status == "accepted"
     section = next(s for s in result.memo["sections"] if s["code"] == "BO3")
     assert section["claims"] == [] and "coverage gap" in section["notice"]
-    # The critical rubric dimension is missing, so no score is fabricated.
-    assert result.memo["score"]["status"] == "unavailable"
-    assert result.memo["score"]["band"] is None
 
 
 def test_prompt_injection_in_source_text_does_not_change_behaviour(db_session, tmp_path):
@@ -223,15 +221,15 @@ def test_failed_specialist_is_recorded_and_synthesis_still_runs(db_session, tmp_
 def test_orchestrator_input_is_validated_structure_only(db_session, tmp_path):
     _, backend = run(db_session, tmp_path)
     inputs = next(i for m, i in backend.requests if m == "orchestrate")
-    assert set(inputs) <= {"topic", "parameters", "score", "open_conflicts",
+    assert set(inputs) <= {"topic", "parameters", "open_conflicts",
                            "data_limitations", *ALLOWED_ORCHESTRATOR_EXTRAS}
+    assert "score" not in inputs
     assert "evidence" not in inputs and "canonical_evidence" not in inputs
     dumped = json.dumps(inputs)
     for _, text in PASSAGES.values():
         assert text not in dumped  # no raw passage is forwarded
-    assert {p["parameter_id"] for p in inputs["parameters"]} >= {
-        "competitive_position_risk_signal", "pricing_power_assessment"}
-    assert inputs["score"]["status"] == "provisional"
+    assert "pricing_power_assessment" in {p["parameter_id"] for p in inputs["parameters"]}
+    assert not any(p["parameter_id"].endswith("_risk_signal") for p in inputs["parameters"])
     assert all(h["admissibility"] != "audit_only" for h in inputs["hypotheses"])
     assert {h["hypothesis_id"] for h in inputs["audit_only_hypotheses"]} >= {
         "BO1-H003", "BO3-H003", "BO5-H003"}
@@ -333,7 +331,7 @@ def test_conclusion_claims_carry_claim_specific_references(db_session, tmp_path)
     assert [e["evidence_id"] for e in claims["bo_d2"]["evidence"]] == ["ev_payer"]
     assert [e["evidence_id"] for e in claims["bo_w1"]["evidence"]] == ["ev_geo"]
     row = db_session.query(TopicConclusionRow).one()
-    assert row.payload["score_reference"] == result.memo["score"]["score_id"]
+    assert row.payload["score_reference"] is None
     assert "band" not in json.dumps(row.payload)
 
 
@@ -390,9 +388,7 @@ def test_material_finding_triggers_one_targeted_rerun_with_lineage(db_session, t
     assert [c.acceptance_state for c in conclusions] == ["superseded", "accepted"]
     assert conclusions[1].supersedes_id == conclusions[0].id
     assert conclusions[1].challenge_status == "reran"
-    scores = db_session.query(RiskScoreRow).filter_by(analysis_run_id=rid).order_by(
-        RiskScoreRow.created_at).all()
-    assert [s.acceptance_state for s in scores] == ["superseded", "accepted"]
+    assert db_session.query(RiskScoreRow).filter_by(analysis_run_id=rid).count() == 0
     params = db_session.query(ParameterResultRow).filter_by(
         analysis_run_id=rid, parameter_id="pricing_power_assessment").all()
     assert sorted(p.acceptance_state for p in params) == ["accepted", "superseded"]
@@ -481,8 +477,7 @@ def test_invalid_challenger_answer_is_not_treated_as_acceptance(
     assert entry["status"] == "rejected" and any(expected in i for i in entry["issues"])
     assert result.conclusion_status == "human_review_required"
     assert db_session.query(ChallengeFindingRow).count() == 0
-    scores = db_session.query(RiskScoreRow).all()
-    assert len(scores) == 1 and scores[0].acceptance_state == "accepted"
+    assert db_session.query(RiskScoreRow).count() == 0
 
 
 def test_challenger_sees_rejected_hypotheses_and_calculation_denominators(
@@ -557,8 +552,9 @@ def test_memo_and_audit_are_written_and_labelled_offline(db_session, tmp_path):
                     "Regulation, Litigation &amp; External Risks",
                     "Business Resilience &amp; Risk Interactions",
                     "Key Credit Strengths and Vulnerabilities",
-                    "Outstanding Questions / Data Limitations", "BusinessRiskScore"):
+                    "Outstanding Questions / Data Limitations"):
         assert heading in memo_html
+    assert "BusinessRiskScore" not in memo_html
     assert "model-private reasoning" in audit_html
 
 
@@ -599,19 +595,12 @@ def test_every_citation_resolves_to_an_admitted_source(db_session, tmp_path):
             assert sources[n]["filename"] == "nfh-10k.htm" and sources[n]["section"]
 
 
-def test_score_is_deterministic_and_never_fabricated(db_session, tmp_path):
+def test_no_business_risk_score_is_produced(db_session, tmp_path):
     result, _ = run(db_session, tmp_path)
-    score = result.memo["score"]
-    assert score["status"] == "provisional" and score["band"] == 2
-    assert score["method"] == "deterministic"
-    assert score["missing_required_parameter_ids"] == ["customer_hhi"]
-    assert "customer_hhi is not available" in score["explanation"]
-    row = db_session.query(RiskScoreRow).one()
-    assert row.kind == "business" and row.coverage_weight == pytest.approx(0.7)
-    signals = db_session.query(ParameterResultRow).filter(
-        ParameterResultRow.parameter_id.like("%risk_signal")).all()
-    assert all(s.method == "deterministic" and s.agent_id is None for s in signals)
-    assert all(s.formula_id.startswith("rubric:") for s in signals)
+    assert "score" not in result.memo and "score" not in result.audit
+    assert db_session.query(RiskScoreRow).count() == 0
+    assert db_session.query(ParameterResultRow).filter(
+        ParameterResultRow.parameter_id.like("%risk_signal")).count() == 0
 
 
 def test_audit_reports_unexecuted_steps_honestly(db_session, tmp_path):
@@ -627,7 +616,6 @@ def test_audit_reports_unexecuted_steps_honestly(db_session, tmp_path):
     assert result.audit["challenger"]["rounds"] == "not_executed"
     assert result.audit["final_conclusion"] == "unavailable"
     assert result.memo["executive"]["provisional_view"] is None
-    assert result.memo["score"]["band"] is None
     html = result.output_paths["audit_report.html"].read_text("utf-8")
     assert "not_executed" in html
 
@@ -637,7 +625,7 @@ def test_handoff_is_valid_independently_readable_and_review_gated(db_session, tm
     handoff = AcceptedBusinessOverview.model_validate(result.handoff)
     assert handoff.human_review_status == "pending"
     assert handoff.business_topic_conclusion_id.startswith("tc_")
-    assert handoff.business_risk_score_status == "provisional"
+    assert "business_risk_band" not in result.handoff
     assert handoff.material_risk_ids == ["bo_r1", "bo_r2", "bo_r3"]
     assert "BO2-H001" in handoff.accepted_finding_ids
     assert handoff.validated_mitigants == []
@@ -657,7 +645,7 @@ def test_handoff_is_valid_independently_readable_and_review_gated(db_session, tm
     with pytest.raises(HandoffError):
         review_handoff(db_session, handoff.handoff_id, reviewer="b", reason="again")
     row = db_session.get(AcceptedBusinessOverviewRow, handoff.handoff_id)
-    row.payload = {**row.payload, "business_risk_band": 1}
+    row.payload = {**row.payload, "material_risk_ids": []}
     with pytest.raises(HandoffImmutableError):
         db_session.flush()
     db_session.rollback()

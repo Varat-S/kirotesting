@@ -104,7 +104,6 @@ def test_replay_is_deterministic_for_validation_scoring_and_hashes(completed):
         R5, backend=replay, execution_mode="replay")
     # Execution labels/models may differ; governed analytical hashes must not.
     assert second["handoff"]["content_hash"] == completed["handoff"]["content_hash"]
-    assert second["post_challenge"]["score"] == completed["post_challenge"]["score"]
     assert second["validation"] == completed["validation"]
 
 

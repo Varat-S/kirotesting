@@ -79,7 +79,7 @@ def test_cli_runs_bo_only_from_a_real_sec_bundle_and_records_review(tmp_path, ca
     assert summary["agents"]["business_challenge"] == "validated"
     # BO6 had one validated primary finding to consider and ran.
     assert summary["ai_calls"] == 8
-    assert summary["business_risk_score"] == {"status": "unavailable", "band": None}
+    assert "business_risk_score" not in summary
     for path in summary["outputs"].values():
         assert (tmp_path / "out" / "bo" / "POC_BO").as_posix() in path.replace("\\", "/")
 

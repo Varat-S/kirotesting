@@ -1,8 +1,8 @@
 """Business Orchestrator input contract (Remediation item 7).
 
 The Business Orchestrator consumes EXACTLY: accepted validated Business
-ParameterResults, the BusinessRiskScore, and the relevant open conflicts / data
-limitations / evidence-quality notes. It must NOT receive arbitrary raw
+ParameterResults, the BusinessRiskScore when the caller has one, and the
+relevant open conflicts / data limitations / evidence-quality notes. It must NOT receive arbitrary raw
 documents and MUST NOT recalculate anything. This module builds that strict
 input packet; anything outside the contract is dropped.
 """
@@ -23,7 +23,7 @@ class OrchestratorInputError(ValueError):
 class BusinessOrchestratorInput:
     analysis_run_id: str
     parameters: list[dict[str, Any]]
-    score: dict[str, Any]
+    score: dict[str, Any] | None
     open_conflicts: list[dict[str, Any]]
     data_limitations: list[dict[str, Any]]
     # Additional VALIDATED structure (Business Overview v2): hypothesis records,
@@ -35,7 +35,7 @@ class BusinessOrchestratorInput:
         return {
             "topic": "business",
             "parameters": self.parameters,
-            "score": self.score,
+            **({"score": self.score} if self.score is not None else {}),
             "open_conflicts": self.open_conflicts,
             "data_limitations": self.data_limitations,
             **self.extras,
@@ -46,7 +46,7 @@ class BusinessOrchestratorInput:
 ALLOWED_ORCHESTRATOR_EXTRAS = frozenset({
     "data_notice", "sections", "hypotheses", "audit_only_hypotheses",
     "duplicate_groups", "contradictions", "resilience_findings", "indicators",
-    "coverage", "score_explanation", "challenge_feedback",
+    "coverage", "challenge_feedback",
     "validation_feedback",
     "module_conclusions", "cross_module_instruction",
 })
@@ -56,13 +56,13 @@ def build_business_orchestrator_input(
     *,
     analysis_run_id: str,
     parameters: list[ParameterResult],
-    business_score: RiskScore,
+    business_score: RiskScore | None = None,
     open_conflicts: list[dict[str, Any]] | None = None,
     data_limitations: list[dict[str, Any]] | None = None,
     extras: dict[str, Any] | None = None,
 ) -> BusinessOrchestratorInput:
     """Construct the strict Business Orchestrator input (item 7)."""
-    if business_score.kind is not ScoreKind.BUSINESS:
+    if business_score is not None and business_score.kind is not ScoreKind.BUSINESS:
         raise OrchestratorInputError("Expected a BusinessRiskScore.")
     unknown = set(extras or {}) - ALLOWED_ORCHESTRATOR_EXTRAS
     if unknown:
@@ -73,7 +73,7 @@ def build_business_orchestrator_input(
     return BusinessOrchestratorInput(
         analysis_run_id=analysis_run_id,
         parameters=accepted,
-        score=_score_payload(business_score),
+        score=_score_payload(business_score) if business_score is not None else None,
         open_conflicts=list(open_conflicts or []),
         data_limitations=list(data_limitations or []),
         extras=dict(extras or {}),
