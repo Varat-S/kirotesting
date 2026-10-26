@@ -3,10 +3,10 @@
   "created": "2026-10-17",
   "provenance_note": "All examples are developer-created or derived from previously inspected HCA/NFH fixtures. None is independent external validation data. K cases were execution-held-out after guard revision, but belong to the same developer and HCA source family.",
   "sets": [
-    {"path": "examples/bo_m2/hca_m1s2", "role": "development", "provenance": "Developer-authored scripted M2 comparison; repeatedly inspected and used to change heuristics."},
-    {"path": "examples/bo_m2/nfh_m1s2", "role": "development", "provenance": "Developer-authored synthetic breadth case; inspected during M2."},
-    {"path": "examples/bo_m2/judge_eval/hca_cases.json", "role": "development", "provenance": "J01-J18 pre-registered before judge execution, then used to revise the deterministic guard."},
-    {"path": "examples/bo_m2/judge_eval/hca_cases_heldout.json", "role": "held_out_with_caveat", "provenance": "K01-K12 written after guard revision and before execution; same developer, borrower, filing and task family, so not independent validation."},
+    {"path": "examples/bo_m1s2/hca_m1s2", "role": "development", "provenance": "Developer-authored scripted M1S2 comparison; repeatedly inspected and used to change heuristics."},
+    {"path": "examples/bo_m1s2/nfh_m1s2", "role": "development", "provenance": "Developer-authored synthetic breadth case; inspected during M1S2."},
+    {"path": "examples/bo_m1s2/judge_eval/hca_cases.json", "role": "development", "provenance": "J01-J18 pre-registered before judge execution, then used to revise the deterministic guard."},
+    {"path": "examples/bo_m1s2/judge_eval/hca_cases_heldout.json", "role": "held_out_with_caveat", "provenance": "K01-K12 written after guard revision and before execution; same developer, borrower, filing and task family, so not independent validation."},
     {"path": "examples/bo_m3/offline_comparison.json", "role": "development", "provenance": "Synthetic controlled cases created for architecture plumbing and metric regression."}
   ],
   "coverage": [

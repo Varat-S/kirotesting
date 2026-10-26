@@ -23,7 +23,7 @@ from app.services.pipeline.runner import CreditMemoPipeline
 
 
 HCA_DIR = Path("examples/healthcare/hca-2025")
-SCRIPTS = Path("examples/bo_m2/hca_m1s2")
+SCRIPTS = Path("examples/bo_m1s2/hca_m1s2")
 pytestmark = pytest.mark.skipif(
     not (HCA_DIR / "filing/bundle.json").exists(), reason="HCA filing unavailable")
 

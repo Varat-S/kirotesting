@@ -55,7 +55,7 @@ Targeted enhancement (not a rebuild) of the EXISTING standalone Module 3 special
   `LLMBackend`, `FakeLLMBackend`, `LLMValidationError`, schema-validates every response
   before use), `providers.py`, `providers_vertex.py` (Vertex/Gemini behind the
   abstraction, ADC/service-account creds, never committed), `sampling.py`,
-  `app/schemas/llm.py`. Live transcript precedent: `app/services/bo/m2_live.py`.
+  `app/schemas/llm.py`. Live transcript precedent: `app/services/bo/m1s2_live.py`.
   Settings/secrets use Pydantic `SecretStr` (masked in logs). Fake backend tests:
   `tests/unit/test_llm_client.py`.
 - **Schema.** `app/schemas/bo_m3.py` is versioned and additive: `M3_ASSESSMENT_VERSION`

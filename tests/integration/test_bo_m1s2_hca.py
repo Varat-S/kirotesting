@@ -1,4 +1,4 @@
-"""M2 — controlled offline comparison on HCA FY2025 (specialist M1S2).
+"""M1S2 — controlled offline comparison on HCA FY2025 (specialist M1S2).
 
 Runs only when the HCA filing has been fetched (examples/healthcare/hca-2025/
 filing/bundle.json; git-ignored). Scenarios were committed before the first run
@@ -21,7 +21,7 @@ from app.services.pipeline.runner import CreditMemoPipeline
 HCA_DIR = Path("examples/healthcare/hca-2025")
 pytestmark = pytest.mark.skipif(
     not (HCA_DIR / "filing/bundle.json").exists(),
-    reason="HCA FY2025 Form 10-K has not been acquired; HCA M2 comparison NOT performed.")
+    reason="HCA FY2025 Form 10-K has not been acquired; HCA M1S2 comparison NOT performed.")
 
 
 @pytest.fixture()
@@ -36,7 +36,7 @@ def report(db_session, tmp_path):
         db_session, case_id="HCA_2025_M2", evidence=prepared.evidence_snapshot,
         metrics=prepared.metrics, spec=V3_SPEC_BY_CODE["M1S2"],
         coverage_checks=load_case_checks(HCA_DIR / "coverage_checks.json"))
-    return run_comparison(db_session, prep, "examples/bo_m2/hca_m1s2")
+    return run_comparison(db_session, prep, "examples/bo_m1s2/hca_m1s2")
 
 
 def _o(report, arm):

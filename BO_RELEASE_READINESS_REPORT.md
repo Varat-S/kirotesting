@@ -105,7 +105,7 @@ by free path. Output paths are rooted at the configured output root.
 
 **Sensitive data in logs — Pass.** The production BO path uses no `print`/logging of
 evidence or secrets. `print` statements exist only in the **experimental** CLI tools
-(`m2_live.py`, `judge_eval.py`, `m3_*.py`), which are not on the default runner path
+(`m1s2_live.py`, `judge_eval.py`, `m3_*.py`), which are not on the default runner path
 and write to git-ignored `output/`.
 
 **Provider error handling — Pass with limitations.** Provider exceptions and timeouts

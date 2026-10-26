@@ -1,4 +1,12 @@
-"""M2 controlled comparison: single-pass specialist vs hypothesis investigation.
+"""M1S2 controlled comparison: single-pass specialist vs hypothesis investigation.
+
+Workstream naming: historically called the "M2" work package (second deliverable
+of the BO investigation integration). It compares procedures for one Module 1
+specialist (M1S2 Customer Stickiness) and is unrelated to Module 2 (Industry,
+``m2_industry``). The ``COMPARISON_VERSION`` value and the ``ar_m2_`` analysis-run
+id prefix below deliberately keep their original strings: they are machine-facing
+identifiers persisted in committed fixtures, so renaming the VALUES would force
+regenerating those fixtures (including Module 3's) and is intentionally avoided.
 
 Both arms run ONE v3 Module 1 specialist over IDENTICAL inputs: the same sealed
 evidence packet, indicators, permitted parameter values and deterministic

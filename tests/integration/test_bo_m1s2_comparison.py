@@ -1,6 +1,6 @@
-"""M2 — controlled offline comparison on the synthetic NFH case (specialist M1S2).
+"""M1S2 — controlled offline comparison on the synthetic NFH case (specialist M1S2).
 
-Scripted model responses (examples/bo_m2/nfh_m1s2) are EQUALLY WRONG in both
+Scripted model responses (examples/bo_m1s2/nfh_m1s2) are EQUALLY WRONG in both
 arms. These tests check the harness guarantees and pin the measured pipeline
 behaviour as a regression; they say nothing about live model quality.
 """
@@ -22,7 +22,7 @@ from app.services.bo.comparison import (
 from app.services.bo.roster_v3 import V3_SPEC_BY_CODE
 from tests import bo_helpers as h
 
-SCRIPTS = "examples/bo_m2/nfh_m1s2"
+SCRIPTS = "examples/bo_m1s2/nfh_m1s2"
 
 
 @pytest.fixture()
@@ -78,7 +78,7 @@ def test_each_arm_writes_its_own_validator_audit_event(comparison, db_session):
 
 
 def test_measured_single_pass_outcomes(comparison):
-    """Regression pin of the baseline arm (see BO_M2_COMPARISON_REPORT.md)."""
+    """Regression pin of the baseline arm (see BO_M1S2_COMPARISON_REPORT.md)."""
     _, report = comparison
     arm = report["arms"]["single_pass"]
     o = _outcomes(report, "single_pass")
@@ -94,7 +94,7 @@ def test_measured_single_pass_outcomes(comparison):
 
 
 def test_measured_investigation_outcomes(comparison):
-    """Regression pin of the investigation arm (see BO_M2_COMPARISON_REPORT.md)."""
+    """Regression pin of the investigation arm (see BO_M1S2_COMPARISON_REPORT.md)."""
     _, report = comparison
     arm = report["arms"]["investigation"]
     o = _outcomes(report, "investigation")

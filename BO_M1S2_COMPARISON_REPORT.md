@@ -1,4 +1,10 @@
-# BO investigation integration — M1 and M2 report
+# BO investigation integration — M1 and M1S2 report
+
+> Naming note: "M2" throughout this report refers to the **development workstream
+> "M2"** (the second work package: per-specialist investigation + controlled
+> comparison), which was exercised on **Module 1 Specialist 2 (M1S2, Customer
+> Stickiness)**. It is NOT the architecture's Module 2 (Industry Information,
+> `m2_industry`). The example fixtures live under `examples/bo_m1s2/`.
 
 Branch `feat/bo-investigation-integration`. Architecture: [`BO_ARCHITECTURE_V3_SPEC.md`](BO_ARCHITECTURE_V3_SPEC.md).
 Background: [`BO_INTEGRATION_M0_ASSESSMENT.md`](BO_INTEGRATION_M0_ASSESSMENT.md).
@@ -32,8 +38,8 @@ Sections 4–5a use scripted model responses. Sections 5b–5c report real, paid
 |---|---|
 | `SpecialistInvestigation`: steps 6–12 + parameter classification for one specialist, over its sealed packet only | `bo/investigation.py` |
 | Comparison harness: identical inputs for both arms, anchor-based scripts, call/payload recording, scoring against a pre-registered manifest | `bo/comparison.py` |
-| Scenario set for M1S2 on the synthetic case | `examples/bo_m2/nfh_m1s2/` |
-| Recorded results | `examples/bo_m2/nfh_m1s2/results.json` |
+| Scenario set for M1S2 on the synthetic case | `examples/bo_m1s2/nfh_m1s2/` |
+| Recorded results | `examples/bo_m1s2/nfh_m1s2/results.json` |
 
 ## 2. Tests
 
@@ -169,7 +175,7 @@ Same manifest, same scripts, same inputs. Nothing in the scenarios was changed.
 | Parameters: correct accepted / defective held back | 1 / 0 of 2 | 0 / 2 of 2 | **1 / 2 of 2** |
 | Model calls; request / response chars | 1; 10,489 / 4,981 | 4; 46,863 / 23,520 | 4; 46,862 / 23,520 |
 
-Adversarial variants (tests in `tests/integration/test_bo_m2_comparison.py`):
+Adversarial variants (tests in `tests/integration/test_bo_m1s2_comparison.py`):
 
 * S3 with the metric's concept copied correctly → still `unverified` (R2, undeclared inferential step).
 * S2 relabelled as a `reported_fact` → `unverified` (R1 all-or-nothing).
@@ -244,9 +250,9 @@ What HCA adds to the synthetic result:
 
 ## 5b. Live runs (HCA FY2025, M1S2, `gemini-3.1-flash-lite` on Vertex)
 
-Tool: `python -m app.services.bo.m2_live` (temporary). Per run it writes an HTML and a
+Tool: `python -m app.services.bo.m1s2_live` (temporary). Per run it writes an HTML and a
 PDF transcript of every model call (prompt, inputs, raw output, tokens) and of what the
-validators did with each finding, under `output/m2_live*/` (git-ignored).
+validators did with each finding, under `output/m1s2_live*/` (git-ignored).
 
 **The first live runs exposed five integration defects that the scripted tests could not**
 (fixed in `771ed3d`, `2cf0e2f`, `19ec617`; scripted results unchanged after each fix):
@@ -313,7 +319,7 @@ Approved 17 Oct. Changes (`33bc1c2`, `42fef15`):
   completed mechanically (search intent reset to the canonical intent of its
   requirement kind; omitted mandatory perspectives filled with the labelled template
   enquiries) and must still pass the planner's full gate.
-* **Optional testing model:** `m2_live --testing-model` runs only the hypothesis-testing
+* **Optional testing model:** `m1s2_live --testing-model` runs only the hypothesis-testing
   call on another model (output cap raised to 32k for reasoning models; thinking tokens
   now recorded and priced).
 

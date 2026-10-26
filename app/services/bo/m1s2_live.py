@@ -1,7 +1,7 @@
-"""TEMPORARY: live M2 comparison for one v3 specialist with readable transcripts.
+"""TEMPORARY: live M1S2 comparison for one v3 specialist with readable transcripts.
 
-    python -m app.services.bo.m2_live --case-dir <case folder> --case-id <ID> \
-        --runs 3 --out output/m2_live
+    python -m app.services.bo.m1s2_live --case-dir <case folder> --case-id <ID> \
+        --runs 3 --out output/m1s2_live
 
 The case folder holds ``package.json`` and, optionally, ``coverage_checks.json``.
 
@@ -121,14 +121,14 @@ def _shorten(value: Any) -> Any:
 def render_html(run: dict[str, Any], arms: list, path: Path) -> None:
     e = html.escape
     parts = [
-        "<!doctype html><meta charset='utf-8'><title>M2 live transcript</title>",
+        "<!doctype html><meta charset='utf-8'><title>M1S2 live transcript</title>",
         "<style>body{font:14px/1.45 system-ui,sans-serif;margin:24px;max-width:1100px}"
         "pre{white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:4px;"
         "font-size:12px}details{margin:6px 0}summary{cursor:pointer;font-weight:600}"
         "table{border-collapse:collapse;font-size:12px}td,th{border:1px solid #ccc;"
         "padding:4px;vertical-align:top}h2{border-top:2px solid #333;padding-top:8px}"
         ".bad{color:#a40000}.ok{color:#006400}</style>",
-        f"<h1>M2 live run {e(str(run['run']))} - {e(run['case'])}, {e(run['specialist'])}</h1>",
+        f"<h1>M1S2 live run {e(str(run['run']))} - {e(run['case'])}, {e(run['specialist'])}</h1>",
         f"<p>Model: {e(run['model'])}. Same sealed packet for both arms "
         f"(fingerprint {e(run['fingerprint'][:16])}). Live output varies between runs; "
         "do not conclude anything from one run.</p>",
@@ -219,7 +219,7 @@ def render_pdf(run: dict[str, Any], arms: list, path: Path) -> bool:
             lines.append(line)
         return Preformatted("\n".join(lines), mono)
 
-    story = [p(f"M2 live run {run['run']} - {run['case']}, {run['specialist']}", h1),
+    story = [p(f"M1S2 live run {run['run']} - {run['case']}, {run['specialist']}", h1),
              p(f"Model: {run['model']}. Same sealed packet for both arms. Long input "
                "strings are shortened here; transcript.html has them in full."),
              Spacer(1, 4 * mm)]
@@ -299,7 +299,7 @@ def run_live(runs: int, out: Path, *, case_dir: Path, case_id: str,
     out.mkdir(parents=True, exist_ok=True)
     summary: dict[str, Any] = {"runs": []}
     for n in range(1, runs + 1):
-        tmp = Path(tempfile.mkdtemp(prefix="m2live_"))
+        tmp = Path(tempfile.mkdtemp(prefix="m1s2live_"))
         engine = create_engine(f"sqlite:///{tmp}/case.db")
         Base.metadata.create_all(engine)
         session = Session(engine)
@@ -362,7 +362,7 @@ def main(argv=None) -> None:
                         help="use the premise entailment judge (one extra call)")
     parser.add_argument("--unseeded", action="store_true",
                         help="generation without the specialist brief and agenda")
-    parser.add_argument("--out", type=Path, default=Path("output/m2_live"))
+    parser.add_argument("--out", type=Path, default=Path("output/m1s2_live"))
     args = parser.parse_args(argv)
     summary = run_live(args.runs, args.out, case_dir=args.case_dir,
                        case_id=args.case_id, specialist=args.specialist,

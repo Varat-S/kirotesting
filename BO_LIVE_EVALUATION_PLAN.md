@@ -82,7 +82,7 @@ one challenger call and, if a material finding is raised, one bounded rerun roun
 
 ## 2. Proposed cost authorization (CAPPED — awaiting approval)
 
-Grounded in the **real paid anchors** recorded in `BO_M2_COMPARISON_REPORT.md` §5b–5c
+Grounded in the **real paid anchors** recorded in `BO_M1S2_COMPARISON_REPORT.md` §5b–5c
 (same borrower, same filing, HCA M1S2 on Vertex):
 
 - single-pass specialist, `gemini-3.1-flash-lite`: ≈ **$0.007** / specialist, ≈ 6 s;
