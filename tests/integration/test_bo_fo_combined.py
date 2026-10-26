@@ -1,0 +1,371 @@
+"""Shared filing intake and the concurrent BO + FO run, over the committed NVIDIA filing.
+
+The filing is copied into a temporary ``edgar_filings/`` root and every run is offline: the BO on
+its offline backend, the FO on scripted Pre-check Agent responses. No network, no model.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import shutil
+import sqlite3
+import threading
+import time
+import zipfile
+from datetime import date
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, text
+
+from app.cli import main
+from app.main import create_app
+from app.models.base import init_db
+from app.services import bo_fo
+from app.services.acquisition import shared_filing
+from app.services.acquisition.models import SecFiling
+from app.services.acquisition.sec_edgar import SecEdgarClient
+from app.services.extraction.sec.bundle import SecFilingBundle
+from app.services.fo import loader, precheck
+from app.services.fo import models as fo_models
+from tests.integration.test_fo_runner_api import FOLDER, NVDA, agent, responses
+
+ACCESSION = "0001045810-26-000021"
+FILED = date(2026, 2, 25)
+REPORT = date(2026, 1, 25)
+PRIMARY = "nvda-20260125.htm"
+
+
+@pytest.fixture()
+def root(tmp_path, monkeypatch):
+    root = tmp_path / "edgar_filings"
+    root.mkdir()
+    monkeypatch.setattr(loader, "FILINGS_ROOT", root)
+    return root
+
+
+@pytest.fixture()
+def loose(tmp_path):
+    """NVIDIA's filing files without the bundle manifest: what a user has after saving them from EDGAR."""
+    folder = tmp_path / "nvda_files"
+    folder.mkdir()
+    for p in NVDA.iterdir():
+        if p.is_file() and p.suffix in shared_filing.SEC_SUFFIXES:
+            shutil.copy(p, folder / p.name)
+    return folder
+
+
+def _database(tmp_path) -> Path:
+    db = tmp_path / "data" / "main.db"
+    db.parent.mkdir(parents=True, exist_ok=True)
+    engine = create_engine(f"sqlite:///{db.as_posix()}")
+    init_db(engine)
+    engine.dispose()
+    return db
+
+
+def _count(db, table):
+    with sqlite3.connect(db) as con:
+        return con.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+
+
+class FakeSec:
+    """The parts of SecEdgarClient the intake uses, answering from the NVIDIA fixture."""
+
+    annual_reports = staticmethod(SecEdgarClient.annual_reports)
+
+    def __init__(self, accepted=None):
+        self.filing = SecFiling("1045810", "10-K", ACCESSION, FILED, REPORT, PRIMARY, accepted, True)
+        self.older = SecFiling("1045810", "10-K", "0001045810-25-000023", date(2025, 2, 26), date(2025, 1, 26),
+                               "nvda-20250126.htm", None, True)
+        self.legacy = SecFiling("1045810", "10-K", "0001045810-18-000010", date(2018, 2, 28), date(2018, 1, 28),
+                                "nvda-2018x10k.htm", None, False)
+        self.amended = SecFiling("1045810", "10-K/A", "0001045810-26-000030", date(2026, 3, 10), REPORT,
+                                 "nvda-20260125a.htm", None, True)
+
+    def lookup_ticker(self, ticker):
+        assert ticker == "NVDA"
+        return {"cik": "1045810", "ticker": "NVDA", "name": "NVIDIA CORP"}
+
+    def list_filings(self, cik):
+        assert str(cik) == "1045810"
+        return [self.amended, self.filing, self.older, self.legacy]
+
+    def proxy_for(self, filings, filing):
+        return None
+
+    def company_profile(self, cik):
+        return {"cik": "1045810", "name": "NVIDIA CORP", "sic": 3674, "sic_description": "Semiconductors"}
+
+    def fetch_bundle(self, company, filing, proxy=None):
+        bundle = SecFilingBundle.load(NVDA / "bundle.json")
+        return bundle.model_copy(update={"files": [f for f in bundle.files if f.role != "proxy"]})
+
+
+# --- intake --------------------------------------------------------------------------------------------
+
+
+def test_import_loose_files_with_declared_dates(root, loose):
+    filing = shared_filing.import_filing([loose], accession=ACCESSION, filing_date=FILED)
+    assert filing.name == "NVDA 10-K FY2026"
+    assert (filing.cik, filing.form, filing.report_date, filing.availability) == ("1045810", "10-K", REPORT, "declared")
+    bundle = shared_filing.load_bundle(filing.name)  # hashes re-checked from disk
+    roles = {f.filename: f.role for f in bundle.files}
+    assert roles[PRIMARY] == "primary_inline_xbrl" and roles["nvda-20260125.xsd"] == "schema"
+    assert roles["nvda-20260125_pre.xml"] == "presentation_linkbase"
+    # Without an EDGAR acceptance time, availability is the conservative end of the filing day (US Eastern).
+    assert {f.available_at.isoformat() for f in bundle.files} == {"2026-02-26T05:00:00+00:00"}
+    company = json.loads((filing.folder / "company.json").read_text(encoding="utf-8"))
+    assert company["cik"] == 1045810 and company["ticker"] == "NVDA"
+    # The FO reads the same folder.
+    data, _ = loader.load(filing.name)
+    assert data["meta"]["source"] == PRIMARY
+    assert [r["name"] for r in shared_filing.list_shared() if r["runnable"]] == [filing.name]
+
+
+def test_import_without_dates_needs_them_or_edgar(root, loose):
+    with pytest.raises(shared_filing.SharedFilingError, match="accession and filing date are needed"):
+        shared_filing.import_filing([loose])
+    filing = shared_filing.import_filing([loose], client=FakeSec())  # looked up on (fake) EDGAR
+    bundle = shared_filing.load_bundle(filing.name)
+    assert bundle.accession == ACCESSION and bundle.filing_date == FILED
+    assert {f.source_url for f in bundle.files if f.filename == PRIMARY} == {
+        "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm"}
+    company = json.loads((filing.folder / "company.json").read_text(encoding="utf-8"))
+    assert company["sic"] == "3674"
+
+
+def test_import_rejects_a_date_edgar_contradicts(root, loose):
+    with pytest.raises(shared_filing.SharedFilingError, match="not 2026-03-01"):
+        shared_filing.import_filing([loose], filing_date=date(2026, 3, 1), client=FakeSec())
+
+
+def test_import_an_uploaded_zip(root, loose):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for p in loose.iterdir():
+            archive.write(p, f"NVDA 10-K/{p.name}")  # a folder inside the archive is flattened
+    filing = shared_filing.import_filing({"nvda.zip": buffer.getvalue()}, accession=ACCESSION,
+                                         filing_date=FILED, name="NVDA upload")
+    assert filing.name == "NVDA upload" and filing.files == len(list(loose.iterdir()))
+
+
+def test_import_prepares_a_folder_already_in_edgar_filings_in_place(root, loose):
+    target = root / "NVDA 10-K FY2026"
+    shutil.copytree(loose, target)
+    before = sorted(p.name for p in target.iterdir())
+    filing = shared_filing.import_filing([target], accession=ACCESSION, filing_date=FILED)
+    assert filing.folder == target
+    assert sorted(p.name for p in target.iterdir()) == sorted([*before, "bundle.json", "company.json"])
+    with pytest.raises(shared_filing.SharedFilingError, match="already has a bundle.json"):
+        shared_filing.import_filing([target], accession=ACCESSION, filing_date=FILED)
+
+
+def test_import_refuses_what_is_not_a_10k(root, tmp_path):
+    with pytest.raises(shared_filing.SharedFilingError, match="No .htm/.xsd/.xml"):
+        shared_filing.import_filing({"notes.txt": b"hello"})
+    with pytest.raises(shared_filing.SharedFilingError, match="No Inline XBRL"):
+        shared_filing.import_filing({"page.htm": b"<html></html>", "s.xsd": b"<schema/>"},
+                                    accession=ACCESSION, filing_date=FILED)
+    with pytest.raises(shared_filing.SharedFilingError, match="acceptable SEC file name"):
+        shared_filing.import_filing({"bad name.htm": b"x"})
+    assert not [p for p in root.iterdir()]  # nothing half-written, no scratch folders left
+
+
+def test_fetch_writes_a_flat_folder_both_sections_read(root):
+    filing = shared_filing.fetch_filing(FakeSec(), "NVDA", fy=2026)
+    assert filing.name == "NVDA 10-K FY2026"
+    assert (filing.folder / PRIMARY).is_file() and not (filing.folder / ACCESSION).exists()
+    assert shared_filing.load_bundle(filing.name).primary_document == PRIMARY
+    with pytest.raises(shared_filing.SharedFilingError, match="already exists"):
+        shared_filing.fetch_filing(FakeSec(), "NVDA", fy=2026)
+
+
+def test_a_ticker_lists_its_10ks_to_choose_from(root):
+    company, reports = shared_filing.annual_reports(FakeSec(), "NVDA")
+    assert company["ticker"] == "NVDA"
+    assert [(r["fiscal_year"], r["form"]) for r in reports] == [(2026, "10-K"), (2025, "10-K"), (2018, "10-K")]
+    assert reports[0]["folder"] == "NVDA 10-K FY2026" and reports[0]["problem"] is None
+    assert reports[2]["problem"] == "no Inline XBRL; not supported"
+    _, with_amendments = shared_filing.annual_reports(FakeSec(), "NVDA", include_amendments=True)
+    assert "10-K/A" in [r["form"] for r in with_amendments]
+    shared_filing.fetch_filing(FakeSec(), "NVDA", accession=ACCESSION)
+    assert shared_filing.annual_reports(FakeSec(), "NVDA")[1][0]["downloaded"] is True
+
+
+def test_a_folder_without_a_manifest_is_fo_only(root, loose):
+    shutil.copytree(loose, root / "NVDA plain")
+    assert shared_filing.list_shared()[0]["runnable"] is False
+    with pytest.raises(shared_filing.SharedFilingError, match="has no bundle.json"):
+        bo_fo.plan("NVDA plain")
+
+
+# --- the combined run ----------------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def shared(root):
+    shutil.copytree(NVDA, root / FOLDER)  # the fixture already has the shared layout
+    return FOLDER
+
+
+def test_both_sections_run_concurrently_into_one_database(shared, tmp_path):
+    db = _database(tmp_path)
+    seen = []
+    out = bo_fo.run_bo_fo(database=db, folder=shared, bo_backend=None, fo_backend=agent(), fo_mode="scripted",
+                          output_root=tmp_path / "out", on_progress=lambda s, m: seen.append((s, m)))
+    assert out["case_id"] == "NVDA_FY2026"
+    assert out["bo"]["status"] == "completed" and out["fo"]["status"] == "completed", out
+    assert out["bo"]["summary"]["case_id"] == out["fo"]["summary"]["case_id"] == "NVDA_FY2026"
+    assert out["cutoff"] == "2026-05-13T04:00:00+00:00"  # the latest file (the proxy): every file admitted
+    assert _count(db, "financial_overview_runs") == 1 and _count(db, "agentic_analysis_runs") == 1
+    assert _count(db, "model_runs") >= 5  # the FO's agent calls came across from its staging database
+    assert not list((tmp_path / "data" / "staging").iterdir())
+    assert ("fo", "completed") in seen and ("bo", "completed") in seen
+
+
+def test_one_section_failing_leaves_the_other(shared, tmp_path, monkeypatch):
+    from app.services.bo.runner import BusinessOverviewRunner
+
+    def broken(self, *a, **k):
+        raise RuntimeError("BO broke")
+
+    monkeypatch.setattr(BusinessOverviewRunner, "run_case", broken)
+    db = _database(tmp_path)
+    out = bo_fo.run_bo_fo(database=db, folder=shared, bo_backend=None, fo_backend=agent(), fo_mode="scripted",
+                          output_root=tmp_path / "out")
+    assert out["bo"]["status"] == "failed" and "BO broke" in out["bo"]["error"]
+    assert out["fo"]["status"] == "completed" and _count(db, "financial_overview_runs") == 1
+
+
+def test_the_fo_copy_waits_for_the_other_writer(shared, tmp_path):
+    """A held write lock (the BO mid-run) delays the FO's copy; it lands once the lock is released."""
+    db = _database(tmp_path)
+    staging = tmp_path / "staging.db"
+    engine = create_engine(f"sqlite:///{staging.as_posix()}")
+    init_db(engine)
+    with engine.begin() as con:
+        con.execute(text("INSERT INTO financial_overview_runs (run_id, case_id, filing_folder, folder_signature, "
+                         "engine_version, reference_hash, status, human_review_status, payload, content_hash, "
+                         "started_at) VALUES ('fo-x', 'C', 'f', 's', 'e', 'r', 'completed', 'pending', '{}', 'h', "
+                         "'2026-01-01 00:00:00')"))
+    engine.dispose()
+    holder = sqlite3.connect(db, isolation_level=None)
+    holder.execute("BEGIN IMMEDIATE")
+    with pytest.raises(sqlite3.OperationalError, match="locked"):
+        bo_fo.merge(staging, db, lock_wait=0.2)
+    result = {}
+    worker = threading.Thread(target=lambda: result.update(bo_fo.merge(staging, db, lock_wait=30)))
+    worker.start()
+    time.sleep(0.5)
+    assert worker.is_alive()  # waiting, not failing
+    holder.execute("COMMIT")
+    holder.close()
+    worker.join(30)
+    assert result == {"financial_overview_runs": 1} and _count(db, "financial_overview_runs") == 1
+
+
+def test_cli_run_bo_fo(shared, tmp_path, capsys, monkeypatch):
+    import app.cli as cli
+
+    common = ["--database", str(tmp_path / "data" / "main.db"), "--output", str(tmp_path / "out")]
+    with pytest.raises(ValueError, match="The BO needs"):
+        main([*common, "run-bo-fo", "--filing", shared])
+    script = tmp_path / "agent.json"
+    script.write_text(json.dumps(responses()), encoding="utf-8")
+    monkeypatch.setattr(cli, "_live_backend", lambda: None)  # the BO's offline backend stands in for --live
+    main([*common, "run-bo-fo", "NVDA_BOTH", "--filing", shared, "--live", "--fo-responses", str(script)])
+    out = json.loads(capsys.readouterr().out)
+    assert out["case_id"] == "NVDA_BOTH"
+    assert (out["bo"]["status"], out["fo"]["status"]) == ("completed", "completed")
+
+
+def test_cli_import_filing(root, loose, tmp_path, capsys):
+    main(["--database", str(tmp_path / "data" / "main.db"), "import-filing", str(loose), "--offline",
+          "--accession", ACCESSION, "--filing-date", FILED.isoformat()])
+    out = json.loads(capsys.readouterr().out)
+    assert out["folder"] == "NVDA 10-K FY2026" and out["availability"] == "declared"
+    assert out["next"] == 'python -m app.cli run-bo-fo --filing "NVDA 10-K FY2026" --live'
+
+
+# --- the browser ---------------------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def client(root, tmp_path, monkeypatch):
+    from app.core.config import get_settings
+
+    db = _database(tmp_path)
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db.as_posix()}")
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "web_out"))
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    get_settings.cache_clear()
+    from app.api import deps
+
+    deps._session_factory.cache_clear()
+    monkeypatch.setattr(precheck, "live_backend", lambda model=None: agent())
+    monkeypatch.setattr(precheck, "agent_available", lambda: (True, None))
+    monkeypatch.setattr(fo_models, "available_models", lambda force=False: (["test-model"], None))
+    monkeypatch.setattr(bo_fo, "bo_live_backend", lambda: None)
+    with TestClient(create_app()) as test_client:
+        yield test_client
+    deps._session_factory.cache_clear()
+
+
+def test_browser_upload_then_run_both(client, loose):
+    page = client.get("/run")
+    assert page.status_code == 200 and "No folder in" in page.text
+    files = [("files", (p.name, p.read_bytes(), "application/octet-stream")) for p in sorted(loose.iterdir())]
+    uploaded = client.post("/run/import", files=files,
+                           data={"accession": ACCESSION, "filing_date": FILED.isoformat()},
+                           follow_redirects=False)
+    assert uploaded.status_code == 303 and uploaded.headers["location"] == "/run?folder=NVDA%2010-K%20FY2026"
+    started = client.post("/run/start", data={"folder": "NVDA 10-K FY2026"}, follow_redirects=False)
+    assert started.status_code == 303
+    job_id = started.headers["location"].split("job=")[1]
+    for _ in range(600):
+        job = client.get(f"/run/jobs/{job_id}").json()
+        if job["status"] != "running":
+            break
+        time.sleep(0.5)
+    assert job["status"] == "finished", job
+    assert job["sections"]["bo"]["status"] == job["sections"]["fo"]["status"] == "completed"
+    page = client.get(f"/run?job={job_id}").text
+    assert f"/cases/NVDA_FY2026/fo.html?run_id={job['result']['fo']['summary']['run_id']}" in page
+    assert client.get(f"/cases/NVDA_FY2026/fo.html?run_id={job['result']['fo']['summary']['run_id']}").status_code == 200
+
+
+def test_cli_fetch_filing_without_a_year_lists_the_choices(root, tmp_path, capsys, monkeypatch):
+    import app.cli as cli
+
+    monkeypatch.setattr(cli, "_sec_client", lambda session: FakeSec())
+    main(["--database", str(tmp_path / "data" / "main.db"), "fetch-filing", "NVDA"])
+    out = json.loads(capsys.readouterr().out)
+    assert [r["fiscal_year"] for r in out["choose_one"]] == [2026, 2025, 2018]
+    assert out["choose_one"][0]["download"] == f"python -m app.cli fetch-filing NVDA --accession {ACCESSION}"
+    assert not list(root.iterdir())  # listing downloads nothing
+
+
+def test_browser_ticker_then_choose_a_year(client, root, monkeypatch):
+    from app.api import bo_fo as api
+
+    monkeypatch.setattr(api, "_client", lambda session: FakeSec())
+    monkeypatch.setattr(api, "get_settings", lambda: type("S", (), {"sec_user_agent": "Test t@example.com"})())
+    listed = client.get("/run/reports", params={"ticker": "NVDA"})
+    assert listed.status_code == 200
+    assert "NVIDIA CORP (NVDA): choose a 10-K to download" in listed.text
+    assert f'value="{ACCESSION}"' in listed.text and "FY2025" in listed.text
+    assert "no Inline XBRL; not supported" in listed.text
+    fetched = client.post("/run/fetch", data={"ticker": "NVDA", "accession": ACCESSION}, follow_redirects=False)
+    assert fetched.status_code == 303 and fetched.headers["location"] == "/run?folder=NVDA%2010-K%20FY2026"
+    assert (root / "NVDA 10-K FY2026" / "bundle.json").is_file()
+    again = client.get("/run/reports", params={"ticker": "NVDA"})
+    assert "already in <code>edgar_filings/NVDA 10-K FY2026</code>" in again.text
+
+
+def test_browser_refuses_a_bad_upload(client):
+    bad = client.post("/run/import", files=[("files", ("x.htm", b"<html></html>", "text/html"))],
+                      data={"accession": ACCESSION, "filing_date": FILED.isoformat()})
+    assert bad.status_code == 400 and "Import failed" in bad.text

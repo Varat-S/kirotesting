@@ -61,17 +61,22 @@ class Base(DeclarativeBase):
     """Declarative base for all ORM models."""
 
 
-def create_engine_and_session(database_url: str) -> tuple[Engine, sessionmaker]:
+def create_engine_and_session(
+    database_url: str, *, sqlite_timeout: float | None = None
+) -> tuple[Engine, sessionmaker]:
     """Create a SQLAlchemy engine and a bound session factory.
 
     Handles SQLite-specific connection arguments for both file-based and
-    in-memory URLs.
+    in-memory URLs. ``sqlite_timeout`` is how many seconds a connection waits
+    for another connection's write lock (SQLite's default is 5).
     """
     connect_args: dict = {}
     engine_kwargs: dict = {"future": True}
 
     if database_url.startswith("sqlite"):
         connect_args["check_same_thread"] = False
+        if sqlite_timeout is not None:
+            connect_args["timeout"] = sqlite_timeout
         # Share a single in-memory database across connections for tests.
         if ":memory:" in database_url or database_url == "sqlite://":
             engine_kwargs["poolclass"] = StaticPool

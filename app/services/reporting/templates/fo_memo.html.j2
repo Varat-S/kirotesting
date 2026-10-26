@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Financial Overview - {{ memo.case.borrower or memo.case.case_id }}</title>
+<style>
+  body { font-family: Georgia, "Times New Roman", serif; color: #1c2430; max-width: 900px; margin: 2.2rem auto; padding: 0 1.4rem; line-height: 1.5; font-size: 15px; }
+  h1 { font-size: 1.7rem; margin: 0 0 .2rem; }
+  h2 { font-size: 1.15rem; margin: 2rem 0 .5rem; padding-bottom: .25rem; border-bottom: 2px solid #1c2430; }
+  h3 { font-size: 1rem; margin: 1.1rem 0 .3rem; }
+  .meta, .small { font-family: Arial, Helvetica, sans-serif; font-size: .8rem; color: #55606e; }
+  .banner { font-family: Arial, Helvetica, sans-serif; font-size: .85rem; padding: .6rem .8rem; margin: .8rem 0; border-left: 4px solid #8a6d1c; background: #fbf6e6; }
+  .banner.sim, .banner.block { border-color: #9a3324; background: #fbeeea; }
+  .banner.block { font-weight: bold; }
+  .headline { font-size: 1.05rem; margin: .6rem 0 1rem; }
+  .tag { font-family: Arial, Helvetica, sans-serif; font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; padding: .08rem .4rem; border-radius: 3px; border: 1px solid #c3cad3; color: #404b59; margin-right: .3rem; white-space: nowrap; }
+  .tag.very-low, .tag.low { border-color: #2f6b45; color: #2f6b45; }
+  .tag.moderate { border-color: #8a6d1c; color: #8a6d1c; }
+  .tag.elevated, .tag.high, .tag.very-high { border-color: #9a3324; color: #9a3324; }
+  .score { font-family: Arial, Helvetica, sans-serif; font-size: 2rem; font-weight: bold; line-height: 1; }
+  .scorebox { display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; font-family: Arial, Helvetica, sans-serif; margin: .4rem 0 1rem; }
+  .scorebox div span { display: block; font-size: .72rem; color: #55606e; text-transform: uppercase; letter-spacing: .04em; }
+  .qual { font-style: italic; color: #55606e; }
+  table { border-collapse: collapse; width: 100%; font-family: Arial, Helvetica, sans-serif; font-size: .8rem; margin: .5rem 0; }
+  th, td { text-align: left; vertical-align: top; padding: .3rem .5rem; border-bottom: 1px solid #d9dee4; }
+  th { background: #f1f3f6; }
+  .table-wrap { overflow-x: auto; }
+  ul { margin: .3rem 0 .6rem 1.2rem; padding: 0; }
+  .cols { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  .cols > div { flex: 1 1 260px; }
+  .notice { font-family: Arial, Helvetica, sans-serif; font-size: .8rem; color: #6b7480; }
+  .measure { margin-bottom: 1.4rem; }
+</style>
+</head>
+<body>
+{% macro tag(s) %}<span class="tag {{ s.css }}">{{ s.label }}{% if s.score is not none %} · {{ s.text }}{% endif %}</span>{% endmacro %}
+{% macro status(v) %}<span class="tag">{{ (v or 'not run')|replace('_', ' ') }}</span>{% endmacro %}
+
+<h1>Financial Overview</h1>
+<div class="meta">
+  {{ memo.case.borrower }}{% if memo.case.ticker %} ({{ memo.case.ticker }}){% endif %} &middot; case {{ memo.case.case_id }} &middot; {{ memo.case.form }} for the period ending {{ memo.case.period_end or 'unknown' }} (FY{{ memo.case.fiscal_year or '?' }})
+  {% if memo.case.source %}&middot; SEC accession {{ memo.case.source.accession }}, filed {{ memo.case.source.filing_date }}{% endif %}<br>
+  Run {{ memo.run.run_id }} &middot; {{ memo.run.started_at[:16]|replace('T', ' ') if memo.run.started_at }} &middot; engine {{ memo.run.engine_version }}{% if memo.run.agent_model %} &middot; agent model {{ memo.run.agent_model }}{% endif %} &middot; scope: Financial Overview only
+</div>
+{% if memo.run.agent_mode == 'scripted' %}<div class="banner sim">{{ memo.run.agent_mode_text }}</div>{% endif %}
+<div class="banner{% if memo.status.blocking %} block{% endif %}">
+  Status: {{ (memo.status.run_status or 'unknown')|replace('_', ' ') }}. {{ memo.status.text }}
+  Human review: {{ memo.status.human_review_status }}.
+</div>
+
+<h2>Executive Financial Credit Assessment</h2>
+<p class="headline">{{ memo.executive.headline }}</p>
+<div class="scorebox">
+  <div><span>Composite risk score</span><div class="score">{{ memo.executive.composite.text }}</div></div>
+  <div><span>Indicative rating</span><div class="score">{{ memo.executive.composite.rating or '—' }}</div></div>
+  <div><span>Risk level</span>{{ tag(memo.executive.composite) }}</div>
+  <div><span>Measures scored</span><div class="score">{{ memo.executive.measures_scored }}<small style="font-size:1rem"> / 7</small></div></div>
+</div>
+<p class="notice">Scores run from 1 (lowest risk) to 10 (highest). The rating is the engine's indicative mapping of the composite (1 = AAA, 10 = D), not an agency rating.</p>
+<div class="cols">
+  <div><h3>Financial strengths</h3>
+    {% if memo.executive.strengths %}<ul>{% for s in memo.executive.strengths %}<li><a href="#m-{{ s.key }}">{{ s.text }}</a></li>{% endfor %}</ul>{% else %}<p class="notice">No measure scores low risk.</p>{% endif %}</div>
+  <div><h3>Financial weaknesses</h3>
+    {% if memo.executive.weaknesses %}<ul>{% for s in memo.executive.weaknesses %}<li><a href="#m-{{ s.key }}">{{ s.text }}</a></li>{% endfor %}</ul>{% else %}<p class="notice">No measure scores above moderate risk.</p>{% endif %}</div>
+</div>
+{% if memo.executive.watch %}<h3>Moderate</h3><ul>{% for s in memo.executive.watch %}<li><a href="#m-{{ s.key }}">{{ s.text }}</a></li>{% endfor %}</ul>{% endif %}
+<h3>Pre-checks</h3>
+<p>{% for p in memo.executive.prechecks %}{{ p.title }}: {{ status(p.status) }}{{ ' ' if not loop.last }}{% endfor %}</p>
+{% set out = memo.outstanding %}
+{% if out.run_decision or out.pending_overrides or out.unresolved_triggers %}
+<h3>Requires an analyst</h3>
+<ul>
+{% for e in out.run_decision %}<li>Going concern: {{ e.reason }}</li>{% endfor %}
+{% for e in out.pending_overrides %}<li>{{ e.measure }} ({{ e.title }}): engine score {{ e.engine_score if e.engine_score is not none else 'none' }}. {{ e.reason }}</li>{% endfor %}
+{% for t in out.unresolved_triggers %}<li>Trigger {{ t.trigger }}: {{ t.reason }}</li>{% endfor %}
+</ul>
+{% endif %}
+
+<h2>Pre-checks</h2>
+{% if memo.prechecks %}
+<div class="table-wrap"><table><thead><tr><th>Check</th><th>Outcome</th><th>Finding</th><th>Effect on the scores</th></tr></thead><tbody>
+{% for p in memo.prechecks %}<tr><td>{{ p.title }}</td><td>{{ status(p.status) }}</td><td>{{ p.reason }}</td><td>{{ p.effect }}</td></tr>{% endfor %}
+</tbody></table></div>
+<p class="notice">The Pre-check Agent classifies the filing's passages; its quotes are verified against the filing before they count.</p>
+{% else %}<p class="notice">No pre-check was recorded for this run.</p>{% endif %}
+
+<h2>Financial Measures</h2>
+{% for m in memo.measures %}
+<div class="measure" id="m-{{ m.key }}">
+<h3>{{ m.title }} {{ tag(m.score) }}{% if m.escalated %}<span class="tag high">awaiting analyst</span>{% endif %}</h3>
+{% if m.formula %}<div class="small">{{ m.formula }}</div>{% endif %}
+{% if m.results %}
+<div class="table-wrap"><table><thead><tr><th></th>{% for h in m.headings %}<th>{{ h }}</th>{% endfor %}</tr></thead><tbody>
+{% for r in m.results %}<tr><td>{{ r.label }}</td>{% for c in r.cells %}<td>{{ c }}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% if m.trend %}<p>{{ m.trend.text }}</p>{% endif %}
+{% if m.why_unscored %}<p class="qual">Not scored: {{ m.why_unscored }}</p>{% endif %}
+{% if m.override %}<p><strong>{{ m.override }}</strong></p>{% endif %}
+{% for b in m.benchmarks %}<div class="small">{{ b }}</div>{% endfor %}
+{% for b in m.bands %}<div class="small">Risk bands: {{ b }}</div>{% endfor %}
+{% if m.triggers %}<div class="small">Triggers: {% for t in m.triggers %}{{ t.trigger }}: {{ t.reason }}{{ '; ' if not loop.last }}{% endfor %}.</div>{% endif %}
+{% for q in m.qualifications %}<div class="qual">{{ q }}</div>{% endfor %}
+</div>
+{% endfor %}
+
+<h2>Composite Risk Score</h2>
+{% if memo.composite.formula %}<p class="small">{{ memo.composite.formula }}{% if memo.composite.average and memo.composite.average != '—' %}; weighted average {{ memo.composite.average }}{% endif %}.</p>{% endif %}
+{% if memo.composite.rows %}
+<div class="table-wrap"><table><thead><tr><th>Measure</th><th>Score</th><th>Weight</th><th>Share used</th><th>Contribution</th><th>Notes</th></tr></thead><tbody>
+{% for r in memo.composite.rows %}<tr><td>{{ r.name }}</td><td>{{ r.score.text }}</td><td>{{ r.weight }}</td><td>{{ r.share }}</td><td>{{ r.contribution }}</td><td>{{ r.notes }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+{% for a in memo.composite.adjustments %}<div class="qual">{{ a }}</div>{% endfor %}
+{% if memo.composite.gaps %}<p class="notice">{{ memo.composite.gaps }}</p>{% endif %}
+
+<h2>Outstanding Items and Limitations</h2>
+{% if out.unscored %}<h3>Measures not scored</h3><ul>{% for u in out.unscored %}<li>{{ u.measure }}: {{ u.reason }}</li>{% endfor %}</ul>{% endif %}
+{% if out.data_limitations %}<h3>Data limitations</h3><ul>{% for d in out.data_limitations %}<li>{{ d }}</li>{% endfor %}</ul>{% endif %}
+{% if memo.decisions.review or memo.decisions.overrides %}<h3>Analyst decisions</h3><ul>
+{% if memo.decisions.review %}<li>Run decision: {{ memo.decisions.review.decision }} by {{ memo.decisions.review.reviewer }} on {{ memo.decisions.review.decided_at[:10] }}: {{ memo.decisions.review.reason }}</li>{% endif %}
+{% for o in memo.decisions.overrides %}<li>{{ o.measure }}: {{ 'overridden to ' ~ o.analyst_score if o.decision == 'override' else 'engine score accepted' }} (engine {{ o.engine_score }}) by {{ o.reviewer }} on {{ (o.decided_at or '')[:10] }}: {{ o.reason }}</li>{% endfor %}
+</ul>{% endif %}
+{% if not (out.unscored or out.data_limitations or out.run_decision or out.pending_overrides or out.unresolved_triggers) %}<p class="notice">None recorded.</p>{% endif %}
+
+<h2>Basis of Preparation</h2>
+<p class="small">Every figure is computed by code from the 10-K's Inline XBRL facts ({{ memo.case.filing_folder }}){% if memo.case.source and memo.case.source.url %}, <a href="{{ memo.case.source.url }}">{{ memo.case.source.url }}</a>{% endif %}; amounts are in millions of the reporting currency. Industry group: {{ memo.case.industry_group or 'not classified' }}. This memo is a rendering of the recorded run {{ memo.run.run_id }} (hash {{ (memo.run.content_hash or '')[:16] }}); it adds no analysis of its own. Version {{ memo.version }}.</p>
+</body>
+</html>

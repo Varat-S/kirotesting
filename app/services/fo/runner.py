@@ -751,6 +751,14 @@ class FinancialOverviewRunner:
         paths["financial_overview.json"].write_text(canonical_json(payload) + "\n", encoding="utf-8", newline="\n")
         paths["financial_overview.html"].write_text(render_overview_html(payload, run=run),
                                                     encoding="utf-8", newline="\n")
+        # The memo as at the run (before any analyst decision; the browser's memo reflects later ones).
+        from .memo import build_memo, filing_source, render_memo_html
+
+        memo = build_memo(payload, run=run, source=filing_source(payload["filing"]["folder"]))
+        paths["financial_memo.json"] = folder / "financial_memo.json"
+        paths["financial_memo.json"].write_text(canonical_json(memo) + "\n", encoding="utf-8", newline="\n")
+        paths["financial_memo.html"] = folder / "financial_memo.html"
+        paths["financial_memo.html"].write_text(render_memo_html(memo), encoding="utf-8", newline="\n")
         agents = {check: transcript(result["agent"], check) for check, result in payload["precheck"].items()
                   if result.get("agent")}
         if agents:

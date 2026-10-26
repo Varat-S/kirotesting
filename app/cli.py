@@ -295,6 +295,56 @@ def main(argv=None):
     fo_override.add_argument("--score", type=float, help="Your score, 1-10 (required to override)")
     fo_override.add_argument("--reviewer", required=True)
     fo_override.add_argument("--reason", required=True)
+    filing_fetch = commands.add_parser(
+        "fetch-filing",
+        help="Download a 10-K from SEC EDGAR into edgar_filings/ for both the BO and the FO "
+             "(requires SEC_USER_AGENT)",
+    )
+    filing_fetch.add_argument("ticker")
+    filing_fetch_pick = filing_fetch.add_mutually_exclusive_group()
+    filing_fetch_pick.add_argument("--fy", type=int, help="Fiscal year (discovery hint from the report date)")
+    filing_fetch_pick.add_argument("--accession")
+    filing_fetch.add_argument("--include-amendments", action="store_true",
+                              help="With neither --fy nor --accession: also list 10-K/A amendments")
+    filing_fetch.add_argument("--with-proxy", action="store_true",
+                              help="Also download the DEF 14A proxy statement (into proxy/)")
+    filing_fetch.add_argument("--name", help='Folder name (default: "<TICKER> 10-K FY<year>")')
+    filing_import = commands.add_parser(
+        "import-filing",
+        help="Make a 10-K you already have (folder, files or .zip) readable by both the BO and the FO",
+    )
+    filing_import.add_argument(
+        "sources", nargs="+", type=Path,
+        help="A folder, the filing's files, or a .zip. A folder already in edgar_filings/ is prepared in place.")
+    filing_import.add_argument("--accession", help="SEC accession, e.g. 0001193125-26-044769")
+    filing_import.add_argument("--filing-date", type=date.fromisoformat, help="SEC filing date, YYYY-MM-DD")
+    filing_import.add_argument("--ticker", help="Ticker, when the cover page has none")
+    filing_import.add_argument("--name", help='Folder name (default: "<TICKER> 10-K FY<year>")')
+    filing_import.add_argument(
+        "--offline", action="store_true",
+        help="Never contact SEC EDGAR (the accession and filing date must then be given)")
+    both = commands.add_parser(
+        "run-bo-fo",
+        help="Run the Business Overview and the Financial Overview concurrently over one filing",
+    )
+    both.add_argument("case_id", nargs="?", help="Case id (default: TICKER_FY<year> from the cover page)")
+    both_source = both.add_mutually_exclusive_group(required=True)
+    both_source.add_argument("--filing", help='A folder in edgar_filings/ with a bundle.json, e.g. "HCA 10-K FY2025"')
+    both_source.add_argument("--ticker", help="Download the 10-K from SEC EDGAR first (with --fy or --accession)")
+    both.add_argument("--fy", type=int)
+    both.add_argument("--accession")
+    both.add_argument("--with-proxy", action="store_true")
+    both.add_argument("--live", action="store_true",
+                      help="Both sections on the configured live provider (model cost)")
+    both.add_argument("--bo-responses", type=Path, help="Scripted BO responses (JSON): the BO runs offline")
+    both.add_argument("--fo-responses", type=Path, help="Scripted FO agent responses (JSON): the FO runs offline")
+    both.add_argument("--model", help="With a live FO: the Pre-check Agent's Vertex model")
+    both.add_argument("--roster", choices=("v2", "v3"), default="v2")
+    both.add_argument("--enable-m4-debt-specialist", action="store_true")
+    both.add_argument(
+        "--cutoff", type=lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")),
+        help="BO evidence cut-off (default: the latest file availability, so every file is admitted)")
+    both.add_argument("--pdf", action="store_true")
     approve = commands.add_parser(
         "approve", help="Record your explicit approval of the exact draft content"
     )
@@ -338,6 +388,16 @@ def main(argv=None):
             if args.command == "run-fo-case":
                 print(json.dumps(_run_fo_case(session, args), indent=2))
                 session.commit()
+                return
+            if args.command in {"fetch-filing", "import-filing"}:
+                print(json.dumps(_intake(session, args), indent=2))
+                session.commit()
+                return
+            if args.command == "run-bo-fo":
+                outcome = _run_bo_fo(session, database, args)
+                print(json.dumps(outcome, indent=2))
+                if any(outcome[s]["status"] == "failed" for s in ("bo", "fo")):
+                    raise SystemExit(1)
                 return
             if args.command == "fo-review":
                 from app.services.fo.review import review_run
@@ -534,17 +594,87 @@ def main(argv=None):
 
 
 def _live_backend():
-    settings = get_settings()
-    if settings.llm_provider == "vertex":
-        from app.services.llm.providers_vertex import VertexProviderBackend
+    from app.services.bo_fo import bo_live_backend
 
-        backend = VertexProviderBackend(settings)
+    return bo_live_backend()
+
+
+def _sec_client(session):
+    return SecEdgarClient(get_settings().sec_user_agent, audit=AuditLog(session))
+
+
+def _intake(session, args):
+    """fetch-filing / import-filing: one shared folder in edgar_filings/ that both sections read."""
+    from app.services.acquisition import shared_filing
+
+    if args.command == "fetch-filing" and not (args.fy or args.accession):
+        # No year chosen: list the company's 10-Ks so one can be picked.
+        company, reports = shared_filing.annual_reports(
+            _sec_client(session), args.ticker, include_amendments=args.include_amendments)
+        return {"company": company, "choose_one": [
+            {**r, "download": f'python -m app.cli fetch-filing {company["ticker"]} --accession {r["accession"]}'}
+            for r in reports]}
+    if args.command == "fetch-filing":
+        filing = shared_filing.fetch_filing(
+            _sec_client(session), args.ticker, fy=args.fy, accession=args.accession,
+            with_proxy=args.with_proxy, name=args.name)
     else:
-        from app.services.llm.providers import RealProviderBackend
+        # EDGAR fills in (and checks) the accession and filing date when a contact is configured.
+        client = None if args.offline or not get_settings().sec_user_agent else _sec_client(session)
+        filing = shared_filing.import_filing(
+            args.sources, accession=args.accession, filing_date=args.filing_date,
+            ticker=args.ticker, name=args.name, client=client)
+    return {**filing.summary(),
+            "next": f'python -m app.cli run-bo-fo --filing "{filing.name}" --live'}
 
-        backend = RealProviderBackend(settings)
-    backend.check_configuration()
-    return backend
+
+def _run_bo_fo(session, database, args):
+    """Both sections at once over one shared folder; see app/services/bo_fo.py."""
+    from app.services import bo_fo
+    from app.services.acquisition import shared_filing
+    from app.services.fo import precheck
+
+    if args.ticker:
+        if bool(args.fy) == bool(args.accession):
+            raise ValueError("--ticker requires exactly one of --fy or --accession.")
+        filing = shared_filing.fetch_filing(
+            _sec_client(session), args.ticker, fy=args.fy, accession=args.accession,
+            with_proxy=args.with_proxy)
+        folder = filing.name
+    else:
+        folder = args.filing
+    # Release this session's write lock (SEC audit events) before the sections start writing.
+    session.commit()
+    if args.bo_responses:
+        from app.services.bo.offline import ScriptedBoBackend
+
+        bo_backend = ScriptedBoBackend.from_file(args.bo_responses)
+    elif args.live:
+        bo_backend = _live_backend()
+    else:
+        raise ValueError("The BO needs --live or --bo-responses.")
+    if args.fo_responses:
+        if args.model:
+            raise ValueError("--model applies to a live FO only.")
+        fo_backend, fo_mode = precheck.scripted_backend(args.fo_responses), "scripted"
+    elif args.live:
+        fo_backend, fo_mode = precheck.live_backend(args.model), "live"
+    else:
+        raise ValueError("The FO needs --live or --fo-responses.")
+
+    def show(section, message):  # progress on stderr, so stdout stays the JSON summary
+        print(f"[{section}] {message}", file=sys.stderr, flush=True)
+
+    outcome = bo_fo.run_bo_fo(
+        database=database, folder=folder, case_id=args.case_id, cutoff=args.cutoff,
+        bo_backend=bo_backend, fo_backend=fo_backend, fo_mode=fo_mode,
+        output_root=args.output, roster=args.roster,
+        enable_m4_debt_specialist=args.enable_m4_debt_specialist, produce_pdf=args.pdf,
+        on_progress=show)
+    for section in ("bo", "fo"):
+        if outcome[section]["status"] == "failed":
+            print(outcome[section].pop("traceback"), file=sys.stderr)
+    return outcome
 
 
 def _run_bo_specialists(session, database, args):

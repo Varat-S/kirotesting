@@ -12,6 +12,7 @@ writes (it records one new run); every other route is a read of recorded runs.
 * ``POST /cases/{case_id}/fo/runs/{run_id}/override`` -- the analyst's score for an escalated measure
 * ``GET  /cases/{case_id}/fo/runs`` and ``/fo/runs/{run_id}`` -- JSON
 * ``GET  /cases/{case_id}/fo/runs/{run_id}/overview.json|.html`` -- the recorded scorecard
+* ``GET  /cases/{case_id}/fo/runs/{run_id}/memo.json|.html`` -- the Financial Overview memo
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from app.core.config import get_settings
 from app.services.fo import loader, precheck
 from app.services.fo import cancel as fo_cancel
 from app.services.fo import models as fo_models
+from app.services.fo.memo import build_memo, filing_source, render_memo_html
 from app.services.fo.reporting import render_overview_html
 from app.services.fo.review import (
     FoReviewError,
@@ -207,6 +209,24 @@ def get_financial_overview_run(case_id: str, run_id: str, session: Session = Dep
     _run_for_case(session, case_id, run_id)
     view = fo_view(session, run_id)
     return {k: v for k, v in view.items() if k != "overview"}
+
+
+def _memo(session: Session, case_id: str, run_id: str) -> dict:
+    row = _run_for_case(session, case_id, run_id)
+    return build_memo(dict(row.payload), run=run_header(row), review=review_view(review_for(session, run_id)),
+                      overrides=overrides_for(session, run_id), source=filing_source(row.filing_folder))
+
+
+@router.get("/cases/{case_id}/fo/runs/{run_id}/memo.json")
+def get_financial_overview_memo_json(case_id: str, run_id: str, session: Session = Depends(get_session)) -> dict:
+    """The Financial Overview memo for one run, built from the recorded run (with any review and overrides)."""
+    return _memo(session, case_id, run_id)
+
+
+@router.get("/cases/{case_id}/fo/runs/{run_id}/memo.html", response_class=HTMLResponse)
+def get_financial_overview_memo_html(case_id: str, run_id: str,
+                                     session: Session = Depends(get_session)) -> HTMLResponse:
+    return HTMLResponse(render_memo_html(_memo(session, case_id, run_id)))
 
 
 @router.get("/cases/{case_id}/fo/runs/{run_id}/{kind}.json")

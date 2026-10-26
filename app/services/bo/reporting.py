@@ -77,12 +77,123 @@ def execution_mode(backend) -> str:
     return "offline_simulation" if isinstance(backend, FakeLLMBackend) else "live_model"
 
 
+# Roster-v3 modules whose governed output is laid out in the memo, attached to the
+# section of the same code. M1 is already the six M1 sections themselves.
+MEMO_MODULES = ("M2", "M3", "M4")
+_SHOWN_DISPOSITIONS = {"supported", "qualified"}
+_SHOWN_MATERIALITY = {"high", "medium"}
+
+
+def _shown(item: dict[str, Any]) -> bool:
+    """A governed item the memo may show: accepted, not audit-only, material."""
+    return (item.get("disposition") in _SHOWN_DISPOSITIONS
+            and item.get("admissibility") != "audit_only"
+            and item.get("materiality", "medium") in _SHOWN_MATERIALITY)
+
+
+def _m3_view(assessment: dict[str, Any] | None, cite) -> dict[str, Any] | None:
+    """The memo's reading of the validated M3 assessment (Validator 7 output).
+
+    Only what Validator 7 kept: rejected graph items stay in the audit report.
+    """
+    if assessment is None:
+        return None
+    names = {e["entity_id"]: e["legal_name"] for e in assessment.get("legal_entities") or []}
+    borrower = assessment.get("borrower_identification") or {}
+
+    def finding(f: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "finding_id": f["finding_id"],
+            "text": f["credit_hypothesis"],
+            "mechanism": f.get("causal_mechanism"),
+            "direction": f.get("credit_direction", "neutral"),
+            "materiality": f.get("materiality", "medium"),
+            "disposition": f["disposition"],
+            "qualifications": f.get("qualifications") or [],
+            "citations": cite(f.get("supporting_evidence_ids") or []),
+        }
+
+    return {
+        "borrower": {
+            "status": borrower.get("status"),
+            "legal_name": names.get(borrower.get("entity_id")),
+            "limitation": borrower.get("limitation"),
+        },
+        "legal_entities": [
+            {"legal_name": e["legal_name"], "jurisdiction": e.get("jurisdiction"),
+             "classification": e.get("classification"),
+             "verification_status": e.get("verification_status"),
+             "citations": cite(e.get("evidence_ids") or [])}
+            for e in assessment.get("legal_entities") or []],
+        "ownership": [
+            {"parent": names.get(r["parent_entity_id"], r["parent_entity_id"]),
+             "subsidiary": names.get(r["subsidiary_entity_id"], r["subsidiary_entity_id"]),
+             "ownership_percentage": r.get("ownership_percentage"),
+             "confirmation_status": r.get("confirmation_status")}
+            for r in assessment.get("ownership_relationships") or []],
+        "structural_findings": [finding(f) for f in
+                                assessment.get("structural_credit_findings") or []
+                                if _shown(f)],
+        "governance_findings": [finding(f) for f in
+                                assessment.get("governance_screening") or []
+                                if _shown(f)],
+        "management": [
+            {"legal_name": o["legal_name"], "role": o["role"],
+             "dimension": o["dimension"], "text": o["hypothesis"],
+             "mechanism": o.get("credit_mechanism"),
+             "direction": o.get("credit_direction", "neutral"),
+             "materiality": o.get("materiality", "medium"),
+             "attributed": o.get("admissibility") == "attributed",
+             "citations": cite(o.get("supporting_evidence_ids") or [])}
+            for o in assessment.get("management_assessments") or [] if _shown(o)],
+        "information_gaps": list(assessment.get("information_gaps") or []),
+    }
+
+
+def _m4_view(module: dict[str, Any], cite) -> dict[str, Any]:
+    """The memo's reading of the assembled ``m4_analysis`` (both M4 agents)."""
+    debt = module.get("m4_debt_assessment") or {}
+    analysis = module.get("m4_analysis")
+    if analysis is None:
+        # Debt specialist was not requested for this run: strategy agent only.
+        return {"debt_run": False}
+    report = debt.get("validator_report") or {}
+    return {
+        "debt_run": True,
+        "status": analysis.get("status"),
+        "debt_status": debt.get("status", "not_run"),
+        "debt_validated": bool(debt.get("validated")),
+        "debt_reason": debt.get("reason"),
+        "citations": cite(debt.get("evidence_ids") or []),
+        "d1": analysis.get("deliverable_1"),
+        "d2": analysis.get("deliverable_2"),
+        "d3": analysis.get("deliverable_3"),
+        "d4": analysis.get("deliverable_4"),
+        "checks": [{"check_id": c.get("check_id"), "name": c.get("name"),
+                    "passed": bool(c.get("passed")), "detail": c.get("detail")}
+                   for c in report.get("checks") or []],
+        "missing_information": list(analysis.get("missing_information") or []),
+    }
+
+
+def _money(value) -> str:
+    """$M amounts as they read in the memo: thousands separators, no decimals."""
+    if value is None:
+        return "n/a"
+    try:
+        return f"{float(value):,.0f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def _env() -> Environment:
-    return Environment(
+    env = Environment(
         loader=FileSystemLoader(str(_TEMPLATES)),
         autoescape=select_autoescape(["html", "j2"]),
         trim_blocks=True, lstrip_blocks=True,
     )
+    env.filters["money"] = _money
+    return env
 
 
 def render_memo_html(memo: dict[str, Any]) -> str:
@@ -320,6 +431,33 @@ class BoReportBuilder:
                     f"Specialist status: {run.agents[agent_id].status}. "
                     "This section is a coverage gap."),
             })
+
+        # Roster v3: lay each module's governed output out under its own section.
+        # Findings the narrative already rests on are not repeated.
+        if run.roster_version == "v3":
+            used_in_claims = {h for _, c, _ in claims for h in c["hypothesis_ids"]}
+            for section in sections:
+                module = run.module_conclusions.get(section["code"])
+                if section["code"] not in MEMO_MODULES or module is None:
+                    continue
+                section["module"] = {
+                    "code": section["code"],
+                    "status": module["status"],
+                    "failed_or_missing_agents": module["failed_or_missing_agents"],
+                    "unresolved_coverage_checks": module["unresolved_coverage_checks"],
+                    "missing_information": module["missing_information"],
+                    "further_findings": [
+                        {"hypothesis_id": f["hypothesis_id"], "text": f["claim"],
+                         "mechanism": f.get("credit_mechanism"),
+                         "direction": f["direction"], "materiality": f["materiality"],
+                         "attributed": f["admissibility"] == "attributed",
+                         "citations": cite(f.get("supporting_evidence_ids") or [])}
+                        for f in module["findings"]
+                        if f["hypothesis_id"] not in used_in_claims and _shown(f)],
+                    "m3": (_m3_view(module.get("m3_assessment"), cite)
+                           if section["code"] == "M3" else None),
+                    "m4": _m4_view(module, cite) if section["code"] == "M4" else None,
+                }
 
         last = run.challenge_rounds[-1] if run.challenge_rounds else None
         open_findings = [

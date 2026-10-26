@@ -1,0 +1,329 @@
+"""Run the Business Overview and the Financial Overview concurrently over one shared filing folder.
+
+Both sections read the same folder in ``edgar_filings/`` (see
+:mod:`app.services.acquisition.shared_filing`): the BO its ``bundle.json``, the FO its files. Each
+runs in its own thread with its own database session and backend, under the same case id, so
+one case shows both. A failure in one section is reported and never stops the other.
+
+SQLite allows one writer at a time, and both sections keep a write transaction open for as long
+as they run (the BO from its first stage, the FO from its first logged model call). So the
+two never share a database while running:
+
+* the BO writes to the main database, as ``run-bo-case`` does;
+* the FO writes to its own staging database (seeded with the main database's prompt versions so
+  its prompt registry behaves as it would there), and when it finishes its rows are copied into
+  the main database in one transaction that waits for the BO's write lock.
+
+If that copy cannot be made, the staging database is kept and its path reported; nothing is lost.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+import threading
+import traceback
+import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
+from pathlib import Path
+
+from app.models.base import Base, create_engine_and_session, init_db
+from app.services.acquisition import shared_filing
+from app.services.fo import loader as fo_loader
+from app.services.fo.runner import FinancialOverviewRunner, default_case_id, validate_case_id
+from app.services.pipeline.sec import sec_source_package
+
+# How long a section waits for the other's write lock. The BO holds its lock for its whole run.
+LOCK_WAIT_SECONDS = 3 * 60 * 60
+# Reference rows the FO staging database starts with; only rows the FO run added are copied back.
+SEEDED_TABLES = ("prompt_versions",)
+
+
+class BoFoError(ValueError):
+    """The combined run cannot start (no shared folder, no backend, a bad case id)."""
+
+
+def bo_live_backend():
+    """The configured live provider for the BO (LLM_PROVIDER), as ``run-bo-case --live`` uses it."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.llm_provider == "vertex":
+        from app.services.llm.providers_vertex import VertexProviderBackend
+
+        backend = VertexProviderBackend(settings)
+    else:
+        from app.services.llm.providers import RealProviderBackend
+
+        backend = RealProviderBackend(settings)
+    backend.check_configuration()
+    return backend
+
+
+def sqlite_path(database_url: str) -> Path:
+    """The file behind a ``sqlite:///`` URL; a combined run needs a file both threads can open."""
+    prefix = "sqlite:///"
+    if not database_url.startswith(prefix) or ":memory:" in database_url or database_url == prefix:
+        raise BoFoError("A combined BO + FO run needs a file-based SQLite database (DATABASE_URL=sqlite:///...).")
+    return Path(database_url[len(prefix):]).resolve()
+
+
+def plan(folder: str, case_id: str | None = None, cutoff: datetime | None = None) -> dict:
+    """Check the folder can be read by both sections and settle the case id and evidence cut-off."""
+    bundle = shared_filing.load_bundle(folder)
+    if case_id:
+        validate_case_id(case_id)
+    else:
+        case_id = default_case_id(fo_loader.load(folder)[0]["meta"], folder)
+    if cutoff is not None and cutoff.tzinfo is None:
+        raise BoFoError("The evidence cut-off needs a timezone, e.g. 2026-03-31T00:00:00Z.")
+    # By default every file in the folder is admitted: the cut-off is the latest availability.
+    cutoff = cutoff or max(f.available_at for f in bundle.files)
+    return {"folder": folder, "case_id": case_id, "cutoff": cutoff, "bundle": bundle}
+
+
+def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: str,
+              output_root, data_root=None, case_id: str | None = None, cutoff: datetime | None = None,
+              roster: str = "v2", enable_m4_debt_specialist: bool = False, produce_pdf: bool = False,
+              on_progress=None, lock_wait: float = LOCK_WAIT_SECONDS) -> dict:
+    """Run both sections at once; returns ``{"case_id", "folder", "cutoff", "bo": {...}, "fo": {...}}``.
+
+    Each section's entry has ``status`` ``completed`` or ``failed`` and either its ``summary`` or its
+    ``error``. ``on_progress(section, message)`` is called from the worker threads as they advance.
+    """
+    database = Path(database).resolve()
+    data_root = Path(data_root) if data_root is not None else database.parent
+    settled = plan(folder, case_id, cutoff)
+    case_id = settled["case_id"]
+    say = on_progress or (lambda section, message: None)
+
+    def bo():
+        from app.services.bo.runner import BusinessOverviewRunner
+
+        identity = shared_filing.company_info(folder)
+        package = sec_source_package(
+            settled["bundle"], cutoff=settled["cutoff"],
+            entity_id=identity.get("ticker") or None, legal_name=identity.get("name") or None)
+        engine, factory = create_engine_and_session(
+            f"sqlite:///{database.as_posix()}", sqlite_timeout=lock_wait)
+        try:
+            with factory() as session:
+                say("bo", "running the Business Overview")
+                result = BusinessOverviewRunner(
+                    session, backend=bo_backend, data_root=data_root, output_root=output_root,
+                    bo_roster=roster, enable_m4_debt_specialist=enable_m4_debt_specialist,
+                ).run_case(case_id, package=package, produce_pdf=produce_pdf)
+                say("bo", "recording the Business Overview")
+                session.commit()
+        finally:
+            engine.dispose()
+        return bo_summary(result, roster)
+
+    def fo():
+        staging = data_root / "staging" / f"fo-{uuid.uuid4().hex[:16]}.db"
+        staging.parent.mkdir(parents=True, exist_ok=True)
+        engine, factory = create_engine_and_session(f"sqlite:///{staging.as_posix()}")
+        try:
+            init_db(engine)
+            _seed(staging, database, lock_wait)
+            with factory() as session:
+                result = FinancialOverviewRunner(
+                    session, output_root=output_root, agent_backend=fo_backend, agent_mode=fo_mode,
+                    check_stop=lambda step: say("fo", step),
+                ).run_filing(folder, case_id)
+                session.commit()
+        except BaseException:
+            engine.dispose()
+            staging.unlink(missing_ok=True)  # nothing was recorded; the staging copy holds nothing of value
+            raise
+        engine.dispose()
+        say("fo", "copying the Financial Overview into the main database (waits for the BO to finish writing)")
+        try:
+            merge(staging, database, lock_wait)
+        except Exception as exc:
+            raise StagingKept(f"{exc} The Financial Overview run is kept in {staging}.", staging) from exc
+        staging.unlink(missing_ok=True)
+        return result.summary()
+
+    outcome = {"case_id": case_id, "folder": folder, "cutoff": settled["cutoff"].isoformat()}
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="bo-fo") as pool:
+        futures = {pool.submit(bo): "bo", pool.submit(fo): "fo"}
+        for future in as_completed(futures):
+            section = futures[future]
+            try:
+                outcome[section] = {"status": "completed", "summary": future.result()}
+                say(section, "completed")
+            except Exception as exc:  # one section's failure is reported, never raised over the other's result
+                outcome[section] = {"status": "failed", "error": f"{type(exc).__name__}: {exc}",
+                                    "traceback": traceback.format_exc(limit=8)}
+                if isinstance(exc, StagingKept):
+                    outcome[section]["staging_database"] = str(exc.staging)
+                say(section, "failed")
+    return outcome
+
+
+class StagingKept(RuntimeError):
+    def __init__(self, message, staging):
+        super().__init__(message)
+        self.staging = staging
+
+
+def bo_summary(result, roster: str) -> dict:
+    return {
+        "case_id": result.case_id,
+        "analysis_run_id": result.analysis_run_id,
+        "scope": "business_overview_only",
+        "execution_mode": result.execution_mode,
+        "bo_roster": roster,
+        "conclusion_status": result.conclusion_status,
+        "human_review_status": "pending",
+        "handoff_id": (result.handoff or {}).get("handoff_id"),
+        "business_risk_score": {
+            "status": result.memo["score"]["status"], "band": result.memo["score"]["band"],
+        } if result.memo else None,
+        "outputs": sorted({str(Path(p).parent) for p in result.output_paths.values()}),
+    }
+
+
+# --- the FO staging database ------------------------------------------------------------------------
+
+
+def _connect(database: Path, lock_wait: float) -> sqlite3.Connection:
+    # Autocommit mode, so BEGIN IMMEDIATE below is the only transaction: it takes the write lock up front
+    # (waiting for the BO's) instead of upgrading a read lock, which SQLite can refuse without waiting.
+    return sqlite3.connect(str(database), timeout=lock_wait, isolation_level=None)
+
+
+def _columns(con, schema: str, table: str) -> list[str]:
+    return [row[1] for row in con.execute(f'PRAGMA {schema}.table_info("{table}")')]
+
+
+def _seed(staging: Path, database: Path, lock_wait: float) -> None:
+    con = _connect(staging, lock_wait)
+    try:
+        con.execute("ATTACH DATABASE ? AS main_db", (str(database),))
+        for table in SEEDED_TABLES:
+            cols = [c for c in _columns(con, "main", table) if c in set(_columns(con, "main_db", table))]
+            if cols:
+                names = ", ".join(f'"{c}"' for c in cols)
+                con.execute(f'INSERT INTO main."{table}" ({names}) SELECT {names} FROM main_db."{table}"')
+        con.execute("DETACH DATABASE main_db")
+    finally:
+        con.close()
+
+
+def merge(staging: Path, database: Path, lock_wait: float = LOCK_WAIT_SECONDS) -> dict[str, int]:
+    """Copy an FO staging database's rows into the main database in one transaction; returns rows per table."""
+    con = _connect(database, lock_wait)
+    copied: dict[str, int] = {}
+    try:
+        con.execute("ATTACH DATABASE ? AS staging", (str(staging),))
+        con.execute("BEGIN IMMEDIATE")
+        try:
+            for table in (t.name for t in Base.metadata.sorted_tables):
+                if not con.execute(f'SELECT 1 FROM staging."{table}" LIMIT 1').fetchone():
+                    continue
+                main_cols = set(_columns(con, "main", table))
+                cols = _columns(con, "staging", table)
+                missing = [c for c in cols if c not in main_cols]
+                if missing:
+                    raise RuntimeError(
+                        f"The main database's {table} table lacks {missing}; run python -m app.migrate first.")
+                if table in SEEDED_TABLES:
+                    copied[table] = _merge_prompt_versions(con, cols)
+                    continue
+                names = ", ".join(f'"{c}"' for c in cols)
+                cursor = con.execute(f'INSERT INTO main."{table}" ({names}) SELECT {names} FROM staging."{table}"')
+                copied[table] = cursor.rowcount
+            con.execute("COMMIT")
+        except BaseException:
+            con.execute("ROLLBACK")
+            raise
+        con.execute("DETACH DATABASE staging")
+    finally:
+        con.close()
+    return copied
+
+
+def _merge_prompt_versions(con, cols) -> int:
+    """New prompt versions the FO registered; a version already in the main database must be the same prompt."""
+    clash = con.execute(
+        'SELECT s.name, s.version FROM staging.prompt_versions s JOIN main.prompt_versions m '
+        'ON m.name = s.name AND m.version = s.version WHERE m.content_hash != s.content_hash').fetchone()
+    if clash:
+        raise RuntimeError(f"Prompt {clash[0]} version {clash[1]} differs between the FO run and the main database.")
+    names = ", ".join(f'"{c}"' for c in cols if c != "id")  # the main database allocates its own ids
+    cursor = con.execute(
+        f'INSERT INTO main.prompt_versions ({names}) SELECT {names} FROM staging.prompt_versions s '
+        'WHERE NOT EXISTS (SELECT 1 FROM main.prompt_versions m WHERE m.name = s.name AND m.version = s.version)')
+    return cursor.rowcount
+
+
+# --- background jobs for the browser -------------------------------------------------------------------
+
+
+class Jobs:
+    """Combined runs started from the browser: each runs in a background thread and is polled for progress."""
+
+    KEEP = 20
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._jobs: dict[str, dict] = {}
+
+    def start(self, **kwargs) -> str:
+        job_id = uuid.uuid4().hex[:12]
+        now = datetime.now(timezone.utc).isoformat()
+        job = {"job_id": job_id, "status": "running", "started_at": now, "finished_at": None,
+               "folder": kwargs["folder"], "case_id": kwargs.get("case_id"),
+               "sections": {s: {"status": "running", "step": "starting", "steps": []} for s in ("bo", "fo")},
+               "result": None, "error": None}
+        with self._lock:
+            self._jobs[job_id] = job
+            for old in sorted(self._jobs, key=lambda k: self._jobs[k]["started_at"])[:-self.KEEP]:
+                if self._jobs[old]["status"] != "running":
+                    del self._jobs[old]
+
+        def progress(section, message):
+            with self._lock:
+                state = job["sections"][section]
+                if message in ("completed", "failed"):
+                    state["status"] = message
+                else:
+                    state["steps"].append(message)
+                    state["step"] = message
+
+        def work():
+            try:
+                result = run_bo_fo(on_progress=progress, **kwargs)
+                with self._lock:
+                    job.update(result=result, case_id=result["case_id"], status="finished")
+                    for section in ("bo", "fo"):
+                        job["sections"][section]["status"] = result[section]["status"]
+            except Exception as exc:
+                with self._lock:
+                    job.update(status="failed", error=f"{type(exc).__name__}: {exc}")
+            finally:
+                with self._lock:
+                    job["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+        threading.Thread(target=work, name=f"bo-fo-{job_id}", daemon=True).start()
+        return job_id
+
+    def get(self, job_id: str) -> dict | None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            return _copy(job) if job else None
+
+    def recent(self) -> list[dict]:
+        with self._lock:
+            return [_copy(j) for j in sorted(self._jobs.values(), key=lambda j: j["started_at"], reverse=True)]
+
+
+def _copy(job: dict) -> dict:
+    import copy
+
+    return copy.deepcopy(job)
+
+
+jobs = Jobs()

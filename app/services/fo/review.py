@@ -125,6 +125,14 @@ def write_review_outputs(run: FinancialOverviewRunRow, review: FinancialOverview
     html_path.write_text(render_overview_html(dict(run.payload), run=run_header(run), review=review_view(review),
                                               overrides=overrides or []),
                          encoding="utf-8", newline="\n")
+    from .memo import build_memo, filing_source, render_memo_html
+
+    memo = build_memo(dict(run.payload), run=run_header(run), review=review_view(review), overrides=overrides or [],
+                      source=filing_source(run.filing_folder))
+    out["financial_memo.json"] = folder / "financial_memo.json"
+    out["financial_memo.json"].write_text(canonical_json(memo) + "\n", encoding="utf-8", newline="\n")
+    out["financial_memo.html"] = folder / "financial_memo.html"
+    out["financial_memo.html"].write_text(render_memo_html(memo), encoding="utf-8", newline="\n")
     return {**{k: str(v) for k, v in out.items()}, "financial_overview.html": str(html_path)}
 
 

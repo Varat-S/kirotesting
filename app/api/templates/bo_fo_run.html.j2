@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Run BO and FO</title>{% include 'browser_style.html.j2' %}
+<style>
+  .ok { color: #2f6b45; font-weight: bold; } .bad { color: #9a3324; font-weight: bold; } .warn { color: #8a6d1c; font-weight: bold; }
+  .sections { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .section-card { border: 1px solid #c9d1da; border-radius: 8px; padding: 14px 16px; background: #f8fafd; }
+  .track { position: relative; height: 8px; border-radius: 4px; background: #e3e8ee; overflow: hidden; margin: 8px 0; }
+  .track .bar { position: absolute; top: 0; left: -40%; width: 40%; height: 100%; border-radius: 4px; background: #2f6fb0; animation: slide 1.4s ease-in-out infinite; }
+  .track.done .bar { animation: none; left: 0; width: 100%; background: #2f6b45; } .track.failed .bar { animation: none; left: 0; width: 100%; background: #9a3324; }
+  @keyframes slide { from { left: -40%; } to { left: 100%; } }
+  @media (prefers-reduced-motion: reduce) { .track .bar { animation: none; left: 0; width: 100%; opacity: .5; } }
+  .buttons { margin-top: 16px; } @media (max-width: 650px) { .sections { grid-template-columns: 1fr; } }
+</style></head>
+<body>
+{% macro st(v) %}<span class="{{ 'ok' if v in ['completed', 'finished'] else 'bad' if v in ['failed'] else 'warn' }}">{{ (v or '—')|replace('_', ' ') }}</span>{% endmacro %}
+<header><span class="badge">Business Overview + Financial Overview</span><h1>Run BO and FO together</h1>
+<p class="subtle">Get a 10-K in once, by downloading it from SEC EDGAR or uploading its files, and both sections read the same folder in <code>edgar_filings/</code>: the Business Overview reads its <code>bundle.json</code> (file roles, hashes and availability), and the Financial Overview reads its Inline XBRL. Both then run at the same time under one case id.</p>
+<div class="actions"><a href="/">All cases</a><a href="/bo">Business Overview runs</a><a href="/fo">Financial Overview runs</a></div></header>
+<main>
+{% if error %}<section><p class="notice" role="alert"><strong>{{ error }}</strong></p></section>{% endif %}
+
+{% if job %}<section id="job" data-job="{{ job.job_id }}" data-status="{{ job.status }}"><h2>Run <code>{{ job.job_id }}</code>: {{ job.folder }}</h2>
+<p>Case <strong id="job-case">{{ job.case_id }}</strong> · started {{ job.started_at }} · <span id="job-status">{{ st(job.status) }}</span></p>
+<p class="notice" id="job-error"{% if not job.error %} hidden{% endif %}>{{ job.error or '' }}</p>
+<div class="sections">
+{% for key, label in [('bo', 'Business Overview'), ('fo', 'Financial Overview')] %}{% set s = job.sections[key] %}
+<div class="section-card" id="section-{{ key }}"><strong>{{ label }}</strong> <span class="state">{{ st(s.status) }}</span>
+<div class="track{% if s.status == 'completed' %} done{% elif s.status == 'failed' %} failed{% endif %}" aria-hidden="true"><div class="bar"></div></div>
+<div class="step subtle">{{ s.step }}</div>
+{% set r = job.result[key] if job.result else none %}
+<p class="error bad"{% if not (r and r.status == 'failed') %} hidden{% endif %}>{{ r.error if r and r.status == 'failed' else '' }}</p>
+<p class="open"{% if not (r and r.status == 'completed') %} hidden{% endif %}>{% if r and r.status == 'completed' %}{% if key == 'bo' %}<a href="/cases/{{ job.case_id }}/bo.html?analysis_run_id={{ r.summary.analysis_run_id }}">Open the Business Overview</a>{% else %}<a href="/cases/{{ job.case_id }}/fo.html?run_id={{ r.summary.run_id }}">Open the Financial Overview</a>{% endif %}{% endif %}</p></div>
+{% endfor %}
+</div>
+<p class="subtle">Live runs make model calls (billed) and usually take several minutes; the Business Overview takes longest. The Financial Overview's result is copied into the database once the Business Overview has finished writing. Keep this page open, or come back to it: the run continues in the server.</p>
+</section>{% endif %}
+
+<section id="start"><h2>Run both sections</h2>
+{% if not (bo_ok and fo_ok) %}<p class="notice">{% if not bo_ok %}<strong>Business Overview provider not configured:</strong> {{ bo_reason }}<br>{% endif %}{% if not fo_ok %}<strong>Pre-check Agent not configured:</strong> {{ fo_reason }}{% endif %}</p>{% endif %}
+{% set runnable = filings|selectattr('runnable')|list %}
+{% if runnable %}
+<form method="post" action="/run/start" id="start-form">
+<div class="form-grid">
+<div><label for="folder">Filing folder</label><select id="folder" name="folder" required>{% for f in runnable %}<option value="{{ f.name }}"{% if f.name == selected_folder %} selected{% endif %}>{{ f.name }} ({{ f.files }} files)</option>{% endfor %}</select></div>
+<div><label for="case_id">Case id <small>(optional)</small></label><input id="case_id" name="case_id" placeholder="default: TICKER_FY<year>" value="{{ values.case_id or '' }}" pattern="[A-Za-z0-9_.-]+"></div>
+<div><label for="roster">Business Overview roster</label><select id="roster" name="roster"><option value="v2"{% if values.roster != 'v3' %} selected{% endif %}>v2: six specialists (default)</option><option value="v3"{% if values.roster == 'v3' %} selected{% endif %}>v3: four modules, eight specialists</option></select>
+<label style="font-weight:normal;margin-top:8px"><input type="checkbox" name="enable_m4_debt_specialist" value="1" style="width:auto"> Also run the Module 4 debt specialist (v3 only)</label></div>
+<div>{% if fo_ok %}<label for="model">Pre-check Agent model (FO)</label><select id="model" name="model">{% for m in models %}<option value="{{ m }}"{% if m == selected_model %} selected{% endif %}>{{ m }}</option>{% endfor %}</select>{% if models_note %}<small>{{ models_note }}</small>{% endif %}{% else %}<span class="subtle">Pre-check Agent model</span><br><strong class="bad">not configured</strong>{% endif %}</div>
+<div><label for="cutoff">BO evidence cut-off <small>(optional)</small></label><input id="cutoff" name="cutoff" placeholder="e.g. 2026-03-31T00:00:00Z" value="{{ values.cutoff or '' }}"><small>Blank admits every file in the folder (the latest file availability).</small></div>
+</div>
+<div class="buttons"><button class="primary-button" type="submit"{% if not (bo_ok and fo_ok) %} disabled{% endif %}>Run Business Overview + Financial Overview</button></div>
+</form>
+{% else %}<p>No folder in <code>edgar_filings/</code> can be read by both sections yet. Download or upload a 10-K below.</p>{% endif %}
+{% set unprepared = filings|rejectattr('has_manifest')|list %}
+{% if unprepared %}<details><summary>{{ unprepared|length }} folder(s) the Financial Overview can read but the Business Overview cannot (no <code>bundle.json</code>)</summary>
+<ul>{% for f in unprepared %}<li>{{ f.name }}: prepare it with <code>python -m app.cli import-filing "edgar_filings/{{ f.name }}" --accession ... --filing-date ...</code></li>{% endfor %}</ul></details>{% endif %}
+</section>
+
+<section id="add"><h2>Add a 10-K</h2>
+<div class="form-grid">
+<form method="get" action="/run/reports#add"><fieldset><legend>Download from SEC EDGAR</legend>
+{% if not sec_ok %}<p class="notice">Set <code>SEC_USER_AGENT</code> (your name and email, e.g. <code>Jane Doe jane@example.com</code>) in <code>.env</code> and restart the app to download. No API key is needed.</p>{% endif %}
+<label for="ticker">Ticker</label><input id="ticker" name="ticker" required placeholder="e.g. HCA" value="{{ values.ticker or '' }}">
+<label style="font-weight:normal;margin-top:12px"><input type="checkbox" name="amendments" value="1" style="width:auto"{% if values.amendments %} checked{% endif %}> Include amended 10-Ks (10-K/A)</label>
+<div class="buttons"><button type="submit"{% if not sec_ok %} disabled{% endif %}>Find 10-Ks</button></div>
+<small>Lists the company's annual reports by year; you then choose which one to download.</small>
+</fieldset></form>
+<form method="post" action="/run/import" enctype="multipart/form-data"><fieldset><legend>Upload a filing's files</legend>
+<label for="files">Inline XBRL 10-K (.htm), its .xsd and linkbases, or a .zip</label><input id="files" name="files" type="file" multiple required accept=".zip,.htm,.html,.xhtml,.xml,.xsd,.json">
+<small>The cover page supplies the company and period. Exhibits are optional; a <code>company.json</code> may be included.</small>
+<div class="form-grid" style="margin-top:12px"><div><label for="import-accession">Accession</label><input id="import-accession" name="accession" placeholder="0001193125-26-044769" value="{{ values.accession or '' }}"></div>
+<div><label for="filing_date">Filing date</label><input id="filing_date" name="filing_date" type="date" value="{{ values.filing_date or '' }}"></div></div>
+<small>{% if sec_ok %}Optional: looked up and checked on SEC EDGAR.{% else %}Required: SEC_USER_AGENT is not set, so they cannot be looked up. They are recorded as declared by you.{% endif %}</small>
+<label for="import-ticker" style="margin-top:12px">Ticker <small>(optional)</small></label><input id="import-ticker" name="ticker" value="{{ values.import_ticker or '' }}">
+<div class="buttons"><button type="submit">Upload</button></div>
+</fieldset></form>
+</div>
+{% if reports %}
+<form method="post" action="/run/fetch" id="reports"><fieldset><legend>{{ company.name }} ({{ company.ticker }}): choose a 10-K to download</legend>
+<input type="hidden" name="ticker" value="{{ company.ticker }}">
+<div class="table-wrap"><table><thead><tr><th></th><th>Fiscal year</th><th>Form</th><th>Period ending</th><th>Filed</th><th>Proxy statement</th><th>Accession</th><th></th></tr></thead><tbody>
+{% set ns = namespace(first=true) %}
+{% for r in reports %}{% set usable = not r.problem and not r.downloaded %}
+<tr{% if not usable %} class="subtle"{% endif %}>
+<td><input type="radio" name="accession" id="acc-{{ loop.index }}" value="{{ r.accession }}" style="width:auto"{% if not usable %} disabled{% elif ns.first %} checked{% set ns.first = false %}{% endif %}></td>
+<td><label for="acc-{{ loop.index }}" style="margin:0">FY{{ r.fiscal_year }}</label></td><td>{{ r.form }}</td><td>{{ r.report_date }}</td><td>{{ r.filing_date }}</td>
+<td>{{ r.proxy or '—' }}</td><td><code>{{ r.accession }}</code></td>
+<td>{% if r.downloaded %}already in <code>edgar_filings/{{ r.folder }}</code>{% elif r.problem %}{{ r.problem }}{% endif %}</td></tr>
+{% endfor %}
+</tbody></table></div>
+<label style="font-weight:normal;margin-top:12px"><input type="checkbox" name="with_proxy" value="1" style="width:auto" checked> Also download the proxy statement (better management, governance and related-party evidence for the BO)</label>
+<div class="buttons"><button class="primary-button" type="submit"{% if ns.first %} disabled{% endif %}>Download the selected 10-K</button></div>
+<small>Saved to <code>edgar_filings/</code> with its <code>bundle.json</code> and <code>company.json</code>, ready for both sections.</small>
+</fieldset></form>
+{% endif %}
+</section>
+
+{% if jobs %}<section id="recent"><h2>Runs in this server session</h2>
+<div class="table-wrap"><table><thead><tr><th>Run</th><th>Folder</th><th>Case</th><th>Started</th><th>BO</th><th>FO</th><th>Open</th></tr></thead><tbody>
+{% for j in jobs %}<tr><td><code>{{ j.job_id }}</code></td><td>{{ j.folder }}</td><td>{{ j.case_id }}</td><td>{{ j.started_at }}</td><td>{{ st(j.sections.bo.status) }}</td><td>{{ st(j.sections.fo.status) }}</td><td><a href="/run?job={{ j.job_id }}">Progress</a>{% if j.result %}{% if j.result.bo.status == 'completed' %} · <a href="/cases/{{ j.case_id }}/bo.html?analysis_run_id={{ j.result.bo.summary.analysis_run_id }}">BO</a>{% endif %}{% if j.result.fo.status == 'completed' %} · <a href="/cases/{{ j.case_id }}/fo.html?run_id={{ j.result.fo.summary.run_id }}">FO</a>{% endif %}{% endif %}</td></tr>{% endfor %}
+</tbody></table></div></section>{% endif %}
+</main>
+<script>
+(function () {
+  var box = document.getElementById("job");
+  if (!box || box.dataset.status !== "running") return;
+  var id = box.dataset.job;
+  var labels = {completed: "ok", finished: "ok", failed: "bad"};
+  function state(el, v) { el.textContent = (v || "—").replace(/_/g, " "); el.className = labels[v] || "warn"; }
+  function render(job) {
+    state(document.getElementById("job-status"), job.status);
+    document.getElementById("job-case").textContent = job.case_id || "";
+    if (job.error) { var e = document.getElementById("job-error"); e.textContent = job.error; e.hidden = false; }
+    ["bo", "fo"].forEach(function (key) {
+      var s = job.sections[key], card = document.getElementById("section-" + key);
+      var tag = document.createElement("span"); state(tag, s.status);
+      var holder = card.querySelector(".state"); holder.textContent = ""; holder.appendChild(tag);
+      card.querySelector(".step").textContent = s.step;
+      var track = card.querySelector(".track");
+      track.className = "track" + (s.status === "completed" ? " done" : s.status === "failed" ? " failed" : "");
+      var r = job.result && job.result[key];
+      if (r && r.status === "failed") { var err = card.querySelector(".error"); err.textContent = r.error; err.hidden = false; }
+      if (r && r.status === "completed") {
+        var open = card.querySelector(".open"), a = document.createElement("a");
+        a.href = key === "bo"
+          ? "/cases/" + encodeURIComponent(job.case_id) + "/bo.html?analysis_run_id=" + encodeURIComponent(r.summary.analysis_run_id)
+          : "/cases/" + encodeURIComponent(job.case_id) + "/fo.html?run_id=" + encodeURIComponent(r.summary.run_id);
+        a.textContent = "Open the " + (key === "bo" ? "Business" : "Financial") + " Overview";
+        open.textContent = ""; open.appendChild(a); open.hidden = false;
+      }
+    });
+    return job.status === "running";
+  }
+  var poll = setInterval(function () {
+    fetch("/run/jobs/" + encodeURIComponent(id), {cache: "no-store"})
+      .then(function (r) { return r.json(); })
+      .then(function (job) { if (!render(job)) clearInterval(poll); })
+      .catch(function () {});
+  }, 1500);
+})();
+</script>
+</body>
+</html>

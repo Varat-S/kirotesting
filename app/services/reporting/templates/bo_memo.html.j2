@@ -27,6 +27,14 @@
   .cols > div { flex: 1 1 320px; }
   .notice { font-family: Arial, Helvetica, sans-serif; font-size: .8rem; color: #6b7480; }
   .src { word-break: break-word; }
+  .module { margin: .8rem 0 0; padding: .2rem 0 0 .9rem; border-left: 3px solid #c3cad3; }
+  .module h3 { font-size: .95rem; }
+  .module h4 { font-family: Arial, Helvetica, sans-serif; font-size: .8rem; margin: .8rem 0 .2rem; text-transform: uppercase; letter-spacing: .04em; color: #404b59; }
+  .tag.complete { border-color: #2f6b45; color: #2f6b45; }
+  .tag.incomplete, .tag.fail { border-color: #9a3324; color: #9a3324; }
+  .tag.pass { border-color: #2f6b45; color: #2f6b45; }
+  .num { text-align: right; white-space: nowrap; }
+  .tablewrap { overflow-x: auto; }
 </style>
 </head>
 <body>
@@ -37,6 +45,119 @@
   {% if c.title %}<strong>{{ c.title }}.</strong> {% endif %}{{ c.text }}{{ cites(c) }}
   {% if c.uncertainty %}<div class="qual">Qualification: {{ c.uncertainty }}</div>{% endif %}
   {% for q in c.quoted_values %}<div class="small">Calculation: {{ q.label }} = {{ q.value }}{% if q.unit %} ({{ q.unit }}){% endif %}{% if q.denominator %}, denominator {{ q.denominator }}{% endif %}{% if q.period %}, period {{ q.period }}{% endif %}</div>{% endfor %}
+</div>
+{% endmacro %}
+{% macro finding(f) %}
+<div class="claim">
+  <span class="tag {{ f.direction }}">{{ f.direction }}</span><span class="tag">{{ f.materiality }} materiality</span>{% if f.attributed %}<span class="tag">management claim</span>{% endif %}{% if f.disposition == 'qualified' %}<span class="tag mixed">qualified</span>{% endif %}<br>
+  {{ f.text }}{{ cites(f) }}
+  {% if f.mechanism %}<div class="small">Credit mechanism: {{ f.mechanism }}</div>{% endif %}
+  {% for q in f.qualifications or [] %}<div class="qual">Qualification: {{ q }}</div>{% endfor %}
+</div>
+{% endmacro %}
+{% macro list_or_none(items, none_text='None recorded.') %}
+{% if items %}<ul>{% for i in items %}<li>{{ i }}</li>{% endfor %}</ul>{% else %}<p class="notice">{{ none_text }}</p>{% endif %}
+{% endmacro %}
+{% macro m3_panel(m) %}
+<h4>Borrower identification</h4>
+<p class="small">{{ m.borrower.status|replace('_', ' ') }}{% if m.borrower.legal_name %}: {{ m.borrower.legal_name }}{% endif %}{% if m.borrower.limitation %}. {{ m.borrower.limitation }}{% endif %}</p>
+<h4>Legal entities</h4>
+{% if m.legal_entities %}
+<div class="tablewrap"><table><tr><th>Entity</th><th>Jurisdiction</th><th>Classification</th><th>Verification</th></tr>
+{% for e in m.legal_entities %}<tr><td>{{ e.legal_name }}{{ cites(e) }}</td><td>{{ e.jurisdiction or '' }}</td><td>{{ (e.classification or '')|replace('_', ' ') }}</td><td>{{ e.verification_status }}</td></tr>{% endfor %}
+</table></div>{% else %}<p class="notice">No legal entities were validated.</p>{% endif %}
+{% if m.ownership %}
+<h4>Ownership</h4>
+<div class="tablewrap"><table><tr><th>Parent</th><th>Subsidiary</th><th>Ownership</th><th>Confirmation</th></tr>
+{% for r in m.ownership %}<tr><td>{{ r.parent }}</td><td>{{ r.subsidiary }}</td><td class="num">{% if r.ownership_percentage is not none %}{{ r.ownership_percentage }}%{% else %}n/a{% endif %}</td><td>{{ r.confirmation_status }}</td></tr>{% endfor %}
+</table></div>{% endif %}
+<h4>Structural credit findings</h4>
+{% for f in m.structural_findings %}{{ finding(f) }}{% else %}<p class="notice">No material structural finding was validated.</p>{% endfor %}
+<h4>Senior management</h4>
+{% for o in m.management %}
+<div class="claim"><span class="tag {{ o.direction }}">{{ o.direction }}</span><span class="tag">{{ o.dimension|replace('_', ' ') }}</span><span class="tag">{{ o.materiality }} materiality</span>{% if o.attributed %}<span class="tag">management claim</span>{% endif %}<br>
+<strong>{{ o.legal_name }}, {{ o.role }}.</strong> {{ o.text }}{{ cites(o) }}
+{% if o.mechanism %}<div class="small">Credit mechanism: {{ o.mechanism }}</div>{% endif %}</div>
+{% else %}<p class="notice">No material management observation was validated.</p>{% endfor %}
+{% if m.governance_findings %}<h4>Governance screening</h4>{% for f in m.governance_findings %}{{ finding(f) }}{% endfor %}{% endif %}
+<h4>Information gaps</h4>
+{{ list_or_none(m.information_gaps) }}
+{% endmacro %}
+{% macro m4_panel(m) %}
+{% if not m.debt_run %}
+<p class="notice">The Module 4 debt-structure specialist was not run for this analysis, so debt structure, refinancing and debt utilisation are not assessed here. This section rests on the strategy and capital-allocation agent only.</p>
+{% else %}
+<p class="small">Debt-structure specialist: <span class="tag {{ 'pass' if m.debt_validated else 'fail' }}">{{ m.debt_status|replace('_', ' ') }}</span>{% if m.debt_reason %} {{ m.debt_reason }}{% endif %}{{ cites(m) }}</p>
+{% if m.d4 %}
+{% set box = m.d4.executive_credit_summary_box %}
+<h4>Debt structure credit conclusion</h4>
+<p><strong>{{ box.overall_credit_rating_verdict|replace('_', ' ') }}</strong> &middot; recommended loan placement: {{ box.recommended_loan_placement|replace('_', ' ') }} &middot; {{ box.target_entity_and_period }}</p>
+{{ list_or_none(box.executive_takeaways, 'No takeaways recorded.') }}
+<p>{{ m.d4.core_credit_assessment }}</p>
+{% endif %}
+{% if m.d1 %}
+{% set cpf = m.d1.creditor_priority_framework %}
+<h4>Debt and creditor priority</h4>
+<div class="tablewrap"><table><tr><th>Tier</th><th class="num">$M</th></tr>
+<tr><td>Tier 1: direct OpCo secured</td><td class="num">{{ cpf.tier_1_direct_opco_secured_m|money }}</td></tr>
+<tr><td>Tier 2: senior unsecured, guaranteed</td><td class="num">{{ cpf.tier_2_senior_unsecured_guaranteed_m|money }}</td></tr>
+<tr><td>Tier 3: unguaranteed HoldCo</td><td class="num">{{ cpf.tier_3_unguaranteed_holdco_m|money }}</td></tr>
+<tr><th>Consolidated total indebtedness</th><th class="num">{{ cpf.consolidated_total_indebtedness_m|money }}</th></tr>
+</table></div>
+<p class="small">Structural subordination drag ratio {{ cpf.structural_subordination_drag_ratio }}. Prospective bank loan, if secured: {{ cpf.prospective_loan_secured_placement }} If senior unsecured: {{ cpf.prospective_loan_senior_unsecured_placement }}</p>
+{% if m.d1.senior_notes_schedule %}
+<div class="tablewrap"><table><tr><th>Senior notes</th><th>Borrower</th><th class="num">Principal $M</th><th>Coupon</th><th>Maturity</th><th>Security</th><th>Tier</th></tr>
+{% for n in m.d1.senior_notes_schedule %}<tr><td>{{ n.senior_note_series }}</td><td>{{ n.legal_borrower }}</td><td class="num">{{ n.principal_amount_m|money }}</td><td>{{ n.coupon_interest_rate }}</td><td>{{ n.maturity_year }}</td><td>{{ n.collateral_security_status|replace('_', ' ') }}</td><td>{{ n.priority_ranking_tier|replace('_', ' ') }}</td></tr>{% endfor %}
+</table></div>{% endif %}
+{% if m.d1.non_note_obligations_schedule %}
+<div class="tablewrap"><table><tr><th>Other obligations</th><th>Borrower</th><th class="num">Drawn $M</th><th class="num">Limit $M</th><th>Terms</th><th>Maturity</th><th>Tier</th></tr>
+{% for n in m.d1.non_note_obligations_schedule %}<tr><td>{{ n.obligation_facility }}</td><td>{{ n.legal_borrower }}</td><td class="num">{{ n.principal_drawn_m|money }}</td><td class="num">{{ n.available_facility_limit_m|money }}</td><td>{{ n.interest_rate_terms }}</td><td>{{ n.maturity }}</td><td>{{ n.priority_ranking_tier|replace('_', ' ') }}</td></tr>{% endfor %}
+</table></div>{% endif %}
+{% endif %}
+{% if m.d2 %}
+<h4>Refinancing and maturity</h4>
+<p>{{ m.d2.refinancing_capacity_discipline_verdict }}</p>
+<p class="small">Weighted average refinancing lead time {{ m.d2.metrics.weighted_avg_refinancing_lead_time_months }} months &middot; refinancing cost delta {{ m.d2.metrics.refinancing_cost_spread_delta_bps }} bps &middot; weighted average maturity extension {{ m.d2.metrics.weighted_avg_maturity_extension_years }} years &middot; distress events {{ m.d2.metrics.historical_refinancing_distress_events }}</p>
+{% if m.d2.refinancing_log %}
+<div class="tablewrap"><table><tr><th>Transaction</th><th>Obligation</th><th class="num">$M</th><th>Terms</th><th>Date</th><th>Maturity</th><th>Use of proceeds</th></tr>
+{% for r in m.d2.refinancing_log %}<tr><td>{{ r.transaction_category|replace('_', ' ') }}</td><td>{{ r.obligation_series_description }}</td><td class="num">{{ r.principal_amount_m|money }}</td><td>{{ r.coupon_interest_terms }}</td><td>{{ r.execution_date_fiscal_period }}</td><td>{{ r.original_retired_maturity or '' }}{% if r.new_extended_maturity %} &rarr; {{ r.new_extended_maturity }}{% endif %}</td><td>{{ r.use_of_proceeds_impact }}</td></tr>{% endfor %}
+</table></div>{% endif %}
+{% endif %}
+{% if m.d3 %}
+<h4>Debt utilisation and leverage impact</h4>
+<p>{{ m.d3.debt_utilisation_leverage_verdict }}</p>
+<p class="small">{{ m.d3.debt_utilisation_matrix.debt_funded_vs_internally_funded_deployment }} {{ m.d3.debt_utilisation_matrix.shareholder_distributions_vs_leverage_balance }}</p>
+{% if m.d3.capital_deployment_reconciliation %}
+<div class="tablewrap"><table><tr><th>Capital stream</th><th>Use</th><th class="num">3-year $M</th><th>Funding source</th><th>Leverage impact</th></tr>
+{% for c in m.d3.capital_deployment_reconciliation %}<tr><td>{{ c.capital_allocation_stream }}</td><td>{{ c.specific_use_description }}</td><td class="num">{{ c.cumulative_amount_3y_m|money }}</td><td>{{ c.primary_funding_source }}</td><td>{{ c.leverage_impact }}</td></tr>{% endfor %}
+</table></div>{% endif %}
+{% endif %}
+{% if m.d4 and m.d4.synthesis_matrix %}
+<h4>Synthesis matrix</h4>
+<div class="tablewrap"><table><tr><th>Scope</th><th>Evidence</th><th>Verdict</th><th>Lender implication</th></tr>
+{% for r in m.d4.synthesis_matrix %}<tr><td>{{ r.analytical_scope_pillar }}</td><td>{{ r.core_empirical_evidence }}</td><td>{{ r.deliverable_verdict }}</td><td>{{ r.bank_lender_implications }}</td></tr>{% endfor %}
+</table></div>{% endif %}
+{% if m.checks %}
+<h4>Debt-structure validator</h4>
+<div class="tablewrap"><table><tr><th>Check</th><th>Result</th><th>Detail</th></tr>
+{% for c in m.checks %}<tr><td>{{ c.name or c.check_id }}</td><td><span class="tag {{ 'pass' if c.passed else 'fail' }}">{{ 'pass' if c.passed else 'fail' }}</span></td><td>{{ c.detail }}</td></tr>{% endfor %}
+</table></div>{% endif %}
+{% if m.missing_information %}<h4>Module 4 limitations</h4>{{ list_or_none(m.missing_information) }}{% endif %}
+{% endif %}
+{% endmacro %}
+{% macro module_panel(mod) %}
+<div class="module" id="module-{{ mod.code }}">
+<h3>{{ mod.code }} governed module output <span class="tag {{ mod.status }}">{{ mod.status }}</span></h3>
+{% if mod.failed_or_missing_agents %}<p class="small">Specialists not validated: {{ mod.failed_or_missing_agents|join(', ') }}.</p>{% endif %}
+{% if mod.unresolved_coverage_checks %}<p class="small">Unresolved coverage checks: {{ mod.unresolved_coverage_checks|join(', ') }}.</p>{% endif %}
+{% if mod.m3 %}{{ m3_panel(mod.m3) }}{% elif mod.code == 'M3' %}<p class="notice">The validated M3 corporate-structure and management assessment is unavailable for this run.</p>{% endif %}
+{% if mod.m4 %}{{ m4_panel(mod.m4) }}{% endif %}
+{% if mod.further_findings %}
+<h4>Further governed specialist findings</h4>
+<p class="small">Accepted, material findings from this module's specialists that the narrative above does not rest on.</p>
+{% for f in mod.further_findings %}{{ finding(f) }}{% endfor %}
+{% endif %}
+{% if mod.missing_information %}<h4>Information not available</h4>{{ list_or_none(mod.missing_information) }}{% endif %}
 </div>
 {% endmacro %}
 
@@ -74,6 +195,7 @@
 {% for c in s.claims %}{{ claim(c) }}{% endfor %}
 {% if s.headline_refs %}<p class="notice">Headline finding{{ 's' if s.headline_refs|length > 1 }} set out under Key Credit Strengths and Vulnerabilities: {% for r in s.headline_refs %}<a href="#claim-{{ r.claim_id }}">{{ r.title }}</a>{{ '; ' if not loop.last }}{% endfor %}.</p>{% endif %}
 {% if s.notice %}<p class="notice">{{ s.notice }}</p>{% endif %}
+{% if s.module %}{{ module_panel(s.module) }}{% endif %}
 {% endfor %}
 
 <h2>Key Credit Strengths and Vulnerabilities</h2>

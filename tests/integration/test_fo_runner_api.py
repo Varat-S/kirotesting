@@ -625,7 +625,8 @@ def test_only_an_escalated_run_can_be_reviewed(db_session):
 def test_runner_writes_outputs_like_bo(db_session, tmp_path):
     result = runner(db_session, output_root=tmp_path / "out").run_filing(FOLDER, "NVDA_FILES")
     folder = tmp_path / "out" / "fo" / "NVDA_FILES" / result.run_id
-    assert set(result.paths) == {"financial_overview.json", "financial_overview.html", "precheck_transcript.json",
+    assert set(result.paths) == {"financial_overview.json", "financial_overview.html", "financial_memo.json",
+                                 "financial_memo.html", "precheck_transcript.json",
                                  "trigger_transcript.json"}  # DSCR trigger T2 fires on NVIDIA's CapEx
     assert all(p.parent == folder and p.is_file() for p in result.paths.values())
     saved = json.loads((folder / "financial_overview.json").read_text(encoding="utf-8"))
