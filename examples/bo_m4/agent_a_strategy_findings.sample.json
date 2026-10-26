@@ -1,0 +1,44 @@
+{
+  "agent_id": "m4_strategy_capital",
+  "role": "Strategy & Capital Allocation (Agent A)",
+  "note": "Governed strategy hypotheses (merit of acquisition / capex / capital allocation). Agent A does NOT draw leverage or debt-service conclusions.",
+  "findings": [
+    {
+      "hypothesis_id": "m4sc_h1",
+      "agent_id": "m4_strategy_capital",
+      "section": "acquisition_strategy",
+      "claim": "Disciplined bolt-on M&A: acquisitions are small relative to operating cash flow and integrated without material impairments.",
+      "direction": "supportive",
+      "materiality": "medium",
+      "credit_mechanism": "Consistent, low-risk integration reduces event risk from the acquisition programme.",
+      "supporting_evidence_ids": [
+        "ev_mna_1",
+        "ev_mna_2"
+      ]
+    },
+    {
+      "hypothesis_id": "m4sc_h2",
+      "agent_id": "m4_strategy_capital",
+      "section": "capex_strategy",
+      "claim": "Capex programme targets organic capacity growth (beds, facilities, technology) consistent with stated strategic priorities.",
+      "direction": "supportive",
+      "materiality": "medium",
+      "credit_mechanism": "Capacity investment supports durable revenue generation.",
+      "supporting_evidence_ids": [
+        "ev_capex_1"
+      ]
+    },
+    {
+      "hypothesis_id": "m4sc_h3",
+      "agent_id": "m4_strategy_capital",
+      "section": "integration_risk",
+      "claim": "Management emphasises shareholder returns (buybacks) alongside growth; sustained large distributions warrant monitoring.",
+      "direction": "qualified",
+      "materiality": "medium",
+      "credit_mechanism": "Aggressive distribution appetite can compete with reinvestment and balance-sheet strength over time.",
+      "supporting_evidence_ids": [
+        "ev_dist_1"
+      ]
+    }
+  ]
+}

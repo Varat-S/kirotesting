@@ -1,0 +1,35 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "check_id": "V8-01-RECONCILIATION",
+      "name": "Debt tranche reconciliation to reported total indebtedness",
+      "passed": true,
+      "detail": "Sum of drawn tranches 46,492.000M vs reported total 46,492.000M (delta 0.000M, tolerance 1.000M)."
+    },
+    {
+      "check_id": "V8-02-SUBORDINATION-RATIO",
+      "name": "Structural subordination drag ratio recomputation",
+      "passed": true,
+      "detail": "Recomputed drag ratio 0.0220 vs claimed 0.0220 (delta 0.0000, tolerance 0.0005)."
+    },
+    {
+      "check_id": "V8-03-MATURITY-ORDER",
+      "name": "Senior-note maturity chronological ordering",
+      "passed": true,
+      "detail": "Maturity years are in chronological order."
+    },
+    {
+      "check_id": "V8-04-LEGAL-ENTITY",
+      "name": "Legal entity / borrower-guarantor attribution",
+      "passed": true,
+      "detail": "Every tranche names a legal borrower with coherent credit support."
+    },
+    {
+      "check_id": "V8-05-DOUBLE-COUNTING",
+      "name": "No double-counting of undrawn limits / intercompany debt",
+      "passed": true,
+      "detail": "Reported total 46,492.000M tracks drawn principal 46,492.000M; excluded undrawn headroom 9,793.000M and intercompany 0.000M."
+    }
+  ]
+}
