@@ -1,0 +1,1376 @@
+{
+  "type": "object",
+  "required": [
+    "parameters",
+    "hypotheses",
+    "m3_assessment"
+  ],
+  "properties": {
+    "parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "parameter_id",
+          "value_type",
+          "status",
+          "value",
+          "evidence_ids",
+          "hypothesis_ids"
+        ],
+        "properties": {
+          "parameter_id": {
+            "type": "string"
+          },
+          "value": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value_type": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "provisional",
+              "unavailable",
+              "not_applicable",
+              "requires_review"
+            ]
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "materiality": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "hypothesis_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "hypothesis_id",
+          "claim",
+          "claim_type",
+          "direction",
+          "disposition",
+          "confidence",
+          "materiality",
+          "credit_mechanism",
+          "supporting_evidence_ids",
+          "contradicting_evidence_ids",
+          "evidence_quotes",
+          "missing_information",
+          "evidence_basis"
+        ],
+        "properties": {
+          "hypothesis_id": {
+            "type": "string"
+          },
+          "claim": {
+            "type": "string"
+          },
+          "claim_type": {
+            "type": "string",
+            "enum": [
+              "fact",
+              "calculated_fact",
+              "management_claim",
+              "inference",
+              "assumption"
+            ]
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "negative",
+              "mixed",
+              "neutral"
+            ]
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "qualified",
+              "rejected",
+              "unverified"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "medium_low",
+              "low"
+            ]
+          },
+          "materiality": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "credit_mechanism": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supporting_evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "contradicting_evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence_quotes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "evidence_id",
+                "quote"
+              ],
+              "properties": {
+                "evidence_id": {
+                  "type": "string"
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "quoted_values": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "parameter_result_id",
+                "value"
+              ],
+              "properties": {
+                "parameter_result_id": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "number"
+                },
+                "unit": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "period": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "denominator": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "missing_information": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence_basis": {
+            "type": "string",
+            "enum": [
+              "company_specific_disclosure",
+              "deterministic_calculation",
+              "management_statement",
+              "generic_risk_disclosure",
+              "inference",
+              "none"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "checklist_responses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "check_id",
+          "status"
+        ],
+        "properties": {
+          "check_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "addressed",
+              "not_supported_by_evidence",
+              "not_applicable"
+            ]
+          },
+          "hypothesis_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "missing_information": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "m3_assessment": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "borrower_identification",
+        "legal_entities",
+        "ownership_relationships",
+        "cash_flow_locations",
+        "cash_transfer_relationships",
+        "structural_credit_findings",
+        "management_assessments",
+        "governance_screening",
+        "information_gaps",
+        "downstream_dependencies",
+        "management_stability"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "bo-m3-corporate-assessment-1.2"
+          ]
+        },
+        "borrower_identification": {
+          "type": "object",
+          "required": [
+            "status",
+            "entity_id",
+            "evidence_ids",
+            "limitation"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "identified",
+                "unavailable",
+                "disputed"
+              ]
+            },
+            "entity_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "limitation": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "legal_entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "entity_id",
+              "legal_name",
+              "jurisdiction",
+              "classification",
+              "identity_type",
+              "proposed_verification_status",
+              "evidence_ids",
+              "materiality_reason"
+            ],
+            "properties": {
+              "entity_id": {
+                "type": "string"
+              },
+              "legal_name": {
+                "type": "string"
+              },
+              "jurisdiction": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "classification": {
+                "type": "string",
+                "enum": [
+                  "ultimate_parent",
+                  "intermediate_holding_company",
+                  "reporting_parent",
+                  "operating_subsidiary",
+                  "joint_venture",
+                  "partially_owned_subsidiary",
+                  "proposed_borrower",
+                  "other_material_entity"
+                ]
+              },
+              "identity_type": {
+                "type": "string",
+                "enum": [
+                  "legal_entity",
+                  "operating_unit",
+                  "collective_grouping",
+                  "unresolved"
+                ]
+              },
+              "proposed_verification_status": {
+                "type": "string",
+                "enum": [
+                  "verified",
+                  "qualified",
+                  "unverified",
+                  "disputed"
+                ]
+              },
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "materiality_reason": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "ownership_relationships": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "relationship_id",
+              "parent_entity_id",
+              "subsidiary_entity_id",
+              "ownership_percentage",
+              "control_basis",
+              "effective_from",
+              "effective_to",
+              "evidence_ids",
+              "proposed_confirmation_status",
+              "uncertainty"
+            ],
+            "properties": {
+              "relationship_id": {
+                "type": "string"
+              },
+              "parent_entity_id": {
+                "type": "string"
+              },
+              "subsidiary_entity_id": {
+                "type": "string"
+              },
+              "ownership_percentage": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "control_basis": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "effective_from": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "effective_to": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "proposed_confirmation_status": {
+                "type": "string",
+                "enum": [
+                  "verified",
+                  "qualified",
+                  "unverified",
+                  "disputed"
+                ]
+              },
+              "uncertainty": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "cash_flow_locations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "cash_flow_id",
+              "entity_id",
+              "amount",
+              "period",
+              "currency",
+              "units",
+              "accounting_basis",
+              "measure_type",
+              "reporting_scope",
+              "cash_flow_roles",
+              "evidence_ids",
+              "proposed_provenance_status",
+              "missing_information"
+            ],
+            "properties": {
+              "cash_flow_id": {
+                "type": "string"
+              },
+              "entity_id": {
+                "type": "string"
+              },
+              "amount": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "period": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "currency": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "units": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "accounting_basis": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "measure_type": {
+                "type": "string",
+                "enum": [
+                  "revenue",
+                  "ebitda",
+                  "operating_income",
+                  "operating_cash_flow",
+                  "free_cash_flow",
+                  "cash_balance",
+                  "distributable_cash",
+                  "actual_upstream_distribution",
+                  "unclassified"
+                ]
+              },
+              "reporting_scope": {
+                "type": "string",
+                "enum": [
+                  "consolidated",
+                  "segment",
+                  "entity"
+                ]
+              },
+              "cash_flow_roles": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "operating_cash_generator",
+                    "legal_cash_controller",
+                    "cash_holder",
+                    "debt_service_obligor"
+                  ]
+                }
+              },
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "proposed_provenance_status": {
+                "type": "string",
+                "enum": [
+                  "verified",
+                  "qualified",
+                  "unverified",
+                  "disputed"
+                ]
+              },
+              "missing_information": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "cash_transfer_relationships": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "transfer_id",
+              "source_entity_id",
+              "destination_entity_id",
+              "mechanism",
+              "transfer_evidence_state",
+              "known_restrictions_or_dependencies",
+              "evidence_ids",
+              "proposed_confirmation_status",
+              "uncertainty"
+            ],
+            "properties": {
+              "transfer_id": {
+                "type": "string"
+              },
+              "source_entity_id": {
+                "type": "string"
+              },
+              "destination_entity_id": {
+                "type": "string"
+              },
+              "mechanism": {
+                "type": "string",
+                "enum": [
+                  "dividend",
+                  "intercompany_loan",
+                  "cash_pool",
+                  "management_fee",
+                  "distribution",
+                  "other"
+                ]
+              },
+              "transfer_evidence_state": {
+                "type": "string",
+                "enum": [
+                  "capacity_only",
+                  "documented_actual_transfer",
+                  "proposed",
+                  "unknown"
+                ]
+              },
+              "known_restrictions_or_dependencies": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "proposed_confirmation_status": {
+                "type": "string",
+                "enum": [
+                  "verified",
+                  "qualified",
+                  "unverified",
+                  "disputed"
+                ]
+              },
+              "uncertainty": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "structural_credit_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "finding_id",
+              "hypothesis_id",
+              "credit_hypothesis",
+              "causal_mechanism",
+              "supporting_evidence_ids",
+              "contradicting_evidence_ids",
+              "supporting_evidence_investigated",
+              "contradictory_evidence_investigated",
+              "proposed_disposition",
+              "confidence",
+              "materiality",
+              "downstream_verification_requirements",
+              "borrower_specific",
+              "analytical_dimension",
+              "structural_observation",
+              "referenced_node_ids",
+              "referenced_link_ids",
+              "onboarding_source_reference",
+              "credit_direction",
+              "assessment_availability",
+              "qualifications",
+              "missing_information"
+            ],
+            "properties": {
+              "finding_id": {
+                "type": "string"
+              },
+              "hypothesis_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "credit_hypothesis": {
+                "type": "string"
+              },
+              "causal_mechanism": {
+                "type": "string"
+              },
+              "supporting_evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "contradicting_evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "supporting_evidence_investigated": {
+                "type": "boolean"
+              },
+              "contradictory_evidence_investigated": {
+                "type": "boolean"
+              },
+              "proposed_disposition": {
+                "type": "string",
+                "enum": [
+                  "supported",
+                  "qualified",
+                  "rejected",
+                  "unverified"
+                ]
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "medium_low",
+                  "low"
+                ]
+              },
+              "materiality": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "downstream_verification_requirements": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "borrower_specific": {
+                "type": "boolean"
+              },
+              "analytical_dimension": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "borrower_position",
+                  "guarantor_coverage",
+                  "cash_flow_access",
+                  "operating_debt_structure",
+                  "minority_or_jv",
+                  "structural_complexity",
+                  null
+                ]
+              },
+              "structural_observation": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "referenced_node_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "referenced_link_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "onboarding_source_reference": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "credit_direction": {
+                "type": "string",
+                "enum": [
+                  "positive",
+                  "negative",
+                  "mixed",
+                  "neutral"
+                ]
+              },
+              "assessment_availability": {
+                "type": "string",
+                "enum": [
+                  "sufficient",
+                  "insufficient_evidence"
+                ]
+              },
+              "qualifications": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "missing_information": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "management_assessments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "observation_id",
+              "management_id",
+              "legal_name",
+              "role",
+              "effective_from",
+              "effective_to",
+              "dimension",
+              "evidence_basis",
+              "attribution",
+              "assurance_scope",
+              "assurance_date",
+              "hypothesis",
+              "credit_mechanism",
+              "supporting_evidence_ids",
+              "contradicting_evidence_ids",
+              "supporting_evidence_investigated",
+              "contradictory_evidence_investigated",
+              "proposed_disposition",
+              "confidence",
+              "materiality",
+              "missing_information",
+              "executive_ids",
+              "fact_ids",
+              "credit_direction"
+            ],
+            "properties": {
+              "observation_id": {
+                "type": "string"
+              },
+              "management_id": {
+                "type": "string"
+              },
+              "legal_name": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string"
+              },
+              "effective_from": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "effective_to": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "dimension": {
+                "type": "string",
+                "enum": [
+                  "competence",
+                  "credibility_integrity",
+                  "leadership_continuity",
+                  "relevant_experience",
+                  "transition_risk"
+                ]
+              },
+              "evidence_basis": {
+                "type": "string",
+                "enum": [
+                  "reported_experience",
+                  "credentials_or_tenure",
+                  "outcome_evidence",
+                  "control_assurance",
+                  "misconduct_or_enforcement",
+                  "unclassified",
+                  "disclosed_leadership_history"
+                ]
+              },
+              "attribution": {
+                "type": "string",
+                "enum": [
+                  "company_reported",
+                  "independently_observed",
+                  "auditor_assured",
+                  "validator_inference",
+                  "unclassified"
+                ]
+              },
+              "assurance_scope": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "assurance_date": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "hypothesis": {
+                "type": "string"
+              },
+              "credit_mechanism": {
+                "type": "string"
+              },
+              "supporting_evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "contradicting_evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "supporting_evidence_investigated": {
+                "type": "boolean"
+              },
+              "contradictory_evidence_investigated": {
+                "type": "boolean"
+              },
+              "proposed_disposition": {
+                "type": "string",
+                "enum": [
+                  "supported",
+                  "qualified",
+                  "rejected",
+                  "unverified"
+                ]
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "medium_low",
+                  "low"
+                ]
+              },
+              "materiality": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "missing_information": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "executive_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "fact_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "credit_direction": {
+                "type": "string",
+                "enum": [
+                  "positive",
+                  "negative",
+                  "mixed",
+                  "neutral"
+                ]
+              },
+              "evidence_summary": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "uncertainties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "mitigating_considerations": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "governance_screening": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "finding_id",
+              "hypothesis_id",
+              "credit_hypothesis",
+              "causal_mechanism",
+              "supporting_evidence_ids",
+              "contradicting_evidence_ids",
+              "supporting_evidence_investigated",
+              "contradictory_evidence_investigated",
+              "proposed_disposition",
+              "confidence",
+              "materiality",
+              "downstream_verification_requirements",
+              "borrower_specific",
+              "credit_direction"
+            ],
+            "properties": {
+              "finding_id": {
+                "type": "string"
+              },
+              "hypothesis_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "credit_hypothesis": {
+                "type": "string"
+              },
+              "causal_mechanism": {
+                "type": "string"
+              },
+              "supporting_evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "contradicting_evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "supporting_evidence_investigated": {
+                "type": "boolean"
+              },
+              "contradictory_evidence_investigated": {
+                "type": "boolean"
+              },
+              "proposed_disposition": {
+                "type": "string",
+                "enum": [
+                  "supported",
+                  "qualified",
+                  "rejected",
+                  "unverified"
+                ]
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "medium_low",
+                  "low"
+                ]
+              },
+              "materiality": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "downstream_verification_requirements": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "borrower_specific": {
+                "type": "boolean"
+              },
+              "credit_direction": {
+                "type": "string",
+                "enum": [
+                  "positive",
+                  "negative",
+                  "mixed",
+                  "neutral"
+                ]
+              },
+              "qualifications": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "missing_information": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "management_stability": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "type": "string",
+              "enum": [
+                "bo-m3-management-stability-1.0"
+              ]
+            },
+            "as_of_date": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "as_of_source": {
+              "additionalProperties": false,
+              "properties": {
+                "evidence_id": {
+                  "type": "string"
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "evidence_id",
+                "quote"
+              ],
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "review_scope": {
+              "type": "string"
+            },
+            "history_start": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "history_end": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "history_source": {
+              "additionalProperties": false,
+              "properties": {
+                "evidence_id": {
+                  "type": "string"
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "evidence_id",
+                "quote"
+              ],
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "executives": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "executive_id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "current_role": {
+                    "type": "string"
+                  },
+                  "facts": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "fact_id": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "enum": [
+                            "current_role",
+                            "appointment",
+                            "company_join",
+                            "prior_internal_role",
+                            "external_role",
+                            "external_appointment",
+                            "no_prior_company_experience",
+                            "departure",
+                            "planned_succession",
+                            "internal_promotion",
+                            "role_expansion",
+                            "transition_risk"
+                          ],
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        },
+                        "date": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "end_date": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "source": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "evidence_id": {
+                              "type": "string"
+                            },
+                            "quote": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "evidence_id",
+                            "quote"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "fact_id",
+                        "kind",
+                        "value",
+                        "date",
+                        "end_date",
+                        "source"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "executive_id",
+                  "name",
+                  "current_role",
+                  "facts"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "limitations": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "schema_version",
+            "as_of_date",
+            "as_of_source",
+            "review_scope",
+            "history_start",
+            "history_end",
+            "history_source",
+            "executives",
+            "limitations"
+          ],
+          "type": "object"
+        },
+        "information_gaps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "downstream_dependencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "module",
+              "question"
+            ],
+            "properties": {
+              "module": {
+                "type": "string",
+                "enum": [
+                  "FO",
+                  "M4",
+                  "SO"
+                ]
+              },
+              "question": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$id": "urn:bo:m3-generation-draft:1.0"
+}

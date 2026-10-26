@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import calendar
 from copy import deepcopy
 from datetime import date
 from typing import Any
@@ -529,6 +530,31 @@ def _canonical_financial_checks(
     return tuple(checks)
 
 
+def _calendar_values(text):
+    """Calendar literals and a same-length numeric-scan mask, not value tokens.
+
+    Mask occurrences, not numeric values: another 31 used as a financial amount
+    must still be checked even when a date in the sentence also contains 31.
+    """
+    months = "|".join(calendar.month_name[1:])
+    pattern = rf"\b(?:20\d{{2}}|19\d{{2}})-\d{{2}}-\d{{2}}\b|\b(?:{months})\s+\d{{1,2}},?\s+(?:20\d{{2}}|19\d{{2}})\b"
+    values, masked = [], list(text)
+    for match in re.finditer(pattern, text, re.I):
+        raw = match[0]
+        try:
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
+                value = date.fromisoformat(raw).isoformat()
+            else:
+                month, day, year = raw.replace(",", "").split()
+                number = next(i for i, name in enumerate(calendar.month_name) if name.casefold() == month.casefold())
+                value = date(int(year), number, int(day)).isoformat()
+        except (ValueError, StopIteration):
+            value = None
+        values.append(value)
+        masked[match.start():match.end()] = " " * (match.end() - match.start())
+    return values, "".join(masked)
+
+
 def _deterministic_claim_checks(
     claim_text: str, evidence_ids: list[str], evidence_texts: dict[str, str],
 ) -> tuple[DeterministicCheck, ...]:
@@ -568,6 +594,12 @@ def _deterministic_claim_checks(
     if not corpus.strip():
         return ()
     checks: list[DeterministicCheck] = []
+    claim_dates, numeric_claim = _calendar_values(claim_text)
+    source_dates, numeric_corpus = _calendar_values(corpus)
+    for value in claim_dates:
+        checks.append(DeterministicCheck(name="calendar_date_in_cited_evidence",
+            passed=value is not None and value in source_dates, contradiction=False,
+            detail="A valid matching calendar date must occur in the cited evidence; it is not a financial amount."))
 
     # Only a directly comparable claim/passage may yield a numeric CONTRADICTED.
     comparable, incomparable_reason = _comparable_basis(claim_text, corpus)
@@ -582,7 +614,7 @@ def _deterministic_claim_checks(
     # a period phrase).
     claim_period_tokens = _period_value_tokens(claim_text)
     claimed_numbers = {
-        _normalise_number(t) for t in _NUMBER_RE.findall(claim_text)
+        _normalise_number(t) for t in _NUMBER_RE.findall(numeric_claim)
         if _normalise_number(t) and _normalise_number(t) not in claim_period_tokens
     }
 
@@ -595,11 +627,11 @@ def _deterministic_claim_checks(
     claim_metric = _identify_canonical_metric(claim_text)
     corpus_period_tokens = _period_value_tokens(corpus)
     corpus_numbers = {
-        _normalise_number(t) for t in _NUMBER_RE.findall(corpus)
+        _normalise_number(t) for t in _NUMBER_RE.findall(numeric_corpus)
         if _normalise_number(t) and _normalise_number(t) not in corpus_period_tokens
     }
     metric_bound = (
-        _metric_bound_values(corpus, claim_metric) if claim_metric else set())
+        _metric_bound_values(numeric_corpus, claim_metric) if claim_metric else set())
     # Use the metric-bound subset when we could identify the claim's metric and
     # that metric is actually named in the passage; this isolates the relevant
     # metric-value relationship and discards figures belonging to other metrics.
@@ -769,25 +801,34 @@ def _govern_structural_finding(
                       "may not be invented.")
             reasons.append(reason)
             _issue(issues, "m3.structural_borrower_invented", item_id, "downgraded", reason)
-    # An ownership-percentage assertion must match the admitted link value.
-    claimed_numbers = {_normalise_number(t) for t in _NUMBER_RE.findall(text)}
-    for link_id in link_refs:
-        pct = struct["node_pct_by_link"].get(link_id)
-        if pct is None:
-            continue
-        pct_token = _normalise_number(f"{pct:g}")
-        pct_pct_token = _normalise_number(f"{pct:g}%")
-        # Only act when the finding asserts SOME percentage that is not the
-        # admitted one (a bare percent like "35%" that disagrees).
-        asserted_pcts = {n for n in claimed_numbers
-                         if n and n not in {pct_token, pct_pct_token}
-                         and f"{n}%" in text.replace(" ", "")}
-        if asserted_pcts and disposition in {"supported", "qualified"}:
-            disposition = "rejected"
-            reason = (f"Ownership percentage asserted ({sorted(asserted_pcts)}) does "
-                      f"not match the admitted link {link_id} value ({pct}).")
+    # A finding may reference a chain with different ownership stakes. Every
+    # asserted percentage must resolve to a referenced link, not equal EVERY
+    # link's stake (which incorrectly rejected valid multi-link observations).
+    asserted_pcts = {_normalise_number(t) for t in _NUMBER_RE.findall(text) if t.endswith("%")}
+    referenced_pcts = {_normalise_number(f"{struct['node_pct_by_link'][l]:g}")
+                       for l in link_refs if struct["node_pct_by_link"].get(l) is not None}
+    if asserted_pcts - referenced_pcts and link_refs and disposition in {"supported", "qualified"}:
+        disposition = "rejected"
+        reason = "Ownership percentage asserted does not match any referenced admitted ownership link."
+        reasons.append(reason)
+        _issue(issues, "m3.structural_percentage_mismatch", item_id, "rejected", reason)
+    if asserted_pcts and len(referenced_pcts) > 1 and disposition in {"supported", "qualified"}:
+        # Multiple stakes require explicit bindings, not a coincidental token
+        # somewhere else in the referenced chain. The generated contract uses
+        # 'link:<parent>-><child>=80%' in the observation for this purpose.
+        bound, conflicting = set(), False
+        for lid in link_refs:
+            for match in re.finditer(re.escape(lid.casefold()) + r"\s*=\s*(\d+(?:\.\d+)?)\s*%", text):
+                actual = struct["node_pct_by_link"].get(lid)
+                if actual is None or float(match[1]) != actual:
+                    conflicting = True
+                else:
+                    bound.add(_normalise_number(match[1]))
+        if conflicting or asserted_pcts - bound:
+            disposition = "rejected" if conflicting else "unverified"
+            reason = "Each asserted percentage in a mixed-stake chain needs a correct explicit link_id=percentage% binding."
             reasons.append(reason)
-            _issue(issues, "m3.structural_percentage_mismatch", item_id, "rejected", reason)
+            _issue(issues, "m3.structural_percentage_binding", item_id, "rejected" if conflicting else "downgraded", reason)
 
     has_admitted_support = bool(supporting)
 
@@ -880,13 +921,22 @@ def _govern_finding(raw: dict[str, Any], *, allowed: set[str], borrower_known: b
                      evidence_texts: dict[str, str] | None = None,
                      structure_facts: dict[str, Any] | None = None,
                      canonical_metrics: dict[str, dict[str, Any]] | None = None,
+                     scenario_evidence_id: str | None = None,
+                     hypothesis_proposals: dict | None = None,
                      ) -> dict[str, Any]:
     item = deepcopy(raw)
     item_id = str(item.get("finding_id") or item.get("observation_id") or "unknown")
     supporting = item.get("supporting_evidence_ids") or []
     contradicting = item.get("contradicting_evidence_ids") or []
     reasons = list(item.get("validation_reasons") or [])
-    disposition = item.get("disposition")
+    # New generation drafts carry an explicitly proposed candidate, never an
+    # admissibility decision. Only this validation function emits the outcome.
+    disposition = item.pop("proposed_disposition", item.get("disposition"))
+    scenario_support = bool(bucket == "structural_credit_findings" and scenario_evidence_id
+                            and scenario_evidence_id in supporting)
+    if scenario_support:
+        borrower_id = ((structure_facts or {}).get("borrower") or {}).get("node_id")
+        borrower_known = borrower_known or bool(borrower_id and borrower_id in (item.get("referenced_node_ids") or []))
     if disposition in {"supported", "qualified"} and (
         not item.get("supporting_evidence_investigated")
         or not item.get("contradictory_evidence_investigated")
@@ -956,6 +1006,17 @@ def _govern_finding(raw: dict[str, Any], *, allowed: set[str], borrower_known: b
         disposition = _govern_structural_finding(
             item, item_id=item_id, disposition=disposition, reasons=reasons,
             issues=issues, struct=_structure_index(structure_facts))
+        from app.services.bo.m3_scenario_validation import structural_reference_reasons
+        for reason in structural_reference_reasons(item, structure_facts, scenario_evidence_id, hypothesis_proposals):
+            if disposition != "rejected":
+                disposition = "unverified"
+            reasons.append(reason)
+            _issue(issues, "m3.case_provenance_or_hypothesis", item_id, "downgraded", reason)
+        if scenario_support and disposition == "supported":
+            disposition = "qualified"
+            reason = "Scenario facts are established assumptions only; lender-risk mechanisms remain conditional and require human/legal review."
+            reasons.append(reason)
+            _issue(issues, "m3.scenario_inference_qualified", item_id, "recorded_gap", reason)
 
     # Citation-id existence is NOT entailment: for a still-admitted claim that
     # asserts a specific value/period, run deterministic checks against the cited
@@ -1023,6 +1084,11 @@ def validate_m3_assessment(
     evidence_texts: dict[str, str] | None = None,
     structure_facts: dict[str, Any] | None = None,
     canonical_metrics: dict[str, dict[str, Any]] | None = None,
+    management_company_aliases: tuple[str, ...] = (),
+    management_window_years: int = 3,
+    hypothesis_proposals: list[dict] | None = None,
+    usable_hypothesis_ids: set[str] | None = None,
+    generation_draft: bool = False,
 ) -> M3CorporateAssessment:
     """Validate, filter and conservatively downgrade an M3 model proposal.
 
@@ -1043,15 +1109,33 @@ def validate_m3_assessment(
                     "ultimate_parent", "intermediate_holding_company",
                     "reporting_parent", "proposed_borrower",
                 } else "unresolved")
-    try:
-        draft = M3CorporateAssessment.model_validate(proposal)
-    except ValidationError as exc:
-        raise M3AssessmentError(f"invalid m3_assessment contract: {exc}") from exc
-    data = draft.model_dump(mode="json")
+    if generation_draft:
+        from app.services.bo.m3_contract import validate_assessment_draft, STATUS_FIELDS
+        import jsonschema
+        try:
+            validate_assessment_draft(proposal)
+        except jsonschema.ValidationError as exc:
+            raise M3AssessmentError("invalid canonical model-owned draft projection") from exc
+        data = deepcopy(proposal)
+        # Candidate statuses are inputs to the existing checks, not published
+        # approvals. Each resulting object is returned only after governance.
+        for bucket, field in STATUS_FIELDS.items():
+            for item in data[bucket]:
+                item[field] = item.pop("proposed_" + field)
+    else:
+        try:
+            draft = M3CorporateAssessment.model_validate(proposal)
+        except ValidationError as exc:
+            raise M3AssessmentError(f"invalid m3_assessment contract: {exc}") from exc
+        data = draft.model_dump(mode="json")
     issues: list[dict] = []
     rejected: list[dict] = []
     validated_borrowers = set(validated_borrower_entity_ids or ())
     evidence_texts = evidence_texts or {}
+    from app.services.bo.m3_case_evidence import verified_scenario_source
+    scenario_eid = verified_scenario_source(structure_facts, allowed_evidence_ids, evidence_texts)
+    case_nodes = {n["node_id"]: n for n in (structure_facts or {}).get("nodes", [])} if scenario_eid else {}
+    case_links = {(l["parent_id"], l["child_id"]): l for l in (structure_facts or {}).get("links", [])} if scenario_eid else {}
 
     entities: dict[str, dict] = {}
     clean_entities = []
@@ -1073,6 +1157,20 @@ def validate_m3_assessment(
             entity["verification_status"] = "unverified"
             _issue(issues, "m3.entity_evidence", eid, "downgraded",
                    "Verified entity lacks a resolving sealed-packet evidence reference.")
+        if eid in case_nodes:
+            node = case_nodes[eid]
+            if node["is_grouping_node"]:
+                _issue(issues, "m3.scenario_grouping_identity", eid, "rejected", "An aggregate case node is not an individual legal entity.")
+                rejected.append({"kind": "legal_entity", "item": entity, "reason": "case_grouping_not_legal_entity"})
+                continue
+            real_citations = [e for e in entity["evidence_ids"] if e != scenario_eid]
+            if (entity["legal_name"] != node["display_name"] or scenario_eid not in entity["evidence_ids"] or any(
+                    entity["legal_name"].casefold() not in evidence_texts.get(e, "").casefold() for e in real_citations)):
+                entity["verification_status"] = "unverified"
+                _issue(issues, "m3.scenario_identity_provenance", eid, "downgraded", "A hypothetical entity needs exact case identity and case provenance; unrelated SEC citations cannot verify it.")
+            elif entity["verification_status"] == "verified":
+                entity["verification_status"] = "qualified"
+                _issue(issues, "m3.scenario_identity_scope", eid, "downgraded", "Established as a case assumption, not verified actual legal identity.")
         entities[eid] = entity
         clean_entities.append(entity)
     data["legal_entities"] = clean_entities
@@ -1082,6 +1180,7 @@ def validate_m3_assessment(
         borrower["entity_id"] not in entities
         or not _evidence_ok(borrower["evidence_ids"], allowed_evidence_ids)
         or borrower["entity_id"] not in validated_borrowers
+        or (scenario_eid and set(borrower["evidence_ids"]) == {scenario_eid})
     ):
         _issue(issues, "m3.proposed_borrower_transaction_evidence",
                borrower.get("entity_id"), "downgraded",
@@ -1113,6 +1212,13 @@ def validate_m3_assessment(
         elif rel["confirmation_status"] == "verified" and not _evidence_ok(
                 rel["evidence_ids"], allowed_evidence_ids):
             reason = "verified_relationship_lacks_evidence"
+        if scenario_eid and scenario_eid in rel["evidence_ids"] and not reason:
+            case_link = case_links.get((rel["parent_entity_id"], rel["subsidiary_entity_id"]))
+            if not case_link or case_link.get("ownership_percent") != pct:
+                reason = "relationship_conflicts_with_case_assumptions"
+            elif rel["confirmation_status"] == "verified":
+                rel["confirmation_status"] = "qualified"
+                _issue(issues, "m3.scenario_relationship_scope", rid, "downgraded", "Case ownership assumption, not verified actual company ownership.")
         key = (rel["parent_entity_id"], rel["subsidiary_entity_id"])
         prior = seen_relationships.get(key)
         if prior and (prior.get("ownership_percentage") != pct
@@ -1152,6 +1258,11 @@ def validate_m3_assessment(
                 rel["confirmation_status"] = "unverified"
                 _issue(issues, "m3.transfer_evidence", item_id, "downgraded",
                        "Verified cash-transfer relationship lacks resolving evidence.")
+            if scenario_eid and set(rel["evidence_ids"]) == {scenario_eid} and (
+                    rel["transfer_evidence_state"] == "documented_actual_transfer" or rel["confirmation_status"] == "verified"):
+                rel["confirmation_status"] = "unverified"
+                _issue(issues, "m3.case_not_actual_transfer", item_id, "downgraded",
+                       "Scenario ownership and guarantor assumptions do not document an actual cash transfer.")
             clean.append(rel)
         data[bucket] = clean
 
@@ -1168,6 +1279,8 @@ def validate_m3_assessment(
         roles = set(cash.get("cash_flow_roles") or [])
         if entity is None:
             reason = "unknown_entity"
+        elif scenario_eid and set(cash["evidence_ids"]) == {scenario_eid} and cash["amount"] is not None:
+            reason = "scenario_is_not_financial_amount_evidence"
         elif cash["amount"] is not None and not _evidence_ok(
                 cash["evidence_ids"], allowed_evidence_ids):
             reason = "amount_lacks_resolving_evidence"
@@ -1186,6 +1299,9 @@ def validate_m3_assessment(
             _issue(issues, "m3.cash_flow_semantics", cid, "rejected", reason)
             rejected.append({"kind": "cash_flow_location", "item": cash, "reason": reason})
             continue
+        if scenario_eid and scenario_eid in cash["evidence_ids"] and cash["provenance_status"] == "verified":
+            cash["provenance_status"] = "qualified"
+            _issue(issues, "m3.case_cash_role_scope", cid, "downgraded", "Hypothetical case role only; actual cash generation or payment obligations are not verified.")
         clean_cash.append(cash)
     data["cash_flow_locations"] = clean_cash
 
@@ -1208,7 +1324,10 @@ def validate_m3_assessment(
                 issues=issues, bucket=bucket, evidence_texts=evidence_texts,
                 structure_facts=(structure_facts
                                  if bucket == "structural_credit_findings" else None),
-                canonical_metrics=canonical_metrics))
+                canonical_metrics=canonical_metrics, scenario_evidence_id=scenario_eid,
+                hypothesis_proposals=({h["hypothesis_id"]: h for h in hypothesis_proposals
+                                      if usable_hypothesis_ids is None or h["hypothesis_id"] in usable_hypothesis_ids}
+                                     if hypothesis_proposals is not None else None)))
         data[bucket] = clean
 
     identities: dict[str, tuple[str, str]] = {}
@@ -1229,6 +1348,13 @@ def validate_m3_assessment(
                    "downgraded", item["validation_reasons"][-1])
         identities.setdefault(key, identity)
 
+    if data.get("management_stability") is not None:
+        from app.services.bo.m3_management import govern_management_stability
+        data["validation_issues"] = issues
+        govern_management_stability(data, evidence_texts=evidence_texts,
+                                    company_aliases=management_company_aliases,
+                                    window_years=management_window_years)
+
     if not data["information_gaps"]:
         data["information_gaps"] = [
             "Completeness of corporate structure and management evidence was not established."
@@ -1246,4 +1372,7 @@ def validate_m3_assessment(
     data["validation_issues"] = issues
     data["rejected_items"] = rejected
     data["model_proposal"] = original
-    return M3CorporateAssessment.model_validate(data)
+    try:
+        return M3CorporateAssessment.model_validate(data)
+    except ValidationError as exc:
+        raise M3AssessmentError("Governed assessment failed its typed output contract") from exc

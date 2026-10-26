@@ -362,8 +362,13 @@ def main(argv=None):
                 session.commit()
                 return
             if args.command == "run-m3":
-                print(json.dumps(_run_m3(session, database, args), indent=2))
+                m3_summary = _run_m3(session, database, args)
+                print(json.dumps(m3_summary, indent=2))
                 session.commit()
+                # Persist database/artifacts first. An execution/validation
+                # failure must not be reported as a successful shell command.
+                if str(m3_summary.get("validation_stages", {}).get("module_completion", "")).startswith("failed_"):
+                    raise SystemExit(1)
                 return
             if args.command == "bo-review":
                 from app.services.bo.handoff import review_handoff
@@ -611,9 +616,11 @@ def _run_m3(session, database, args):
     synthesis, scoring, memo, handoff or downstream agent runs.
     """
     from app.services.bo.m3_demo import write_m3_demo
+    from app.services.bo.m3_diagnostics import ensure_local_store
     from app.services.bo.m3_standalone import run_m3
     from app.services.pipeline.runner import CreditMemoPipeline
 
+    ensure_local_store(session)
     # OPT-IN, default-off real-model pathway. Offline (scripted --responses) is
     # the default and is clearly separated from the live path. --live constructs
     # the configured provider backend through the existing provider abstraction
@@ -666,18 +673,47 @@ def _run_m3(session, database, args):
         metrics=prepared.metrics, m3_responses=m3_responses,
         corporate_structure_document=corporate_structure_document,
         transaction_borrower_entity_id=args.transaction_borrower_entity_id,
-        live_backend=live_backend, live_config=live_config)
+        live_backend=live_backend, live_config=live_config,
+        required_assessment_version=("bo-m3-corporate-assessment-1.2" if args.live else None))
 
     reference_output = None
     reference_path = Path("examples/bo_m3/Sample HCA Corp Structure Final Output.json")
     if simplified_document is not None and reference_path.is_file():
         reference_output = json.loads(reference_path.read_text(encoding="utf-8"))
 
+    reproduce_argv = [sys.executable, "-m", "app.cli", "--database", str(database),
+                      "--output", str(args.output), "run-m3", args.case_id]
+    for flag, value in (("--package", args.package), ("--bundle", args.bundle),
+                        ("--cutoff", args.cutoff.isoformat() if args.cutoff else None),
+                        ("--entity-id", args.entity_id), ("--entity-name", args.entity_name),
+                        ("--corporate-structure", args.corporate_structure),
+                        ("--transaction-borrower-entity-id", args.transaction_borrower_entity_id),
+                        ("--responses", args.responses)):
+        if value is not None:
+            reproduce_argv += [flag, str(value)]
+    reproduce_env = {"DEBUG": "false"}
+    if args.live:
+        reproduce_argv.append("--live")
+        reproduce_env.update({
+            "LLM_PROVIDER": settings.llm_provider,
+            "LLM_TIMEOUT_SECONDS": str(settings.llm_timeout_seconds),
+            "LLM_MAX_OUTPUT_TOKENS": str(settings.llm_max_output_tokens),
+            "LLM_MAX_INPUT_BYTES": str(settings.llm_max_input_bytes),
+        })
+        if settings.llm_provider == "vertex":
+            reproduce_env.update({k: str(v) for k, v in {
+                "VERTEX_MODEL_NARROW": settings.vertex_model_narrow,
+                "GOOGLE_CLOUD_PROJECT": settings.google_cloud_project,
+                "GOOGLE_CLOUD_LOCATION": settings.google_cloud_location,
+            }.items() if v is not None})
+        elif settings.llm_model:
+            reproduce_env["LLM_MODEL"] = settings.llm_model
     paths = write_m3_demo(
         result, args.output, simplified_document=simplified_document,
         reference_output=reference_output,
         corporate_structure_path=corporate_structure_path,
-        responses_path=(str(args.responses) if args.responses else None))
+        responses_path=(str(args.responses) if args.responses else None),
+        reproduce_argv=reproduce_argv, reproduce_env=reproduce_env)
 
     return {
         "case_id": result.case_id,
@@ -695,6 +731,7 @@ def _run_m3(session, database, args):
         "completion_status": result.completion_status,
         "validation_issue_count": len(result.validation_issues),
         "rejected_item_count": len(result.rejected_items),
+        "validation_stages": result.validation_stages,
         "outputs": {k: str(v) for k, v in paths.items()},
     }
 

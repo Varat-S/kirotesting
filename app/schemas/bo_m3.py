@@ -8,15 +8,17 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.bo import Admissibility, Confidence, Direction, Disposition
 from app.schemas.agentic import Materiality
+from app.schemas.bo_m3_management import ManagementStability
 
 
-M3_ASSESSMENT_VERSION = "bo-m3-corporate-assessment-1.1"
+M3_ASSESSMENT_VERSION = "bo-m3-corporate-assessment-1.2"
 M3_VALIDATOR_VERSION = "validator-7-1.1.0"
 
 # The 1.0 contract (and its validator stamp) remain accepted so scripted
 # proposals authored before the Layer-2 additive extension still validate.
 M3_ASSESSMENT_VERSIONS = (
-    "bo-m3-corporate-assessment-1.0", "bo-m3-corporate-assessment-1.1")
+    "bo-m3-corporate-assessment-1.0", "bo-m3-corporate-assessment-1.1",
+    "bo-m3-corporate-assessment-1.2")
 M3_VALIDATOR_VERSIONS = ("validator-7-1.0.0", "validator-7-1.1.0")
 
 # The six Layer-2 analytical dimensions the specialist may address. Kept as a
@@ -157,10 +159,11 @@ class ManagementObservation(_Strict):
     role: str
     effective_from: str | None = None
     effective_to: str | None = None
-    dimension: Literal["competence", "credibility_integrity"]
+    dimension: Literal["competence", "credibility_integrity", "leadership_continuity",
+                       "relevant_experience", "transition_risk"]
     evidence_basis: Literal[
         "reported_experience", "credentials_or_tenure", "outcome_evidence",
-        "control_assurance", "misconduct_or_enforcement", "unclassified",
+        "control_assurance", "misconduct_or_enforcement", "unclassified", "disclosed_leadership_history",
     ] = "unclassified"
     attribution: Literal[
         "company_reported", "independently_observed", "auditor_assured",
@@ -184,6 +187,20 @@ class ManagementObservation(_Strict):
     credibility_vs_direction_note: str | None = None
     missing_information: list[str] = Field(default_factory=list)
     validation_reasons: list[str] = Field(default_factory=list)
+    executive_ids: list[str] = Field(default_factory=list)
+    fact_ids: list[str] = Field(default_factory=list)
+    evidence_summary: str | None = None
+    uncertainties: list[str] = Field(default_factory=list)
+    mitigating_considerations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def continuity_direction_is_explicit(cls, values):
+        if isinstance(values, dict) and values.get("dimension") in {
+            "leadership_continuity", "relevant_experience", "transition_risk"
+        } and "credit_direction" not in values:
+            raise ValueError("new stability findings require explicit credit_direction; missing is not neutral")
+        return values
 
 
 class BorrowerIdentification(_Strict):
@@ -211,7 +228,8 @@ class M3ValidationIssue(_Strict):
 class M3CorporateAssessment(_Strict):
     schema_version: Literal[
         "bo-m3-corporate-assessment-1.0", "bo-m3-corporate-assessment-1.1",
-    ] = M3_ASSESSMENT_VERSION
+        "bo-m3-corporate-assessment-1.2",
+    ] = "bo-m3-corporate-assessment-1.1"  # unstamped historic proposals retain their old meaning
     validator_id: Literal["validator_7"] = "validator_7"
     validator_version: Literal[
         "validator-7-1.0.0", "validator-7-1.1.0",
@@ -223,9 +241,16 @@ class M3CorporateAssessment(_Strict):
     cash_transfer_relationships: list[CashTransferRelationship] = Field(default_factory=list)
     structural_credit_findings: list[StructuralCreditFinding] = Field(default_factory=list)
     management_assessments: list[ManagementObservation] = Field(default_factory=list)
+    management_stability: ManagementStability | None = None
     governance_screening: list[StructuralCreditFinding] = Field(default_factory=list)
     information_gaps: list[str] = Field(default_factory=list)
     downstream_dependencies: list[dict[str, str]] = Field(default_factory=list)
     validation_issues: list[M3ValidationIssue] = Field(default_factory=list)
     rejected_items: list[dict] = Field(default_factory=list)
     model_proposal: dict = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def stability_version_contract(self):
+        if self.schema_version == "bo-m3-corporate-assessment-1.2" and self.management_stability is None:
+            raise ValueError("M3 1.2 requires management_stability; earlier records retain legacy interpretation")
+        return self

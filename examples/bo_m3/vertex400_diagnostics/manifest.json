@@ -1,0 +1,15 @@
+{
+  "scope": "public schema-only fixtures; no prompts, filing text, credentials or raw model responses",
+  "phase2_accepted_provider_schema.json": {
+    "provenance": "exact provider schema from immutable successful Phase 2 model record",
+    "model_run_id": "937f882f-a9b6-480f-803d-ef972c677431",
+    "adapter": "vertex-m3-1.1",
+    "schema_sha256": "98b997888d124734c8b753b6d98a7b93e319386485ead7452ce62bbff9ee366f"
+  },
+  "vertex_m3_1_3_provider_schema.json": {
+    "provenance": "offline reconstruction with unchanged pre-correction v1.3 adapter and failed immutable canonical request; actual failed wire schema was not captured",
+    "model_run_id": "1b4ca168-4cdd-48c9-af4d-7dac103c998e",
+    "adapter": "vertex-m3-1.3",
+    "schema_sha256": "1758de31c4116f243a42e83a659ff4d5c16ba435620bc4a7fcfe60a2b208067d"
+  }
+}

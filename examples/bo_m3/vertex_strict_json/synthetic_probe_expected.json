@@ -1,0 +1,49 @@
+{
+  "parameters": [],
+  "hypotheses": [],
+  "m3_assessment": {
+    "schema_version": "bo-m3-corporate-assessment-1.2",
+    "borrower_identification": {
+      "status": "unavailable",
+      "limitation": "Synthetic schema probe; no transaction evidence.",
+      "entity_id": null,
+      "evidence_ids": []
+    },
+    "legal_entities": [],
+    "ownership_relationships": [],
+    "cash_flow_locations": [],
+    "cash_transfer_relationships": [],
+    "structural_credit_findings": [],
+    "management_assessments": [],
+    "governance_screening": [],
+    "information_gaps": [],
+    "downstream_dependencies": [],
+    "management_stability": {
+      "schema_version": "bo-m3-management-stability-1.0",
+      "review_scope": "Synthetic schema diagnostic only",
+      "as_of_date": "2026-10-26",
+      "as_of_source": {
+        "evidence_id": "synthetic-schema-source-1",
+        "quote": "As of 2026-10-26, Alex Example is Chief Executive Officer of Fictional Schema Probe Ltd."
+      },
+      "executives": [
+        {
+          "executive_id": "alex-example",
+          "name": "Alex Example",
+          "current_role": "Chief Executive Officer",
+          "facts": [
+            {
+              "fact_id": "alex-role",
+              "kind": "current_role",
+              "value": "Chief Executive Officer",
+              "source": {
+                "evidence_id": "synthetic-schema-source-1",
+                "quote": "As of 2026-10-26, Alex Example is Chief Executive Officer of Fictional Schema Probe Ltd."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.schemas.bo_m3_management import stability_json_schema
+
 from app.prompts.agent_schemas import AGENT_PARAMETER_STATUSES
 from app.services.bo.plans import (
     BO_AGENT_SPECS,
@@ -127,7 +129,7 @@ _M3_ASSESSMENT: dict[str, Any] = {
     ],
     "properties": {
         "schema_version": {"type": "string", "enum": [
-            "bo-m3-corporate-assessment-1.0", "bo-m3-corporate-assessment-1.1"]},
+            "bo-m3-corporate-assessment-1.0", "bo-m3-corporate-assessment-1.1", "bo-m3-corporate-assessment-1.2"]},
         "borrower_identification": {
             "type": "object",
             "required": ["status", "entity_id", "evidence_ids", "limitation"],
@@ -214,10 +216,11 @@ _M3_ASSESSMENT: dict[str, Any] = {
                 "observation_id": {"type": "string"}, "management_id": {"type": "string"},
                 "legal_name": {"type": "string"}, "role": {"type": "string"},
                 "effective_from": _NULLABLE_STR, "effective_to": _NULLABLE_STR,
-                "dimension": {"type": "string", "enum": ["competence", "credibility_integrity"]},
+                "dimension": {"type": "string", "enum": ["competence", "credibility_integrity",
+                    "leadership_continuity", "relevant_experience", "transition_risk"]},
                 "evidence_basis": {"type": "string", "enum": [
                     "reported_experience", "credentials_or_tenure", "outcome_evidence",
-                    "control_assurance", "misconduct_or_enforcement", "unclassified"]},
+                    "control_assurance", "misconduct_or_enforcement", "unclassified", "disclosed_leadership_history"]},
                 "attribution": {"type": "string", "enum": [
                     "company_reported", "independently_observed", "auditor_assured",
                     "validator_inference", "unclassified"]},
@@ -232,9 +235,14 @@ _M3_ASSESSMENT: dict[str, Any] = {
                 "confidence": {"type": "string", "enum": CONFIDENCES},
                 "materiality": {"type": "string", "enum": ["low", "medium", "high"]},
                 "missing_information": _STR_LIST,
+                "executive_ids": _STR_LIST, "fact_ids": _STR_LIST,
+                "credit_direction": {"type": "string", "enum": DIRECTIONS},
+                "evidence_summary": _NULLABLE_STR, "uncertainties": _STR_LIST,
+                "mitigating_considerations": _STR_LIST,
             }, "additionalProperties": False,
         }},
         "governance_screening": {"type": "array", "items": _M3_FINDING},
+        "management_stability": stability_json_schema(),
         "information_gaps": _STR_LIST,
         "downstream_dependencies": {"type": "array", "items": {
             "type": "object", "required": ["module", "question"],
@@ -776,7 +784,7 @@ _AGENT_BRIEFS.update({
     "M3": (
         "You are the Corporate Structure & Senior Management specialist (Business "
         "Overview Module 3). Produce the normal hypotheses AND one m3_assessment "
-        "using schema_version bo-m3-corporate-assessment-1.0.\n"
+        "using schema_version bo-m3-corporate-assessment-1.2 with management_stability.\n"
         "The m3_assessment contains borrower_identification, legal_entities, "
         "ownership_relationships, cash_flow_locations, cash_transfer_relationships, "
         "structural_credit_findings, management_assessments, governance_screening, "
@@ -806,24 +814,24 @@ _AGENT_BRIEFS.update({
         "Corporate and cash-flow structure: identify only material parents, holding "
         "companies, operating subsidiaries, joint ventures, partially owned entities "
         "and the proposed borrower. Do not assume the reporting parent is the borrower. "
-        "If no borrower is evidenced, set borrower status to unavailable and keep all "
-        "borrower-specific findings unverified. Keep separate the entity generating "
+        "If no actual transaction borrower is evidenced, keep borrower_identification unavailable. "
+        "A source-designated hypothetical borrower still supports scenario-specific findings "
+        "using the separately sealed case-assumption evidence; it is not a verified real obligor. "
+        "Keep separate the entity generating "
         "cash, controlling it, capable of receiving a transfer, actually receiving a "
         "distribution, and obligated to service debt. Never allocate consolidated cash "
         "flow to a subsidiary, infer unrestricted access from ownership/control, or "
         "state a potential restriction as established. Describe preliminary structural "
         "subordination only as a hypothesis requiring downstream legal verification.\n"
-        "Management competence: examine relevant experience, demonstrated execution, "
-        "continuity, succession, key-person dependence and performance through "
-        "disruptions. Tenure, qualifications or company growth alone do not demonstrate "
-        "competence; distinguish company outcomes from outcomes attributable to leaders. "
-        "Set evidence_basis and attribution explicitly. Reported experience is an "
-        "attributed background fact, not independent proof of competence.\n"
-        "Credibility and integrity: compare representations with outcomes and examine "
-        "restatements, established regulatory findings, conflicts, transparency, control "
-        "failures, remediation and accountability. Separate allegations, investigations, "
-        "established findings and responses. Absence of misconduct evidence is not proof "
-        "of integrity. Avoid personality judgments. An auditor opinion on internal "
+        "Senior-management objective: assess leadership stability, continuity, recent "
+        "changes and relevant company-specific versus external experience. Do not grade "
+        "overall management quality, competence, credibility, integrity or effectiveness. "
+        "Legacy management_quality_assessment and key_person_dependency_assessment "
+        "must be unavailable with null values and an explanation of the narrowed remit. "
+        "Keep independent governance screening of restatements, established regulatory "
+        "findings, conflicts and reporting controls outside this leadership assessment. "
+        "Separate allegations, investigations, established findings and responses. "
+        "Absence of misconduct evidence is not proof of integrity. An auditor opinion on internal "
         "control must carry assurance_scope and assurance_date and must remain scoped "
         "to internal control over financial reporting, not operational, clinical or "
         "strategic governance.\n"
@@ -856,11 +864,25 @@ _AGENT_BRIEFS.update({
         "insufficient_evidence when the structure supports only a descriptive "
         "observation. Do not infer structural subordination from the mere existence "
         "of holding-company layers; explain the actual credit mechanism and the "
-        "evidence it would require. A guarantor flag does not prove the entity "
-        "guarantees the proposed borrowing or that any guarantee is enforceable, and "
-        "ownership percentage alone does not establish unrestricted cash access. Do "
+        "evidence it would require. A guarantor flag does not prove a real-world "
+        "guarantee of the proposed borrowing or legal enforceability; in an explicitly "
+        "hypothetical case it establishes the assumed guarantor role, as described below. "
+        "Ownership percentage alone does not establish unrestricted cash access. Do "
         "not invent subsidiary-level debt or collateral and do not produce a debt "
-        "schedule or refinancing analysis. SIMULATION SAFEGUARD: when the structure "
+        "schedule or refinancing analysis. CASE AUTHORITY: validated simulated nodes, ownership "
+        "links/percentages, designated hypothetical borrower and guarantor markings are "
+        "authoritative assumptions WITHIN this lending exercise. Do not withhold analysis "
+        "merely because they are simulated. Cite the supplied scenario_evidence_id and "
+        "onboarding source reference, exact node/link IDs, and separate relevant structural "
+        "hypotheses. Keep real borrower_identification unavailable unless separately verified. "
+        "Scenario legal entities/relationships are qualified assumptions, never verified "
+        "actual company entities; real SEC excerpts cannot verify absent simulated names. "
+        "Consider borrower placement, potential subsidiary creditor priority, guarantor/non-guarantor "
+        "recourse, minority economic ownership and possible upstream cash dependencies. "
+        "Use case fact -> observation -> conditional lender-risk mechanism -> implication -> "
+        "direction -> qualifications. No forced adverse rating: disclose unknown asset/cash/debt "
+        "distribution, ranking, guarantee terms and transfer restrictions. A marked guarantor "
+        "is assumed in the case, but not proof of real enforceability. SIMULATION SAFEGUARD: when the structure "
         "is simulated, do not combine the fictional hierarchy with real 10-K "
         "disclosures to assert real debts, guarantees or restrictions unless entity "
         "identity and legal applicability are explicitly established in cited "
@@ -898,6 +920,160 @@ BO_PARAMETER_JSON_SCHEMA: dict[str, Any] = {
 }
 
 
+_M3_GROUNDING_RULES = (
+    "\nM3 evidence and consistency requirements (single specialist):\n"
+    "- Emit each owned categorical parameter explicitly. For status 'ok', "
+    "'provisional' or 'requires_review', its OWN evidence_ids must contain exact "
+    "IDs from evidence_review.admitted_evidence_ids. A hypothesis_ids link does "
+    "not replace parameter-level citations. The cited passage must support the "
+    "chosen permitted value, and linked hypotheses must survive verification. "
+    "If no classification is established, use status 'unavailable', value null "
+    "and notes explaining the specific gap. Never attach arbitrary citations "
+    "merely to fill an evidence_ids array; provisional/requires_review also "
+    "require evidence. Tenure alone does not establish management quality; "
+    "generic litigation risk does not establish a material proceeding or event.\n"
+    "- Use evidence[].evidence_id for narrative citations. document_id, "
+    "document_hash, source_document_id, node_id and link_id are different "
+    "namespaces and are NOT admitted narrative evidence IDs. The structural "
+    "source belongs in onboarding_source_reference; graph IDs belong in "
+    "referenced_node_ids and referenced_link_ids.\n"
+    "- Build legal_entities before relationships. Each ownership parent and "
+    "subsidiary, cash-flow entity and transfer endpoint must match an entity_id "
+    "you actually include there, with the same identity throughout. Include "
+    "only evidence-supported material entities, not a fictional repair of an "
+    "unknown endpoint. If no defensible entity/relationship exists, omit that "
+    "item and explain the gap. Illustrative nodes, collective groupings and "
+    "reporting segments must not become verified legal persons.\n"
+    "- transaction_context.validated_borrower_entity_ids lists case-validated "
+    "transaction identities, if any. A borrower role in a simulated chart does "
+    "not establish the actual proposed obligor. If transaction identity is "
+    "absent, borrower_identification is unavailable; do not label general "
+    "management or governance observations borrower_specific. Keep any actual "
+    "borrower-dependent conclusion unverified with its legal verification gap.\n"
+    "- For structural_credit_findings set analytical_dimension, "
+    "structural_observation, applicable exact referenced_node_ids/link_ids, "
+    "credit_direction, assessment_availability, qualifications and "
+    "missing_information. Separate a descriptive or hypothetical chart "
+    "observation from an established cash-access, debt or guarantee conclusion. "
+    "A simulated hierarchy or guarantor shield proves no actual enforceable "
+    "guarantee or transfer right. Do not manufacture adverse or favourable findings.\n"
+    "- evidence_review.retrieval_attempts records searches ACTUALLY performed, "
+    "their bounded scope and results. A match is not entailment. Before setting "
+    "supporting_evidence_investigated or contradictory_evidence_investigated "
+    "true, actually review the relevant admitted passages for that specific "
+    "assertion, including adverse evidence and limitations. A plan entry alone "
+    "does not prove a claim-specific investigation. If the review could not be "
+    "performed or its scope is inadequate, keep the flag false, use unverified "
+    "and explain the gap. No contrary passage found in a bounded review is not "
+    "proof that no contradiction or risk exists; record the reviewed scope and "
+    "remaining limitation in missing_information/qualifications. Never flip a "
+    "flag solely to pass validation.\n"
+    "- All non-null effective_from, effective_to and assurance_date values "
+    "must be complete evidence-supported ISO dates YYYY-MM-DD. If a source "
+    "gives only a year or month, retain that disclosure in missing_information "
+    "and set the date null. Do not invent January 1, a day, an end date, or a "
+    "start date from an as-of officer list.\n"
+    "- Each management hypothesis is the actual readable assertion, not a "
+    "hypothesis ID. Distinguish reported experience from demonstrated outcomes "
+    "and attribute company reports explicitly. Explain which leadership-history "
+    "areas are unassessed. "
+    "Keep unsupported items unverified/audit_only. Do not make broad competence "
+    "or integrity judgments in the new leadership-stability remit. Return all required sections "
+    "and useful supported findings rather than empty arrays to evade scrutiny.\n"
+    "Phase 3 support conditions: a resolving citation is necessary, never proof "
+    "of the classification. Do not map generic departure warnings or years of "
+    "tenure into a low/moderate/high dependency grade. Such a grade needs an "
+    "explicit source assessment/calibration basis, consistent with the linked "
+    "hypothesis; otherwise the category is unavailable while the narrower risk "
+    "description may remain useful. Do not infer that succession/compliance "
+    "plans work merely because they exist; read and disclose adjacent caveats.\n"
+    "Governance 'none' and material events 'none_identified' require an explicit "
+    "dated broad review with appropriate coverage, not a narrow statement about "
+    "investigations. For governance review board oversight, conflicts/related "
+    "parties, controls and enforcement/misconduct; for events review corporate "
+    "actions, leadership, legal/regulatory matters and reporting/control events. "
+    "Describe the bounded scope, period and unresolved exclusions. If those "
+    "conditions cannot be established, use unavailable; do not declare absence. "
+    "Before 'contingent_exposure_only', check actual received inquiries and "
+    "existing matters throughout the admitted packet. Historical inquiries do "
+    "not prove a current material proceeding, but they require resolution before "
+    "an exclusive hypothetical-only classification. Never invent that resolution.\n"
+    "For each finding independently inspect relevant support and counter-evidence. "
+    "Acknowledge a limiting sentence even when it is in the same passage as the "
+    "support, by citing that ID in contradicting_evidence_ids and explaining the "
+    "limitation in a qualified hypothesis. Mere flags or an empty contradictory "
+    "list do not substantiate review. Do not stitch quotes with ellipses: each "
+    "evidence_quotes.quote must be a contiguous verbatim excerpt.\n"
+    "Control-assessment/auditor passages are now protected by bounded query "
+    "coverage. Cite their exact financial-reporting scope and assurance date; "
+    "do not broaden ICFR assurance into management integrity or clinical/operating "
+    "competence. Preserve genuinely supported adverse as well as favourable findings. "
+    "For a credit mechanism state the evidenced premise, the cash-generation, "
+    "cash-access or creditor-loss transmission, and what remains unproven. An "
+    "economic subsidiary-distribution dependency does not establish legal "
+    "subordination or a hypothetical facility obligor. Distinguish issuer-level "
+    "disclosure from transaction-specific borrower conclusions."
+)
+
+_M3_STABILITY_RULES = (
+    "\nVersioned senior-management stability contract (supersedes the old management-quality objective):\n"
+    "- Emit management_stability with schema_version bo-m3-management-stability-1.0, "
+    "review_scope, limitations and executives. The recent_change_window_years comes "
+    "from management_review_policy (default three years), anchored to an exact "
+    "source-supported officer-list/as-of date, not today's date. If no exact review "
+    "date is evidenced, use null and explain why recentness/tenure cannot be calculated. "
+    "A filing date is not a roster date: select the explicitly disclosed executive-list date.\n"
+    "- For each material executive, prioritising CEO/CFO/COO and other disclosed key "
+    "officers, provide executive_id, name, current_role and atomic facts. Cover every material "
+    "officer in management_review_policy.disclosed_roster, including non-CEO finance, operations, "
+    "legal, clinical, nursing and HR leadership when disclosed. Report omissions honestly; "
+    "do not claim a comprehensive review with missing officers. A missing biography means "
+    "unavailable history, not permission to invent it. Each fact "
+    "is a complete object with fact_id, kind, value, optional date/end_date and source {evidence_id, quote}; "
+    "only management_assessments[].fact_ids contains string references to existing fact objects. "
+    "Use a contiguous quote identifying the executive and expressly supporting that "
+    "fact. value should be a verbatim role/company/event phrase. Record dates only "
+    "at their actual precision: YYYY, YYYY-MM or YYYY-MM-DD. Do not invent exact "
+    "days, appointment dates, replacement events or employment start dates.\n"
+    "- Fact kinds: current_role, appointment, company_join, prior_internal_role, "
+    "external_role, external_appointment, no_prior_company_experience, departure, "
+    "planned_succession, internal_promotion, role_expansion, transition_risk. Company context must be "
+    "explicit in the cited biography. Prior external roles are not internal roles. "
+    "An incomplete biography means unknown internal experience, never absence. "
+    "An external appointment alone does not establish no previous company service. "
+    "Use internal_promotion only for an explicitly disclosed promotion; otherwise "
+    "prior internal history can support internal_succession without asserting the "
+    "formal promotion/expansion type. Returning former employees can be externally recruited.\n"
+    "- Do not emit derived verification_status, tenure, transition_type, recentness, "
+    "history_coverage or change_history_status as proof. The application verifies "
+    "and derives those fields. A complete no-change history requires an explicit "
+    "comprehensive review source covering the entire dated window and key roles; "
+    "otherwise leave history_start/end/source null and state the coverage gap. "
+    "Recent appointments established in this filing are not a complete turnover frequency.\n"
+    "- Put credit findings in management_assessments with dimension leadership_continuity, "
+    "relevant_experience or transition_risk, evidence_basis disclosed_leadership_history, "
+    "executive_ids and fact_ids. Include evidence_summary, hypothesis as a qualified "
+    "inference, credit_mechanism, source IDs, uncertainties and mitigating_considerations. "
+    "Keep Direction/Materiality/Confidence separate from evidence verification. Do "
+    "the actual supporting and contradictory review; retain contrary citations and "
+    "scope limitations. Qualified positive, negative and neutral findings are all valid outcomes.\n"
+    "- Sustained evidenced role history and substantial internal roles can suggest "
+    "institutional familiarity and potential continuity benefits without proving "
+    "superior decision-making. A recent internal promotion is not inherently negative. "
+    "Recent material leadership changes plus explicitly external recruitment and "
+    "explicitly absent prior company service can support a qualified transition-risk "
+    "finding. Explain the company-specific coordination/learning mechanism and possible "
+    "effect on operational or financial continuity and cash-flow predictability. "
+    "Do not claim realised disruption or incompetence without evidence. Acknowledge "
+    "external expertise and planned succession as possible mitigants. One external "
+    "hire does not automatically make the overall executive group credit-negative. "
+    "Review the group rather than using a stable CEO to imply no changes elsewhere. "
+    "Separate current-role tenure from company service; relevant internal experience can "
+    "mitigate a recent appointment without proving competence or predictable strategic "
+    "execution. A conditional word elsewhere cannot qualify an unqualified performance claim.\n"
+)
+
+
 def specialist_block(spec) -> str:
     """The part of the prompt that belongs to ONE specialist only."""
     return (
@@ -905,6 +1081,8 @@ def specialist_block(spec) -> str:
         "Your parameters - emit ONLY these, and no other: "
         + ", ".join(spec.owned_parameters) + ".\n"
         f"Your hypothesis ids: '{spec.code}-H001', '{spec.code}-H002', ..."
+        + (_M3_GROUNDING_RULES if spec.code == "M3" else "")
+        + (_M3_STABILITY_RULES if spec.code == "M3" else "")
     )
 
 

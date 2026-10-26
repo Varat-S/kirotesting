@@ -17,13 +17,16 @@ auditor can inspect exactly what was produced:
   command for the ``run-m3`` CLI.
 
 All JSON is written with :func:`app.core.hashing.canonical_json` (sorted keys,
-newline-terminated) so repeated runs over the same inputs are byte-identical.
+newline-terminated). Structural and governed analytical content stays
+deterministic for scripted inputs; diagnostic IDs/timestamps identify each
+execution and are intentionally not byte-identical across independent runs.
 Nothing here calls a model; it only serialises an already-governed result.
 """
 
 from __future__ import annotations
 
 import json
+import shlex
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -97,7 +100,9 @@ def _structure_scorecard(
     checks: list[dict[str, Any]] = []
     # Against the simplified onboarding input (the ingested contract).
     if simplified_document is not None:
-        expected_in = _count_simplified_tree(simplified_document)
+        expected_in = (_count_refined(simplified_document)
+                       if "companies" in simplified_document else
+                       _count_simplified_tree(simplified_document))
         for field in ("entities", "relationships", "guarantors"):
             checks.append({
                 "population": f"vs_simplified_input.{field}",
@@ -446,6 +451,19 @@ def build_evaluation_scorecard(
     expected_labels: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Explicit-denominator scorecard with a completeness caveat."""
+    stability = (result.governed_assessment or {}).get("management_stability")
+    management_quality = ({
+        "objective": "leadership_stability_continuity_and_relevant_experience",
+        "policy_version": stability["schema_version"],
+        "executive_count": len(stability["executives"]),
+        "verified_fact_count": sum(f["verification_status"] == "verified" for p in stability["executives"] for f in p["facts"]),
+        "unverified_fact_count": sum(f["verification_status"] != "verified" for p in stability["executives"] for f in p["facts"]),
+        "history_coverage": stability["history_coverage"],
+        "change_history_status": stability["change_history_status"],
+        "admitted_finding_ids": result.m3_analysis.get("consolidated_conclusion", {}).get("admitted_management_signal_ids", []),
+        "legacy_competence_integrity_benchmark_applicable": False,
+        "note": "Evidence/admission counts only; no management-quality rating or measured model semantic accuracy.",
+    } if stability is not None else _management_scorecard())
     return {
         "scorecard_kind": "bo_m3_standalone_evaluation",
         "case_id": result.case_id,
@@ -460,8 +478,9 @@ def build_evaluation_scorecard(
             result, expected_labels),
         "conclusion_integration_accuracy": _conclusion_integration_scorecard(result),
         "numerical_verification_quality": _numerical_verification_scorecard(result),
-        "management_analytical_quality": _management_scorecard(),
+        "management_analytical_quality": management_quality,
         "completion_status": result.completion_status,
+        "validation_stages": result.validation_stages,
         "requires_human_review": True,
         "forced_outcome": False,
         "completeness_caveat": (
@@ -514,6 +533,8 @@ def build_validation_report(result) -> dict[str, Any]:
         "finding_dispositions": _finding_dispositions(result),
         "corporate_structure_status": result.corporate_structure_status,
         "completion_status": result.completion_status,
+        "validation_stages": result.validation_stages,
+        "completion_status_meaning": "Artifact availability only; see validation_stages.",
         "requires_human_review": True,
         "forced_outcome": False,
     }
@@ -523,13 +544,25 @@ def build_validation_report(result) -> dict[str, Any]:
 
 
 def _reproduce_command(result, *, corporate_structure_path: str | None,
-                       responses_path: str | None, output_dir: str) -> str:
-    parts = ["python -m app.cli", "--output", output_dir, "run-m3", result.case_id]
+                       responses_path: str | None, output_dir: str,
+                       reproduce_argv: list[str] | None = None,
+                       reproduce_env: dict[str, str] | None = None) -> str:
+    parts = reproduce_argv or ["python", "-m", "app.cli", "--output", output_dir,
+                               "run-m3", result.case_id]
+    if reproduce_argv is not None:
+        # Credentials intentionally come from the existing local environment/ADC.
+        allowed = {"DEBUG", "LLM_PROVIDER", "LLM_MODEL", "VERTEX_MODEL_NARROW",
+                   "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION",
+                   "LLM_TIMEOUT_SECONDS", "LLM_MAX_OUTPUT_TOKENS", "LLM_MAX_INPUT_BYTES"}
+        env = {"DEBUG": "false", **{k: str(v) for k, v in (reproduce_env or {}).items()
+                                      if k in allowed}}
+        return " ".join(f"{key}={shlex.quote(value)}" for key, value in sorted(env.items())) + \
+            " " + shlex.join(parts)
     if corporate_structure_path:
         parts += ["--corporate-structure", corporate_structure_path]
     if responses_path:
         parts += ["--responses", responses_path]
-    return "DEBUG=false " + " ".join(parts)
+    return "DEBUG=false " + shlex.join(parts)
 
 
 def write_m3_demo(
@@ -541,6 +574,8 @@ def write_m3_demo(
     corporate_structure_path: str | None = None,
     responses_path: str | None = None,
     expected_labels: dict[str, str] | None = None,
+    reproduce_argv: list[str] | None = None,
+    reproduce_env: dict[str, str] | None = None,
 ) -> dict[str, Path]:
     """Write the six inspectable standalone Module 3 files; return their paths.
 
@@ -571,8 +606,18 @@ def write_m3_demo(
 
     reproduce = _reproduce_command(
         result, corporate_structure_path=corporate_structure_path,
-        responses_path=responses_path, output_dir=str(output_dir))
+        responses_path=responses_path, output_dir=str(output_dir),
+        reproduce_argv=reproduce_argv, reproduce_env=reproduce_env)
     paths["run_manifest"] = folder / "run_manifest.json"
     _write(paths["run_manifest"], {**result.run_manifest,
-                                   "reproduce_command": reproduce})
+                                   "reproduce_command": reproduce,
+                                   "reproduction": {
+                                       "ready": reproduce_argv is not None,
+                                       "working_directory": str(Path.cwd()),
+                                       "note": ("Original invocation: use fresh database/output paths before rerunning. "
+                                                "Credentials are never embedded. Live regeneration is not byte-exact; "
+                                                "use the recorded model run for exact offline replay."
+                                                if reproduce_argv is not None else
+                                                "Legacy command fragment only: source/database/backend context was not supplied."),
+                                   }})
     return paths

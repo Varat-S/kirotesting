@@ -35,6 +35,13 @@ output/**
 !output/**/.gitkeep
 *.db
 *.sqlite3
+# SQLite companions can also contain private M3 evidence/response pages.
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
 
 # Benchmark reference workbook and its generated artifacts are kept local
 # (not published); see examples/healthcare/README.md.
@@ -46,3 +53,14 @@ edgar_filings/*
 !edgar_filings/README.md
 .bo_fixture/
 explorer_evidence/
+
+# Local desktop clutter and accidentally nested SDK installations.
+.DS_Store
+google-cloud-sdk/
+/exec -l /
+
+# The explicitly simulated, non-sensitive source fixture is needed offline.
+!data/test_inputs/hca_simulated_corporate_structure.json
+
+# Case-specific live exports and local investigation notes stay private/local.
+examples/bo_m3/live_verification/

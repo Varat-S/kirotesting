@@ -1,0 +1,635 @@
+{
+  "fixture_kind": "developer_authored_grounded_offline_example_not_model_output",
+  "review_status": "awaiting_human_review",
+  "source_case": "HCA_DANIEL_M3_PHASE2_20261026_02",
+  "filing_path": "examples/healthcare/hca-2025/filing/0001193125-26-044769/hca-20251231.htm",
+  "filing_sha256": "2043cd0346a1ca36748348b6bef4bdf02385ee772eb241794fcffc98c8c6ba8c",
+  "response": {
+    "parameters": [
+      {
+        "parameter_id": "management_quality_assessment",
+        "value_type": "categorical",
+        "value": null,
+        "status": "unavailable",
+        "evidence_ids": [],
+        "hypothesis_ids": [],
+        "notes": "Leadership ratings retired; independent governance/legal classifications not reassessed in this authored management-only example."
+      },
+      {
+        "parameter_id": "key_person_dependency_assessment",
+        "value_type": "categorical",
+        "value": null,
+        "status": "unavailable",
+        "evidence_ids": [],
+        "hypothesis_ids": [],
+        "notes": "Leadership ratings retired; independent governance/legal classifications not reassessed in this authored management-only example."
+      },
+      {
+        "parameter_id": "governance_concern_assessment",
+        "value_type": "categorical",
+        "value": null,
+        "status": "unavailable",
+        "evidence_ids": [],
+        "hypothesis_ids": [],
+        "notes": "Leadership ratings retired; independent governance/legal classifications not reassessed in this authored management-only example."
+      },
+      {
+        "parameter_id": "litigation_risk_assessment",
+        "value_type": "categorical",
+        "value": null,
+        "status": "unavailable",
+        "evidence_ids": [],
+        "hypothesis_ids": [],
+        "notes": "Leadership ratings retired; independent governance/legal classifications not reassessed in this authored management-only example."
+      },
+      {
+        "parameter_id": "material_event_assessment",
+        "value_type": "categorical",
+        "value": null,
+        "status": "unavailable",
+        "evidence_ids": [],
+        "hypothesis_ids": [],
+        "notes": "Leadership ratings retired; independent governance/legal classifications not reassessed in this authored management-only example."
+      }
+    ],
+    "hypotheses": [],
+    "m3_assessment": {
+      "schema_version": "bo-m3-corporate-assessment-1.2",
+      "borrower_identification": {
+        "status": "unavailable",
+        "entity_id": null,
+        "evidence_ids": [],
+        "limitation": "No transaction-specific obligor analysis in this leadership-only example."
+      },
+      "legal_entities": [],
+      "ownership_relationships": [],
+      "cash_flow_locations": [],
+      "cash_transfer_relationships": [],
+      "structural_credit_findings": [],
+      "governance_screening": [],
+      "downstream_dependencies": [],
+      "information_gaps": [
+        "Authored leadership-only example; independent legal/structural/governance analysis has not been performed."
+      ],
+      "management_assessments": [
+        {
+          "observation_id": "HCA-CONT-CEO",
+          "management_id": "reviewed-team",
+          "legal_name": "Disclosed HCA leadership",
+          "role": "Senior executives",
+          "dimension": "leadership_continuity",
+          "evidence_basis": "disclosed_leadership_history",
+          "attribution": "company_reported",
+          "hypothesis": "The CEO's internal operating and financial roles and sustained current-role history suggest company familiarity and may support continuity.",
+          "credit_mechanism": "Leadership continuity or transition uncertainty may affect operating coordination and cash-flow predictability.",
+          "executive_ids": [
+            "hazen"
+          ],
+          "fact_ids": [
+            "hazen-appointment",
+            "hazen-history-0",
+            "hazen-history-1",
+            "hazen-history-2",
+            "hazen-external-humana",
+            "hazen-external-galen"
+          ],
+          "evidence_summary": "Disclosed appointment and role history, with exact quoted evidence.",
+          "supporting_evidence_ids": [
+            "43837739ffd24aa1f37e219166611e8114462f5da0d265ba52dabaa72eda312a"
+          ],
+          "contradicting_evidence_ids": [
+            "17e9245218e732b7df32427dd26fa8ae6b1d3b0a04e2a0e5f59b3a9494a6dc86"
+          ],
+          "supporting_evidence_investigated": true,
+          "contradictory_evidence_investigated": true,
+          "disposition": "qualified",
+          "admissibility": "qualified_narrative",
+          "credit_direction": "positive",
+          "materiality": "medium",
+          "confidence": "medium",
+          "missing_information": [],
+          "uncertainties": [
+            "Succession plans may not result in successful transitions; no proven reduction in disruption or superior decision-making is established.",
+            "The filing does not establish complete three-year turnover frequency."
+          ],
+          "mitigating_considerations": [
+            "Disclosed internal roles support company familiarity; external roles add distinct professional experience."
+          ],
+          "effective_from": null,
+          "effective_to": null,
+          "assurance_scope": null,
+          "assurance_date": null
+        },
+        {
+          "observation_id": "HCA-CONT-CFO",
+          "management_id": "reviewed-team",
+          "legal_name": "Disclosed HCA leadership",
+          "role": "Senior executives",
+          "dimension": "leadership_continuity",
+          "evidence_basis": "disclosed_leadership_history",
+          "attribution": "company_reported",
+          "hypothesis": "The recent CFO appointment reflects prior internal finance roles and may carry less company-learning uncertainty than an unfamiliar external appointment.",
+          "credit_mechanism": "Leadership continuity or transition uncertainty may affect operating coordination and cash-flow predictability.",
+          "executive_ids": [
+            "marks"
+          ],
+          "fact_ids": [
+            "marks-appointment",
+            "marks-history-0",
+            "marks-history-1",
+            "marks-history-2"
+          ],
+          "evidence_summary": "Disclosed appointment and role history, with exact quoted evidence.",
+          "supporting_evidence_ids": [
+            "42cceb8763f58fb5522265340815226439226d26cca558ec9ead8d9eec61a206"
+          ],
+          "contradicting_evidence_ids": [
+            "17e9245218e732b7df32427dd26fa8ae6b1d3b0a04e2a0e5f59b3a9494a6dc86"
+          ],
+          "supporting_evidence_investigated": true,
+          "contradictory_evidence_investigated": true,
+          "disposition": "qualified",
+          "admissibility": "qualified_narrative",
+          "credit_direction": "neutral",
+          "materiality": "medium",
+          "confidence": "medium",
+          "missing_information": [],
+          "uncertainties": [
+            "Succession plans may not result in successful transitions; no proven reduction in disruption or superior decision-making is established.",
+            "The filing does not establish complete three-year turnover frequency."
+          ],
+          "mitigating_considerations": [
+            "Disclosed internal roles support company familiarity; external roles add distinct professional experience."
+          ],
+          "effective_from": null,
+          "effective_to": null,
+          "assurance_scope": null,
+          "assurance_date": null
+        },
+        {
+          "observation_id": "HCA-CONT-GROUP",
+          "management_id": "reviewed-team",
+          "legal_name": "Disclosed HCA leadership",
+          "role": "Senior executives",
+          "dimension": "leadership_continuity",
+          "evidence_basis": "disclosed_leadership_history",
+          "attribution": "company_reported",
+          "hypothesis": "Disclosed internal experience across the executive group may support organisational continuity, while recent CFO, legal-administrative and nursing appointments still warrant transition review.",
+          "credit_mechanism": "Leadership continuity or transition uncertainty may affect operating coordination and cash-flow predictability.",
+          "executive_ids": [
+            "hazen",
+            "marks",
+            "foster",
+            "mcalevey",
+            "berres",
+            "cuffe",
+            "rossitto"
+          ],
+          "fact_ids": [
+            "hazen-appointment",
+            "hazen-history-0",
+            "hazen-history-1",
+            "hazen-history-2",
+            "hazen-external-humana",
+            "hazen-external-galen",
+            "marks-appointment",
+            "marks-history-0",
+            "marks-history-1",
+            "marks-history-2",
+            "foster-appointment",
+            "foster-history-0",
+            "foster-history-1",
+            "foster-history-2",
+            "foster-external-methodist",
+            "mcalevey-appointment",
+            "mcalevey-history-0",
+            "mcalevey-history-1",
+            "mcalevey-external-sec",
+            "berres-appointment",
+            "berres-history-0",
+            "berres-history-1",
+            "cuffe-appointment",
+            "cuffe-history-0",
+            "cuffe-history-1",
+            "rossitto-appointment",
+            "rossitto-history-0",
+            "rossitto-history-1",
+            "rossitto-history-2"
+          ],
+          "evidence_summary": "Disclosed appointment and role history, with exact quoted evidence.",
+          "supporting_evidence_ids": [
+            "43837739ffd24aa1f37e219166611e8114462f5da0d265ba52dabaa72eda312a",
+            "42cceb8763f58fb5522265340815226439226d26cca558ec9ead8d9eec61a206",
+            "dc33b5f1e6b6e72a1841e50146fc4d7a9032ea46ffd40e61749d9e99bb9fa73f"
+          ],
+          "contradicting_evidence_ids": [
+            "17e9245218e732b7df32427dd26fa8ae6b1d3b0a04e2a0e5f59b3a9494a6dc86"
+          ],
+          "supporting_evidence_investigated": true,
+          "contradictory_evidence_investigated": true,
+          "disposition": "qualified",
+          "admissibility": "qualified_narrative",
+          "credit_direction": "positive",
+          "materiality": "medium",
+          "confidence": "medium",
+          "missing_information": [],
+          "uncertainties": [
+            "Succession plans may not result in successful transitions; no proven reduction in disruption or superior decision-making is established.",
+            "The filing does not establish complete three-year turnover frequency."
+          ],
+          "mitigating_considerations": [
+            "Disclosed internal roles support company familiarity; external roles add distinct professional experience."
+          ],
+          "effective_from": null,
+          "effective_to": null,
+          "assurance_scope": null,
+          "assurance_date": null
+        }
+      ],
+      "management_stability": {
+        "schema_version": "bo-m3-management-stability-1.0",
+        "as_of_date": "2026-02-01",
+        "as_of_source": {
+          "evidence_id": "43837739ffd24aa1f37e219166611e8114462f5da0d265ba52dabaa72eda312a",
+          "quote": "As of February 1, 2026, our executive officers were as follows:"
+        },
+        "recent_change_window_years": 3,
+        "review_scope": "FY2025 Form 10-K Item 1, all seven disclosed executive biographies as of February 1, 2026 and admitted succession-risk evidence.",
+        "executives": [
+          {
+            "executive_id": "hazen",
+            "name": "Samuel N. Hazen",
+            "current_role": "Chief Executive Officer",
+            "facts": [
+              {
+                "fact_id": "hazen-appointment",
+                "kind": "appointment",
+                "value": "Chief Executive Officer",
+                "date": "2019-01",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "43837739ffd24aa1f37e219166611e8114462f5da0d265ba52dabaa72eda312a",
+                  "quote": "Samuel N. Hazen has served as Chief Executive Officer since January 2019 and was appointed as a director in September 2018. From November 2016 through December 2018, Mr. Hazen served as the Company’s President and Chief Operating Officer. Prior to that, he served as Chief Operating Officer of the Company from January 2015 to November 2016 and as President — Operations of the Company from 2011 to 2015. He also served as President — Western Group from 2001 to 2011 and as Chief Financial Officer — Western Group of the Company from 1995 to 2001. Prior to that time, Mr. Hazen served in various hospital, regional and division Chief Financial Officer positions with the Company, Humana Inc. and Galen Health Care, Inc."
+                }
+              },
+              {
+                "fact_id": "hazen-history-0",
+                "kind": "prior_internal_role",
+                "value": "President and Chief Operating Officer",
+                "date": "2016-11",
+                "end_date": "2018-12",
+                "source": {
+                  "evidence_id": "43837739ffd24aa1f37e219166611e8114462f5da0d265ba52dabaa72eda312a",
+                  "quote": "Samuel N. Hazen has served as Chief Executive Officer since January 2019 and was appointed as a director in September 2018. From November 2016 through December 2018, Mr. Hazen served as the Company’s President and Chief Operating Officer. Prior to that, he served as Chief Operating Officer of the Company from January 2015 to November 2016 and as President — Operations of the Company from 2011 to 2015. He also served as President — Western Group from 2001 to 2011 and as Chief Financial Officer — Western Group of the Company from 1995 to 2001. Prior to that time, Mr. Hazen served in various hospital, regional and division Chief Financial Officer positions with the Company, Humana Inc. and Galen Health Care, Inc."
+                }
+              },
+              {
+                "fact_id": "hazen-history-1",
+                "kind": "prior_internal_role",
+                "value": "President — Operations",
+                "date": "2011",
+                "end_date": "2015",
+                "source": {
+                  "evidence_id": "43837739ffd24aa1f37e219166611e8114462f5da0d265ba52dabaa72eda312a",
+                  "quote": "Samuel N. Hazen has served as Chief Executive Officer since January 2019 and was appointed as a director in September 2018. From November 2016 through December 2018, Mr. Hazen served as the Company’s President and Chief Operating Officer. Prior to that, he served as Chief Operating Officer of the Company from January 2015 to November 2016 and as President — Operations of the Company from 2011 to 2015. He also served as President — Western Group from 2001 to 2011 and as Chief Financial Officer — Western Group of the Company from 1995 to 2001. Prior to that time, Mr. Hazen served in various hospital, regional and division Chief Financial Officer positions with the Company, Humana Inc. and Galen Health Care, Inc."
+                }
+              },
+              {
+                "fact_id": "hazen-history-2",
+                "kind": "prior_internal_role",
+                "value": "Chief Financial Officer — Western Group",
+                "date": "1995",
+                "end_date": "2001",
+                "source": {
+                  "evidence_id": "43837739ffd24aa1f37e219166611e8114462f5da0d265ba52dabaa72eda312a",
+                  "quote": "Samuel N. Hazen has served as Chief Executive Officer since January 2019 and was appointed as a director in September 2018. From November 2016 through December 2018, Mr. Hazen served as the Company’s President and Chief Operating Officer. Prior to that, he served as Chief Operating Officer of the Company from January 2015 to November 2016 and as President — Operations of the Company from 2011 to 2015. He also served as President — Western Group from 2001 to 2011 and as Chief Financial Officer — Western Group of the Company from 1995 to 2001. Prior to that time, Mr. Hazen served in various hospital, regional and division Chief Financial Officer positions with the Company, Humana Inc. and Galen Health Care, Inc."
+                }
+              },
+              {
+                "fact_id": "hazen-external-humana",
+                "kind": "external_role",
+                "value": "Humana Inc.",
+                "date": null,
+                "end_date": null,
+                "source": {
+                  "evidence_id": "43837739ffd24aa1f37e219166611e8114462f5da0d265ba52dabaa72eda312a",
+                  "quote": "Samuel N. Hazen has served as Chief Executive Officer since January 2019 and was appointed as a director in September 2018. From November 2016 through December 2018, Mr. Hazen served as the Company’s President and Chief Operating Officer. Prior to that, he served as Chief Operating Officer of the Company from January 2015 to November 2016 and as President — Operations of the Company from 2011 to 2015. He also served as President — Western Group from 2001 to 2011 and as Chief Financial Officer — Western Group of the Company from 1995 to 2001. Prior to that time, Mr. Hazen served in various hospital, regional and division Chief Financial Officer positions with the Company, Humana Inc. and Galen Health Care, Inc."
+                }
+              },
+              {
+                "fact_id": "hazen-external-galen",
+                "kind": "external_role",
+                "value": "Galen Health Care, Inc.",
+                "date": null,
+                "end_date": null,
+                "source": {
+                  "evidence_id": "43837739ffd24aa1f37e219166611e8114462f5da0d265ba52dabaa72eda312a",
+                  "quote": "Samuel N. Hazen has served as Chief Executive Officer since January 2019 and was appointed as a director in September 2018. From November 2016 through December 2018, Mr. Hazen served as the Company’s President and Chief Operating Officer. Prior to that, he served as Chief Operating Officer of the Company from January 2015 to November 2016 and as President — Operations of the Company from 2011 to 2015. He also served as President — Western Group from 2001 to 2011 and as Chief Financial Officer — Western Group of the Company from 1995 to 2001. Prior to that time, Mr. Hazen served in various hospital, regional and division Chief Financial Officer positions with the Company, Humana Inc. and Galen Health Care, Inc."
+                }
+              }
+            ]
+          },
+          {
+            "executive_id": "marks",
+            "name": "Michael A. Marks",
+            "current_role": "Chief Financial Officer",
+            "facts": [
+              {
+                "fact_id": "marks-appointment",
+                "kind": "appointment",
+                "value": "Chief Financial Officer",
+                "date": "2024-05-01",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "42cceb8763f58fb5522265340815226439226d26cca558ec9ead8d9eec61a206",
+                  "quote": "Michael A. Marks was appointed Executive Vice President and Chief Financial Officer, effective May 1, 2024. He previously served as Senior Vice President — Finance from January 2023 through April 2024. Mr. Marks served as Vice President — Financial Operations Support from March 2021 through December 2022. Prior to that time, he served as CFO of the National Group from December 2008 to February 2021 and CFO of the West Florida Division from July 2004 to November 2008. Mr. Marks joined HCA Healthcare in 1996."
+                }
+              },
+              {
+                "fact_id": "marks-history-0",
+                "kind": "prior_internal_role",
+                "value": "Senior Vice President — Finance",
+                "date": "2023-01",
+                "end_date": "2024-04",
+                "source": {
+                  "evidence_id": "42cceb8763f58fb5522265340815226439226d26cca558ec9ead8d9eec61a206",
+                  "quote": "Michael A. Marks was appointed Executive Vice President and Chief Financial Officer, effective May 1, 2024. He previously served as Senior Vice President — Finance from January 2023 through April 2024. Mr. Marks served as Vice President — Financial Operations Support from March 2021 through December 2022. Prior to that time, he served as CFO of the National Group from December 2008 to February 2021 and CFO of the West Florida Division from July 2004 to November 2008. Mr. Marks joined HCA Healthcare in 1996."
+                }
+              },
+              {
+                "fact_id": "marks-history-1",
+                "kind": "prior_internal_role",
+                "value": "Vice President — Financial Operations Support",
+                "date": "2021-03",
+                "end_date": "2022-12",
+                "source": {
+                  "evidence_id": "42cceb8763f58fb5522265340815226439226d26cca558ec9ead8d9eec61a206",
+                  "quote": "Michael A. Marks was appointed Executive Vice President and Chief Financial Officer, effective May 1, 2024. He previously served as Senior Vice President — Finance from January 2023 through April 2024. Mr. Marks served as Vice President — Financial Operations Support from March 2021 through December 2022. Prior to that time, he served as CFO of the National Group from December 2008 to February 2021 and CFO of the West Florida Division from July 2004 to November 2008. Mr. Marks joined HCA Healthcare in 1996."
+                }
+              },
+              {
+                "fact_id": "marks-history-2",
+                "kind": "company_join",
+                "value": "HCA Healthcare",
+                "date": "1996",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "42cceb8763f58fb5522265340815226439226d26cca558ec9ead8d9eec61a206",
+                  "quote": "Michael A. Marks was appointed Executive Vice President and Chief Financial Officer, effective May 1, 2024. He previously served as Senior Vice President — Finance from January 2023 through April 2024. Mr. Marks served as Vice President — Financial Operations Support from March 2021 through December 2022. Prior to that time, he served as CFO of the National Group from December 2008 to February 2021 and CFO of the West Florida Division from July 2004 to November 2008. Mr. Marks joined HCA Healthcare in 1996."
+                }
+              }
+            ]
+          },
+          {
+            "executive_id": "foster",
+            "name": "Jon M. Foster",
+            "current_role": "Chief Operating Officer",
+            "facts": [
+              {
+                "fact_id": "foster-appointment",
+                "kind": "appointment",
+                "value": "Chief Operating Officer",
+                "date": "2023-01-01",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "42cceb8763f58fb5522265340815226439226d26cca558ec9ead8d9eec61a206",
+                  "quote": "Jon M. Foster was appointed Executive Vice President and Chief Operating Officer effective January 1, 2023. Prior to that time, he served as President — American Group from January 2013 to December 2022, President — Southwest Group from February 2011 to January 2013 and Division President for the Central and West Texas Division from January 2006 to February 2011. Mr. Foster joined HCA in March 2001 as President and CEO of St. David’s HealthCare in Austin, Texas and served in that position until February 2011. Prior to joining the Company, Mr. Foster served in various executive capacities within the Baptist Health System in Knoxville, Tennessee and The Methodist Hospital System in Houston, Texas."
+                }
+              },
+              {
+                "fact_id": "foster-history-0",
+                "kind": "prior_internal_role",
+                "value": "President — American Group",
+                "date": "2013-01",
+                "end_date": "2022-12",
+                "source": {
+                  "evidence_id": "42cceb8763f58fb5522265340815226439226d26cca558ec9ead8d9eec61a206",
+                  "quote": "Jon M. Foster was appointed Executive Vice President and Chief Operating Officer effective January 1, 2023. Prior to that time, he served as President — American Group from January 2013 to December 2022, President — Southwest Group from February 2011 to January 2013 and Division President for the Central and West Texas Division from January 2006 to February 2011. Mr. Foster joined HCA in March 2001 as President and CEO of St. David’s HealthCare in Austin, Texas and served in that position until February 2011. Prior to joining the Company, Mr. Foster served in various executive capacities within the Baptist Health System in Knoxville, Tennessee and The Methodist Hospital System in Houston, Texas."
+                }
+              },
+              {
+                "fact_id": "foster-history-1",
+                "kind": "company_join",
+                "value": "HCA",
+                "date": "2001-03",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "42cceb8763f58fb5522265340815226439226d26cca558ec9ead8d9eec61a206",
+                  "quote": "Jon M. Foster was appointed Executive Vice President and Chief Operating Officer effective January 1, 2023. Prior to that time, he served as President — American Group from January 2013 to December 2022, President — Southwest Group from February 2011 to January 2013 and Division President for the Central and West Texas Division from January 2006 to February 2011. Mr. Foster joined HCA in March 2001 as President and CEO of St. David’s HealthCare in Austin, Texas and served in that position until February 2011. Prior to joining the Company, Mr. Foster served in various executive capacities within the Baptist Health System in Knoxville, Tennessee and The Methodist Hospital System in Houston, Texas."
+                }
+              },
+              {
+                "fact_id": "foster-history-2",
+                "kind": "external_role",
+                "value": "Baptist Health System",
+                "date": null,
+                "end_date": null,
+                "source": {
+                  "evidence_id": "42cceb8763f58fb5522265340815226439226d26cca558ec9ead8d9eec61a206",
+                  "quote": "Jon M. Foster was appointed Executive Vice President and Chief Operating Officer effective January 1, 2023. Prior to that time, he served as President — American Group from January 2013 to December 2022, President — Southwest Group from February 2011 to January 2013 and Division President for the Central and West Texas Division from January 2006 to February 2011. Mr. Foster joined HCA in March 2001 as President and CEO of St. David’s HealthCare in Austin, Texas and served in that position until February 2011. Prior to joining the Company, Mr. Foster served in various executive capacities within the Baptist Health System in Knoxville, Tennessee and The Methodist Hospital System in Houston, Texas."
+                }
+              },
+              {
+                "fact_id": "foster-external-methodist",
+                "kind": "external_role",
+                "value": "The Methodist Hospital System",
+                "date": null,
+                "end_date": null,
+                "source": {
+                  "evidence_id": "42cceb8763f58fb5522265340815226439226d26cca558ec9ead8d9eec61a206",
+                  "quote": "Jon M. Foster was appointed Executive Vice President and Chief Operating Officer effective January 1, 2023. Prior to that time, he served as President — American Group from January 2013 to December 2022, President — Southwest Group from February 2011 to January 2013 and Division President for the Central and West Texas Division from January 2006 to February 2011. Mr. Foster joined HCA in March 2001 as President and CEO of St. David’s HealthCare in Austin, Texas and served in that position until February 2011. Prior to joining the Company, Mr. Foster served in various executive capacities within the Baptist Health System in Knoxville, Tennessee and The Methodist Hospital System in Houston, Texas."
+                }
+              }
+            ]
+          },
+          {
+            "executive_id": "mcalevey",
+            "name": "Michael R. McAlevey",
+            "current_role": "Chief Legal and Administrative Officer",
+            "facts": [
+              {
+                "fact_id": "mcalevey-appointment",
+                "kind": "appointment",
+                "value": "Chief Legal and Administrative Officer",
+                "date": "2024-04-01",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "42cceb8763f58fb5522265340815226439226d26cca558ec9ead8d9eec61a206",
+                  "quote": "Michael R. McAlevey was appointed Executive Vice President — Chief Legal and Administrative Officer of the Company, effective April 1, 2024."
+                }
+              },
+              {
+                "fact_id": "mcalevey-history-0",
+                "kind": "prior_internal_role",
+                "value": "Senior Vice President and Chief Legal Officer",
+                "date": "2022-01",
+                "end_date": "2024-03",
+                "source": {
+                  "evidence_id": "dc33b5f1e6b6e72a1841e50146fc4d7a9032ea46ffd40e61749d9e99bb9fa73f",
+                  "quote": "r. McAlevey previously served as Senior Vice President and Chief Legal Officer from January 2022 through March 2024. Prior to joining HCA, Mr. McAlevey served in senior legal and executive roles at General Electric, most recently as Vice President, General Counsel and Business Development Leader for GE Healthcare since 2018. Prior to that, he served as General Counsel and Business Development Leader for GE Aerospace from 2011 to 2018 and Chief Corporate, Securities and Finance Counsel for GE from 2003 to 2011. Before joining GE, Mr. McAlevey served as Deputy Director of the United States Securities and Exchange Commission’s Division of Corporation Finance from 1998 to 2002."
+                }
+              },
+              {
+                "fact_id": "mcalevey-history-1",
+                "kind": "external_role",
+                "value": "General Electric",
+                "date": null,
+                "end_date": null,
+                "source": {
+                  "evidence_id": "dc33b5f1e6b6e72a1841e50146fc4d7a9032ea46ffd40e61749d9e99bb9fa73f",
+                  "quote": "r. McAlevey previously served as Senior Vice President and Chief Legal Officer from January 2022 through March 2024. Prior to joining HCA, Mr. McAlevey served in senior legal and executive roles at General Electric, most recently as Vice President, General Counsel and Business Development Leader for GE Healthcare since 2018. Prior to that, he served as General Counsel and Business Development Leader for GE Aerospace from 2011 to 2018 and Chief Corporate, Securities and Finance Counsel for GE from 2003 to 2011. Before joining GE, Mr. McAlevey served as Deputy Director of the United States Securities and Exchange Commission’s Division of Corporation Finance from 1998 to 2002."
+                }
+              },
+              {
+                "fact_id": "mcalevey-external-sec",
+                "kind": "external_role",
+                "value": "Deputy Director",
+                "date": "1998",
+                "end_date": "2002",
+                "source": {
+                  "evidence_id": "dc33b5f1e6b6e72a1841e50146fc4d7a9032ea46ffd40e61749d9e99bb9fa73f",
+                  "quote": "r. McAlevey previously served as Senior Vice President and Chief Legal Officer from January 2022 through March 2024. Prior to joining HCA, Mr. McAlevey served in senior legal and executive roles at General Electric, most recently as Vice President, General Counsel and Business Development Leader for GE Healthcare since 2018. Prior to that, he served as General Counsel and Business Development Leader for GE Aerospace from 2011 to 2018 and Chief Corporate, Securities and Finance Counsel for GE from 2003 to 2011. Before joining GE, Mr. McAlevey served as Deputy Director of the United States Securities and Exchange Commission’s Division of Corporation Finance from 1998 to 2002."
+                }
+              }
+            ]
+          },
+          {
+            "executive_id": "berres",
+            "name": "Jennifer L. Berres",
+            "current_role": "Chief Human Resources Officer",
+            "facts": [
+              {
+                "fact_id": "berres-appointment",
+                "kind": "appointment",
+                "value": "Chief Human Resources Officer",
+                "date": "2019-11-01",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "43837739ffd24aa1f37e219166611e8114462f5da0d265ba52dabaa72eda312a",
+                  "quote": "Jennifer L. Berres was appointed Senior Vice President and Chief Human Resources Officer effective November 1, 2019. Ms. Berres joined HCA in 1993 and served in various capacities, including as Vice President — Human Resources from April 2013 through October 2019."
+                }
+              },
+              {
+                "fact_id": "berres-history-0",
+                "kind": "prior_internal_role",
+                "value": "Vice President — Human Resources",
+                "date": "2013-04",
+                "end_date": "2019-10",
+                "source": {
+                  "evidence_id": "43837739ffd24aa1f37e219166611e8114462f5da0d265ba52dabaa72eda312a",
+                  "quote": "Jennifer L. Berres was appointed Senior Vice President and Chief Human Resources Officer effective November 1, 2019. Ms. Berres joined HCA in 1993 and served in various capacities, including as Vice President — Human Resources from April 2013 through October 2019."
+                }
+              },
+              {
+                "fact_id": "berres-history-1",
+                "kind": "company_join",
+                "value": "HCA",
+                "date": "1993",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "43837739ffd24aa1f37e219166611e8114462f5da0d265ba52dabaa72eda312a",
+                  "quote": "Jennifer L. Berres was appointed Senior Vice President and Chief Human Resources Officer effective November 1, 2019. Ms. Berres joined HCA in 1993 and served in various capacities, including as Vice President — Human Resources from April 2013 through October 2019."
+                }
+              }
+            ]
+          },
+          {
+            "executive_id": "cuffe",
+            "name": "Michael S. Cuffe",
+            "current_role": "Chief Clinical Officer",
+            "facts": [
+              {
+                "fact_id": "cuffe-appointment",
+                "kind": "appointment",
+                "value": "Chief Clinical Officer",
+                "date": "2022-01-01",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "43837739ffd24aa1f37e219166611e8114462f5da0d265ba52dabaa72eda312a",
+                  "quote": "Michael S. Cuffe, M.D. was appointed Executive Vice President and Chief Clinical Officer effective January 1, 2022. He previously served as President — Physician Services Group from October 2011 through December 2021. From October 2011 to January 2015, Dr. Cuffe also served as a Vice President of the Company. Prior to that time, Dr. Cuffe s"
+                }
+              },
+              {
+                "fact_id": "cuffe-history-0",
+                "kind": "prior_internal_role",
+                "value": "Vice President of the Company",
+                "date": "2011-10",
+                "end_date": "2015-01",
+                "source": {
+                  "evidence_id": "43837739ffd24aa1f37e219166611e8114462f5da0d265ba52dabaa72eda312a",
+                  "quote": "Michael S. Cuffe, M.D. was appointed Executive Vice President and Chief Clinical Officer effective January 1, 2022. He previously served as President — Physician Services Group from October 2011 through December 2021. From October 2011 to January 2015, Dr. Cuffe also served as a Vice President of the Company. Prior to that time, Dr. Cuffe s"
+                }
+              },
+              {
+                "fact_id": "cuffe-history-1",
+                "kind": "external_role",
+                "value": "Duke University Health System",
+                "date": null,
+                "end_date": null,
+                "source": {
+                  "evidence_id": "42cceb8763f58fb5522265340815226439226d26cca558ec9ead8d9eec61a206",
+                  "quote": "erved Duke University Health System as Vice President for Ambulatory Services and Chief Medical Officer from March 2011 to October 2011 and Vice President Medical Affairs from June 2005 to March 2011. He also served Duke University School of Medicine as Vice Dean for Medical Affairs from June 2008 to March 2011, Deputy Chair of the Department of Medicine from August 2009 to August 2010 and Associate Professor of Medicine from March 2005 to October 2011. Prior to that time, Dr. Cuffe served in various leadership roles with the Duke Clinical Research Institute, Duke University Medical Center and Duke University School of Medicine.\n32"
+                }
+              }
+            ]
+          },
+          {
+            "executive_id": "rossitto",
+            "name": "Erica L. Rossitto",
+            "current_role": "Chief Nurse Executive",
+            "facts": [
+              {
+                "fact_id": "rossitto-appointment",
+                "kind": "appointment",
+                "value": "Chief Nurse Executive",
+                "date": "2026-02-01",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "dc33b5f1e6b6e72a1841e50146fc4d7a9032ea46ffd40e61749d9e99bb9fa73f",
+                  "quote": "Erica L. Rossitto was appointed Senior Vice President and Chief Nurse Executive, effective February 1, 2026. She previously served as Senior Vice President and Assistant Chief Nurse Executive from December 2023 through January 2026. Prior to that time, Ms. Rossitto served as Vice President and Group Chief Nurse Executive — American Group & Atlantic Group from April 2022 to November 2023 and Vice President and Group Chief Nurse Executive — American Group, Clinical Operations Group from September 2020 to March 2022. Ms. Rossitto joined HCA in 2000 as a nurse at HCA HealthONE Swedish."
+                }
+              },
+              {
+                "fact_id": "rossitto-history-0",
+                "kind": "prior_internal_role",
+                "value": "Senior Vice President and Assistant Chief Nurse Executive",
+                "date": "2023-12",
+                "end_date": "2026-01",
+                "source": {
+                  "evidence_id": "dc33b5f1e6b6e72a1841e50146fc4d7a9032ea46ffd40e61749d9e99bb9fa73f",
+                  "quote": "Erica L. Rossitto was appointed Senior Vice President and Chief Nurse Executive, effective February 1, 2026. She previously served as Senior Vice President and Assistant Chief Nurse Executive from December 2023 through January 2026. Prior to that time, Ms. Rossitto served as Vice President and Group Chief Nurse Executive — American Group & Atlantic Group from April 2022 to November 2023 and Vice President and Group Chief Nurse Executive — American Group, Clinical Operations Group from September 2020 to March 2022. Ms. Rossitto joined HCA in 2000 as a nurse at HCA HealthONE Swedish."
+                }
+              },
+              {
+                "fact_id": "rossitto-history-1",
+                "kind": "prior_internal_role",
+                "value": "Vice President and Group Chief Nurse Executive — American Group",
+                "date": "2020-09",
+                "end_date": "2022-03",
+                "source": {
+                  "evidence_id": "dc33b5f1e6b6e72a1841e50146fc4d7a9032ea46ffd40e61749d9e99bb9fa73f",
+                  "quote": "Erica L. Rossitto was appointed Senior Vice President and Chief Nurse Executive, effective February 1, 2026. She previously served as Senior Vice President and Assistant Chief Nurse Executive from December 2023 through January 2026. Prior to that time, Ms. Rossitto served as Vice President and Group Chief Nurse Executive — American Group & Atlantic Group from April 2022 to November 2023 and Vice President and Group Chief Nurse Executive — American Group, Clinical Operations Group from September 2020 to March 2022. Ms. Rossitto joined HCA in 2000 as a nurse at HCA HealthONE Swedish."
+                }
+              },
+              {
+                "fact_id": "rossitto-history-2",
+                "kind": "company_join",
+                "value": "HCA",
+                "date": "2000",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "dc33b5f1e6b6e72a1841e50146fc4d7a9032ea46ffd40e61749d9e99bb9fa73f",
+                  "quote": "Erica L. Rossitto was appointed Senior Vice President and Chief Nurse Executive, effective February 1, 2026. She previously served as Senior Vice President and Assistant Chief Nurse Executive from December 2023 through January 2026. Prior to that time, Ms. Rossitto served as Vice President and Group Chief Nurse Executive — American Group & Atlantic Group from April 2022 to November 2023 and Vice President and Group Chief Nurse Executive — American Group, Clinical Operations Group from September 2020 to March 2022. Ms. Rossitto joined HCA in 2000 as a nurse at HCA HealthONE Swedish."
+                }
+              }
+            ]
+          }
+        ],
+        "limitations": [
+          "No comprehensive three-year change log is established.",
+          "Appointment/current-role tenure differs from total company service."
+        ]
+      }
+    }
+  }
+}

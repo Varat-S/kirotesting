@@ -18,9 +18,10 @@ class ProviderNotConfiguredError(RuntimeError):
 class ProviderCallError(RuntimeError):
     """Sanitized failure; never contains credentials or HTTP response bodies."""
 
-    def __init__(self, message):
+    def __init__(self, message, *, diagnostic_metadata=None):
         super().__init__(message)
         self.public_message = message
+        self.diagnostic_metadata = diagnostic_metadata
 
 
 def strict_schema(schema):

@@ -70,6 +70,8 @@ class LLMRequest:
     # Model tier for provider routing (narrow|orchestrator|challenge). The
     # fake/OpenAI backends ignore it; the Vertex backend maps it to a model.
     model_tier: str | None = None
+    # Only the standalone M3 owner-only recorder opts in to private telemetry.
+    record_private_diagnostics: bool = False
 
 
 @dataclass
@@ -369,7 +371,7 @@ class LLMClient:
         try:
             raw = self._backend.generate(request)
         except RuntimeError as exc:
-            return self._sanitize_provider_error(exc)
+            return self._sanitize_provider_error(exc, request)
         return self._validate_raw(request, raw)
 
     async def _generate_and_validate_async(
@@ -379,17 +381,25 @@ class LLMClient:
         try:
             raw = await self._backend.generate_async(request)
         except RuntimeError as exc:
-            return self._sanitize_provider_error(exc)
+            return self._sanitize_provider_error(exc, request)
         return self._validate_raw(request, raw)
 
     def _sanitize_provider_error(
-        self, exc: RuntimeError
+        self, exc: RuntimeError, request=None
     ) -> tuple[LLMRawResult, None, str, str]:
         """Turn a provider exception into a rejected result WITHOUT leaking secrets."""
+        metadata = {}
+        if request is not None and request.method == "m3_corporate_management" and type(exc).__module__ == "app.services.llm.providers":
+            candidate = getattr(exc, "diagnostic_metadata", None)
+            if isinstance(candidate, dict):
+                from app.services.llm.vertex_m3_diagnostics import public_diagnostics
+                metadata = public_diagnostics(candidate)
+                if request.record_private_diagnostics:
+                    metadata.update({k: candidate[k] for k in ("provider_request", "provider_request_json", "private_service_error") if k in candidate})
         raw = LLMRawResult(
             raw_response="",
-            model_id=getattr(self._backend, "model_id", "unknown"),
-            model_config={"error_type": type(exc).__name__},
+            model_id=metadata.get("model_id") or getattr(self._backend, "model_id", "unknown"),
+            model_config={"error_type": type(exc).__name__, **metadata},
         )
         detail = f"Provider call failed ({type(exc).__name__})."
         if type(exc).__module__ == "app.services.llm.providers" and hasattr(
@@ -412,10 +422,22 @@ class LLMClient:
             parsed = parsed_obj
         except json.JSONDecodeError as exc:
             outcome = "rejected"
-            detail = f"Response was not valid JSON: {exc}"
+            if request.method == "m3_corporate_management":
+                detail = (f"Response was not valid JSON (line {exc.lineno}, "
+                          f"column {exc.colno}).")
+            else:
+                detail = f"Response was not valid JSON: {exc}"
         except jsonschema.ValidationError as exc:
             outcome = "rejected"
-            detail = f"Response failed schema validation: {exc.message}"
+            if request.method == "m3_corporate_management":
+                # Schema paths contain contract keys, never instance values or
+                # user-supplied property names. exc.message can quote evidence,
+                # credentials echoed by a model, or an entire malformed item.
+                path = "/".join(str(part) for part in exc.absolute_schema_path)
+                detail = (f"Response failed schema validation "
+                          f"(rule={exc.validator}; schema_path={path or '/'}).")
+            else:
+                detail = f"Response failed schema validation: {exc.message}"
         return raw, parsed, outcome, detail
 
     def generate_only(self, request: LLMRequest) -> GenerateOnlyResult:
