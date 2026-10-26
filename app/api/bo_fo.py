@@ -32,6 +32,7 @@ from app.services.audit.log import AuditLog
 from app.services.extraction.sec.xml import MAX_FILE_BYTES
 from app.services.fo import precheck
 from app.services.fo import models as fo_models
+from app.services.rms import RmsRequest
 
 router = APIRouter(tags=["business and financial overview"])
 _env = Environment(
@@ -159,12 +160,18 @@ def start_run(
     roster: str = Form(default="v2"),
     enable_m4_debt_specialist: str = Form(default=""),
     cutoff: str = Form(default=""),
+    requested_amount_m: str = Form(default=""),
+    tenor_years: str = Form(default=""),
 ):
-    values = {"case_id": case_id, "model": model, "roster": roster, "cutoff": cutoff}
+    values = {"case_id": case_id, "model": model, "roster": roster, "cutoff": cutoff,
+              "requested_amount_m": requested_amount_m, "tenor_years": tenor_years}
     settings = get_settings()
     try:
         database = bo_fo.sqlite_path(settings.database_url)
         parsed_cutoff = datetime.fromisoformat(cutoff.replace("Z", "+00:00")) if cutoff.strip() else None
+        rms_request = (RmsRequest(float(requested_amount_m), tenor_years=int(tenor_years) if tenor_years.strip()
+                                  else None)
+                       if requested_amount_m.strip() else None)
         settled = bo_fo.plan(folder, case_id.strip() or None, parsed_cutoff)
         if roster not in ("v2", "v3"):
             raise ValueError("The BO roster is v2 or v3.")
@@ -177,7 +184,7 @@ def start_run(
         database=database, folder=folder, case_id=settled["case_id"], cutoff=settled["cutoff"],
         bo_backend=bo_backend, fo_backend=fo_backend, fo_mode="live",
         output_root=settings.output_dir, data_root=settings.data_dir, roster=roster,
-        enable_m4_debt_specialist=bool(enable_m4_debt_specialist))
+        enable_m4_debt_specialist=bool(enable_m4_debt_specialist), rms_request=rms_request)
     return RedirectResponse(f"/run?job={quote(job_id)}", status_code=303)
 
 

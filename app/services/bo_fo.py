@@ -15,10 +15,16 @@ two never share a database while running:
   the main database in one transaction that waits for the BO's write lock.
 
 If that copy cannot be made, the staging database is kept and its path reported; nothing is lost.
+
+With a loan request, Risk Mitigation & Structuring (:mod:`app.services.rms`) runs once both threads have
+finished, and only when both sections completed: it reads the BO's ``handoff.json`` and the FO's
+``financial_overview.json`` and writes ``<output>/rms/<case>/<run>/rms.json``. It is deterministic (no model)
+and writes nothing to the database.
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 import traceback
@@ -28,6 +34,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.models.base import Base, create_engine_and_session, init_db
+from app.services import rms
+from app.services.rms import runner as rms_runner
 from app.services.acquisition import shared_filing
 from app.services.fo import loader as fo_loader
 from app.services.fo.runner import FinancialOverviewRunner, default_case_id, validate_case_id
@@ -85,11 +93,15 @@ def plan(folder: str, case_id: str | None = None, cutoff: datetime | None = None
 def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: str,
               output_root, data_root=None, case_id: str | None = None, cutoff: datetime | None = None,
               roster: str = "v2", enable_m4_debt_specialist: bool = False, produce_pdf: bool = False,
-              on_progress=None, lock_wait: float = LOCK_WAIT_SECONDS) -> dict:
-    """Run both sections at once; returns ``{"case_id", "folder", "cutoff", "bo": {...}, "fo": {...}}``.
+              rms_request: rms.RmsRequest | None = None, on_progress=None,
+              lock_wait: float = LOCK_WAIT_SECONDS) -> dict:
+    """Run both sections at once; returns ``{"case_id", "folder", "cutoff", "bo": {...}, "fo": {...},
+    "rms": {...}}``.
 
     Each section's entry has ``status`` ``completed`` or ``failed`` and either its ``summary`` or its
-    ``error``. ``on_progress(section, message)`` is called from the worker threads as they advance.
+    ``error``. ``rms`` is ``completed``, ``failed`` or ``skipped`` (no request, or a section didn't complete),
+    with its ``summary``, ``error`` or ``reason``. ``on_progress(section, message)`` is called from the worker
+    threads as they advance, and for ``rms`` once both have finished.
     """
     database = Path(database).resolve()
     data_root = Path(data_root) if data_root is not None else database.parent
@@ -159,7 +171,42 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
                 if isinstance(exc, StagingKept):
                     outcome[section]["staging_database"] = str(exc.staging)
                 say(section, "failed")
+    outcome["rms"] = run_rms(outcome, rms_request, output_root, say)
     return outcome
+
+
+def run_rms(outcome: dict, request: rms.RmsRequest | None, output_root, say) -> dict:
+    """Risk Mitigation & Structuring over the two sections' recorded outputs, once both have completed."""
+    if request is None:
+        return {"status": "skipped", "reason": "No requested loan amount was given."}
+    unfinished = [s.upper() for s in ("bo", "fo") if outcome[s]["status"] != "completed"]
+    if unfinished:
+        say("rms", "skipped")
+        return {"status": "skipped",
+                "reason": f"Needs both sections completed; the {' and '.join(unfinished)} did not complete."}
+    try:
+        say("rms", "assessing the loan request")
+        fo_path = Path(outcome["fo"]["summary"]["outputs"]["financial_overview.json"])
+        handoff_path = outcome["bo"]["summary"].get("handoff_path")
+        handoff = json.loads(Path(handoff_path).read_text(encoding="utf-8")) if handoff_path else None
+        run_id = rms_runner.new_run_id()
+        result = rms.assess(request, json.loads(fo_path.read_text(encoding="utf-8")), handoff=handoff,
+                            analysis_run_id=run_id)
+        record, path = rms_runner.write_record(
+            result, run_id=run_id, case_id=outcome["case_id"], output_root=output_root,
+            sources={"bo_analysis_run_id": outcome["bo"]["summary"]["analysis_run_id"],
+                     "bo_handoff_id": (handoff or {}).get("handoff_id"),
+                     "bo_review_status": (handoff or {}).get("human_review_status"),
+                     "fo_run_id": outcome["fo"]["summary"]["run_id"],
+                     "fo_content_hash": outcome["fo"]["summary"]["content_hash"],
+                     "fo_decisions": {"review": None, "overrides": []},  # a new run has no decisions yet
+                     "bo_handoff": handoff_path, "fo_overview": str(fo_path)})
+    except Exception as exc:  # reported like a section's failure; the BO and FO results stand
+        say("rms", "failed")
+        return {"status": "failed", "error": f"{type(exc).__name__}: {exc}",
+                "traceback": traceback.format_exc(limit=8)}
+    say("rms", "completed")
+    return {"status": "completed", "summary": rms_runner.rms_summary(record, path)}
 
 
 class StagingKept(RuntimeError):
@@ -182,6 +229,7 @@ def bo_summary(result, roster: str) -> dict:
             "status": result.memo["score"]["status"], "band": result.memo["score"]["band"],
         } if result.memo else None,
         "outputs": sorted({str(Path(p).parent) for p in result.output_paths.values()}),
+        "handoff_path": str(result.output_paths["handoff.json"]) if "handoff.json" in result.output_paths else None,
     }
 
 
@@ -276,7 +324,10 @@ class Jobs:
         now = datetime.now(timezone.utc).isoformat()
         job = {"job_id": job_id, "status": "running", "started_at": now, "finished_at": None,
                "folder": kwargs["folder"], "case_id": kwargs.get("case_id"),
-               "sections": {s: {"status": "running", "step": "starting", "steps": []} for s in ("bo", "fo")},
+               "sections": {**{s: {"status": "running", "step": "starting", "steps": []} for s in ("bo", "fo")},
+                            "rms": {"status": "waiting" if kwargs.get("rms_request") else "skipped",
+                                    "step": "waits for both sections" if kwargs.get("rms_request")
+                                    else "no requested loan amount", "steps": []}},
                "result": None, "error": None}
         with self._lock:
             self._jobs[job_id] = job
@@ -287,9 +338,10 @@ class Jobs:
         def progress(section, message):
             with self._lock:
                 state = job["sections"][section]
-                if message in ("completed", "failed"):
+                if message in ("completed", "failed", "skipped"):
                     state["status"] = message
                 else:
+                    state["status"] = "running"
                     state["steps"].append(message)
                     state["step"] = message
 
@@ -298,11 +350,15 @@ class Jobs:
                 result = run_bo_fo(on_progress=progress, **kwargs)
                 with self._lock:
                     job.update(result=result, case_id=result["case_id"], status="finished")
-                    for section in ("bo", "fo"):
+                    for section in ("bo", "fo", "rms"):
                         job["sections"][section]["status"] = result[section]["status"]
+                    if result["rms"]["status"] == "skipped":
+                        job["sections"]["rms"]["step"] = result["rms"]["reason"]
             except Exception as exc:
                 with self._lock:
                     job.update(status="failed", error=f"{type(exc).__name__}: {exc}")
+                    if job["sections"]["rms"]["status"] == "waiting":
+                        job["sections"]["rms"].update(status="skipped", step="the run did not finish")
             finally:
                 with self._lock:
                     job["finished_at"] = datetime.now(timezone.utc).isoformat()

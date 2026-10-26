@@ -91,7 +91,7 @@
 <div id="review" class="fo-gate fo-decision">
 <h3>Analyst decision required: going concern (agent and verified evidence disagree)</h3>
 <p>{{ gate.gc_decision.reason }}. The agent's FAIL quote did not hold up against the filing (see "Held back" below), so the engine scored the run on the verified result. Read the agent's answer and the passages, then decide. <strong>Use the verified result</strong>: the run is scored as calculated (any measure still escalated waits for its own decision). <strong>Continue</strong> or <strong>Stop</strong>: side with the agent's FAIL (continue: overall score 10, measures superseded; stop: "Not scored: going-concern fail"). The decision is recorded once and cannot be changed.</p>
-{% if forms %}<form class="review" method="post" action="{{ decision_base }}/review">
+{% if forms %}<form class="review" method="post" action="{{ decision_base }}/review">{% if credit %}<input type="hidden" name="credit" value="1"><input type="hidden" name="bo_run" value="{{ credit.bo_run }}">{% endif %}
 <div><label for="reviewer">Reviewer</label><input id="reviewer" name="reviewer" required></div>
 <div><label for="reason">Reason</label><input id="reason" name="reason" required placeholder="Why"></div>
 <div class="buttons"><button class="primary-button" type="submit" name="decision" value="use_verified">Use the verified result ({{ gate.gc_decision.verified|upper }})</button><button type="submit" name="decision" value="continue">Fail: continue at score 10</button><button type="submit" name="decision" value="stop">Fail: stop the analysis</button></div>
@@ -103,7 +103,7 @@
 <div id="review" class="fo-gate fo-decision">
 <h3>Analyst decision required: going-concern FAIL</h3>
 <p>{{ pc.reason }}. Read the basis and the passages below, then decide. <strong>Continue</strong>: overall score 10, the measures are shown as "superseded by going-concern fail" and not counted, and agent triggers are skipped. <strong>Stop</strong>: "Not scored: going-concern fail". The decision is recorded once and cannot be changed.</p>
-{% if forms %}<form class="review" method="post" action="{{ decision_base }}/review">
+{% if forms %}<form class="review" method="post" action="{{ decision_base }}/review">{% if credit %}<input type="hidden" name="credit" value="1"><input type="hidden" name="bo_run" value="{{ credit.bo_run }}">{% endif %}
 <div><label for="reviewer">Reviewer</label><input id="reviewer" name="reviewer" required></div>
 <div><label for="reason">Reason</label><input id="reason" name="reason" required placeholder="Why the analysis should continue or stop"></div>
 <div class="buttons"><button class="primary-button" type="submit" name="decision" value="continue">Continue the analysis</button><button type="submit" name="decision" value="stop">Stop the analysis</button></div>
@@ -118,7 +118,7 @@
 <div id="override-{{ e.measure }}" class="fo-gate fo-decision">
 <h3>Analyst decision required: {{ e.measure_name }} ({{ e.title or 'covenant breach' }})</h3>
 <p>{{ e.reason }}. {{ e.detail or 'The engine set revolver availability to 0 and the score to 10.' }} Engine score: <strong>{{ e.engine_score if e.engine_score is not none else 'none' }}</strong>{% if e.calculated_score is not none %} (calculated before the adjustment: {{ e.calculated_score }}){% endif %}. Read this check below, then accept the engine's score or enter your own (1–10). The composite is re-weighted on the score you record. The decision is recorded once and cannot be changed.</p>
-{% if forms %}<form class="review" method="post" action="{{ decision_base }}/override">
+{% if forms %}<form class="review" method="post" action="{{ decision_base }}/override">{% if credit %}<input type="hidden" name="credit" value="1"><input type="hidden" name="bo_run" value="{{ credit.bo_run }}">{% endif %}
 <input type="hidden" name="measure" value="{{ e.measure }}">
 <div><label for="reviewer-{{ e.measure }}">Reviewer</label><input id="reviewer-{{ e.measure }}" name="reviewer" required></div>
 <div><label for="reason-{{ e.measure }}">Reason</label><input id="reason-{{ e.measure }}" name="reason" required placeholder="Why this score"></div>

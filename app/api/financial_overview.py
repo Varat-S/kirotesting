@@ -17,6 +17,7 @@ writes (it records one new run); every other route is a read of recorded runs.
 
 from __future__ import annotations
 
+import logging
 import secrets
 from pathlib import Path
 from urllib.parse import quote
@@ -26,6 +27,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from jinja2 import Environment, FileSystemLoader
 from sqlalchemy.orm import Session
 
+from app.api.credit import back_to_credit, credit_context, reassess_for_credit
 from app.api.deps import get_session
 from app.core.config import get_settings
 from app.services.fo import loader, precheck
@@ -43,9 +45,11 @@ from app.services.fo.review import (
     run_header,
 )
 from app.services.fo.runner import FinancialOverviewRunner, FoRunError
+from app.services.rms.runner import reassess_after_fo_review
 from app.services.fo.workbench import FoRunNotFoundError, fo_artifact, fo_run, fo_runs, fo_view
 
 router = APIRouter(tags=["financial_overview"])
+log = logging.getLogger(__name__)
 _env = Environment(
     loader=FileSystemLoader(str(Path(__file__).parent / "templates")),
     autoescape=True,
@@ -53,7 +57,7 @@ _env = Environment(
 
 
 def _page(session, *, view=None, runs=None, error=None, selected_folder=None, case_id=None, selected_model=None,
-          stopped=None, failed=None, status_code=200):
+          stopped=None, failed=None, credit=None, status_code=200):
     agent_ok, agent_reason = precheck.agent_available()
     models, models_note = fo_models.available_models() if agent_ok else ([], None)
     return HTMLResponse(
@@ -61,7 +65,7 @@ def _page(session, *, view=None, runs=None, error=None, selected_folder=None, ca
             runs=fo_runs(session) if runs is None else runs, filings=loader.list_filings(), view=view,
             error=error, stopped=stopped, failed=failed, selected_folder=selected_folder, case_id=case_id,
             agent_ok=agent_ok, agent_reason=agent_reason, models=models, models_note=models_note,
-            selected_model=selected_model or fo_models.configured_model(),
+            selected_model=selected_model or fo_models.configured_model(), credit=credit,
             run_token=secrets.token_urlsafe(16)),  # identifies the next run, so its Stop button can reach it
         status_code=status_code)
 
@@ -144,8 +148,11 @@ def financial_overview_run_progress(run_token: str = Query(default="")) -> dict:
 def financial_overview_workbench(
     case_id: str,
     run_id: str | None = Query(default=None),
+    credit: bool = Query(default=False),
+    bo_run: str | None = Query(default=None),
     session: Session = Depends(get_session),
 ) -> HTMLResponse:
+    """``?credit=1&bo_run=`` (set by the credit view's link): show the way back, and return there after a decision."""
     runs = fo_runs(session, case_id)
     selected = run_id or (runs[0]["run_id"] if runs else None)
     view = None
@@ -154,7 +161,17 @@ def financial_overview_workbench(
         view = fo_view(session, selected)
         saved = Path(get_settings().output_dir) / "fo" / case_id / selected
         view["output_folder"] = str(saved.resolve()) if saved.is_dir() else None
-    return _page(session, view=view, runs=runs)
+    return _page(session, view=view, runs=runs,
+                 credit=credit_context(case_id, selected, bo_run) if credit else None)
+
+
+def _reassess_rms(session: Session, run_id: str) -> None:
+    """Redo an RMS assessment of this run on the analyst's decision. RMS writes only its own files, so a fault
+    there is logged and never undoes the decision just recorded."""
+    try:
+        reassess_after_fo_review(session, run_id, get_settings().output_dir)
+    except Exception:
+        log.exception("RMS re-assessment after the FO decision on %s failed", run_id)
 
 
 @router.post("/cases/{case_id}/fo/runs/{run_id}/review")
@@ -164,6 +181,8 @@ def review_financial_overview_run(
     decision: str = Form(...),
     reviewer: str = Form(default=""),
     reason: str = Form(default=""),
+    credit: str = Form(default=""),
+    bo_run: str = Form(default=""),
     session: Session = Depends(get_session),
 ):
     """Record the analyst's continue / stop decision on a going-concern fail."""
@@ -172,9 +191,8 @@ def review_financial_overview_run(
         review_run(session, run_id, decision=decision, reviewer=reviewer, reason=reason,
                    output_root=get_settings().output_dir)
     except FoReviewError as exc:
-        view = fo_view(session, run_id)
-        return _page(session, view=view, runs=fo_runs(session, case_id), error=str(exc), status_code=400)
-    return RedirectResponse(f"/cases/{quote(case_id)}/fo.html?run_id={quote(run_id)}", status_code=303)
+        return _decision_error(session, case_id, run_id, exc, credit, bo_run)
+    return _after_decision(session, case_id, run_id, credit, bo_run)
 
 
 @router.post("/cases/{case_id}/fo/runs/{run_id}/override")
@@ -186,6 +204,8 @@ def override_financial_overview_measure(
     score: str = Form(default=""),
     reviewer: str = Form(default=""),
     reason: str = Form(default=""),
+    credit: str = Form(default=""),
+    bo_run: str = Form(default=""),
     session: Session = Depends(get_session),
 ):
     """Record the analyst's score for an escalated measure: accept the engine's, or override it."""
@@ -194,9 +214,23 @@ def override_financial_overview_measure(
         override_measure(session, run_id, measure=measure, decision=decision, reviewer=reviewer, reason=reason,
                          score=score.strip() or None, output_root=get_settings().output_dir)
     except FoReviewError as exc:
-        view = fo_view(session, run_id)
-        return _page(session, view=view, runs=fo_runs(session, case_id), error=str(exc), status_code=400)
+        return _decision_error(session, case_id, run_id, exc, credit, bo_run)
+    return _after_decision(session, case_id, run_id, credit, bo_run)
+
+
+def _after_decision(session, case_id, run_id, credit, bo_run):
+    """Back to where the analyst came from: the credit view (re-assessed for its run pair) when the workbench
+    was opened from it, else this run's workbench."""
+    if credit:
+        return back_to_credit(case_id, run_id, bo_run,
+                              reassess_for_credit(session, case_id, run_id, bo_run))
+    _reassess_rms(session, run_id)
     return RedirectResponse(f"/cases/{quote(case_id)}/fo.html?run_id={quote(run_id)}", status_code=303)
+
+
+def _decision_error(session, case_id, run_id, exc, credit, bo_run):
+    return _page(session, view=fo_view(session, run_id), runs=fo_runs(session, case_id), error=str(exc),
+                 credit=credit_context(case_id, run_id, bo_run) if credit else None, status_code=400)
 
 
 @router.get("/cases/{case_id}/fo/runs")

@@ -12,6 +12,8 @@
 <p class="subtle">Read-only inspection of recorded Business Overview runs. Approval is a separate, explicit reviewer action.</p>
 <div class="actions"><a href="/">All cases</a><a href="/bo">All Business Overview runs</a></div></header>
 <main>
+{% if credit %}<div class="notice" id="credit-back" style="position:sticky;top:0;z-index:5;border-left-color:#2f6fb0;background:#eef3fb"><a href="{{ credit.url }}"><strong>&larr; Back to the credit view (BO + FO + RMS)</strong></a> <span class="subtle">A decision you make here takes you back there, with RMS re-assessed.</span></div>{% endif %}
+{% if error %}<section><p class="notice" role="alert"><strong>{{ error }}</strong></p></section>{% endif %}
 <section><h2>Case and run selection</h2>
 {% if runs %}
 <div class="table-wrap"><table><thead><tr><th>Case</th><th>Run</th><th>Started</th><th>Mode</th><th>Conclusion</th><th>Human review</th><th>Open</th></tr></thead><tbody>
@@ -24,7 +26,7 @@
 <section><h2>{{ view.case.borrower or view.case.case_id }} &mdash; run {{ view.analysis_run_id }}</h2>
 {% if view.run.execution_mode == 'offline_simulation' %}<p class="notice"><strong>{{ view.run.execution_label }}</strong></p>{% endif %}
 <p>Conclusion: {{ st(view.conclusion_status) }}. {{ view.status_text }}</p>
-<div class="actions"><a href="#evidence">Evidence status</a><a href="#agents">Agent execution</a><a href="#accepted">Accepted hypotheses</a><a href="#rejected">Rejected hypotheses</a><a href="#contradictions">Contradictions</a><a href="#open">Open questions</a><a href="#memo">Memo preview</a><a href="#audit">Audit preview</a><a href="#review">Review</a></div>
+<div class="actions"><a href="{{ credit.url if credit else '/cases/' ~ view.case.case_id ~ '/credit.html?bo_run=' ~ view.analysis_run_id }}"><strong>Credit view (BO + FO + RMS)</strong></a><a href="#evidence">Evidence status</a><a href="#agents">Agent execution</a><a href="#accepted">Accepted hypotheses</a><a href="#rejected">Rejected hypotheses</a><a href="#contradictions">Contradictions</a><a href="#open">Open questions</a><a href="#memo">Memo preview</a><a href="#audit">Audit preview</a><a href="#review">Review</a></div>
 <p class="subtle">Downloads: <a href="{{ base }}/memo.html">memo HTML</a> · <a href="{{ base }}/memo.json">memo JSON</a> · <a href="{{ base }}/audit.html">audit HTML</a> · <a href="{{ base }}/audit.json">audit JSON</a> · <a href="{{ base }}/handoff.json">handoff JSON</a></p>
 </section>
 
@@ -72,6 +74,7 @@
 <p>Handoff <code>{{ view.handoff.handoff_id }}</code>: {{ st(view.handoff.human_review_status) }}{% if view.handoff.reviewer %} by {{ view.handoff.reviewer }} at {{ view.handoff.reviewed_at }}{% endif %}.</p>
 {% if view.handoff.human_review_status == 'pending' %}
 <form class="review" method="post" action="{{ base }}/review">
+{% if credit %}<input type="hidden" name="credit" value="1"><input type="hidden" name="fo_run" value="{{ credit.fo_run }}">{% endif %}
 <p><label>Reviewer <input type="text" name="reviewer" required></label></p>
 <p><label>Reason <input type="text" name="reason" required></label></p>
 {% if view.handoff.unresolved_challenges %}<p><label><input type="checkbox" name="acknowledge_unresolved" value="true"> I acknowledge the unresolved challenger findings listed above; they remain recorded on the handoff.</label></p>{% endif %}

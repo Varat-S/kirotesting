@@ -255,15 +255,27 @@ def get_bo_run(
 def get_bo_workbench_html(
     case_id: str,
     analysis_run_id: str | None = Query(default=None),
+    credit: bool = Query(default=False),
+    fo_run: str | None = Query(default=None),
     session: Session = Depends(get_session),
 ) -> HTMLResponse:
+    """``?credit=1&fo_run=`` (set by the credit view's link): show the way back, and return there after the
+    review decision."""
+    return _bo_page(session, case_id, analysis_run_id, credit=credit, fo_run=fo_run)
+
+
+def _bo_page(session, case_id, analysis_run_id, *, credit=False, fo_run=None, error=None, status_code=200):
+    from app.api.credit import credit_context
     from app.services.bo.workbench import bo_runs
 
     runs = bo_runs(session, case_id)
     selected = analysis_run_id or (runs[0]["analysis_run_id"] if runs else None)
     view = _bo_run_for_case(session, case_id, selected) if selected else None
     return HTMLResponse(
-        _env.get_template("bo_workbench.html.j2").render(runs=runs, view=view))
+        _env.get_template("bo_workbench.html.j2").render(
+            runs=runs, view=view, error=error,
+            credit=credit_context(case_id, fo_run, selected) if credit else None),
+        status_code=status_code)
 
 
 @router.get("/{case_id}/bo/runs/{analysis_run_id}/{kind}.json")
@@ -302,15 +314,44 @@ def review_bo_run(
     reason: str = Form(...),
     decision: str = Form(...),
     acknowledge_unresolved: bool = Form(default=False),
+    credit: str = Form(default=""),
+    fo_run: str = Form(default=""),
     session: Session = Depends(get_session),
-) -> dict:
+):
+    """The reviewer's decision on the handoff. Returns the recorded decision as JSON; from the credit view
+    (``credit``), goes back there instead, with RMS re-assessed for its run pair."""
+    from app.api.credit import back_to_credit, reassess_for_credit
     from app.services.bo.handoff import HandoffError, review_handoff
 
     view = _bo_run_for_case(session, case_id, analysis_run_id)
     try:
-        return review_handoff(
+        result = review_handoff(
             session, view["handoff"]["handoff_id"], reviewer=reviewer,
             reason=reason, decision=decision,
             acknowledge_unresolved=acknowledge_unresolved)
     except HandoffError as exc:
+        if credit:
+            return _bo_page(session, case_id, analysis_run_id, credit=True, fo_run=fo_run or None,
+                            error=str(exc), status_code=409)
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if credit:
+        notice = (reassess_for_credit(session, case_id, fo_run, analysis_run_id) if fo_run
+                  else "Decision recorded.")
+        return back_to_credit(case_id, fo_run, analysis_run_id, notice)
+    _reassess_rms(session, analysis_run_id)
+    return result
+
+
+def _reassess_rms(session: Session, analysis_run_id: str) -> None:
+    """Redo an RMS assessment of this BO run on the reviewer's decision. RMS writes only its own files, so a
+    fault there is logged and never undoes the decision just recorded."""
+    import logging
+
+    from app.core.config import get_settings
+    from app.services.rms.runner import reassess_after_bo_review
+
+    try:
+        reassess_after_bo_review(session, analysis_run_id, get_settings().output_dir)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "RMS re-assessment after the BO decision on %s failed", analysis_run_id)

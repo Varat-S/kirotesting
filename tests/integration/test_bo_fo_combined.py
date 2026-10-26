@@ -23,13 +23,15 @@ from sqlalchemy import create_engine, text
 from app.cli import main
 from app.main import create_app
 from app.models.base import init_db
-from app.services import bo_fo
+from app.services import bo_fo, rms
 from app.services.acquisition import shared_filing
 from app.services.acquisition.models import SecFiling
 from app.services.acquisition.sec_edgar import SecEdgarClient
 from app.services.extraction.sec.bundle import SecFilingBundle
 from app.services.fo import loader, precheck
 from app.services.fo import models as fo_models
+from app.services.rms import RmsRequest
+from app.services.rms import runner as rms_runner
 from tests.integration.test_fo_runner_api import FOLDER, NVDA, agent, responses
 
 ACCESSION = "0001045810-26-000021"
@@ -224,6 +226,41 @@ def test_both_sections_run_concurrently_into_one_database(shared, tmp_path):
     assert _count(db, "model_runs") >= 5  # the FO's agent calls came across from its staging database
     assert not list((tmp_path / "data" / "staging").iterdir())
     assert ("fo", "completed") in seen and ("bo", "completed") in seen
+    assert out["rms"] == {"status": "skipped", "reason": "No requested loan amount was given."}
+
+
+def test_rms_runs_after_both_sections_complete(shared, tmp_path):
+    db = _database(tmp_path)
+    seen = []
+    out = bo_fo.run_bo_fo(database=db, folder=shared, bo_backend=None, fo_backend=agent(), fo_mode="scripted",
+                          output_root=tmp_path / "out", rms_request=RmsRequest(500, tenor_years=3),
+                          on_progress=lambda s, m: seen.append((s, m)))
+    assert out["rms"]["status"] == "completed", out["rms"]
+    # RMS starts only once both sections have reported.
+    first_rms = next(i for i, (s, _) in enumerate(seen) if s == "rms")
+    assert {("bo", "completed"), ("fo", "completed")} <= set(seen[:first_rms])
+    summary = out["rms"]["summary"]
+    record = json.loads(Path(summary["output"]).read_text(encoding="utf-8"))
+    assert Path(summary["output"]).parent.parent == tmp_path / "out" / "rms" / "NVDA_FY2026"
+    assert record["sources"]["bo_analysis_run_id"] == out["bo"]["summary"]["analysis_run_id"]
+    assert record["sources"]["fo_run_id"] == out["fo"]["summary"]["run_id"]
+    assert record["request"]["requested_amount_m"] == 500 and record["requires_human_review"] is True
+    # The v2 roster has no Module 4 output, so RMS refers the case rather than guessing.
+    assert summary["verdict"] == "refer" and any(g.startswith("RMS-G05") for g in summary["gates"])
+
+
+def test_rms_is_skipped_when_a_section_fails(shared, tmp_path, monkeypatch):
+    from app.services.bo.runner import BusinessOverviewRunner
+
+    def broken(self, *a, **k):
+        raise RuntimeError("BO broke")
+
+    monkeypatch.setattr(BusinessOverviewRunner, "run_case", broken)
+    out = bo_fo.run_bo_fo(database=_database(tmp_path), folder=shared, bo_backend=None, fo_backend=agent(),
+                          fo_mode="scripted", output_root=tmp_path / "out", rms_request=RmsRequest(500))
+    assert out["fo"]["status"] == "completed"
+    assert out["rms"] == {"status": "skipped", "reason": "Needs both sections completed; the BO did not complete."}
+    assert not (tmp_path / "out" / "rms").exists()
 
 
 def test_one_section_failing_leaves_the_other(shared, tmp_path, monkeypatch):
@@ -276,10 +313,14 @@ def test_cli_run_bo_fo(shared, tmp_path, capsys, monkeypatch):
     script = tmp_path / "agent.json"
     script.write_text(json.dumps(responses()), encoding="utf-8")
     monkeypatch.setattr(cli, "_live_backend", lambda: None)  # the BO's offline backend stands in for --live
-    main([*common, "run-bo-fo", "NVDA_BOTH", "--filing", shared, "--live", "--fo-responses", str(script)])
+    with pytest.raises(ValueError, match="need --amount"):
+        main([*common, "run-bo-fo", "--filing", shared, "--live", "--fo-responses", str(script), "--tenor", "5"])
+    main([*common, "run-bo-fo", "NVDA_BOTH", "--filing", shared, "--live", "--fo-responses", str(script),
+          "--amount", "750", "--tenor", "4"])
     out = json.loads(capsys.readouterr().out)
     assert out["case_id"] == "NVDA_BOTH"
-    assert (out["bo"]["status"], out["fo"]["status"]) == ("completed", "completed")
+    assert (out["bo"]["status"], out["fo"]["status"], out["rms"]["status"]) == ("completed",) * 3
+    assert out["rms"]["summary"]["requested_amount_m"] == 750
 
 
 def test_cli_import_filing(root, loose, tmp_path, capsys):
@@ -322,7 +363,9 @@ def test_browser_upload_then_run_both(client, loose):
                            data={"accession": ACCESSION, "filing_date": FILED.isoformat()},
                            follow_redirects=False)
     assert uploaded.status_code == 303 and uploaded.headers["location"] == "/run?folder=NVDA%2010-K%20FY2026"
-    started = client.post("/run/start", data={"folder": "NVDA 10-K FY2026"}, follow_redirects=False)
+    assert 'name="requested_amount_m"' in client.get("/run").text
+    started = client.post("/run/start", data={"folder": "NVDA 10-K FY2026", "requested_amount_m": "500"},
+                          follow_redirects=False)
     assert started.status_code == 303
     job_id = started.headers["location"].split("job=")[1]
     for _ in range(600):
@@ -332,9 +375,34 @@ def test_browser_upload_then_run_both(client, loose):
         time.sleep(0.5)
     assert job["status"] == "finished", job
     assert job["sections"]["bo"]["status"] == job["sections"]["fo"]["status"] == "completed"
+    assert job["sections"]["rms"]["status"] == "completed" and job["result"]["rms"]["summary"]["verdict"] == "refer"
     page = client.get(f"/run?job={job_id}").text
+    assert "Risk Mitigation &amp; Structuring" in page and "US$500.0M requested" in page
+    # NVIDIA isn't benchmarked as a healthcare company, so there is no FO composite and no capacity to show.
+    assert job["result"]["rms"]["summary"]["capacity"] is None and 'class="rms-capacity"' not in page
     assert f"/cases/NVDA_FY2026/fo.html?run_id={job['result']['fo']['summary']['run_id']}" in page
     assert client.get(f"/cases/NVDA_FY2026/fo.html?run_id={job['result']['fo']['summary']['run_id']}").status_code == 200
+
+
+def test_the_run_page_shows_how_the_debt_capacity_was_worked_out():
+    from app.api import bo_fo as api
+    from tests.unit.test_rms import FO as HCA_FO
+    from tests.unit.test_rms import M4 as HCA_M4
+
+    result = rms.assess(RmsRequest(2000), HCA_FO, m4_analysis=HCA_M4)
+    summary = rms_runner.rms_summary({"run_id": "rms-x", "case_id": "HCA_FY2025", **result.to_dict()},
+                                     Path("rms.json"))
+    job = {"job_id": "j1", "status": "finished", "folder": "HCA 10-K FY2025", "case_id": "HCA_FY2025",
+           "started_at": "", "error": None,
+           "sections": {s: {"status": "completed", "step": "completed", "steps": []} for s in ("bo", "fo", "rms")},
+           "result": {"bo": {"status": "failed", "error": "-"}, "fo": {"status": "failed", "error": "-"},
+                      "rms": {"status": "completed", "summary": summary}}}
+    page = api._env.get_template("bo_fo_run.html.j2").render(
+        filings=[], job=job, jobs=[], values={}, fo_ok=False, bo_ok=False, models=[])
+    assert "Debt capacity: US$10,371.4M" in page
+    assert "Leverage, downside (EBITDAR -20%): 4.5x EBITDAR - lease-adjusted net debt <strong>(binding)</strong>" in page
+    assert "EBITDAR US$16,119.0M" in page and "existing debt service US$2,248.0M" in page
+    assert "BO haircut 0%: none" in page
 
 
 def test_cli_fetch_filing_without_a_year_lists_the_choices(root, tmp_path, capsys, monkeypatch):

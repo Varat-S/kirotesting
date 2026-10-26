@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Credit view</title>{% include 'browser_style.html.j2' %}
+<style>
+  .ok { color: #2f6b45; font-weight: bold; } .bad { color: #9a3324; font-weight: bold; } .warn { color: #8a6d1c; font-weight: bold; }
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } @media (max-width: 800px) { .panels { grid-template-columns: 1fr; } }
+  .card { border: 1px solid #c9d1da; border-radius: 8px; padding: 14px 16px; background: #f8fafd; min-width: 0; }
+  .verdict { border-left: 6px solid #2f6fb0; } .verdict.approve { border-left-color: #2f6b45; } .verdict.decline { border-left-color: #9a3324; } .verdict.refer { border-left-color: #d49b25; }
+  .big { font-size: 1.4rem; font-weight: 700; }
+  dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 8px 0; } dl.facts dt { color: #5b6c80; }
+  form.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+  form.grid .buttons { grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap; }
+  .escalation { border-top: 1px solid #dfe5ec; padding-top: 10px; margin-top: 10px; }
+  td.num { text-align: right; white-space: nowrap; }
+</style></head>
+<body>
+{% macro usd(v) %}{% if v is none %}—{% else %}US${{ '{:,.1f}'.format(v) }}M{% endif %}{% endmacro %}
+{% macro st(v) %}<span class="{{ 'ok' if v in ['approve', 'approve_with_conditions', 'approve_with_conditions_secured', 'accepted', 'completed', 'pass', 'compliant', 'routine', 'complete', 'validated'] else 'bad' if v in ['decline', 'rejected', 'fail', 'breach', 'failed', 'stopped'] else 'warn' }}">{{ (v or '—')|replace('_', ' ') }}</span>{% endmacro %}
+{% macro sc(v) %}{% if v is none %}—{% else %}{{ '{:g}'.format(v) }}{% endif %}{% endmacro %}
+{% set fo, bo, rms = view.fo, view.bo, view.rms %}{% set r = rms.latest %}{% set rec = rms.record %}
+{% set fo_run = fo.run_id if fo else '' %}{% set bo_run = bo.analysis_run_id if bo else '' %}
+<header><span class="badge">Business Overview + Financial Overview + Risk Mitigation &amp; Structuring</span>
+<h1>{{ (fo.entity_name if fo else none) or view.case_id }}: credit view</h1>
+<p class="subtle">Case <code>{{ view.case_id }}</code>{% if fo and fo.period_end %} · period ending {{ fo.period_end }}{% endif %}. Decisions made on this page are recorded like those on the BO and FO workbenches, and RMS is re-assessed straight after each one, with the last requested loan.</p>
+{% set bo_link = '/cases/' ~ view.case_id ~ '/bo.html?' ~ {'analysis_run_id': bo_run, 'credit': 1, 'fo_run': fo_run}|urlencode %}
+{% set fo_link = '/cases/' ~ view.case_id ~ '/fo.html?' ~ {'run_id': fo_run, 'credit': 1, 'bo_run': bo_run}|urlencode %}
+<div class="actions"><a href="/">All cases</a>{% if bo %}<a href="{{ bo_link }}">Business Overview workbench</a>{% endif %}{% if fo %}<a href="{{ fo_link }}">Financial Overview workbench</a>{% endif %}<a href="/run">Run BO and FO</a></div>
+{% if view.fo_runs|length > 1 or view.bo_runs|length > 1 %}
+<form method="get" action="/cases/{{ view.case_id }}/credit.html" class="grid" style="margin-top:14px">
+<div><label for="fo_run_pick">FO run</label><select id="fo_run_pick" name="fo_run">{% for x in view.fo_runs %}<option value="{{ x.run_id }}"{% if x.run_id == fo_run %} selected{% endif %}>{{ x.run_id }} ({{ x.status|replace('_', ' ') }}, {{ x.started_at[:10] }})</option>{% endfor %}</select></div>
+<div><label for="bo_run_pick">BO run</label><select id="bo_run_pick" name="bo_run">{% for x in view.bo_runs %}<option value="{{ x.analysis_run_id }}"{% if x.analysis_run_id == bo_run %} selected{% endif %}>{{ x.analysis_run_id }} ({{ x.human_review_status }}, {{ x.created_at[:10] }})</option>{% endfor %}</select></div>
+<div class="buttons"><button type="submit">Show these runs</button></div></form>{% endif %}
+</header>
+<main>
+{% if error %}<section><p class="notice" role="alert"><strong>{{ error }}</strong></p></section>{% endif %}
+{% if notice %}<section><p class="notice" role="status">{{ notice }}</p></section>{% endif %}
+
+<section id="verdict"><h2>Verdict</h2>
+{% if r %}{% set kind = 'approve' if r.verdict.startswith('approve') or r.verdict == 'counter_offer' else r.verdict %}
+<div class="card verdict {{ kind }}">
+<p class="big">{{ st(r.verdict) }}{% if r.approved_amount_m is not none %} · {{ usd(r.approved_amount_m) }}{% if r.approved_amount_m != r.requested_amount_m %} (counter-offer){% endif %}{% endif %}</p>
+<p>Requested {{ usd(r.requested_amount_m) }} · derived debt capacity {{ usd(r.derived_capacity_m) }}{% if r.utilisation is not none %} · utilisation {{ '{:.0%}'.format(r.utilisation) }}{% endif %} · grade {{ r.rating or '—' }} ({{ r.level or '—' }}) · needs human review</p>
+{% if rms.stale %}<div class="notice" id="stale"><strong>Out of date:</strong> {{ rms.stale|join('; ') }}. <form method="post" action="/cases/{{ view.case_id }}/credit/assess" style="display:inline">
+<input type="hidden" name="fo_run" value="{{ fo_run }}"><input type="hidden" name="bo_run" value="{{ bo_run }}">
+<input type="hidden" name="requested_amount_m" value="{{ rms.request.requested_amount_m }}"><input type="hidden" name="tenor_years" value="{{ rms.request.tenor_years }}">
+<input type="hidden" name="interest_rate" value="{{ rms.request.interest_rate }}"><input type="hidden" name="collateral_value_m" value="{{ rms.request.collateral_value_m if rms.request.collateral_value_m is not none else '' }}">
+<button type="submit">Re-assess now</button></form></div>{% endif %}
+{% if r.gates %}<p><strong>Gates holding:</strong></p><ul>{% for g in r.gates %}<li>{{ g }}</li>{% endfor %}</ul>{% endif %}
+<p class="subtle">Assessment <code>{{ r.run_id }}</code>{% if r.supersedes %} (supersedes <code>{{ r.supersedes }}</code>){% endif %} · <code>{{ r.output }}</code></p>
+</div>
+{% else %}<p>No assessment of these runs yet. Enter the requested loan below.</p>{% endif %}
+{% if fo %}
+<form method="post" action="/cases/{{ view.case_id }}/credit/assess" class="grid" style="margin-top:14px" id="assess-form">
+<input type="hidden" name="fo_run" value="{{ fo_run }}"><input type="hidden" name="bo_run" value="{{ bo_run }}">
+<div><label for="requested_amount_m">Requested loan, US$ millions</label><input id="requested_amount_m" name="requested_amount_m" type="number" min="0.1" step="0.1" required value="{{ rms.request.requested_amount_m if rms.request.requested_amount_m is not none else '' }}"></div>
+<div><label for="tenor_years">Tenor, years</label><input id="tenor_years" name="tenor_years" type="number" min="1" step="1" value="{{ rms.request.tenor_years }}"></div>
+<div><label for="interest_rate">Interest rate</label><input id="interest_rate" name="interest_rate" type="number" min="0" step="0.0005" value="{{ rms.request.interest_rate }}"></div>
+<div><label for="collateral_value_m">Collateral value, US$ millions <small>(secured only)</small></label><input id="collateral_value_m" name="collateral_value_m" type="number" min="0" step="0.1" value="{{ rms.request.collateral_value_m if rms.request.collateral_value_m is not none else '' }}"></div>
+<div class="buttons"><button class="primary-button" type="submit">{{ 'Re-assess' if r else 'Assess' }}</button></div>
+</form>{% else %}<p class="notice">This case has no Financial Overview run: RMS needs one.</p>{% endif %}
+</section>
+
+<div class="panels">
+<section id="bo" class="card"><h2>Business Overview</h2>
+{% if bo %}
+<dl class="facts">
+<dt>Handoff</dt><dd>{{ st(bo.human_review_status) }}{% if bo.reviewer %} by {{ bo.reviewer }}{% endif %}{% if bo.reviewed_at %} ({{ bo.reviewed_at[:10] }}){% endif %}</dd>
+<dt>Conclusion</dt><dd>{{ st(bo.conclusion_status) }}</dd>
+<dt>Business risk band</dt><dd>{{ bo.business_band if bo.business_band is not none else 'unavailable' }}</dd>
+<dt>M4 credit verdict</dt><dd>{% if bo.m4.present %}{{ st(bo.m4.verdict) }} · placement {{ (bo.m4.placement or '—')|replace('_', ' ') }}{% else %}<span class="warn">no Module 4 output</span>{% endif %}</dd>
+{% if bo.m4.present %}<dt>M4 status</dt><dd>{{ st(bo.m4.status) }} · debt specialist {{ 'validated' if bo.m4.validated else 'not validated' }}</dd>
+<dt>M4 total debt</dt><dd>{{ usd(bo.m4.total_debt_m) }} · refinancing distress events {{ bo.m4.distress_events if bo.m4.distress_events is not none else '—' }}</dd>{% endif %}
+<dt>M3 structural findings</dt><dd>{% if bo.m3_findings %}{% for f in bo.m3_findings %}{{ f.finding_id }} ({{ f.dimension|replace('_', ' ') }}){% if not loop.last %}; {% endif %}{% endfor %}{% else %}none counted{% endif %}</dd>
+<dt>Unresolved challenges</dt><dd>{{ bo.unresolved_challenges|length }}</dd>
+</dl>
+{% if bo.risks %}<p><strong>Material risks and weaknesses</strong></p><ul>{% for x in bo.risks %}<li>{{ x.title }} <small class="subtle">{{ x.claim_id }}</small></li>{% endfor %}</ul>{% endif %}
+{% if bo.unproven_mitigants %}<p><strong>Unproven mitigants</strong></p><ul>{% for m in bo.unproven_mitigants %}<li>{{ m }}</li>{% endfor %}</ul>{% endif %}
+{% if bo.can_reject %}
+<form method="post" action="/cases/{{ view.case_id }}/credit/bo/{{ bo_run }}/review" class="grid" id="bo-review-form">
+<input type="hidden" name="fo_run" value="{{ fo_run }}">
+<div><label for="bo_reviewer">Reviewer</label><input id="bo_reviewer" name="reviewer" required></div>
+<div><label for="bo_reason">Reason</label><input id="bo_reason" name="reason" required></div>
+{% if bo.unresolved_challenges %}<div class="buttons"><label style="font-weight:normal"><input type="checkbox" name="acknowledge_unresolved" value="true" style="width:auto"> I acknowledge the {{ bo.unresolved_challenges|length }} unresolved challenge(s); they stay recorded</label></div>{% endif %}
+<div class="buttons">{% if bo.can_accept %}<button type="submit" name="decision" value="accept">Accept the Business Overview</button>{% endif %}<button type="submit" name="decision" value="reject">Reject</button></div>
+</form>{% if not bo.can_accept %}<p class="notice">There is no validated conclusion to accept.</p>{% endif %}
+{% endif %}
+<p><a href="{{ bo_link }}">Open the full Business Overview (memo, agents, evidence)</a> <span class="subtle">· you can come back here</span></p>
+{% else %}<p>No Business Overview run for this case.</p>{% endif %}
+</section>
+
+<section id="fo" class="card"><h2>Financial Overview</h2>
+{% if fo %}
+<dl class="facts">
+<dt>Run</dt><dd>{{ st(fo.status) }} <code>{{ fo.run_id }}</code></dd>
+<dt>Composite risk score</dt><dd>{% if fo.composite is not none %}<strong>{{ sc(fo.composite) }} ({{ fo.rating }})</strong>{% else %}not scored{% endif %}{% if fo.engine_composite != fo.composite %} <span class="subtle">· engine {{ sc(fo.engine_composite) }} ({{ fo.engine_rating }})</span>{% endif %}</dd>
+<dt>Going concern</dt><dd>{{ st(fo.gc_status) }}</dd>
+<dt>Covenants</dt><dd>{{ st(fo.covenant_status) }}</dd>
+</dl>
+<div class="table-wrap"><table><thead><tr><th>Measure</th><th>Weight</th><th>Engine</th><th>Now</th><th>Analyst</th></tr></thead><tbody>
+{% for m in fo.measures %}<tr><td>{{ m.name }}</td><td class="num">{{ '{:g}'.format(m.weight) }}%</td><td class="num">{{ sc(m.engine) }}</td><td class="num"><strong>{{ sc(m.score) }}</strong></td><td>{% if m.decision %}{{ m.decision.decision }} by {{ m.decision.reviewer }}{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+<p class="subtle">Risk scores run 1 (lowest) to 10. The FO rating methodology is provisional.</p>
+{% if fo.pending %}<h3>Waiting for an analyst ({{ fo.pending|length }})</h3>
+{% for e in fo.pending %}<div class="escalation">
+{% if e.type == 'measure_override' %}
+<p><strong>{{ e.measure_name or e.measure|replace('_', ' ') }}</strong>: engine score {{ sc(e.engine_score) }}.{% if e.reason %} <span class="subtle">{{ e.reason }}</span>{% endif %}</p>
+<form method="post" action="/cases/{{ view.case_id }}/credit/fo/{{ fo_run }}/override" class="grid fo-override-form">
+<input type="hidden" name="measure" value="{{ e.measure }}"><input type="hidden" name="bo_run" value="{{ bo_run }}">
+<div><label>Your score <small>(to override, 1-10)</small></label><input name="score" type="number" min="1" max="10" step="0.1"></div>
+<div><label>Reviewer</label><input name="reviewer" required></div>
+<div><label>Reason</label><input name="reason" required></div>
+<div class="buttons"><button type="submit" name="decision" value="accept">Accept the engine's score</button><button type="submit" name="decision" value="override">Override</button></div>
+</form>
+{% else %}
+<p><strong>Going-concern decision</strong>{% if e.reason %}: <span class="subtle">{{ e.reason }}</span>{% endif %}</p>
+<form method="post" action="/cases/{{ view.case_id }}/credit/fo/{{ fo_run }}/review" class="grid fo-review-form">
+<input type="hidden" name="bo_run" value="{{ bo_run }}">
+<div><label>Reviewer</label><input name="reviewer" required></div>
+<div><label>Reason</label><input name="reason" required></div>
+<div class="buttons">{% if e.disagreement %}<button type="submit" name="decision" value="use_verified">Use the verified result</button>{% endif %}<button type="submit" name="decision" value="continue">Continue (going-concern fail stands)</button><button type="submit" name="decision" value="stop">Stop</button></div>
+</form>
+{% endif %}</div>{% endfor %}
+{% endif %}
+{% if fo.decisions %}<p><strong>Analyst decisions applied</strong></p><ul>{% for d in fo.decisions %}<li>{{ d }}</li>{% endfor %}</ul>{% endif %}
+<p><a href="{{ fo_link }}">Open the full Financial Overview (scorecard, pre-checks, triggers, evidence)</a> <span class="subtle">· you can come back here</span></p>
+{% else %}<p>No Financial Overview run for this case.</p>{% endif %}
+</section>
+</div>
+
+{% if rec %}
+<section id="rms"><h2>Risk Mitigation &amp; Structuring</h2>
+<div class="panels">
+<div class="card"><h3>Grade</h3>
+{% if rec.grade %}<p>FO composite {{ sc(rec.grade.fo_composite_score) }} ({{ rec.grade.fo_credit_rating }}){% for n in rec.grade.notches %} · {{ n.reason }} {{ '{:+g}'.format(n.notch) }}{% endfor %}{% if rec.grade.severity_floor.applied %} · floored at 7 ({{ rec.grade.severity_floor.measures|join(', ') }}){% endif %} → <strong>{{ sc(rec.grade.score) }} ({{ rec.grade.rating }}, {{ rec.grade.level }})</strong></p>{% else %}<p>No grade: no FO composite.</p>{% endif %}
+{% if r.capacity %}{% set c = r.capacity %}{% set i = c.inputs_m %}
+<h3>Debt capacity: {{ usd(c.derived_capacity_m) }}</h3>
+<p class="subtle">EBITDAR {{ usd(i.ebitdar) }} · lease-adjusted debt {{ usd(i.adj_debt) }} (net {{ usd(i.adj_net_debt) }}) · CFADS {{ usd(i.cfads) }} · existing debt service {{ usd(i.existing_debt_service) }} ({{ c.existing_debt_service_basis }}) · sized at grade level {{ c.level }}</p>
+<div class="table-wrap"><table class="rms-capacity"><tbody>
+{% for t in c.tests %}<tr><td>{{ t.label }}{% if t.binding %} <strong>(binding)</strong>{% endif %}</td><td class="num">{{ usd(t.capacity_m) }}</td></tr>{% endfor %}
+<tr><td>Base capacity: the smallest test</td><td class="num">{{ usd(c.base_capacity_m) }}</td></tr>
+<tr><td>BO haircut {{ '{:.0%}'.format(c.haircut) }}: {{ c.haircuts|join('; ') if c.haircuts else 'none' }}</td><td class="num">{% if c.base_capacity_m is not none %}-{{ usd(c.base_capacity_m - c.derived_capacity_m) }}{% endif %}</td></tr>
+<tr><td><strong>Derived debt capacity</strong></td><td class="num"><strong>{{ usd(c.derived_capacity_m) }}</strong></td></tr>
+</tbody></table></div>{% endif %}
+</div>
+<div class="card"><h3>Structure{% if rec.terms and rec.terms.provisional %} <small class="warn">(provisional: the case is referred)</small>{% endif %}</h3>
+{% if rec.terms %}{% set t = rec.terms %}
+<dl class="facts">
+<dt>Amount</dt><dd>{{ usd(t.amount_m) }}</dd>
+<dt>Rank</dt><dd>{{ t.rank|replace('_', ' ') }}</dd>
+<dt>Tenor</dt><dd>{{ t.tenor_years }} years at {{ '{:.2%}'.format(t.interest_rate) }}</dd>
+<dt>Amortisation</dt><dd>{{ t.amortisation.type|replace('_', ' ') }}{% if t.amortisation.amortised_share %}, {{ '{:.0%}'.format(t.amortisation.amortised_share) }} amortised{% endif %}{% if t.amortisation.excess_cash_sweep %}, {{ '{:.0%}'.format(t.amortisation.excess_cash_sweep) }} excess cash sweep{% endif %}</dd>
+<dt>Pro forma leverage</dt><dd>{{ t.pro_forma_leverage }}x</dd>
+<dt>Covenants</dt><dd>{% for k in t.financial_covenants %}{{ k.covenant|replace('_', ' ') }} {% if k.max is defined %}≤ {{ k.max }}x{% else %}≥ {{ k.min }}x{% endif %} ({{ k.test }}){% if not loop.last %}<br>{% endif %}{% endfor %}</dd>
+<dt>Guarantees</dt><dd>{{ t.guarantees }}</dd>
+</dl>{% else %}<p>No structure drafted for this verdict.</p>{% endif %}
+{% if rec.feasibility %}{% set f = rec.feasibility %}<p>Structuring engine: {% if f.feasible %}<span class="ok">feasible</span>{% elif f.failures %}<span class="bad">fails {{ f.failures|join(', ') }}</span>{% else %}<span class="warn">{{ f.unavailable|join(', ') }} untested (a condition before drawdown)</span>{% endif %}</p>{% endif %}
+</div>
+</div>
+{% if rec.mitigants %}<h3>Mitigants ({{ rec.mitigants|length }})</h3>
+<div class="table-wrap"><table><thead><tr><th>Rule</th><th>Kind</th><th>Why</th><th>Protection</th></tr></thead><tbody>
+{% for m in rec.mitigants %}<tr><td><code>{{ m.rule_id }}</code></td><td>{{ m.category|replace('_', ' ') }}</td><td>{{ m.trigger }}{% if m.heuristic %} <small class="subtle">(keyword match)</small>{% endif %}</td><td>{{ m.mitigant }}</td></tr>{% endfor %}
+</tbody></table></div>{% endif %}
+{% if rec.limitations %}<details><summary>Limitations ({{ rec.limitations|length }})</summary><ul>{% for l in rec.limitations %}<li>{{ l }}</li>{% endfor %}</ul></details>{% endif %}
+<h3>Assessment history</h3>
+<div class="table-wrap"><table><thead><tr><th>Assessed</th><th>Verdict</th><th>Requested</th><th>Approved</th><th>BO handoff</th><th>FO decisions applied</th></tr></thead><tbody>
+{% for h in rms.history %}<tr><td>{{ (h.assessed_at or '')[:19]|replace('T', ' ') }} <small class="subtle"><code>{{ h.run_id }}</code></small></td><td>{{ st(h.verdict) }}</td><td class="num">{{ usd(h.requested_amount_m) }}</td><td class="num">{{ usd(h.approved_amount_m) }}</td><td>{{ h.bo_review_status or '—' }}</td><td>{{ h.fo_decisions|join('; ') if h.fo_decisions else '—' }}</td></tr>{% endfor %}
+</tbody></table></div>
+</section>
+{% endif %}
+</main>
+</body>
+</html>

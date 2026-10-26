@@ -22,6 +22,7 @@ from app.api.inspection import router as inspection_router
 from app.api.financial_overview import router as financial_overview_router
 from app.api.pipeline_explorer import router as pipeline_explorer_router
 from app.api.bo_fo import router as bo_fo_router
+from app.api.credit import router as credit_router
 
 
 def create_app() -> FastAPI:
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
     app.include_router(financial_overview_router)
     app.include_router(pipeline_explorer_router)
     app.include_router(bo_fo_router)
+    app.include_router(credit_router)
     return app
 
 

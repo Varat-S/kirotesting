@@ -295,6 +295,19 @@ def main(argv=None):
     fo_override.add_argument("--score", type=float, help="Your score, 1-10 (required to override)")
     fo_override.add_argument("--reviewer", required=True)
     fo_override.add_argument("--reason", required=True)
+    run_rms = commands.add_parser(
+        "run-rms",
+        help="Risk Mitigation & Structuring for a case from its recorded BO and FO runs (with the FO analyst's "
+             "decisions applied)",
+    )
+    run_rms.add_argument("case_id")
+    run_rms.add_argument("--amount", type=float,
+                         help="Requested loan, US$ millions (default: the case's latest RMS assessment's request)")
+    run_rms.add_argument("--tenor", type=int, help="With --amount: requested tenor in years (default 5)")
+    run_rms.add_argument("--rate", type=float, help="With --amount: interest rate, e.g. 0.065 (default 6.5%%)")
+    run_rms.add_argument("--collateral-value", type=float, help="With --amount: collateral value, US$ millions")
+    run_rms.add_argument("--fo-run", help="FO run id (default: the case's latest)")
+    run_rms.add_argument("--bo-run", help="BO analysis run id (default: the case's latest handoff)")
     filing_fetch = commands.add_parser(
         "fetch-filing",
         help="Download a 10-K from SEC EDGAR into edgar_filings/ for both the BO and the FO "
@@ -345,6 +358,13 @@ def main(argv=None):
         "--cutoff", type=lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")),
         help="BO evidence cut-off (default: the latest file availability, so every file is admitted)")
     both.add_argument("--pdf", action="store_true")
+    both.add_argument("--amount", type=float,
+                      help="Requested loan, US$ millions: Risk Mitigation & Structuring runs once both sections "
+                           "complete")
+    both.add_argument("--tenor", type=int, help="With --amount: requested tenor in years (default 5)")
+    both.add_argument("--rate", type=float, help="With --amount: interest rate, e.g. 0.065 (default 6.5%%)")
+    both.add_argument("--collateral-value", type=float,
+                      help="With --amount: collateral value, US$ millions (a secured loan's LTV test)")
     approve = commands.add_parser(
         "approve", help="Record your explicit approval of the exact draft content"
     )
@@ -401,21 +421,40 @@ def main(argv=None):
                 return
             if args.command == "fo-review":
                 from app.services.fo.review import review_run
+                from app.services.rms.runner import reassess_after_fo_review
 
-                print(json.dumps(review_run(
+                result = review_run(
                     session, args.run_id, decision=args.decision, reviewer=args.reviewer,
                     reason=args.reason, output_root=args.output,
-                ), indent=2))
+                )
+                # An RMS assessment of this run is redone on the analyst's decision.
+                result["rms"] = reassess_after_fo_review(session, args.run_id, args.output)
+                print(json.dumps(result, indent=2))
                 session.commit()
                 return
             if args.command == "fo-override":
                 from app.services.fo.review import override_measure
+                from app.services.rms.runner import reassess_after_fo_review
 
-                print(json.dumps(override_measure(
+                result = override_measure(
                     session, args.run_id, measure=args.measure, decision=args.decision, score=args.score,
                     reviewer=args.reviewer, reason=args.reason, output_root=args.output,
-                ), indent=2))
+                )
+                result["rms"] = reassess_after_fo_review(session, args.run_id, args.output)
+                print(json.dumps(result, indent=2))
                 session.commit()
+                return
+            if args.command == "run-rms":
+                from app.services.rms import RmsRequest
+                from app.services.rms.runner import assess_case
+
+                if args.amount is None and (args.tenor or args.rate is not None or args.collateral_value is not None):
+                    raise ValueError("--tenor, --rate and --collateral-value need --amount.")
+                request = (RmsRequest(args.amount, tenor_years=args.tenor, interest_rate=args.rate,
+                                      collateral_value_m=args.collateral_value)
+                           if args.amount is not None else None)
+                print(json.dumps(assess_case(session, args.case_id, output_root=args.output, request=request,
+                                             fo_run_id=args.fo_run, bo_run_id=args.bo_run), indent=2))
                 return
             if args.command == "run-bo-specialists":
                 print(json.dumps(_run_bo_specialists(session, database, args), indent=2))
@@ -633,7 +672,13 @@ def _run_bo_fo(session, database, args):
     from app.services import bo_fo
     from app.services.acquisition import shared_filing
     from app.services.fo import precheck
+    from app.services.rms import RmsRequest
 
+    if args.amount is None and (args.tenor or args.rate is not None or args.collateral_value is not None):
+        raise ValueError("--tenor, --rate and --collateral-value need --amount.")
+    rms_request = (RmsRequest(args.amount, tenor_years=args.tenor, interest_rate=args.rate,
+                              collateral_value_m=args.collateral_value)
+                   if args.amount is not None else None)
     if args.ticker:
         if bool(args.fy) == bool(args.accession):
             raise ValueError("--ticker requires exactly one of --fy or --accession.")
@@ -670,8 +715,8 @@ def _run_bo_fo(session, database, args):
         bo_backend=bo_backend, fo_backend=fo_backend, fo_mode=fo_mode,
         output_root=args.output, roster=args.roster,
         enable_m4_debt_specialist=args.enable_m4_debt_specialist, produce_pdf=args.pdf,
-        on_progress=show)
-    for section in ("bo", "fo"):
+        rms_request=rms_request, on_progress=show)
+    for section in ("bo", "fo", "rms"):
         if outcome[section]["status"] == "failed":
             print(outcome[section].pop("traceback"), file=sys.stderr)
     return outcome

@@ -13,6 +13,7 @@
   .buttons { margin-top: 16px; } @media (max-width: 650px) { .sections { grid-template-columns: 1fr; } }
 </style></head>
 <body>
+{% macro usd(v) %}{% if v is none %}unavailable{% else %}US${{ '{:,.1f}'.format(v) }}M{% endif %}{% endmacro %}
 {% macro st(v) %}<span class="{{ 'ok' if v in ['completed', 'finished'] else 'bad' if v in ['failed'] else 'warn' }}">{{ (v or '—')|replace('_', ' ') }}</span>{% endmacro %}
 <header><span class="badge">Business Overview + Financial Overview</span><h1>Run BO and FO together</h1>
 <p class="subtle">Get a 10-K in once, by downloading it from SEC EDGAR or uploading its files, and both sections read the same folder in <code>edgar_filings/</code>: the Business Overview reads its <code>bundle.json</code> (file roles, hashes and availability), and the Financial Overview reads its Inline XBRL. Both then run at the same time under one case id.</p>
@@ -32,6 +33,25 @@
 <p class="error bad"{% if not (r and r.status == 'failed') %} hidden{% endif %}>{{ r.error if r and r.status == 'failed' else '' }}</p>
 <p class="open"{% if not (r and r.status == 'completed') %} hidden{% endif %}>{% if r and r.status == 'completed' %}{% if key == 'bo' %}<a href="/cases/{{ job.case_id }}/bo.html?analysis_run_id={{ r.summary.analysis_run_id }}">Open the Business Overview</a>{% else %}<a href="/cases/{{ job.case_id }}/fo.html?run_id={{ r.summary.run_id }}">Open the Financial Overview</a>{% endif %}{% endif %}</p></div>
 {% endfor %}
+{% set s = job.sections.rms %}{% set r = job.result.rms if job.result else none %}
+<div class="section-card" id="section-rms"><strong>Risk Mitigation &amp; Structuring</strong> <span class="state">{{ st(s.status) }}</span>
+<div class="step subtle">{{ s.step }}</div>
+<p class="error bad"{% if not (r and r.status == 'failed') %} hidden{% endif %}>{{ r.error if r and r.status == 'failed' else '' }}</p>
+<div class="rms"{% if not (r and r.status == 'completed') %} hidden{% endif %}>{% if r and r.status == 'completed' %}{% set x = r.summary %}
+<p><strong class="rms-verdict">{{ x.verdict|replace('_', ' ') }}</strong> <span class="rms-amounts">{% if x.approved_amount_m is not none %}US${{ '{:,.1f}'.format(x.approved_amount_m) }}M approved of {% endif %}US${{ '{:,.1f}'.format(x.requested_amount_m) }}M requested</span></p>
+<p class="subtle rms-detail">Grade {{ x.rating or '—' }} ({{ x.level or '—' }}) · derived capacity {% if x.derived_capacity_m is not none %}US${{ '{:,.1f}'.format(x.derived_capacity_m) }}M{% else %}unavailable{% endif %} · needs human review</p>
+{% if x.capacity %}{% set c = x.capacity %}{% set i = c.inputs_m %}
+<details class="rms-capacity" open><summary>Debt capacity: {{ usd(c.derived_capacity_m) }}</summary>
+<p class="subtle">FO inputs: EBITDAR {{ usd(i.ebitdar) }} · lease-adjusted debt {{ usd(i.adj_debt) }} (net {{ usd(i.adj_net_debt) }}) · CFADS {{ usd(i.cfads) }} · existing debt service {{ usd(i.existing_debt_service) }} ({{ c.existing_debt_service_basis }}) · sized at grade level {{ c.level }}</p>
+<div class="table-wrap"><table><tbody>
+{% for t in c.tests %}<tr><td>{{ t.label }}{% if t.binding %} <strong>(binding)</strong>{% endif %}</td><td>{{ usd(t.capacity_m) }}</td></tr>{% endfor %}
+<tr><td>Base capacity: the smallest test</td><td>{{ usd(c.base_capacity_m) }}</td></tr>
+<tr><td>BO haircut {{ '{:.0%}'.format(c.haircut) }}: {{ c.haircuts|join('; ') if c.haircuts else 'none' }}</td><td>{% if c.base_capacity_m is not none %}-{{ usd(c.base_capacity_m - c.derived_capacity_m) }}{% else %}—{% endif %}</td></tr>
+<tr><td><strong>Derived debt capacity</strong></td><td><strong>{{ usd(c.derived_capacity_m) }}</strong></td></tr>
+</tbody></table></div></details>{% endif %}
+<ul class="rms-gates">{% for g in x.gates %}<li>{{ g }}</li>{% endfor %}</ul>
+<p class="subtle rms-output"><code>{{ x.output }}</code></p>{% endif %}</div>
+<p class="open"{% if not (r and r.status == 'completed') %} hidden{% endif %}><a class="credit-link" href="/cases/{{ job.case_id }}/credit.html{% if job.result and job.result.fo.summary %}?fo_run={{ job.result.fo.summary.run_id }}&amp;bo_run={{ job.result.bo.summary.analysis_run_id }}{% endif %}">Open the credit view (BO + FO + RMS, with review)</a></p></div>
 </div>
 <p class="subtle">Live runs make model calls (billed) and usually take several minutes; the Business Overview takes longest. The Financial Overview's result is copied into the database once the Business Overview has finished writing. Keep this page open, or come back to it: the run continues in the server.</p>
 </section>{% endif %}
@@ -48,6 +68,8 @@
 <label style="font-weight:normal;margin-top:8px"><input type="checkbox" name="enable_m4_debt_specialist" value="1" style="width:auto"> Also run the Module 4 debt specialist (v3 only)</label></div>
 <div>{% if fo_ok %}<label for="model">Pre-check Agent model (FO)</label><select id="model" name="model">{% for m in models %}<option value="{{ m }}"{% if m == selected_model %} selected{% endif %}>{{ m }}</option>{% endfor %}</select>{% if models_note %}<small>{{ models_note }}</small>{% endif %}{% else %}<span class="subtle">Pre-check Agent model</span><br><strong class="bad">not configured</strong>{% endif %}</div>
 <div><label for="cutoff">BO evidence cut-off <small>(optional)</small></label><input id="cutoff" name="cutoff" placeholder="e.g. 2026-03-31T00:00:00Z" value="{{ values.cutoff or '' }}"><small>Blank admits every file in the folder (the latest file availability).</small></div>
+<div><label for="requested_amount_m">Requested loan, US$ millions <small>(optional)</small></label><input id="requested_amount_m" name="requested_amount_m" type="number" min="0.1" step="0.1" placeholder="e.g. 2000" value="{{ values.requested_amount_m or '' }}"><small>Risk Mitigation &amp; Structuring runs after both sections complete. Blank skips it.</small></div>
+<div><label for="tenor_years">Requested tenor, years <small>(optional)</small></label><input id="tenor_years" name="tenor_years" type="number" min="1" step="1" placeholder="default 5" value="{{ values.tenor_years or '' }}"></div>
 </div>
 <div class="buttons"><button class="primary-button" type="submit"{% if not (bo_ok and fo_ok) %} disabled{% endif %}>Run Business Overview + Financial Overview</button></div>
 </form>
@@ -97,8 +119,8 @@
 </section>
 
 {% if jobs %}<section id="recent"><h2>Runs in this server session</h2>
-<div class="table-wrap"><table><thead><tr><th>Run</th><th>Folder</th><th>Case</th><th>Started</th><th>BO</th><th>FO</th><th>Open</th></tr></thead><tbody>
-{% for j in jobs %}<tr><td><code>{{ j.job_id }}</code></td><td>{{ j.folder }}</td><td>{{ j.case_id }}</td><td>{{ j.started_at }}</td><td>{{ st(j.sections.bo.status) }}</td><td>{{ st(j.sections.fo.status) }}</td><td><a href="/run?job={{ j.job_id }}">Progress</a>{% if j.result %}{% if j.result.bo.status == 'completed' %} · <a href="/cases/{{ j.case_id }}/bo.html?analysis_run_id={{ j.result.bo.summary.analysis_run_id }}">BO</a>{% endif %}{% if j.result.fo.status == 'completed' %} · <a href="/cases/{{ j.case_id }}/fo.html?run_id={{ j.result.fo.summary.run_id }}">FO</a>{% endif %}{% endif %}</td></tr>{% endfor %}
+<div class="table-wrap"><table><thead><tr><th>Run</th><th>Folder</th><th>Case</th><th>Started</th><th>BO</th><th>FO</th><th>RMS</th><th>Open</th></tr></thead><tbody>
+{% for j in jobs %}<tr><td><code>{{ j.job_id }}</code></td><td>{{ j.folder }}</td><td>{{ j.case_id }}</td><td>{{ j.started_at }}</td><td>{{ st(j.sections.bo.status) }}</td><td>{{ st(j.sections.fo.status) }}</td><td>{% if j.result and j.result.rms.status == 'completed' %}{{ j.result.rms.summary.verdict|replace('_', ' ') }}{% else %}{{ st(j.sections.rms.status) }}{% endif %}</td><td><a href="/run?job={{ j.job_id }}">Progress</a>{% if j.result %}{% if j.result.bo.status == 'completed' %} · <a href="/cases/{{ j.case_id }}/bo.html?analysis_run_id={{ j.result.bo.summary.analysis_run_id }}">BO</a>{% endif %}{% if j.result.fo.status == 'completed' %} · <a href="/cases/{{ j.case_id }}/fo.html?run_id={{ j.result.fo.summary.run_id }}">FO</a>{% endif %}{% endif %}</td></tr>{% endfor %}
 </tbody></table></div></section>{% endif %}
 </main>
 <script>
@@ -130,7 +152,72 @@
         open.textContent = ""; open.appendChild(a); open.hidden = false;
       }
     });
+    renderRms(job);
     return job.status === "running";
+  }
+  function money(v) {
+    if (v === null || v === undefined) return "unavailable";
+    return "US$" + Number(v).toLocaleString("en-US", {minimumFractionDigits: 1, maximumFractionDigits: 1}) + "M";
+  }
+  function row(tbody, label, value, bold) {
+    var tr = document.createElement("tr");
+    [label, value].forEach(function (text) {
+      var td = document.createElement("td");
+      if (bold) { var b = document.createElement("strong"); b.textContent = text; td.appendChild(b); }
+      else td.textContent = text;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  }
+  function capacityDetails(c) {
+    var i = c.inputs_m, details = document.createElement("details"), summary = document.createElement("summary");
+    details.open = true;
+    summary.textContent = "Debt capacity: " + money(c.derived_capacity_m);
+    var inputs = document.createElement("p"); inputs.className = "subtle";
+    inputs.textContent = "FO inputs: EBITDAR " + money(i.ebitdar) + " · lease-adjusted debt " + money(i.adj_debt)
+      + " (net " + money(i.adj_net_debt) + ") · CFADS " + money(i.cfads) + " · existing debt service "
+      + money(i.existing_debt_service) + " (" + c.existing_debt_service_basis + ") · sized at grade level " + c.level;
+    var wrap = document.createElement("div"), table = document.createElement("table"), tbody = document.createElement("tbody");
+    wrap.className = "table-wrap";
+    c.tests.forEach(function (t) { row(tbody, t.label + (t.binding ? " (binding)" : ""), money(t.capacity_m)); });
+    row(tbody, "Base capacity: the smallest test", money(c.base_capacity_m));
+    row(tbody, "BO haircut " + Math.round(c.haircut * 100) + "%: " + (c.haircuts.length ? c.haircuts.join("; ") : "none"),
+        c.base_capacity_m !== null ? "-" + money(c.base_capacity_m - c.derived_capacity_m) : "—");
+    row(tbody, "Derived debt capacity", money(c.derived_capacity_m), true);
+    table.appendChild(tbody); wrap.appendChild(table);
+    [summary, inputs, wrap].forEach(function (el) { details.appendChild(el); });
+    return details;
+  }
+  function renderRms(job) {
+    var s = job.sections.rms, card = document.getElementById("section-rms");
+    if (!s || !card) return;
+    var tag = document.createElement("span"); state(tag, s.status);
+    var holder = card.querySelector(".state"); holder.textContent = ""; holder.appendChild(tag);
+    card.querySelector(".step").textContent = s.step;
+    var r = job.result && job.result.rms;
+    if (r && r.status === "failed") { var err = card.querySelector(".error"); err.textContent = r.error; err.hidden = false; }
+    if (!(r && r.status === "completed")) return;
+    var x = r.summary, box = card.querySelector(".rms");
+    box.textContent = "";
+    var head = document.createElement("p"), verdict = document.createElement("strong");
+    verdict.textContent = x.verdict.replace(/_/g, " ");
+    head.appendChild(verdict);
+    head.appendChild(document.createTextNode(" " + (x.approved_amount_m !== null ? money(x.approved_amount_m) + " approved of " : "")
+      + money(x.requested_amount_m) + " requested"));
+    var detail = document.createElement("p"); detail.className = "subtle";
+    detail.textContent = "Grade " + (x.rating || "—") + " (" + (x.level || "—") + ") · derived capacity "
+      + (x.derived_capacity_m !== null ? money(x.derived_capacity_m) : "unavailable") + " · needs human review";
+    var gates = document.createElement("ul");
+    x.gates.forEach(function (g) { var li = document.createElement("li"); li.textContent = g; gates.appendChild(li); });
+    var out = document.createElement("p"), code = document.createElement("code"); out.className = "subtle";
+    code.textContent = x.output; out.appendChild(code);
+    [head, detail].concat(x.capacity ? [capacityDetails(x.capacity)] : [], [gates, out])
+      .forEach(function (el) { box.appendChild(el); });
+    var credit = card.querySelector(".credit-link");
+    credit.href = "/cases/" + encodeURIComponent(job.case_id) + "/credit.html?fo_run="
+      + encodeURIComponent(job.result.fo.summary.run_id) + "&bo_run=" + encodeURIComponent(job.result.bo.summary.analysis_run_id);
+    credit.parentNode.hidden = false;
+    box.hidden = false;
   }
   var poll = setInterval(function () {
     fetch("/run/jobs/" + encodeURIComponent(id), {cache: "no-store"})

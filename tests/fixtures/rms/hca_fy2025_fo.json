@@ -1,0 +1,549 @@
+{
+  "_note": "Trimmed from a recorded FO run on HCA Healthcare's FY2025 10-K (fo-3191450c498540cd): only the fields the RMS layer reads. Money in US$.",
+  "meta": {
+    "entity_name": "HCA Healthcare, Inc.",
+    "ticker": "HCA",
+    "fiscal_year": "2025",
+    "period_end": "2025-12-31"
+  },
+  "industry": {
+    "industry_group": "Hospitals/Healthcare Facilities"
+  },
+  "composite": {
+    "rating": "A+",
+    "reason": null,
+    "risk_level": "Low",
+    "score": 3.3
+  },
+  "precheck": {
+    "going_concern": {
+      "status": "pass"
+    },
+    "covenants": {
+      "status": "routine"
+    },
+    "acquisitions": {
+      "status": "no_adjustment"
+    }
+  },
+  "gate": {
+    "going_concern": "pass",
+    "covenants": "routine",
+    "acquisitions": "no_adjustment",
+    "agent_triggers": "enabled",
+    "measures_counted": true
+  },
+  "triggers": {
+    "dscr_t1": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 5,
+      "measure": "dscr"
+    },
+    "dscr_t2": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 5,
+      "measure": "dscr"
+    },
+    "dscr_t3": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 5,
+      "measure": "dscr"
+    },
+    "dso_t1": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 2.4,
+      "measure": "dso"
+    },
+    "icr_t1": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 3.5,
+      "measure": "icr"
+    },
+    "icr_t2": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 3.5,
+      "measure": "icr"
+    },
+    "icr_t3": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 3.5,
+      "measure": "icr"
+    },
+    "leverage_t1": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 4.4,
+      "measure": "leverage"
+    },
+    "leverage_t2": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 4.4,
+      "measure": "leverage"
+    },
+    "leverage_t3": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 4.4,
+      "measure": "leverage"
+    },
+    "leverage_t4": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 4.4,
+      "measure": "leverage"
+    },
+    "liquidity_t1": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 3,
+      "measure": "liquidity"
+    },
+    "liquidity_t2": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 3,
+      "measure": "liquidity"
+    },
+    "liquidity_t3": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 3,
+      "measure": "liquidity"
+    },
+    "margin_t1": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 2.3,
+      "measure": "margin"
+    },
+    "margin_t2": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 2.3,
+      "measure": "margin"
+    },
+    "rcf_t1": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 1.8,
+      "measure": "rcf"
+    },
+    "rcf_t2": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 1.8,
+      "measure": "rcf"
+    },
+    "rcf_t3": {
+      "status": "not_triggered",
+      "fired": false,
+      "unresolved": null,
+      "score": 1.8,
+      "measure": "rcf"
+    },
+    "rcf_t4": {
+      "status": "distributions_only",
+      "fired": true,
+      "unresolved": false,
+      "score": 1.8,
+      "measure": "rcf"
+    }
+  },
+  "escalations": [],
+  "metrics": [
+    {
+      "key": "overall",
+      "title": "Composite risk score",
+      "columns": [
+        {
+          "heading": "12M to 2025-12-31",
+          "period": "2025-01-01--2025-12-31",
+          "basis": "historical",
+          "score": 3.3,
+          "reason": null
+        }
+      ]
+    },
+    {
+      "key": "dscr",
+      "title": "Debt service coverage ratio (DSCR)",
+      "columns": [
+        {
+          "heading": "Next 12M from 2025-12-31",
+          "period": "2025-01-01--2025-12-31",
+          "basis": "forward",
+          "score": 5,
+          "ratio": 1.1254762843253185,
+          "reason": null,
+          "cash_flow": 8566000000,
+          "debt_service": 7611000000.0,
+          "principal": 4889000000,
+          "interest": 2248000000.0
+        },
+        {
+          "heading": "12M to 2025-12-31",
+          "period": "2025-01-01--2025-12-31",
+          "basis": "historical",
+          "score": 5,
+          "ratio": 1.1535781291878853,
+          "reason": null,
+          "cash_flow": 8608000000,
+          "debt_service": 7462000000.0,
+          "principal": 4698000000,
+          "interest": 2248000000.0
+        },
+        {
+          "heading": "12M to 2024-12-31",
+          "period": "2024-01-01--2024-12-31",
+          "basis": "historical",
+          "score": null,
+          "ratio": null,
+          "reason": "No principal due tagged",
+          "cash_flow": 6969000000,
+          "debt_service": null,
+          "principal": null,
+          "interest": 2061000000.0
+        },
+        {
+          "heading": "12M to 2023-12-31",
+          "period": "2023-01-01--2023-12-31",
+          "basis": "historical",
+          "score": null,
+          "ratio": null,
+          "reason": "No principal due tagged",
+          "cash_flow": 6446000000,
+          "debt_service": null,
+          "principal": null,
+          "interest": 1938000000.0
+        }
+      ]
+    },
+    {
+      "key": "icr",
+      "title": "Interest coverage ratio (ICR)",
+      "columns": [
+        {
+          "heading": "12M to 2025-12-31",
+          "period": "2025-01-01--2025-12-31",
+          "basis": "historical",
+          "score": 3.5,
+          "ratio": 4.557163531114327,
+          "reason": null
+        },
+        {
+          "heading": "12M to 2024-12-31",
+          "period": "2024-01-01--2024-12-31",
+          "basis": "historical",
+          "score": 3.5,
+          "ratio": 4.324102964118564,
+          "reason": null
+        },
+        {
+          "heading": "12M to 2023-12-31",
+          "period": "2023-01-01--2023-12-31",
+          "basis": "historical",
+          "score": 3.5,
+          "ratio": 4.1672831894780105,
+          "reason": null
+        }
+      ]
+    },
+    {
+      "key": "leverage",
+      "title": "Debt to EBITDAR",
+      "columns": [
+        {
+          "heading": "12M to 2025-12-31",
+          "period": "2025-01-01--2025-12-31",
+          "basis": "historical",
+          "adj_debt": 48697000000,
+          "adj_net_debt": 47657000000,
+          "debt": 46492000000,
+          "cash": 1040000000,
+          "ebitdar": 16119000000,
+          "debt_to_ebitdar": {
+            "flag": null,
+            "g": -0.2569281838055567,
+            "negative_ebitda": false,
+            "net_cash": false,
+            "note": null,
+            "ratio": 3.021093119920591,
+            "raw": 3.021093119920591,
+            "reason": null,
+            "score": 4.2
+          },
+          "net_debt_to_ebitdar": {
+            "flag": null,
+            "g": -0.21007043200956652,
+            "negative_ebitda": false,
+            "net_cash": false,
+            "note": null,
+            "ratio": 2.956572988398784,
+            "raw": 2.956572988398784,
+            "reason": null,
+            "score": 4.4
+          },
+          "composite": {
+            "reason": null,
+            "score": 4.4,
+            "uplift": false
+          }
+        },
+        {
+          "heading": "12M to 2024-12-31",
+          "period": "2024-01-01--2024-12-31",
+          "basis": "historical",
+          "adj_debt": 45237000000,
+          "adj_net_debt": 43304000000,
+          "debt": 43031000000,
+          "cash": 1933000000,
+          "ebitdar": 14399000000,
+          "debt_to_ebitdar": {
+            "flag": null,
+            "g": -0.20046420142242488,
+            "negative_ebitda": false,
+            "net_cash": false,
+            "note": null,
+            "ratio": 3.141676505312869,
+            "raw": 3.141676505312869,
+            "reason": null,
+            "score": 4.4
+          },
+          "net_debt_to_ebitdar": {
+            "flag": null,
+            "g": -0.185464652979069,
+            "negative_ebitda": false,
+            "net_cash": false,
+            "note": null,
+            "ratio": 3.007431071602195,
+            "raw": 3.007431071602195,
+            "reason": null,
+            "score": 4.4
+          },
+          "composite": {
+            "reason": null,
+            "score": 4.4,
+            "uplift": false
+          }
+        },
+        {
+          "heading": "12M to 2023-12-31",
+          "period": "2023-01-01--2023-12-31",
+          "basis": "historical",
+          "adj_debt": null,
+          "adj_net_debt": null,
+          "debt": null,
+          "cash": null,
+          "ebitdar": 13216000000,
+          "debt_to_ebitdar": {
+            "flag": null,
+            "g": null,
+            "negative_ebitda": false,
+            "net_cash": false,
+            "note": null,
+            "ratio": null,
+            "raw": null,
+            "reason": "No balance sheet at this year-end in the filing",
+            "score": null
+          },
+          "net_debt_to_ebitdar": {
+            "flag": null,
+            "g": null,
+            "negative_ebitda": false,
+            "net_cash": false,
+            "note": null,
+            "ratio": null,
+            "raw": null,
+            "reason": "No balance sheet at this year-end in the filing",
+            "score": null
+          },
+          "composite": {
+            "reason": "No Debt / EBITDAR and Net debt / EBITDAR score",
+            "score": null,
+            "uplift": false
+          }
+        }
+      ]
+    },
+    {
+      "key": "rcf",
+      "title": "RCF to debt",
+      "columns": [
+        {
+          "heading": "12M to 2025-12-31",
+          "period": "2025-01-01--2025-12-31",
+          "basis": "historical",
+          "rcf_to_debt": {
+            "g": -1.4794496580898209,
+            "no_debt": false,
+            "note": null,
+            "ratio": 0.21997248290449103,
+            "reason": null,
+            "score": 1.8
+          }
+        },
+        {
+          "heading": "12M to 2024-12-31",
+          "period": "2024-01-01--2024-12-31",
+          "basis": "historical",
+          "rcf_to_debt": {
+            "g": -1.1558670999403144,
+            "no_debt": false,
+            "note": null,
+            "ratio": 0.20379335499701573,
+            "reason": null,
+            "score": 2.2
+          }
+        },
+        {
+          "heading": "12M to 2023-12-31",
+          "period": "2023-01-01--2023-12-31",
+          "basis": "historical",
+          "rcf_to_debt": {
+            "g": null,
+            "no_debt": false,
+            "note": null,
+            "ratio": null,
+            "reason": "No balance sheet at this year-end in the filing",
+            "score": null
+          }
+        }
+      ],
+      "trigger_summary": "trigger RCF/Debt T4: distributions only"
+    },
+    {
+      "key": "liquidity",
+      "title": "Liquidity and debt maturity",
+      "columns": [
+        {
+          "heading": "Next 12M from 2025-12-31",
+          "period": "2025-01-01--2025-12-31",
+          "basis": "historical",
+          "score": 3,
+          "ratio": 1.7157597671752358,
+          "reason": null,
+          "coverage": 1.7157597671752358,
+          "coverage_score": 3,
+          "refinancing": 1.289717741935484,
+          "refinancing_score": 3,
+          "concentration": 0.32005506323668587,
+          "revolver": 5779000000.0,
+          "sources_total": 19455000000.0,
+          "uses_total": 11339000000
+        }
+      ]
+    },
+    {
+      "key": "margin",
+      "title": "EBITDAR margin",
+      "columns": [
+        {
+          "heading": "12M to 2025-12-31",
+          "period": "2025-01-01--2025-12-31",
+          "basis": "historical",
+          "score": 2.3,
+          "ratio": 0.21321428571428572,
+          "reason": null
+        },
+        {
+          "heading": "12M to 2024-12-31",
+          "period": "2024-01-01--2024-12-31",
+          "basis": "historical",
+          "score": 2.6,
+          "ratio": 0.20394317521918331,
+          "reason": null
+        },
+        {
+          "heading": "12M to 2023-12-31",
+          "period": "2023-01-01--2023-12-31",
+          "basis": "historical",
+          "score": 2.7,
+          "ratio": 0.20342322374091862,
+          "reason": null
+        }
+      ]
+    },
+    {
+      "key": "dso",
+      "title": "Days sales outstanding (DSO)",
+      "columns": [
+        {
+          "heading": "12M to 2025-12-31",
+          "period": "2025-01-01--2025-12-31",
+          "basis": "historical",
+          "score": 2.4,
+          "dso": 52.46633597883598,
+          "change": -3.1136677037270886,
+          "reason": null
+        },
+        {
+          "heading": "12M to 2024-12-31",
+          "period": "2024-01-01--2024-12-31",
+          "basis": "historical",
+          "score": null,
+          "dso": 55.58000368256307,
+          "change": null,
+          "reason": "No prior-year DSO: add the prior year's 10-K as a comparison year"
+        },
+        {
+          "heading": "12M to 2023-12-31",
+          "period": "2023-01-01--2023-12-31",
+          "basis": "historical",
+          "score": null,
+          "dso": null,
+          "change": null,
+          "reason": "No balance sheet at this year-end in the filing"
+        }
+      ]
+    }
+  ],
+  "scoring_settings": {
+    "values": {
+      "D": 5.0,
+      "D_dso": 3.0,
+      "bm_days_sales_outstanding": 0.0,
+      "bm_debt_to_ebitdar": 3.61,
+      "bm_ebitdar_margin": 0.158,
+      "bm_net_debt_to_ebitdar": 3.42,
+      "bm_rcf_to_debt": 0.146,
+      "cap": 3.0,
+      "delta": 2.5,
+      "m": 2.0,
+      "p": 5.0,
+      "revolver": null,
+      "w_dscr": 10.0,
+      "w_dso": 7.5,
+      "w_icr": 10.0,
+      "w_leverage": 25.0,
+      "w_liquidity": 20.0,
+      "w_margin": 12.5,
+      "w_rcf": 15.0
+    }
+  }
+}
