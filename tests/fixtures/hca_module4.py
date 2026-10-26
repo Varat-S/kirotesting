@@ -280,8 +280,8 @@ def hca_module4_output() -> dict:
                     "specific_use_description": "Facility expansion, beds, technology",
                     "cumulative_amount_3y_m": 14563.0,
                     "primary_funding_source": "Operating cash flow",
-                    "economic_justification_outcome": (
-                        "Funded organic capacity growth; revenue grew to $75.6B."
+                    "leverage_impact": (
+                        "Self-funded from operating cash flow; leverage-neutral."
                     ),
                 },
                 {
@@ -289,15 +289,15 @@ def hca_module4_output() -> dict:
                     "specific_use_description": "Bolt-on hospital/ASC acquisitions",
                     "cumulative_amount_3y_m": 1298.0,
                     "primary_funding_source": "Operating cash flow",
-                    "economic_justification_outcome": "Disciplined, small relative to OCF.",
+                    "leverage_impact": "Self-funded; immaterial effect on net debt.",
                 },
                 {
                     "capital_allocation_stream": "Share repurchases",
                     "specific_use_description": "Buybacks under board authorizations",
                     "cumulative_amount_3y_m": 19920.0,
                     "primary_funding_source": "Operating cash flow + debt",
-                    "economic_justification_outcome": (
-                        "Large distributions partly debt-funded; leverage managed "
+                    "leverage_impact": (
+                        "Partly debt-funded; added to net debt but leverage kept "
                         "within policy."
                     ),
                 },
@@ -306,27 +306,24 @@ def hca_module4_output() -> dict:
                     "specific_use_description": "Quarterly common dividends",
                     "cumulative_amount_3y_m": 2030.0,
                     "primary_funding_source": "Operating cash flow",
-                    "economic_justification_outcome": "Modest, well covered by OCF.",
+                    "leverage_impact": "Self-funded from OCF; leverage-neutral.",
                 },
             ],
-            "stewardship_matrix": {
-                "debt_funded_expansion_capex_efficiency": (
-                    "CAPEX self-funded by $32.6B of 3-year operating cash flow; "
-                    "efficient organic growth."
-                ),
-                "ma_integration_strategic_discipline": (
-                    "M&A spend immaterial vs cash generation; disciplined bolt-on "
-                    "strategy."
+            "debt_utilisation_matrix": {
+                "debt_funded_vs_internally_funded_deployment": (
+                    "CAPEX, M&A and dividends self-funded by $32.6B of 3-year "
+                    "operating cash flow; only part of the $19.9B of buybacks was "
+                    "debt-funded, so most deployment did not add to net debt."
                 ),
                 "shareholder_distributions_vs_leverage_balance": (
-                    "Aggressive buybacks ($19.9B/3y) partly debt-funded, but "
-                    "leverage kept within policy while growing EBITDA."
+                    "Aggressive buybacks ($19.9B/3y) partly debt-funded, but net "
+                    "debt / EBITDA kept within policy while EBITDA grew."
                 ),
             },
-            "financial_stewardship_verdict": (
-                "Prudent stewardship: growth and modest M&A are internally funded; "
-                "shareholder distributions are large but balanced against a "
-                "controlled leverage profile."
+            "debt_utilisation_leverage_verdict": (
+                "Capital deployment is predominantly internally funded; the "
+                "debt-funded portion of distributions added to net debt but "
+                "leverage remained within a controlled policy range."
             ),
         },
         "deliverable_4": {

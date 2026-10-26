@@ -22,8 +22,8 @@ The five checks (per the Module 4 methodology):
    drawn) and any intercompany borrowings are NOT folded into the reconciled
    total.
 
-Each check produces a :class:`Validator8Check`; the aggregate
-:class:`Validator8Report` is ``passed`` only when every check passes.
+Each check produces a :class:`DebtStructureValidatorCheck`; the aggregate
+:class:`DebtStructureValidatorReport` is ``passed`` only when every check passes.
 """
 
 from __future__ import annotations
@@ -53,8 +53,8 @@ _INTERCOMPANY_MARKERS = ("intercompany", "inter-company", "affiliate loan")
 
 
 @dataclass(frozen=True)
-class Validator8Check:
-    """The outcome of one deterministic Validator 8 check."""
+class DebtStructureValidatorCheck:
+    """The outcome of one deterministic debt-structure validator check."""
 
     check_id: str
     name: str
@@ -64,10 +64,10 @@ class Validator8Check:
 
 
 @dataclass(frozen=True)
-class Validator8Report:
-    """Aggregate Validator 8 report over all checks."""
+class DebtStructureValidatorReport:
+    """Aggregate debt-structure validator report over all checks."""
 
-    checks: list[Validator8Check]
+    checks: list[DebtStructureValidatorCheck]
 
     @property
     def passed(self) -> bool:
@@ -75,10 +75,10 @@ class Validator8Report:
         return all(c.passed for c in self.checks)
 
     @property
-    def failures(self) -> list[Validator8Check]:
+    def failures(self) -> list[DebtStructureValidatorCheck]:
         return [c for c in self.checks if not c.passed]
 
-    def check(self, check_id: str) -> Validator8Check:
+    def check(self, check_id: str) -> DebtStructureValidatorCheck:
         for c in self.checks:
             if c.check_id == check_id:
                 return c
@@ -90,8 +90,8 @@ def _is_intercompany(description: str) -> bool:
     return any(marker in text for marker in _INTERCOMPANY_MARKERS)
 
 
-class Validator8:
-    """Deterministic validator for Module 4 output.
+class DebtStructureValidator:
+    """Deterministic validator for Module 4 debt-structure output (Agent B).
 
     ``reconciliation_tolerance_m`` is an absolute tolerance in $M for the sum of
     tranches vs reported total; rounding across a large schedule makes an exact
@@ -108,7 +108,7 @@ class Validator8:
         self._recon_tol = reconciliation_tolerance_m
         self._ratio_tol = ratio_tolerance
 
-    def validate(self, output: Module4Output) -> Validator8Report:
+    def validate(self, output: Module4Output) -> DebtStructureValidatorReport:
         d1 = output.deliverable_1
         checks = [
             self._check_reconciliation(d1),
@@ -117,11 +117,11 @@ class Validator8:
             self._check_legal_entity(d1),
             self._check_double_counting(d1),
         ]
-        return Validator8Report(checks=checks)
+        return DebtStructureValidatorReport(checks=checks)
 
     # -- check 1: reconciliation ---------------------------------------------
 
-    def _check_reconciliation(self, d1: Deliverable1) -> Validator8Check:
+    def _check_reconciliation(self, d1: Deliverable1) -> DebtStructureValidatorCheck:
         """Sum of drawn tranche principals matches reported total indebtedness.
 
         Only DRAWN principal counts. Undrawn revolver limits and intercompany
@@ -138,7 +138,7 @@ class Validator8:
         tranche_sum = notes_sum + non_note_sum
         delta = abs(tranche_sum - reported)
         passed = delta <= self._recon_tol
-        return Validator8Check(
+        return DebtStructureValidatorCheck(
             check_id=CHECK_RECONCILIATION,
             name="Debt tranche reconciliation to reported total indebtedness",
             passed=passed,
@@ -158,12 +158,12 @@ class Validator8:
 
     # -- check 2: subordination ratio ----------------------------------------
 
-    def _check_subordination_ratio(self, d1: Deliverable1) -> Validator8Check:
+    def _check_subordination_ratio(self, d1: Deliverable1) -> DebtStructureValidatorCheck:
         """Recompute Tier1 direct OpCo secured / consolidated total indebtedness."""
         f = d1.creditor_priority_framework
         total = f.consolidated_total_indebtedness_m
         if total <= 0:
-            return Validator8Check(
+            return DebtStructureValidatorCheck(
                 check_id=CHECK_SUBORDINATION_RATIO,
                 name="Structural subordination drag ratio recomputation",
                 passed=False,
@@ -174,7 +174,7 @@ class Validator8:
         claimed = f.structural_subordination_drag_ratio
         delta = abs(recomputed - claimed)
         passed = delta <= self._ratio_tol
-        return Validator8Check(
+        return DebtStructureValidatorCheck(
             check_id=CHECK_SUBORDINATION_RATIO,
             name="Structural subordination drag ratio recomputation",
             passed=passed,
@@ -195,7 +195,7 @@ class Validator8:
 
     def _check_maturity_order(
         self, schedule: list[SeniorNoteTranche]
-    ) -> Validator8Check:
+    ) -> DebtStructureValidatorCheck:
         """Senior-note maturities must be listed in chronological order."""
         years = [t.maturity_year for t in schedule]
         ordered = all(a <= b for a, b in zip(years, years[1:]))
@@ -208,7 +208,7 @@ class Validator8:
                     "year": years[i],
                 }
                 break
-        return Validator8Check(
+        return DebtStructureValidatorCheck(
             check_id=CHECK_MATURITY_ORDER,
             name="Senior-note maturity chronological ordering",
             passed=ordered,
@@ -223,7 +223,7 @@ class Validator8:
 
     # -- check 4: legal entity ------------------------------------------------
 
-    def _check_legal_entity(self, d1: Deliverable1) -> Validator8Check:
+    def _check_legal_entity(self, d1: Deliverable1) -> DebtStructureValidatorCheck:
         """Every tranche names a legal borrower with coherent credit support.
 
         Fails if any tranche omits a legal borrower, or names the SAME entity as
@@ -255,7 +255,7 @@ class Validator8:
                     f"({borrower!r}); OpCo/HoldCo distinction collapses."
                 )
         passed = not problems
-        return Validator8Check(
+        return DebtStructureValidatorCheck(
             check_id=CHECK_LEGAL_ENTITY,
             name="Legal entity / borrower-guarantor attribution",
             passed=passed,
@@ -269,7 +269,7 @@ class Validator8:
 
     # -- check 5: double-counting --------------------------------------------
 
-    def _check_double_counting(self, d1: Deliverable1) -> Validator8Check:
+    def _check_double_counting(self, d1: Deliverable1) -> DebtStructureValidatorCheck:
         """Undrawn revolver limits and intercompany borrowings stay out of totals.
 
         The reconciled total must not have absorbed (a) available (undrawn)
@@ -303,7 +303,7 @@ class Validator8:
             and drawn_delta > self._recon_tol
         )
         passed = drawn_delta <= self._recon_tol and not includes_undrawn_or_intercompany
-        return Validator8Check(
+        return DebtStructureValidatorCheck(
             check_id=CHECK_DOUBLE_COUNTING,
             name="No double-counting of undrawn limits / intercompany debt",
             passed=passed,

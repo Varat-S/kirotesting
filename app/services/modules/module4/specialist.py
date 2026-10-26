@@ -9,9 +9,10 @@ Ties the three pieces together:
    the other Business Overview specialist prompts use -- no new client method),
    which validates the raw output against the fixed
    :data:`app.schemas.module4.MODULE4_JSON_SCHEMA` BEFORE use.
-3. Run deterministic :class:`Validator8` over the parsed output and attach the
-   report. When Validator 8 fails, a MANDATORY escalation is raised (explicit
-   rule id) so the failure is a real, queryable signal rather than silent prose.
+3. Run the deterministic :class:`DebtStructureValidator` over the parsed output
+   and attach the report. When it fails, a MANDATORY escalation is raised
+   (explicit rule id) so the failure is a real, queryable signal rather than
+   silent prose.
 
 This service never drafts term sheets, covenants or security agreements.
 """
@@ -26,7 +27,10 @@ from app.services.escalation.engine import EscalationEngine
 from app.services.escalation.rules import EscalationCategory, Severity
 from app.services.llm.client import LLMClient, ModelRunResult
 from app.services.modules.module4.prompt import MODULE4_AGENT_NAME
-from app.services.modules.module4.validator8 import Validator8, Validator8Report
+from app.services.modules.module4.debt_structure_validator import (
+    DebtStructureValidator,
+    DebtStructureValidatorReport,
+)
 
 # Explicit rule id for a Validator-8 failure on Module 4 output.
 RULE_VALIDATOR8_FAILURE = "R-MODULE4-VALIDATOR8-01"
@@ -76,7 +80,7 @@ class Module4Result:
     """A completed Module 4 run: parsed output, validator report, provenance."""
 
     output: Module4Output
-    validator8: Validator8Report
+    validator8: DebtStructureValidatorReport
     run: ModelRunResult
     escalation_id: str | None = None
 
@@ -93,12 +97,12 @@ class Module4Specialist:
         self,
         client: LLMClient,
         *,
-        validator: Validator8 | None = None,
+        validator: DebtStructureValidator | None = None,
         escalation_engine: EscalationEngine | None = None,
         case_id: str | None = None,
     ) -> None:
         self._client = client
-        self._validator = validator or Validator8()
+        self._validator = validator or DebtStructureValidator()
         self._escalation = escalation_engine
         self._case_id = case_id
 
@@ -141,7 +145,7 @@ class Module4Specialist:
         )
 
     def _handle_validator_failure(
-        self, report: Validator8Report
+        self, report: DebtStructureValidatorReport
     ) -> str | None:
         """Raise a mandatory escalation when Validator 8 fails (explicit rule id)."""
         if report.passed or self._escalation is None:

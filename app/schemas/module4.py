@@ -1,7 +1,12 @@
-"""Pydantic contracts for the Module 4 Specialist Agent.
+"""Pydantic contracts for the Module 4 Debt Structure Specialist Agent.
 
-Module 4 is the **Debt Structure, Refinancing History & Financial Stewardship**
-specialist (Business Overview Architecture V5). It is an INDEPENDENT specialist:
+This is the **Debt Structure, Refinancing History & Debt Utilisation** specialist
+(Business Overview Architecture V6) -- one of Module 4's two agents. The other,
+Strategy & Capital Allocation (``m4_strategy_capital``), owns acquisition/capex
+strategy and the qualitative capital-allocation / stewardship judgement; this
+specialist owns the DEBT: structure, creditor priority, refinancing, maturity,
+and how capital deployment was funded and affected leverage. The two no longer
+overlap. It is an INDEPENDENT specialist:
 it reads the shared SEC 10-K + structured financial data and produces its own
 four deliverables. It does NOT consume the outputs of Modules 1/2/3 and it does
 NOT draft loan term sheets, covenants or security agreements (that belongs to
@@ -12,7 +17,7 @@ The four deliverables, with their EXACT required column structures, are:
 
 * :class:`Deliverable1` -- Existing Debt & Creditor Priority Map
 * :class:`Deliverable2` -- Historical Refinancing & Debt Maturity Analysis
-* :class:`Deliverable3` -- Debt Utilisation & Financial Stewardship Assessment
+* :class:`Deliverable3` -- Debt Utilisation & Leverage Impact Assessment
 * :class:`Deliverable4` -- Module 4 Credit Conclusion
 
 These schemas are the single source of truth the Module 4 LLM output is
@@ -247,12 +252,24 @@ class Deliverable2(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Deliverable 3: Debt Utilisation & Financial Stewardship Assessment
+# Deliverable 3: Debt Utilisation & Leverage Impact Assessment
+#
+# SCOPE BOUNDARY (Module 4 dual-specialist split): this deliverable covers only
+# how capital deployment was FUNDED and its impact on LEVERAGE / debt-service
+# capacity -- the debt specialist's lane. The QUALITATIVE judgement of capex
+# efficiency and M&A / integration discipline belongs to the Strategy & Capital
+# Allocation agent (``m4_strategy_capital``) and is deliberately NOT assessed
+# here, so the two Module 4 agents do not overlap.
 # ---------------------------------------------------------------------------
 
 
 class CapitalDeploymentEntry(BaseModel):
-    """One row of the Itemized Macro Capital Deployment Reconciliation."""
+    """One row of the Itemized Macro Capital Deployment Reconciliation.
+
+    Describes where capital went, how much, and — the debt-relevant part — how it
+    was FUNDED (operating cash flow vs debt) and the resulting effect on leverage.
+    It does NOT judge strategic merit (that is the strategy agent's remit).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -263,24 +280,37 @@ class CapitalDeploymentEntry(BaseModel):
     cumulative_amount_3y_m: float = Field(
         description="Cumulative Amount ($M) (3-Year)"
     )
-    primary_funding_source: str = Field(description="Primary Funding Source")
-    economic_justification_outcome: str = Field(
-        description="Economic Justification & Operational Outcome"
+    primary_funding_source: str = Field(
+        description="Primary Funding Source (operating cash flow vs debt-funded)"
+    )
+    leverage_impact: str = Field(
+        description="Effect on leverage / debt-service capacity "
+        "(e.g. debt-funded, increased net debt; self-funded, leverage-neutral). "
+        "Debt-relevant funding impact ONLY -- not a strategic-merit judgement."
     )
 
 
-class StewardshipMatrix(BaseModel):
-    """Financial-stewardship assessment across the three stewardship pillars."""
+class DebtUtilisationMatrix(BaseModel):
+    """Debt-utilisation / leverage-impact assessment (debt specialist's lane).
+
+    Scoped to funding and leverage effects. Capex-efficiency and M&A-integration
+    QUALITY are intentionally excluded -- they belong to ``m4_strategy_capital``.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    debt_funded_expansion_capex_efficiency: str
-    ma_integration_strategic_discipline: str
-    shareholder_distributions_vs_leverage_balance: str
+    debt_funded_vs_internally_funded_deployment: str = Field(
+        description="Split of capital deployment funded by debt vs internal cash, "
+        "and what that implies for the debt load."
+    )
+    shareholder_distributions_vs_leverage_balance: str = Field(
+        description="Dividends / buybacks relative to leverage headroom and debt "
+        "policy -- how distributions affect the debt profile."
+    )
 
 
 class Deliverable3(BaseModel):
-    """Deliverable 3 -- Debt Utilisation & Financial Stewardship Assessment."""
+    """Deliverable 3 -- Debt Utilisation & Leverage Impact Assessment."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -288,8 +318,8 @@ class Deliverable3(BaseModel):
     capital_deployment_reconciliation: list[CapitalDeploymentEntry] = Field(
         default_factory=list
     )
-    stewardship_matrix: StewardshipMatrix
-    financial_stewardship_verdict: str
+    debt_utilisation_matrix: DebtUtilisationMatrix
+    debt_utilisation_leverage_verdict: str
 
 
 # ---------------------------------------------------------------------------

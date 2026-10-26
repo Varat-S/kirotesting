@@ -16,8 +16,8 @@ from app.services.audit.log import AuditLog
 from app.services.escalation.engine import EscalationEngine
 from app.services.llm.client import FakeLLMBackend, LLMClient
 from app.services.modules.module4 import (
+    DebtStructureValidator,
     Module4Specialist,
-    Validator8,
 )
 from app.services.modules.module4.specialist import (
     RULE_VALIDATOR8_FAILURE,
@@ -35,7 +35,7 @@ def _specialist(db_session, case_id="HCA-FY2025"):
     client = LLMClient(backend, prompts=registry, session=db_session, audit=audit)
     engine = EscalationEngine(db_session, audit=audit, case_id=case_id)
     specialist = Module4Specialist(
-        client, validator=Validator8(), escalation_engine=engine, case_id=case_id
+        client, validator=DebtStructureValidator(), escalation_engine=engine, case_id=case_id
     )
     return specialist, backend, engine
 

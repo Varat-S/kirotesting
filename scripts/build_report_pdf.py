@@ -270,10 +270,10 @@ def _render_module4(deliverables: dict, st: dict, story: list) -> None:
         story.append(_p("Verdict: " + str(d2["refinancing_capacity_discipline_verdict"]), st["body"]))
 
     d3 = deliverables.get("deliverable_3", {})
-    story.append(_p("Deliverable 3 — Debt Utilisation &amp; Financial Stewardship", st["h3"]))
+    story.append(_p("Deliverable 3 — Debt Utilisation &amp; Leverage Impact", st["h3"]))
     story.append(_p((d3.get("extraction_source") or {}).get("narrative"), st["body"]))
-    if d3.get("financial_stewardship_verdict"):
-        story.append(_p("Verdict: " + str(d3["financial_stewardship_verdict"]), st["body"]))
+    if d3.get("debt_utilisation_leverage_verdict"):
+        story.append(_p("Verdict: " + str(d3["debt_utilisation_leverage_verdict"]), st["body"]))
 
     d4 = deliverables.get("deliverable_4", {})
     story.append(_p("Deliverable 4 — Module 4 Credit Conclusion", st["h3"]))
@@ -457,9 +457,9 @@ def build(
 MODULE_PRESETS: dict[str, dict[str, str]] = {
     "module4": {
         "title": "Module 4 Specialist — Live Test Report",
-        "subtitle": "Debt Structure, Refinancing History & Financial Stewardship · "
+        "subtitle": "Debt Structure, Refinancing History & Debt Utilisation · "
         "AI-assisted draft for human review (UNAPPROVED)",
-        "deliverables_file": "module4_deliverables.json",
+        "deliverables_file": "m4_analysis.json",
         "validator_file": "validator8_report.json",
         "validator_label": "Validator 8",
         "default_out": "module4_test_report.pdf",

@@ -8,7 +8,7 @@ so the test is honest:
                   --CreditMemoPipeline.prepare_case-->  admitted evidence
                   --bounded debt-evidence selection-->  Module4Inputs
                   --Module4Specialist.run (live Vertex/Gemini)-->  4 deliverables
-                  --Validator8-->  deterministic re-check + escalation on failure
+                  --DebtStructureValidator-->  deterministic re-check + escalation
 
 Evidence-first, no fabrication: the inputs handed to the model are only facts and
 verbatim passages that the pipeline ADMITTED from the filing (after the evidence
@@ -306,8 +306,11 @@ def main(argv: list[str] | None = None) -> int:
     result = specialist.run(inputs)
     session.commit()
 
+    # The Module 4 output file is named m4_analysis.json, matching the BO
+    # Architecture V6 per-module naming convention (m1/m2/m3/m4_analysis.json).
+    # It holds the full four-deliverable Module4Output (D1-D4), unchanged.
     deliverables = result.output.model_dump(mode="json")
-    (out_dir / "module4_deliverables.json").write_text(
+    (out_dir / "m4_analysis.json").write_text(
         json.dumps(deliverables, indent=2, default=str), encoding="utf-8"
     )
 

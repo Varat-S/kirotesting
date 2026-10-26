@@ -1,7 +1,11 @@
-"""Module 4 -- Debt Structure, Refinancing History & Financial Stewardship.
+"""Module 4 -- Debt Structure, Refinancing History & Debt Utilisation.
 
-An INDEPENDENT specialist agent. It reads the shared SEC 10-K + structured
-financial data and produces four deliverables (see :mod:`app.schemas.module4`).
+The debt-structure specialist, one of Module 4's two agents (the other,
+``m4_strategy_capital``, owns acquisition/capex strategy and capital-allocation
+stewardship judgement; this agent owns the debt and its leverage impact, with no
+overlap). An INDEPENDENT specialist agent. It reads the shared SEC 10-K +
+structured financial data and produces four deliverables
+(see :mod:`app.schemas.module4`).
 It does NOT consume Modules 1/2/3 outputs and does NOT draft loan term sheets,
 covenants or security agreements.
 
@@ -9,8 +13,9 @@ Public surface:
 
 * :data:`MODULE4_AGENT_NAME`, :data:`MODULE4_PROMPT` -- the versioned agent
   prompt data registered into the prompt catalogue.
-* :class:`Module4Specialist` -- orchestrates the LLM call + Validator 8.
-* :class:`Validator8`, :class:`Validator8Report` -- the deterministic checks.
+* :class:`Module4Specialist` -- orchestrates the LLM call + debt-structure validator.
+* :class:`DebtStructureValidator`, :class:`DebtStructureValidatorReport` -- the
+  deterministic debt-structure checks.
 
 Note: the heavier service symbols (:class:`Module4Specialist`, the validator
 types) are exposed lazily via :func:`__getattr__` so that importing the prompt
@@ -37,9 +42,9 @@ __all__ = [
     "Module4RejectedError",
     "Module4Result",
     "Module4Specialist",
-    "Validator8",
-    "Validator8Check",
-    "Validator8Report",
+    "DebtStructureValidator",
+    "DebtStructureValidatorCheck",
+    "DebtStructureValidatorReport",
 ]
 
 _LAZY: dict[str, tuple[str, str]] = {
@@ -47,9 +52,9 @@ _LAZY: dict[str, tuple[str, str]] = {
     "Module4RejectedError": ("specialist", "Module4RejectedError"),
     "Module4Result": ("specialist", "Module4Result"),
     "Module4Specialist": ("specialist", "Module4Specialist"),
-    "Validator8": ("validator8", "Validator8"),
-    "Validator8Check": ("validator8", "Validator8Check"),
-    "Validator8Report": ("validator8", "Validator8Report"),
+    "DebtStructureValidator": ("debt_structure_validator", "DebtStructureValidator"),
+    "DebtStructureValidatorCheck": ("debt_structure_validator", "DebtStructureValidatorCheck"),
+    "DebtStructureValidatorReport": ("debt_structure_validator", "DebtStructureValidatorReport"),
 }
 
 

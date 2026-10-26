@@ -482,6 +482,25 @@ def _module_conclusions(agents, hypotheses, governed_m3, *, case_id=None):
     overall = m3_output["completion"]["status"]
     if out["M3"]["status"] == "complete" and overall == "partial":
         out["M3"]["status"] = "partial"
+
+    # Module 4 Architecture V6 standalone deliverable: m4_analysis (the content
+    # of m4_analysis.json). Deterministically assembled from the two independent
+    # Module 4 agents. In this recorded-completion path the debt specialist's
+    # four-deliverable output is carried on out["M4"]["m4_debt_assessment"]
+    # (when present); the strategy agent's governed findings are in
+    # out["M4"]["findings"]. No fabrication: absent debt output -> incomplete.
+    from app.services.bo.m4_output import assemble_m4_output
+
+    m4_block = out["M4"]
+    debt_assessment = m4_block.get("m4_debt_assessment") or {}
+    debt_output = debt_assessment.get("assessment")
+    out["M4"]["m4_analysis"] = assemble_m4_output(
+        debt_output,
+        strategy_findings=m4_block.get("findings") or [],
+        debt_status=debt_assessment.get("status", "not_run"),
+        debt_validated=bool(debt_assessment.get("validated")),
+        strategy_status=("validated" if m4_block.get("findings") else "no_usable_findings"),
+    )
     return out
 
 
@@ -988,6 +1007,16 @@ def write_completion_artifacts(packet: dict[str, Any], output_dir: str | Path) -
         paths["m3_analysis"] = folder / "m3_analysis.json"
         paths["m3_analysis"].write_text(
             canonical_json(m3_analysis) + "\n", encoding="utf-8")
+
+    # Module 4 Architecture V6 standalone deliverable: m4_analysis.json. The
+    # governed four-deliverable Module 4 output (debt specialist spine + folded
+    # strategy findings), assembled deterministically in _module_conclusions.
+    m4 = ((packet.get("handoff") or {}).get("module_conclusions") or {}).get("M4") or {}
+    m4_analysis = m4.get("m4_analysis")
+    if m4_analysis is not None:
+        paths["m4_analysis"] = folder / "m4_analysis.json"
+        paths["m4_analysis"].write_text(
+            canonical_json(m4_analysis) + "\n", encoding="utf-8")
     source = packet["source"]["summary"]
     usage = packet["incremental_usage"]
     findings = packet["challenge"]["findings"]

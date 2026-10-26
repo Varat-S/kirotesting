@@ -86,15 +86,22 @@ Not validated: model quality beyond one model and one filing, the logical
 correctness of accepted findings (checks are lexical and structural), and the
 full BO path (orchestrator, challenger, memo) on HCA with a live model.
 
-### Module 4 specialist (debt structure, refinancing & stewardship)
+### Module 4 debt-structure specialist (debt structure, refinancing & debt utilisation)
 
-Module 4 is an **independent specialist** from the Business Overview
-Architecture (V5): Debt Structure, Refinancing History & Financial Stewardship.
-It reads the shared SEC 10-K and structured financial data and produces its own
-four deliverables. It does **not** consume the outputs of Modules 1/2/3
-(cross-module synthesis is a separate downstream concern) and it does **not**
-draft loan term sheets, covenants or security agreements (that belongs to the
-downstream Risk Mitigation & Structuring agent).
+Module 4 has **two agents** with non-overlapping lanes: the Strategy & Capital
+Allocation agent (`m4_strategy_capital`) owns acquisition strategy, integration
+risk, capex strategy and the qualitative capital-allocation / stewardship
+judgement; the **debt-structure specialist** below owns the debt — structure,
+creditor priority, refinancing, maturity, and how capital deployment was funded
+and affected leverage.
+
+The debt-structure specialist is an **independent specialist** (Business
+Overview Architecture V6): Debt Structure, Refinancing History & Debt
+Utilisation. It reads the shared SEC 10-K and structured financial data and
+produces its own four deliverables. It does **not** consume the outputs of
+Modules 1/2/3 (cross-module synthesis is a separate downstream concern) and it
+does **not** draft loan term sheets, covenants or security agreements (that
+belongs to the downstream Risk Mitigation & Structuring agent).
 
 The four schema-validated deliverables are:
 
@@ -107,8 +114,12 @@ The four schema-validated deliverables are:
 2. **Historical Refinancing & Debt Maturity Analysis** — an itemized refinancing
    log plus the refinancing metrics (weighted-average lead time τ_ref, cost
    spread delta ΔS, maturity-extension horizon ΔT, distress-event count).
-3. **Debt Utilisation & Financial Stewardship Assessment** — a macro capital-
-   deployment reconciliation and a three-pillar stewardship matrix.
+3. **Debt Utilisation & Leverage Impact Assessment** — a macro capital-
+   deployment reconciliation (how each stream was funded and its leverage
+   impact) plus a debt-utilisation matrix (debt-funded vs internally-funded
+   deployment; distributions vs leverage balance). Capex-efficiency and
+   M&A-integration *quality* are deliberately excluded — those are the Strategy
+   & Capital Allocation agent's remit, so the two Module 4 agents do not overlap.
 4. **Module 4 Credit Conclusion** — an evidence-driven synthesis matrix and an
    executive credit summary box.
 

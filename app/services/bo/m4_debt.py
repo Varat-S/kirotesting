@@ -66,7 +66,7 @@ class M4DebtResult:
 
     status: str                       # validated | qualified | rejected | failed | unavailable
     assessment: Optional[dict[str, Any]] = None       # parsed Module4Output (json)
-    validator_report: Optional[dict[str, Any]] = None  # Validator8Report (json)
+    validator_report: Optional[dict[str, Any]] = None  # DebtStructureValidatorReport (json)
     validated: bool = False
     escalation_id: Optional[str] = None
     evidence_ids: list[str] = None                    # type: ignore[assignment]
@@ -218,7 +218,7 @@ def run_debt_specialist(
             model_invoked=True,
         )
 
-    # Validator8Report / Validator8Check are frozen dataclasses -> asdict.
+    # DebtStructureValidatorReport / ...Check are frozen dataclasses -> asdict.
     report_json = {
         "passed": result.validator8.passed,
         "checks": [asdict(c) for c in result.validator8.checks],

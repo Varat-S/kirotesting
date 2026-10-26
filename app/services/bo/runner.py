@@ -877,6 +877,7 @@ class _BoRun:
         if result is None:
             m4["m4_debt_assessment"] = None
             m4["m4_debt_status"] = "not_run"
+            m4["m4_analysis"] = self._assemble_m4_analysis(m4, debt_result=None)
             return m4
         block = result.to_module_conclusion()
         m4["m4_debt_assessment"] = block
@@ -892,7 +893,23 @@ class _BoRun:
                           "escalation raised and unresolved.",
             }.get(result.status, f"Module 4 debt-structure status: {result.status}.")
             m4["missing_information"] = sorted({*m4["missing_information"], note})
+        # Deterministic assembly: fold the strategy agent's governed findings
+        # into the debt specialist's four deliverables -> m4_analysis (the
+        # m4_analysis.json content). No new judgement; independence preserved.
+        m4["m4_analysis"] = self._assemble_m4_analysis(m4, debt_result=result)
         return m4
+
+    def _assemble_m4_analysis(self, m4: dict[str, Any], *, debt_result):
+        """Build the governed ``m4_analysis`` from both Module 4 agents."""
+        from app.services.bo.m4_output import assemble_m4_output
+
+        return assemble_m4_output(
+            debt_result.assessment if debt_result is not None else None,
+            strategy_findings=m4.get("findings") or [],
+            debt_status=(debt_result.status if debt_result is not None else "not_run"),
+            debt_validated=bool(debt_result.validated) if debt_result is not None else False,
+            strategy_status=("validated" if (m4.get("findings")) else "no_usable_findings"),
+        )
 
     def _build_orchestrator(self, agent):
         modules = self._build_module_conclusions()
