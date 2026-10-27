@@ -597,6 +597,7 @@ class EvidencePacket(BaseModel):
     analysis_run_id: str
     agent_id: str
     facts: list[dict[str, Any]] = Field(default_factory=list)
+    structured_evidence: list[dict[str, Any]] = Field(default_factory=list)
     parameters: list[dict[str, Any]] = Field(default_factory=list)
     narrative_evidence: list[dict[str, Any]] = Field(default_factory=list)
     entity_relationships: list[dict[str, Any]] = Field(default_factory=list)
@@ -604,6 +605,7 @@ class EvidencePacket(BaseModel):
     covenant_terms: list[dict[str, Any]] = Field(default_factory=list)
     open_conflicts: list[dict[str, Any]] = Field(default_factory=list)
     data_limitations: list[dict[str, Any]] = Field(default_factory=list)
+    context: dict[str, Any] = Field(default_factory=dict)
     evidence_ids: list[str] = Field(default_factory=list)
     packet_hash: str | None = None  # content_hash over the above, excl. this field
 

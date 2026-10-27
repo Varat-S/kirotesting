@@ -68,6 +68,7 @@ include = ["app*"]
 # Ship Jinja2 workbench templates (Milestone 10 case workbench UI) too.
 "app.api" = ["templates/*.j2"]
 "app.schemas" = ["legacy/*.json"]
+"app.services.bo.m3_rebuild" = ["design.json"]
 "app.services.extraction" = ["*.ps1"]
 
 [tool.pytest.ini_options]

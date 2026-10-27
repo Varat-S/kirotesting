@@ -41,6 +41,7 @@ from app.services.bo.indicators import IndicatorSet
 from app.services.bo.m3_artifacts import build_m3_deliverables
 from app.services.bo.m3_output import assemble_m3_output
 from app.services.bo.m3_validation import validate_m3_assessment
+from app.services.bo.m3_version import is_m3_v2_block
 from app.services.bo.reconcile import reconcile
 from app.services.bo.reporting import handoff_content_hash
 from app.services.bo.synthesis import (
@@ -253,9 +254,19 @@ def load_recorded_specialists(path: str | Path) -> RecordedSpecialists:
     audit_only = [h for h in hypotheses.values() if not h.usable]
     reconciliation = reconcile(
         usable, [h for h in audit_only if h.disposition.value == "rejected"])
-    governed_m3 = _govern_m3(agents)
     case_id = meta.get("case_id") or payload.get("case_id")
-    modules = _module_conclusions(agents, hypotheses, governed_m3, case_id=case_id)
+    m3_block = (payload.get("module_conclusions") or {}).get("M3")
+    if is_m3_v2_block(m3_block):
+        # M3-v2: the run recorded the rebuild's block; there is no M3 specialist.
+        if any(a.get("code") == "M3" for a in agents):
+            raise RecordedCompletionError(
+                "An M3-v2 specialists run cannot also carry an M3-v1 specialist.")
+        governed_m3 = None
+        modules = _module_conclusions(agents, hypotheses, None, case_id=case_id,
+                                      m3_v2_block=m3_block)
+    else:
+        governed_m3 = _govern_m3(agents)
+        modules = _module_conclusions(agents, hypotheses, governed_m3, case_id=case_id)
 
     computed = {
         "agents_validated": sum(a.get("status") == "validated" for a in agents),
@@ -431,7 +442,7 @@ def admit_corporate_structure_source(
     }
 
 
-def _module_conclusions(agents, hypotheses, governed_m3, *, case_id=None):
+def _module_conclusions(agents, hypotheses, governed_m3, *, case_id=None, m3_v2_block=None):
     module_agents = {
         "M1": {a.get("agent_id") for a in agents if str(a.get("code", "")).startswith("M1")},
         "M2": {a.get("agent_id") for a in agents if a.get("code") == "M2"},
@@ -456,6 +467,36 @@ def _module_conclusions(agents, hypotheses, governed_m3, *, case_id=None):
             "audit_only_hypothesis_ids": sorted(h.hypothesis_id for h in findings if not h.usable),
             "missing_information": sorted({m for h in findings for m in h.missing_information}),
         }
+    if m3_v2_block is not None:
+        from app.services.bo.m3_rebuild.adapters import validate_context
+
+        out["M3"] = validate_context(m3_v2_block)
+    else:
+        _m3_v1_conclusion(out, agents, governed_m3, case_id=case_id)
+
+    # Module 4 Architecture V6 standalone deliverable: m4_analysis (the content
+    # of m4_analysis.json). Deterministically assembled from the two independent
+    # Module 4 agents. In this recorded-completion path the debt specialist's
+    # four-deliverable output is carried on out["M4"]["m4_debt_assessment"]
+    # (when present); the strategy agent's governed findings are in
+    # out["M4"]["findings"]. No fabrication: absent debt output -> incomplete.
+    from app.services.bo.m4_output import assemble_m4_output
+
+    m4_block = out["M4"]
+    debt_assessment = m4_block.get("m4_debt_assessment") or {}
+    debt_output = debt_assessment.get("assessment")
+    out["M4"]["m4_analysis"] = assemble_m4_output(
+        debt_output,
+        strategy_findings=m4_block.get("findings") or [],
+        debt_status=debt_assessment.get("status", "not_run"),
+        debt_validated=bool(debt_assessment.get("validated")),
+        strategy_status=("validated" if m4_block.get("findings") else "no_usable_findings"),
+    )
+    return out
+
+
+def _m3_v1_conclusion(out, agents, governed_m3, *, case_id=None) -> None:
+    """Fold the M3-v1 governed assessment and its deliverables into ``out["M3"]``."""
     out["M3"]["m3_assessment"] = governed_m3
     out["M3"]["m3_assessment_status"] = "validated" if governed_m3 else "unavailable"
     structure_artifact, structure_svg = build_m3_corporate_structure(
@@ -479,26 +520,6 @@ def _module_conclusions(agents, hypotheses, governed_m3, *, case_id=None):
     overall = m3_output["completion"]["status"]
     if out["M3"]["status"] == "complete" and overall == "partial":
         out["M3"]["status"] = "partial"
-
-    # Module 4 Architecture V6 standalone deliverable: m4_analysis (the content
-    # of m4_analysis.json). Deterministically assembled from the two independent
-    # Module 4 agents. In this recorded-completion path the debt specialist's
-    # four-deliverable output is carried on out["M4"]["m4_debt_assessment"]
-    # (when present); the strategy agent's governed findings are in
-    # out["M4"]["findings"]. No fabrication: absent debt output -> incomplete.
-    from app.services.bo.m4_output import assemble_m4_output
-
-    m4_block = out["M4"]
-    debt_assessment = m4_block.get("m4_debt_assessment") or {}
-    debt_output = debt_assessment.get("assessment")
-    out["M4"]["m4_analysis"] = assemble_m4_output(
-        debt_output,
-        strategy_findings=m4_block.get("findings") or [],
-        debt_status=debt_assessment.get("status", "not_run"),
-        debt_validated=bool(debt_assessment.get("validated")),
-        strategy_status=("validated" if m4_block.get("findings") else "no_usable_findings"),
-    )
-    return out
 
 
 def _prompt(role: str) -> RegisteredPrompt:
@@ -739,6 +760,8 @@ def complete_recorded_specialists(
         "deterministic_prechecks": conclusion_prechecks(synthesis, usable),
         "transaction_obligor": synthesis_inputs["transaction_obligor"],
         "governed_m3": source.governed_m3,
+        **({"m3_components": source.module_conclusions["M3"]}
+           if is_m3_v2_block(source.module_conclusions.get("M3")) else {}),
         "mandatory_tests": [
             "unsupported facts or causal claims", "insufficient entailment",
             "specialist contradictions", "overstated management competence or governance",

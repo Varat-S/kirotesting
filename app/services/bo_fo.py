@@ -39,6 +39,7 @@ from app.services.rms import runner as rms_runner
 from app.services.acquisition import shared_filing
 from app.services.fo import loader as fo_loader
 from app.services.fo.runner import FinancialOverviewRunner, default_case_id, validate_case_id
+from app.services.bo.m3_version import DEFAULT_M3_VERSION, check_m3_version
 from app.services.llm import usage
 from app.services.pipeline.sec import sec_source_package
 
@@ -58,6 +59,18 @@ def bo_live_backend(model: str | None = None):
     """The configured live provider for the BO (LLM_PROVIDER), as ``run-bo-case --live`` uses it. ``model``
     (Vertex only) runs every BO tier (narrow, orchestrator, challenge) on that model for this run, so a combined
     run uses the model picked for the FO's Pre-check Agent in both sections."""
+    return _live_backend_for(_live_settings(model))
+
+
+def m3_v2_live_backend(model: str | None = None):
+    """The live backend for M3-v2's management specialist and its Validator 7 reviewer: the same provider and
+    model as the BO, with the rebuild's response-schema adaptation on Vertex."""
+    from app.services.bo.m3_rebuild.contracts import provider_schema
+
+    return _live_backend_for(_live_settings(model), schema_transform=provider_schema)
+
+
+def _live_settings(model: str | None):
     from app.core.config import get_settings
 
     settings = get_settings()
@@ -69,16 +82,41 @@ def bo_live_backend(model: str | None = None):
             raise ValueError("A model can only be picked for the Vertex provider (LLM_PROVIDER=vertex).")
         settings = settings.model_copy(update={
             "vertex_model_narrow": model, "vertex_model_orchestrator": model, "vertex_model_challenge": model})
+    return settings
+
+
+def _live_backend_for(settings, *, schema_transform=None):
     if settings.llm_provider == "vertex":
         from app.services.llm.providers_vertex import VertexProviderBackend
 
-        backend = VertexProviderBackend(settings)
+        backend = VertexProviderBackend(settings, schema_transform=schema_transform)
     else:
         from app.services.llm.providers import RealProviderBackend
 
         backend = RealProviderBackend(settings)
     backend.check_configuration()
     return backend
+
+
+def m3_v2_package(package, folder: str, bundle):
+    """The filing folder's inputs for M3-v2: its 10-K (the bundle's primary Inline XBRL document) for the
+    management assessment and, when present, its corporate-structure JSON (``shared_filing.m3_structure_path``).
+
+    The JSON is dated to the filing's own availability, so the evidence cut-off admits both together."""
+    from app.services.pipeline.package import Module3Input, SourceInput
+
+    sources, corporate = list(package.sources), None
+    path = shared_filing.m3_structure_path(folder)
+    if path is not None:
+        primary = next(f for f in bundle.files if f.filename == bundle.primary_document)
+        sources.append(SourceInput(
+            filename=path.name, path=str(path), parser="structured_json",
+            tags=["m3", "corporate_structure"], available_at=primary.available_at,
+            entity_id=package.borrower_entity_id, scope="consolidated", accounting_basis="not_applicable"))
+        corporate = path.name
+    fields = {name: getattr(package, name) for name in type(package).model_fields}
+    return type(package)(**{**fields, "sources": sources, "module3": Module3Input(
+        corporate_source=corporate, management_source=bundle.primary_document)})
 
 
 def sqlite_path(database_url: str) -> Path:
@@ -105,14 +143,15 @@ def plan(folder: str, case_id: str | None = None, cutoff: datetime | None = None
 
 def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: str,
               output_root, data_root=None, case_id: str | None = None, cutoff: datetime | None = None,
-              produce_pdf: bool = False,
+              produce_pdf: bool = False, m3_version: str | None = None, m3_backend=None,
               rms_request: rms.RmsRequest | None = None, on_progress=None,
               lock_wait: float = LOCK_WAIT_SECONDS) -> dict:
     """Run both sections at once; returns ``{"case_id", "folder", "cutoff", "bo": {...}, "fo": {...},
     "rms": {...}}``.
 
     Each section's entry has ``status`` ``completed`` or ``failed`` and either its ``summary`` or its
-    ``error``. ``rms`` is ``completed``, ``failed`` or ``skipped`` (no request, or a section didn't complete),
+    ``error``. ``m3_version`` picks the BO's Module 3 (``v1`` default, ``v2`` the rebuild, whose management
+    specialist and reviewer use ``m3_backend``). ``rms`` is ``completed``, ``failed`` or ``skipped`` (no request, or a section didn't complete),
     with its ``summary``, ``error`` or ``reason``. ``on_progress(section, message)`` is called from the worker
     threads as they advance, and for ``rms`` once both have finished.
     """
@@ -129,6 +168,8 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
         package = sec_source_package(
             settled["bundle"], cutoff=settled["cutoff"],
             entity_id=identity.get("ticker") or None, legal_name=identity.get("name") or None)
+        if check_m3_version(m3_version) == "v2":
+            package = m3_v2_package(package, folder, settled["bundle"])
         engine, factory = create_engine_and_session(
             f"sqlite:///{database.as_posix()}", sqlite_timeout=lock_wait)
         try:
@@ -137,12 +178,13 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
                 result = BusinessOverviewRunner(
                     session, backend=bo_backend, data_root=data_root, output_root=output_root,
                     bo_roster=BO_ROSTER, enable_m4_debt_specialist=True,
+                    m3_version=m3_version, m3_backend=m3_backend, m3_reviewer_backend=m3_backend,
                 ).run_case(case_id, package=package, produce_pdf=produce_pdf)
                 say("bo", "recording the Business Overview")
                 session.commit()
         finally:
             engine.dispose()
-        return bo_summary(result)
+        return bo_summary(result, m3_version=check_m3_version(m3_version))
 
     def fo():
         staging = data_root / "staging" / f"fo-{uuid.uuid4().hex[:16]}.db"
@@ -228,13 +270,14 @@ class StagingKept(RuntimeError):
         self.staging = staging
 
 
-def bo_summary(result) -> dict:
+def bo_summary(result, *, m3_version: str = DEFAULT_M3_VERSION) -> dict:
     return {
         "case_id": result.case_id,
         "analysis_run_id": result.analysis_run_id,
         "scope": "business_overview_only",
         "execution_mode": result.execution_mode,
         "bo_roster": BO_ROSTER,
+        "m3_version": m3_version,
         "conclusion_status": result.conclusion_status,
         "human_review_status": "pending",
         "handoff_id": (result.handoff or {}).get("handoff_id"),

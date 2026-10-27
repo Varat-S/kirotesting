@@ -219,3 +219,11 @@ runner mode:
 
 The three-mode executor is not yet wired into `BusinessOverviewRunner`; see
 `BO_M3_READINESS_REPORT.md` for the gate decision and integration plan.
+
+## Module 3 versions
+
+`BusinessOverviewRunner(..., m3_version=...)` picks Module 3 (`m3_version.py`):
+`"v1"` (default) runs the `m3_corporate_management` specialist through
+`m3_standalone.run_m3` and Validator 7; `"v2"` runs the rebuild in `m3_rebuild/`
+(see `docs/m3-rebuild.md`) and leaves the M3-v1 specialist out of the roster.
+M3-v1 may be dropped later.

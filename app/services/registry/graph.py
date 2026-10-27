@@ -270,6 +270,18 @@ def build_pipeline_graph(
     """
     nodes, edges = _skeleton()
     if manifest is not None:
+        # M3-v2 runs add their two component outputs beside the M3-v1 specialist node.
+        for entry in manifest.artifacts:
+            if entry.artifact_id.startswith("m3.rebuild."):
+                node_id = "artifact." + entry.artifact_id
+                nodes.append(_node(node_id, "M3-v2 " + (
+                    "Corporate conversion" if entry.producer_agent == "m3_structure_conversion"
+                    else "Management continuity"),
+                    4, kind="output", group="M3", artifact_id=entry.artifact_id))
+                edges.append({"source": "raw_input", "target": node_id,
+                              "reason": "independent_selected_source"})
+                edges.append({"source": node_id, "target": "synthesis_v1",
+                              "reason": "optional_typed_artifact"})
         _apply_manifest(nodes, manifest)
 
     layers = {

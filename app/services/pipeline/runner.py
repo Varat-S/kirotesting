@@ -30,7 +30,7 @@ from app.models.orm import (
 from app.prompts.registry import PromptRegistry
 from app.schemas.enums import FactStatus
 from app.schemas.llm import AnalysisResponse, ChallengeResponse, ExtractionResponse
-from app.schemas.snapshots import FinalCaseSnapshot
+from app.schemas.snapshots import FinalCaseSnapshot, StructuredEvidenceRecord
 from app.services.analysis.challenge import ChallengeRejectedError, ChallengeService
 from app.services.analysis.grounding import (
     EvidenceIndex,
@@ -247,6 +247,7 @@ class CreditMemoPipeline:
             )
 
         documents, facts, rejected, issues, admitted_tags = [], [], [], [], set()
+        structured_evidence = []
         sec_filings, narrative = [], []
         raw_extraction = []
         sec_mapping_groups = {}
@@ -481,8 +482,93 @@ class CreditMemoPipeline:
                     "notes": source.notes,
                 }
             )
+            if source.parser == "structured_json":
+                try:
+                    payload = json.loads(data.decode("utf-8"))
+                    from app.services.bo.m3_rebuild.structure import (
+                        validate_structure_input,
+                    )
+
+                    validate_structure_input(payload)
+                    entity = next(e for e in package.entities
+                                  if e.entity_id == source.entity_id)
+                    def company_key(value):
+                        tokens = re.findall(r"[a-z0-9]+", value.casefold())
+                        while tokens and tokens[-1] in {
+                            "inc", "incorporated", "corp", "corporation", "llc", "ltd"
+                        }:
+                            tokens.pop()
+                        return tokens
+
+                    selected_company = (
+                        package.module3.company
+                        if (package.module3 is not None
+                            and source.filename == package.module3.corporate_source)
+                        else None
+                    )
+                    if selected_company and company_key(
+                            selected_company) != company_key(entity.legal_name):
+                        raise ParserError(
+                            "Module 3 reporting company differs from the source entity"
+                        )
+                    declared_company = selected_company or entity.legal_name
+                    if company_key(payload["company_name"]) != company_key(
+                            declared_company):
+                        raise ParserError(
+                            "Corporate structure reporting company differs from the case"
+                        )
+                    record_data = {
+                        "evidence_type": "corporate_structure_onboarding",
+                        "document_id": did,
+                        "document_sha256": digest,
+                        "filename": source.filename,
+                        "entity_id": source.entity_id,
+                        "reporting_company": payload["company_name"],
+                        "available_at": source.available_at.isoformat(),
+                        "schema_version": payload["schema_version"],
+                        "declared_status": payload["data_status"],
+                        "assumption_status": (
+                            "simulated" if "simulat" in payload["data_status"].casefold()
+                            else "submitted_unverified"
+                        ),
+                        "validation_status": "contract_validated",
+                        "payload": payload,
+                    }
+                    record = StructuredEvidenceRecord(
+                        evidence_id=content_hash(record_data), **record_data
+                    )
+                    structured_evidence.append(record)
+                    admitted_tags.update(source.tags)
+                    raw_extraction.append({
+                        "document_id": did,
+                        "parser": {"name": "structured_json", "version": "1.0.0"},
+                        "structured_evidence_ids": [record.evidence_id],
+                        "warnings": [],
+                    })
+                    audit.record(
+                        EventType.FACT_EXTRACTED,
+                        case_id=case_id,
+                        actor_type=ActorType.SYSTEM,
+                        after={"parser": "structured_json", "evidence_type":
+                               record.evidence_type, "evidence_id":
+                               record.evidence_id},
+                        linked_objects=[did, record.evidence_id],
+                    )
+                except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+                    flag(
+                        "invalid_metadata",
+                        f"Invalid structured source {source.filename}: {exc}",
+                        [did],
+                    )
+                continue
             options = dict(source.parse_options)
-            include_pdf_text = options.pop("include_text_evidence", False)
+            selected_management = (
+                package.module3 is not None
+                and source.filename == package.module3.management_source
+            )
+            include_pdf_text = (
+                options.pop("include_text_evidence", False) or selected_management
+            )
             enable_ocr = options.pop("enable_ocr", True)
             ocr_cache = options.pop("ocr_cache", None)
             harden_xml = options.pop("harden_xml", False)
@@ -499,7 +585,7 @@ class CreditMemoPipeline:
                 if harden_xml and source.parser == "xbrl":
                     safe_xml(data)
                 passages = []
-                if include_pdf_text and source.parser == "pdf_table":
+                if include_pdf_text and source.parser in {"pdf_table", "pdf_text"}:
                     capture = capture_pdf(
                         data,
                         document_id=did,
@@ -509,7 +595,10 @@ class CreditMemoPipeline:
                     recorder.record("document_" + did, capture)
                     documents[-1]["extraction_coverage"] = capture["coverage"]
                     passages = capture["passages"]
-                    options["captured_pages"] = {p["page"]: p for p in capture["pages"]}
+                    if source.parser == "pdf_table":
+                        options["captured_pages"] = {
+                            p["page"]: p for p in capture["pages"]
+                        }
                     if capture["coverage"]["failed_pages"]:
                         flag(
                             "invalid_metadata",
@@ -517,7 +606,8 @@ class CreditMemoPipeline:
                             [did],
                         )
                 narrative.extend(passages)
-                if include_pdf_text and source.parser == "pdf_table" and not passages:
+                if (include_pdf_text and source.parser in {"pdf_table", "pdf_text"}
+                        and not passages):
                     flag(
                         "invalid_metadata",
                         f"No readable text in {source.filename}; image-only pages require OCR before their contents can be reviewed or extracted.",
@@ -738,6 +828,10 @@ class CreditMemoPipeline:
         }
         evidence.sec_filings = sec_filings
         evidence.narrative_evidence = sorted(narrative, key=lambda p: p["evidence_id"])
+        evidence.structured_evidence = sorted(
+            structured_evidence, key=lambda item: item.evidence_id
+        )
+        evidence.provenance["structured_evidence_count"] = len(structured_evidence)
         evidence.financials = {
             key: {
                 "value": dq.value,

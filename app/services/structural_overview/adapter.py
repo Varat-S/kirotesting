@@ -13,6 +13,7 @@ from app.schemas.bo import AcceptedBusinessOverview
 from app.schemas.bo_m3 import M3CorporateAssessment
 from app.schemas.structural_overview import (
     ASSESSMENT_SCHEMA_VERSION,
+    ASSESSMENT_SCHEMA_VERSION_M3_V2,
     TRANSFORMATION_VERSION,
     AssessmentAuditMetadata,
     BorrowerContext,
@@ -30,6 +31,7 @@ from app.schemas.structural_overview import (
     NormalizedFinding,
     StructuralOverviewAssessment,
 )
+from app.services.bo.m3_rebuild.narrative import management_claims
 from app.services.bo.reporting import handoff_content_hash
 
 
@@ -69,6 +71,29 @@ def _claim(record: dict[str, Any], *, qualified: bool) -> CuratedClaim:
         evidence_ids=record.get("evidence_ids", []),
         qualification="qualified" if qualified else "accepted",
     )
+
+
+def _m3_v2_corporate_structure(
+    module_data: dict[str, Any],
+) -> tuple[CorporateStructureAssessment, str | None, str | None, list[str], str | None]:
+    """M3-v2 supplies case assumptions, never a verified legal structure or obligor."""
+    if module_data.get("m3_assessment") is not None or module_data.get("findings"):
+        raise StructuralOverviewInputError(
+            "An M3-v2 block cannot carry M3-v1 assessments or scored findings.")
+    limitation = (
+        "Submitted corporate assumptions do not establish a verified legal structure or "
+        "transaction obligor; SO legal verification is outstanding."
+    )
+    unavailable = CorporateStructureAssessment(
+        source_status="unavailable",
+        borrower_identification={"status": "unavailable", "limitation": limitation},
+        information_gaps=[limitation],
+        downstream_dependencies=[{
+            "module": "SO",
+            "question": "Verify transaction obligor, legal ownership, ranking and guarantees from transaction-specific evidence.",
+        }],
+    )
+    return unavailable, None, None, [], limitation
 
 
 def _corporate_structure(
@@ -200,6 +225,16 @@ def adapt_business_overview(
     # The content hash covers the handoff as stored, including fields that
     # older schema versions carried and the model now ignores.
     source = payload if isinstance(payload, dict) else handoff.model_dump(mode="json")
+    m3_module = handoff.module_conclusions.get("M3") or {}
+    m3_v2 = m3_module.get("workflow") == "m3-rebuild"
+    if m3_v2:
+        from app.services.bo.m3_rebuild.adapters import validate_context
+        try:
+            validate_context(m3_module, company=handoff.borrower_name,
+                             filing_period=handoff.as_of_date,
+                             cutoff=handoff.evidence_cutoff_timestamp)
+        except ValueError as exc:
+            raise StructuralOverviewInputError(str(exc)) from exc
 
     if handoff.schema_version not in SUPPORTED_HANDOFF_VERSIONS:
         raise StructuralOverviewInputError(
@@ -264,7 +299,7 @@ def adapt_business_overview(
             ))
 
     corporate_structure, borrower_name, borrower_entity_id, borrower_evidence_ids, borrower_limitation = (
-        _corporate_structure(handoff.module_conclusions["M3"])
+        (_m3_v2_corporate_structure if m3_v2 else _corporate_structure)(handoff.module_conclusions["M3"])
     )
 
     unknown_accepted = set(handoff.accepted_finding_ids) - set(findings)
@@ -397,7 +432,12 @@ def adapt_business_overview(
         if dependency.get("module") == "SO" and dependency.get("question")
         and dependency["question"] not in structural_topics
     )
-    if corporate_structure.source_status == "unavailable":
+    if m3_v2:
+        structural_status = "unavailable"
+        structural_reason = (
+            "Legal/obligor facts require independent transaction evidence; M3 case assumptions remain explicitly simulated."
+        )
+    elif corporate_structure.source_status == "unavailable":
         structural_status = "unavailable"
         structural_reason = (
             "BO supplied no validated M3 corporate assessment; obligor and legal structure are unavailable."
@@ -430,13 +470,15 @@ def adapt_business_overview(
         ),
     }
 
+    schema_version = ASSESSMENT_SCHEMA_VERSION_M3_V2 if m3_v2 else ASSESSMENT_SCHEMA_VERSION
     assessment_seed = {
-        "schema_version": ASSESSMENT_SCHEMA_VERSION,
+        "schema_version": schema_version,
         "source_handoff_id": handoff.handoff_id,
         "source_bo_run_id": handoff.analysis_run_id,
         "transformation_version": TRANSFORMATION_VERSION,
     }
     draft = StructuralOverviewAssessment(
+        schema_version=schema_version,
         assessment_id="soa_" + content_hash(assessment_seed)[:16],
         status="partial",
         source_handoff_id=handoff.handoff_id,
@@ -458,6 +500,9 @@ def adapt_business_overview(
             business_strengths=strengths, mitigants=mitigants, compound_risks=compound,
         ),
         corporate_structure=corporate_structure,
+        **({"m3_rebuild": m3_module.get("m3_rebuild"),
+            "management_claims": management_claims(m3_module.get("m3_rebuild"))}
+           if m3_v2 else {}),
         evidence_references=evidence_references,
         governance=GovernanceState(
             conclusion_status=handoff.conclusion_status,

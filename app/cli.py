@@ -19,6 +19,7 @@ from app.core.config import get_settings
 from app.services.acquisition.sec_edgar import SecEdgarClient, EdgarError, write_bundle
 from app.services.extraction.sec.bundle import SecFilingBundle
 from app.services.pipeline.sec import sec_source_package
+from app.services.bo.m3_version import DEFAULT_M3_VERSION, M3_VERSIONS
 from app.services.llm import usage
 
 
@@ -146,6 +147,10 @@ def main(argv=None):
         help=("Simplified v1.0 corporate-structure onboarding JSON passed "
               "to the standalone Module 3 step (as run-m3 --corporate-structure)."),
     )
+    bo_run.add_argument("--m3-version", choices=M3_VERSIONS, default=DEFAULT_M3_VERSION,
+                        help="Business Overview Module 3: v1 (default) the corporate-management "
+             "specialist + Validator 7; v2 the rebuild (structure conversion + management "
+             "continuity from the package's module3 sources)")
     bo_spec = commands.add_parser(
         "run-bo-specialists",
         help="Run the BO specialists and validators only; write the demo reports",
@@ -177,9 +182,13 @@ def main(argv=None):
         "--transaction-borrower-entity-id",
         help="Validated case-spec entity id for the proposed facility obligor; "
              "omit when transaction identity is unavailable")
+    bo_spec.add_argument("--m3-version", choices=M3_VERSIONS, default=DEFAULT_M3_VERSION,
+                         help="Business Overview Module 3: v1 (default) the corporate-management "
+             "specialist + Validator 7; v2 the rebuild (structure conversion + management "
+             "continuity from the package's module3 sources)")
     m3_run = commands.add_parser(
         "run-m3",
-        help=("Run ONLY Business Overview Module 3 (Corporate Structure & Senior "
+        help=("M3-v1: run ONLY Business Overview Module 3 (Corporate Structure & Senior "
               "Management) + Validator 7 offline; write the inspectable demo files"),
     )
     m3_run.add_argument("case_id")
@@ -210,6 +219,12 @@ def main(argv=None):
         "--transaction-borrower-entity-id",
         help="Validated case-spec entity id for the proposed facility obligor; "
              "omit when transaction identity is unavailable")
+    m3_v2_run = commands.add_parser(
+        "run-m3-v2",
+        help=("M3-v2: run the rebuild's corporate conversion and/or filing-only "
+              "management assessment (arguments as `python -m app.services.bo.m3_rebuild`)"),
+    )
+    m3_v2_run.add_argument("rebuild_args", nargs=argparse.REMAINDER)
     bo_review = commands.add_parser(
         "bo-review",
         help="Record your explicit decision on a pending Business Overview handoff",
@@ -355,6 +370,10 @@ def main(argv=None):
     both.add_argument("--amount", type=float,
                       help="Requested loan, US$ millions: Risk Mitigation & Structuring runs once both sections "
                            "complete")
+    both.add_argument("--m3-version", choices=M3_VERSIONS, default=DEFAULT_M3_VERSION,
+                      help="Business Overview Module 3: v1 (default) the corporate-management "
+             "specialist + Validator 7; v2 the rebuild (structure conversion + management "
+             "continuity from the package's module3 sources)")
     both.add_argument("--tenor", type=int, help="With --amount: requested tenor in years (default 5)")
     both.add_argument("--rate", type=float, help="With --amount: interest rate, e.g. 0.065 (default 6.5%%)")
     both.add_argument("--collateral-value", type=float,
@@ -374,6 +393,9 @@ def main(argv=None):
     finalize.add_argument("--reviewer", required=True)
     finalize.add_argument("--pdf", action="store_true")
     args = parser.parse_args(argv)
+    if args.command == "run-m3-v2":
+        from app.services.bo.m3_rebuild.__main__ import main as rebuild_main
+        raise SystemExit(rebuild_main(args.rebuild_args))
     if (
         args.command == "run-sec-case"
         and args.ticker
@@ -679,6 +701,13 @@ def _intake(session, args):
             "next": f'python -m app.cli run-bo-fo --filing "{filing.name}" --live'}
 
 
+def _m3_v2_backend(args):
+    """M3-v2's live management specialist / reviewer backend (the configured provider)."""
+    from app.services.bo_fo import m3_v2_live_backend
+
+    return m3_v2_live_backend(getattr(args, "model", None))
+
+
 def _run_bo_fo(session, database, args):
     """Both sections at once over one shared folder; see app/services/bo_fo.py."""
     from app.services import bo_fo
@@ -722,9 +751,12 @@ def _run_bo_fo(session, database, args):
     def show(section, message):  # progress on stderr, so stdout stays the JSON summary
         print(f"[{section}] {message}", file=sys.stderr, flush=True)
 
+    m3_backend = (bo_fo.m3_v2_live_backend(args.model)
+                  if args.m3_version == "v2" and args.live and not args.bo_responses else None)
     outcome = bo_fo.run_bo_fo(
         database=database, folder=folder, case_id=args.case_id, cutoff=args.cutoff,
         bo_backend=bo_backend, fo_backend=fo_backend, fo_mode=fo_mode,
+        m3_version=args.m3_version, m3_backend=m3_backend,
         output_root=args.output, produce_pdf=args.pdf, rms_request=rms_request, on_progress=show)
     for section in ("bo", "fo", "rms"):
         if outcome[section]["status"] == "failed":
@@ -763,13 +795,16 @@ def _run_bo_specialists(session, database, args):
         data_root=database.parent, output_root=args.output,
         coverage_checks=load_case_checks(args.coverage) if args.coverage else None,
         baseline_calls=args.baseline, prices=prices, bo_roster=BO_ROSTER,
-        transaction_borrower_entity_id=args.transaction_borrower_entity_id)
+        transaction_borrower_entity_id=args.transaction_borrower_entity_id,
+        m3_version=args.m3_version,
+        m3_backend=_m3_v2_backend(args) if args.m3_version == "v2" and args.live else None)
     payload = result["payload"]
     metrics = payload["metrics"]
     return {
         "case_id": args.case_id,
         "analysis_run_id": payload["meta"]["analysis_run_id"],
         "scope": payload["meta"]["scope"],
+        "m3_version": args.m3_version,
         "execution_mode": payload["meta"]["execution_mode"],
         "models": payload["meta"]["models"],
         "specialists": {a["code"]: a["status"] for a in payload["agents"]},
@@ -975,9 +1010,15 @@ def _run_bo_case(session, database, args):
         manifest = load_manifest(args.manifest)
     m3_responses_path = getattr(args, "m3_responses", None)
     corporate_structure_path = getattr(args, "corporate_structure", None)
+    m3_version = getattr(args, "m3_version", DEFAULT_M3_VERSION)
+    if m3_version == "v2" and (m3_responses_path or corporate_structure_path):
+        raise ValueError("--m3-responses and --corporate-structure are M3-v1 inputs; M3-v2 takes "
+                         "its sources from the package's module3 object.")
+    m3_backend = _m3_v2_backend(args) if m3_version == "v2" and args.live else None
     result = BusinessOverviewRunner(
         session, backend=backend, data_root=database.parent, output_root=args.output,
         bo_roster=BO_ROSTER, enable_m4_debt_specialist=True,
+        m3_version=m3_version, m3_backend=m3_backend, m3_reviewer_backend=m3_backend,
         m3_responses=(json.loads(m3_responses_path.read_text(encoding="utf-8"))
                       if m3_responses_path else None),
         m3_corporate_structure=(
@@ -1002,6 +1043,7 @@ def _run_bo_case(session, database, args):
         # registry version, so a run can never be silently misattributed to a
         # different architecture than the one that produced it.
         "bo_roster": BO_ROSTER,
+        "m3_version": m3_version,
         "agent_registry_version": (result.audit or {}).get("registry", {}).get("version"),
         # Whether the Module 4 debt specialist took effect, from the recorded run metadata.
         "m4_debt_specialist_enabled": bool(result.record.get("m4_debt_specialist_enabled", True)),

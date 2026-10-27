@@ -31,6 +31,12 @@
       {{ assessment.borrower.identification_limitation }}
     {% endif %}
   </p>
+  {% if assessment.schema_version == "structural-overview-assessment-1.2" %}
+  <p>Legal structure verification: {{ assessment.corporate_structure.source_status }}. Submitted M3 corporate assumptions do not establish transaction obligor identity.</p>
+  <h3>Management continuity and information limitations</h3>
+  {% for c in assessment.management_claims %}<p><strong>{{ c.executive or 'Information limitation' }}</strong>: {{ c.text }} [{{ c.direction }}; {{ c.category }}] · {{ c.observation_id }} · {{ c.citation_ids | join(', ') }}</p>{% endfor %}
+  {% if assessment.m3_rebuild and assessment.m3_rebuild.structure.artifact %}<p>{{ assessment.m3_rebuild.structure.artifact.simulation_disclaimer }}</p>{% endif %}
+  {% else %}
   <p>M3 source status: <strong>{{ assessment.corporate_structure.source_status }}</strong>
     {% if assessment.corporate_structure.validator_version %}· Validator <code>{{ assessment.corporate_structure.validator_version }}</code>{% endif %}</p>
   <table><thead><tr><th>Legal entity</th><th>Classification</th><th>Verification</th><th>Evidence</th></tr></thead><tbody>
@@ -73,6 +79,7 @@
     <ul>{% for issue in assessment.corporate_structure.audit.validation_issues %}<li>{{ issue.rule_id }} — {{ issue.action }}: {{ issue.reason }}</li>{% endfor %}</ul>
     <p>Rejected items: {{ assessment.corporate_structure.audit.rejected_items | length }}</p>
   </details>
+  {% endif %}
   {% endif %}
 
   <h2>Business Overview findings</h2>

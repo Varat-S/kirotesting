@@ -43,6 +43,8 @@ from app.services.fo import loader as fo_loader
 
 MANIFEST = "bundle.json"
 COMPANY = "company.json"
+# Optional M3-v2 corporate-structure onboarding JSON kept with the filing; not SEC evidence.
+M3_STRUCTURE = "m3_corporate_structure.json"
 PROXY_DIR = "proxy"
 # Files that can belong to a filing bundle; ``company.json`` is identity, not evidence.
 SEC_SUFFIXES = (".htm", ".html", ".xhtml", ".xsd", ".xml")
@@ -179,6 +181,7 @@ def import_filing(sources, *, accession: str | None = None, filing_date: date | 
     else:
         files = _checked(dict(sources))
     identity = _identity(files.pop(COMPANY, None))
+    m3_structure = files.pop(M3_STRUCTURE, None)
     files = {k: v for k, v in files.items() if k.lower().endswith(SEC_SUFFIXES)}
     if not files:
         raise SharedFilingError("No .htm/.xsd/.xml filing files were given.")
@@ -237,9 +240,13 @@ def import_filing(sources, *, accession: str | None = None, filing_date: date | 
         _write_manifest(bundle, in_place)
         if not (in_place / COMPANY).exists():
             _write_company(in_place, identity)
-        return _shared(in_place, bundle)
-    fiscal_year = meta.get("fiscal_year") or filing.fiscal_year
-    return _write_new(bundle, name or folder_name(ticker, cik, form, fiscal_year), identity)
+        shared = _shared(in_place, bundle)
+    else:
+        fiscal_year = meta.get("fiscal_year") or filing.fiscal_year
+        shared = _write_new(bundle, name or folder_name(ticker, cik, form, fiscal_year), identity)
+    if m3_structure is not None:
+        (shared.folder / M3_STRUCTURE).write_bytes(m3_structure)
+    return shared
 
 
 def load_bundle(name: str) -> SecFilingBundle:
@@ -253,6 +260,29 @@ def load_bundle(name: str) -> SecFilingBundle:
         return SecFilingBundle.load(folder / MANIFEST)
     except (ValueError, OSError) as exc:
         raise SharedFilingError(f"{name!r}: {MANIFEST} cannot be read: {exc}") from exc
+
+
+def m3_structure_path(name: str) -> Path | None:
+    """The folder's M3-v2 corporate-structure JSON: ``m3_corporate_structure.json``, or else the one JSON
+    file declaring ``"document_type": "corporate_structure_onboarding"``. Two such files are an error."""
+    folder = fo_loader.resolve_folder(name)
+    if (folder / M3_STRUCTURE).is_file():
+        return folder / M3_STRUCTURE
+    found = []
+    for path in sorted(folder.glob("*.json")):
+        if path.name in (MANIFEST, COMPANY):
+            continue
+        try:
+            declared = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(declared, dict) and declared.get("document_type") == "corporate_structure_onboarding":
+            found.append(path)
+    if len(found) > 1:
+        raise SharedFilingError(
+            f"{name!r} has more than one corporate-structure JSON ({', '.join(p.name for p in found)}); "
+            f"keep one, or name the one to use {M3_STRUCTURE}.")
+    return found[0] if found else None
 
 
 def company_info(name: str) -> dict:
@@ -287,7 +317,7 @@ def _collect(paths: list[Path]) -> dict[str, bytes]:
     for path in paths:
         if path.is_dir():
             for child in sorted(path.iterdir()):
-                if child.is_file() and (child.suffix.lower() in SEC_SUFFIXES or child.name == COMPANY):
+                if child.is_file() and (child.suffix.lower() in SEC_SUFFIXES or child.name in (COMPANY, M3_STRUCTURE)):
                     add(child.name, _read(child))
         elif path.is_file() and path.suffix.lower() == ".zip":
             for filename, data in _unzip(path.read_bytes()).items():
@@ -317,7 +347,7 @@ def _unzip(data: bytes) -> dict[str, bytes]:
             filename = info.filename.replace("\\", "/").rsplit("/", 1)[-1]
             if info.is_dir() or not filename or filename.startswith(".") or "__MACOSX" in info.filename:
                 continue
-            if not (filename.lower().endswith(SEC_SUFFIXES) or filename == COMPANY):
+            if not (filename.lower().endswith(SEC_SUFFIXES) or filename in (COMPANY, M3_STRUCTURE)):
                 continue
             if info.file_size > MAX_FILE_BYTES:
                 raise SharedFilingError(f"{filename} is over the {MAX_FILE_BYTES // (1024 * 1024)} MiB limit.")

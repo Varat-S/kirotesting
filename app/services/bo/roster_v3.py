@@ -220,6 +220,14 @@ V3_NOT_EXECUTED_IDS = tuple(s.agent_id for s in V3_SPECS if not s.executable)
 V3_MODULE_AGENT_IDS = tuple(s.agent_id for s in V3_SPECS if s.module in {"M2", "M3", "M4"})
 V3_PRIMARY_AGENT_IDS = (*V3_M1_PRIMARY_IDS, *V3_MODULE_AGENT_IDS)
 
+
+def v3_specs(m3_version: str = "v1") -> tuple[BoAgentSpec, ...]:
+    """The v3 specialists a run schedules. M3-v2 replaces the M3 specialist with
+    the rebuild workflow, so it is left out of the roster."""
+    if m3_version == "v2":
+        return tuple(s for s in V3_SPECS if s.code != "M3")
+    return V3_SPECS
+
 # parameter_id -> (v2 owner, v3 owner). Every v2 Business parameter appears once.
 BO_V2_TO_V3_PARAMETER_OWNER: dict[str, tuple[str, str]] = {
     p: (v2.agent_id, v3.agent_id)

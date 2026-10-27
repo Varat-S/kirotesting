@@ -26,6 +26,9 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.services.bo.m3_rebuild.narrative import management_claims
+from app.services.bo.m3_version import is_m3_v2_block
+
 from app.core.hashing import canonical_json, content_hash
 from app.models.orm import (
     AcceptedBusinessOverviewRow,
@@ -88,6 +91,43 @@ def _shown(item: dict[str, Any]) -> bool:
     return (item.get("disposition") in _SHOWN_DISPOSITIONS
             and item.get("admissibility") != "audit_only"
             and item.get("materiality", "medium") in _SHOWN_MATERIALITY)
+
+
+def _m3_v2_view(module: dict[str, Any]) -> dict[str, Any]:
+    """M3-v2's two components as the memo shows them: the corporate structure's status and
+    simulation notice, and the management assessment's reviewed observations with their quotes."""
+    components = module.get("m3_rebuild") or {}
+    structure = components.get("structure") or {}
+    management = components.get("management") or {}
+    tree = structure.get("artifact") or {}
+    company = next(iter((tree.get("companies") or {}).values()), {})
+    assessment = management.get("artifact") or {}
+    quotes = {c["citation_id"]: c["quote"] for c in assessment.get("citations") or []}
+    overall = assessment.get("overall_assessment") or {}
+    return {
+        "structure": {
+            "status": structure.get("status"), "error": structure.get("error"),
+            "company": company.get("company_display_name"),
+            "entities": len(company.get("nodes") or []),
+            "tree": company.get("plain_text_tree"),
+            "disclaimer": tree.get("simulation_disclaimer"),
+        },
+        "management": {
+            "status": management.get("status"), "error": management.get("error"),
+            "overall": overall.get("policy"), "outcome": overall.get("outcome"),
+            "profiles": [
+                {"name": p.get("name"), "position": p.get("position"),
+                 "appointed": p.get("appointment_date"), "recency": p.get("recency"),
+                 "succession": p.get("succession")}
+                for p in assessment.get("profiles") or []],
+            "observations": [
+                {"executive": o.get("executive"), "direction": o.get("direction"),
+                 "category": o.get("category"), "text": o.get("text"),
+                 "quotes": [quotes[c] for c in o.get("citation_ids") or [] if c in quotes]}
+                for o in assessment.get("observations") or []],
+            "limitations": list(dict.fromkeys(assessment.get("limitations") or [])),
+        },
+    }
 
 
 def _m3_view(assessment: dict[str, Any] | None, cite) -> dict[str, Any] | None:
@@ -436,6 +476,23 @@ class BoReportBuilder:
                     "m4": _m4_view(module, cite) if section["code"] == "M4" else None,
                 }
 
+        # M3-v2 has no M3 specialist in the roster, so its section is added from the rebuild's block.
+        m3_v2 = run.module_conclusions.get("M3")
+        if run.roster_version == "v3" and is_m3_v2_block(m3_v2):
+            after = next((i + 1 for i, sec in enumerate(sections) if sec["code"] == "M2"), len(sections))
+            sections.insert(after, {
+                "code": "M3", "title": "Corporate Structure & Senior Management (M3-v2)",
+                "agent_id": None, "agent_status": m3_v2["status"], "claims": [],
+                "headline_refs": [], "parameters": [], "notice": None,
+                "module": {
+                    "code": "M3", "status": m3_v2["status"], "failed_or_missing_agents": [],
+                    "unresolved_coverage_checks": [],
+                    "missing_information": m3_v2.get("missing_information") or [],
+                    "further_findings": [], "m3": None, "m4": None,
+                    "m3_v2": _m3_v2_view(m3_v2),
+                },
+            })
+
         last = run.challenge_rounds[-1] if run.challenge_rounds else None
         open_findings = [
             {"challenge_id": f["challenge_id"], "severity": f["severity"],
@@ -482,6 +539,8 @@ class BoReportBuilder:
             },
             "sections": sections,
             "module_conclusions": run.module_conclusions,
+            "management_claims": management_claims(
+                run.module_conclusions.get("M3", {}).get("m3_rebuild")),
             "cross_module_risk_interactions": [
                 c for name, c, _ in claims
                 if name in ("material_risks", "key_drivers")
@@ -740,6 +799,8 @@ class BoReportBuilder:
                 if run.agents[run.resilience_agent_id].status == "validated"
                 else run.agents[run.resilience_agent_id].status),
             "module_conclusions": run.module_conclusions,
+            "management_claims": management_claims(
+                run.module_conclusions.get("M3", {}).get("m3_rebuild")),
             "orchestrator": {
                 "history": run.orchestrator_history or "not_executed",
                 "claims": provenance,

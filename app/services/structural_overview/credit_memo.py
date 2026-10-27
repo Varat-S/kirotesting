@@ -178,7 +178,7 @@ def build_partial_assessment(bo_payload: dict, fo_payload: dict) -> PartialCredi
     sections["facility_underwriting"] = DownstreamSection(status="blocked", reason=gaps["facility_underwriting"][0])
     sections["human_approval"] = DownstreamSection(status="blocked", reason="BO review pending; full credit assessment incomplete.")
     data = bo.model_dump(mode="json")
-    data.update(schema_version="structural-overview-assessment-1.1", financial_overview=fo.model_dump(mode="json"),
+    data.update(schema_version=bo.schema_version, financial_overview=fo.model_dump(mode="json"),
                 financial_calculations=[c.model_dump(mode="json") for c in calculations],
                 source_fo_content_hash=content_hash(fo.model_dump(mode="json")),
                 structural_relationships=[r.model_dump(mode="json") for r in relationships],

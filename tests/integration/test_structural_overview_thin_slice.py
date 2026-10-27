@@ -43,13 +43,17 @@ def _finding(module: str, index: int, *, qualified: bool = False) -> dict:
     }
 
 
-def _handoff() -> dict:
+def _handoff(m3_version: str = "v1") -> dict:
+    """A test handoff. M3-v2's module block has no scored findings (the rebuild's
+    two typed components start ``not_attempted``)."""
     findings = {
         "M1": _finding("M1", 1, qualified=True),
         "M2": _finding("M2", 1),
         "M3": _finding("M3", 1),
         "M4": _finding("M4", 1),
     }
+    if m3_version == "v2":
+        del findings["M3"]
     payload = {
         "handoff_id": "bo_test001",
         "schema_version": "bo-handoff-1.3",
@@ -104,6 +108,9 @@ def _handoff() -> dict:
         "config_versions": {},
         "content_hash": None,
     }
+    if m3_version == "v2":
+        from app.services.bo.m3_rebuild.adapters import unavailable_block
+        payload["module_conclusions"]["M3"] = unavailable_block(payload["case_id"])
     payload["content_hash"] = handoff_content_hash(payload)
     return payload
 

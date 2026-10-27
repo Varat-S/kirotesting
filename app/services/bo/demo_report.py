@@ -31,6 +31,7 @@ from sqlalchemy import select
 from app.core.hashing import canonical_json
 from app.models.orm import AgentRunRow, RetrievalAttemptRow
 from app.prompts.bo_prompts import SHARED_RULES, specialist_block
+from app.services.bo.m3_version import is_m3_v2_block
 
 PAYLOAD_VERSION = "bo-specialists-run-1.0"
 M3_EXPORT_VERSION = "bo-m3-governed-export-1.0"
@@ -1151,16 +1152,20 @@ def write_reports(payload: dict[str, Any], folder: Path, *, benchmark: str | Non
     paths = {"specialists_run.json": folder / "specialists_run.json"}
     paths["specialists_run.json"].write_text(
         canonical_json(payload) + "\n", encoding="utf-8", newline="\n")
-    m3_export = build_m3_governed_export(payload)
-    paths["m3_governed_assessment.json"] = folder / "m3_governed_assessment.json"
-    paths["m3_governed_assessment.json"].write_text(
-        canonical_json(m3_export) + "\n", encoding="utf-8", newline="\n")
-    for name, content in (
-            ("executive_summary.html", render_executive_summary(payload)),
-            ("specialists_comparison.html", render_comparison(payload)),
-            ("validation_audit.html", render_audit(payload)),
-            ("m3_governed_assessment.html",
-             render_m3_governed_assessment(m3_export, payload))):
+    pages = [
+        ("executive_summary.html", render_executive_summary(payload)),
+        ("specialists_comparison.html", render_comparison(payload)),
+        ("validation_audit.html", render_audit(payload)),
+    ]
+    # The governed-assessment view is M3-v1's Validator 7 record; M3-v2 has none.
+    if not is_m3_v2_block((payload.get("module_conclusions") or {}).get("M3")):
+        m3_export = build_m3_governed_export(payload)
+        paths["m3_governed_assessment.json"] = folder / "m3_governed_assessment.json"
+        paths["m3_governed_assessment.json"].write_text(
+            canonical_json(m3_export) + "\n", encoding="utf-8", newline="\n")
+        pages.append(("m3_governed_assessment.html",
+                      render_m3_governed_assessment(m3_export, payload)))
+    for name, content in pages:
         paths[name] = folder / name
         paths[name].write_text(content, encoding="utf-8", newline="\n")
     if benchmark is not None:

@@ -83,6 +83,26 @@
 <h4>Information gaps</h4>
 {{ list_or_none(m.information_gaps) }}
 {% endmacro %}
+{% macro m3_v2_panel(m) %}
+<h4>Corporate structure <span class="tag">{{ m.structure.status|replace('_', ' ') }}</span></h4>
+{% if m.structure.status == 'complete' %}
+<p class="small">{{ m.structure.company }}: {{ m.structure.entities }} entities in the submitted structure.</p>
+{% if m.structure.disclaimer %}<p class="qual">{{ m.structure.disclaimer }}</p>{% endif %}
+{% if m.structure.tree %}<pre class="small">{{ m.structure.tree }}</pre>{% endif %}
+{% else %}<p class="notice">{{ m.structure.error or 'No corporate-structure input was supplied.' }}</p>{% endif %}
+<h4>Senior management <span class="tag">{{ m.management.status|replace('_', ' ') }}</span></h4>
+{% if m.management.overall %}<p><span class="tag {{ m.management.outcome }}">{{ m.management.outcome }}</span> {{ m.management.overall }}</p>{% endif %}
+{% for o in m.management.observations %}
+<div class="claim"><span class="tag {{ o.direction }}">{{ o.direction }}</span><span class="tag">{{ o.category|replace('_', ' ') }}</span><br>
+<strong>{{ o.executive or 'Information limitation' }}.</strong> {{ o.text }}
+{% for q in o.quotes %}<div class="small">Filing: &ldquo;{{ q }}&rdquo;</div>{% endfor %}</div>
+{% else %}<p class="notice">{{ m.management.error or 'No reviewed management observation is available.' }}</p>{% endfor %}
+{% if m.management.profiles %}
+<div class="tablewrap"><table><tr><th>Executive</th><th>Position</th><th>Appointed</th><th>Recency</th><th>Succession</th></tr>
+{% for p in m.management.profiles %}<tr><td>{{ p.name }}</td><td>{{ p.position }}</td><td>{{ p.appointed }}</td><td>{{ p.recency|replace('_', ' ') }}</td><td>{{ p.succession|replace('_', ' ') }}</td></tr>{% endfor %}
+</table></div>{% endif %}
+{% if m.management.limitations %}<h4>Management limitations</h4>{{ list_or_none(m.management.limitations) }}{% endif %}
+{% endmacro %}
 {% macro m4_panel(m) %}
 {% if not m.debt_run %}
 <p class="notice">The Module 4 debt-structure specialist was not run for this analysis, so debt structure, refinancing and debt utilisation are not assessed here. This section rests on the strategy and capital-allocation agent only.</p>
@@ -150,7 +170,7 @@
 <h3>{{ mod.code }} governed module output <span class="tag {{ mod.status }}">{{ mod.status }}</span></h3>
 {% if mod.failed_or_missing_agents %}<p class="small">Specialists not validated: {{ mod.failed_or_missing_agents|join(', ') }}.</p>{% endif %}
 {% if mod.unresolved_coverage_checks %}<p class="small">Unresolved coverage checks: {{ mod.unresolved_coverage_checks|join(', ') }}.</p>{% endif %}
-{% if mod.m3 %}{{ m3_panel(mod.m3) }}{% elif mod.code == 'M3' %}<p class="notice">The validated M3 corporate-structure and management assessment is unavailable for this run.</p>{% endif %}
+{% if mod.m3_v2 %}{{ m3_v2_panel(mod.m3_v2) }}{% elif mod.m3 %}{{ m3_panel(mod.m3) }}{% elif mod.code == 'M3' %}<p class="notice">The validated M3 corporate-structure and management assessment is unavailable for this run.</p>{% endif %}
 {% if mod.m4 %}{{ m4_panel(mod.m4) }}{% endif %}
 {% if mod.further_findings %}
 <h4>Further governed specialist findings</h4>

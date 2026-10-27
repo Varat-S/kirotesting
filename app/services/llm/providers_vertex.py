@@ -69,6 +69,7 @@ class VertexProviderBackend(LLMBackend):
         *,
         client_factory: Callable[[], Any] | None = None,
         m3_draft_contract: bool = True,
+        schema_transform: Callable[[dict], dict] | None = None,
     ) -> None:
         self._settings = settings or get_settings()
         # Injection point for tests: a factory returning an object exposing
@@ -77,6 +78,9 @@ class VertexProviderBackend(LLMBackend):
         self.m3_draft_contract = m3_draft_contract
         # This backend's own calls, for the cost of the web job it was built for.
         self.usage = Meter()
+        # A custom transform marks an M3-v2 backend; its requests get one SDK attempt.
+        self._m3_v2 = schema_transform is not None
+        self._schema_transform = schema_transform or strict_schema
 
     @property
     def model_id(self) -> str:
@@ -176,7 +180,7 @@ class VertexProviderBackend(LLMBackend):
             schema = (provider_generation_schema(request.prompt.response_schema) if is_draft_schema(request.prompt.response_schema)
                       else vertex_m3_response_schema(request.prompt.response_schema))
         else:
-            schema = strict_schema(request.prompt.response_schema)
+            schema = self._schema_transform(request.prompt.response_schema)
         model = self.model_for_tier(request.model_tier)
         requested_temperature, effective_temperature = sampling_temperature(s, request.temperature, model)
         system = (
@@ -204,10 +208,12 @@ class VertexProviderBackend(LLMBackend):
                 # Raw JSON Schema. The SDK's typed ``response_schema`` rejects
                 # nullable type unions (e.g. ["string", "null"]) client-side.
                 "response_json_schema": schema,
+                # M3 requests get one SDK attempt; M3-v1 also bounds the wait.
                 **({"http_options": {
                     "timeout": int(s.llm_timeout_seconds * 1000),
                     "retry_options": {"attempts": 1},
-                }} if is_m3_request(request) else {}),
+                }} if is_m3_request(request) else
+                   {"http_options": {"retry_options": {"attempts": 1}}} if self._m3_v2 else {}),
             },
             "_schema_sha256": content_hash(schema),
             "_inputs_sha256": content_hash(request.inputs),
@@ -240,11 +246,16 @@ class VertexProviderBackend(LLMBackend):
         record_usage(model, usage, self.usage)  # billed even when the output is unusable
         if not output:
             raise ProviderCallError("Vertex returned no structured output.")
+        http_response = getattr(response, "sdk_http_response", None)
         return LLMRawResult(
             raw_response=output,
             model_id=model,
             model_config={
                 "backend": "vertex",
+                "request_attempted": True,
+                "sdk_attempts": 1,
+                "http_status": getattr(http_response, "status_code", None),
+                "response_model_version": getattr(response, "model_version", None),
                 "model_tier": request.model_tier,
                 "request_inputs_sha256": payload["_inputs_sha256"],
                 "request_schema_sha256": payload["_schema_sha256"],

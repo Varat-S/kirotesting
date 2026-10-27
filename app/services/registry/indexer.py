@@ -33,6 +33,7 @@ from app.schemas.artifact_manifest import (
     ExecutionStatus,
     HumanReviewStatus,
 )
+from app.services.bo.m3_version import is_m3_v2_block
 from app.services.registry.provenance import provenance_from_payload
 
 
@@ -390,7 +391,7 @@ def _module_status(status: Any) -> ExecutionStatus:
         return ExecutionStatus.QUALIFIED
     if s in {"failed", "rejected", "fail"}:
         return ExecutionStatus.FAILED
-    if s in {"unavailable", "not_run", "not_executed", "absent"}:
+    if s in {"unavailable", "not_run", "not_executed", "not_attempted", "absent"}:
         return ExecutionStatus.ABSENT
     if s in {"skipped"}:
         return ExecutionStatus.SKIPPED
@@ -482,8 +483,25 @@ def _index_bo_module_artifacts(
             depends_on=[f"bo.agent.m4_strategy_capital.{run_id}"],
         ))
 
-    # --- Validator 7 (M3 numeric binding) ------------------------------------
+    # --- M3-v2: the rebuild's two typed components --------------------------
     m3 = mc.get("M3") if isinstance(mc.get("M3"), dict) else {}
+    if is_m3_v2_block(m3):
+        for kind, component in (m3.get("m3_rebuild") or {}).items():
+            payload = component.get("artifact") or {}
+            entries.append(ArtifactEntry(
+                artifact_id=f"bo.m3.{kind}.{run_id}",
+                artifact_type=(ArtifactType.CORPORATE_STRUCTURE if kind == "structure"
+                               else ArtifactType.MODULE_OUTPUT),
+                case_id=case_id, run_id=run_id, producer_module="M3",
+                producer_agent=("m3_structure_conversion" if kind == "structure"
+                                else "m3_management_assessment"),
+                schema_version=payload.get("schema_version"),
+                file_location=memo_loc, audit_subpath=f"module_conclusions.M3.m3_rebuild.{kind}",
+                status=_module_status(component.get("status")),
+                status_reason=component.get("error"),
+                validation_status=component.get("validation_status")))
+
+    # --- M3-v1: Validator 7 (M3 numeric binding) -----------------------------
     if "m3_assessment_status" in m3:
         v7_status = str(m3.get("m3_assessment_status") or "")
         entries.append(ArtifactEntry(
@@ -762,9 +780,20 @@ def index_case_from_dir(
         for run_dir in sorted(p for p in fo_case.iterdir() if p.is_dir()):
             manifest.artifacts.extend(_index_fo_run(run_dir, root, case_id))
 
+    # M3-v2 runs: output/m3_rebuild/<case>/<run>/m3_rebuild_manifest.json.
+    from app.services.bo.m3_rebuild.adapters import registry_entries
+    rebuild_root = output_root / "m3_rebuild" / case_id
+    if rebuild_root.is_dir():
+        for recorded in sorted(rebuild_root.glob("*/m3_rebuild_manifest.json")):
+            manifest.artifacts.extend(registry_entries(recorded, root, case_id))
+
     for m3_dir in m3_dirs or []:
         m3_path = Path(m3_dir)
-        if m3_path.is_dir():
+        if (m3_path / "m3_rebuild_manifest.json").is_file():
+            entries = registry_entries(m3_path / "m3_rebuild_manifest.json", root, case_id)
+            existing = {a.artifact_id for a in manifest.artifacts}
+            manifest.artifacts.extend(e for e in entries if e.artifact_id not in existing)
+        elif m3_path.is_dir():
             manifest.artifacts.extend(_index_m3_dir(m3_path, root, case_id))
 
     return manifest

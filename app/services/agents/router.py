@@ -33,7 +33,7 @@ from app.schemas.agentic import EvidencePacket
 # A selector decides whether one evidence item belongs in an agent's packet.
 Selector = Callable[[dict[str, Any]], bool]
 
-ROUTER_VERSION = "evidence-router-1.0.0"
+ROUTER_VERSION = "evidence-router-1.1.0"
 
 
 @dataclass(frozen=True)
@@ -48,6 +48,7 @@ class RoutingSpec:
 
     agent_id: str
     fact_selector: Selector | None = None
+    structured_evidence_selector: Selector | None = None
     parameter_selector: Selector | None = None
     narrative_selector: Selector | None = None
     entity_relationship_selector: Selector | None = None
@@ -80,6 +81,7 @@ class RouterInputs:
     snapshot_version: int
     analysis_run_id: str
     facts: list[dict[str, Any]] = field(default_factory=list)
+    structured_evidence: list[dict[str, Any]] = field(default_factory=list)
     parameters: list[dict[str, Any]] = field(default_factory=list)
     narrative_evidence: list[dict[str, Any]] = field(default_factory=list)
     entity_relationships: list[dict[str, Any]] = field(default_factory=list)
@@ -107,6 +109,7 @@ class RouterInputs:
             snapshot_version=data.get("snapshot_version", 1),
             analysis_run_id=analysis_run_id,
             facts=list(data.get("facts", [])),
+            structured_evidence=list(data.get("structured_evidence", [])),
             parameters=list(parameters or []),
             narrative_evidence=list(data.get("narrative_evidence", [])),
             entity_relationships=list(entity_relationships or data.get("entities", [])),
@@ -142,6 +145,9 @@ class EvidenceRouter:
     def build_packet(self, spec: RoutingSpec, inputs: RouterInputs) -> EvidencePacket:
         """Build one agent's packet by applying ``spec`` to ``inputs``."""
         facts = _select(inputs.facts, spec.fact_selector)
+        structured = _select(
+            inputs.structured_evidence, spec.structured_evidence_selector
+        )
         parameters = _select(inputs.parameters, spec.parameter_selector)
         narrative = _select(inputs.narrative_evidence, spec.narrative_selector)
         entity_rels = _select(
@@ -169,7 +175,9 @@ class EvidenceRouter:
             else []
         )
 
-        evidence_ids = _collect_evidence_ids(facts, narrative, facility_terms, covenant_terms)
+        evidence_ids = _collect_evidence_ids(
+            facts, structured, narrative, facility_terms, covenant_terms
+        )
 
         packet = EvidencePacket(
             case_id=inputs.case_id,
@@ -178,6 +186,7 @@ class EvidenceRouter:
             analysis_run_id=inputs.analysis_run_id,
             agent_id=spec.agent_id,
             facts=facts,
+            structured_evidence=structured,
             parameters=parameters,
             narrative_evidence=narrative,
             entity_relationships=entity_rels,
@@ -185,6 +194,7 @@ class EvidenceRouter:
             covenant_terms=covenant_terms,
             open_conflicts=conflicts,
             data_limitations=limitations,
+            context=dict(spec.extra),
             evidence_ids=evidence_ids,
         )
         return packet.model_copy(update={"packet_hash": self.hash_packet(packet)})

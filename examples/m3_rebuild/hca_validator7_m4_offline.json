@@ -1,0 +1,44 @@
+{
+  "decisions": [
+    {
+      "judgment_id": "jud_01",
+      "outcome": "qualified",
+      "reason": "The CEO appointment and independently supported company roles establish continuity context. The cited fact_01 alone establishes appointment history, not all prior operating experience; explicit accepted role claims supply that context. One other submitted role quotation fails its declared passage reference. Institutional knowledge is a plausible bounded inference, not demonstrated competence or financial performance.",
+      "supporting_claim_ids": ["fact_01", "executive:1:role:1", "executive:1:role:3", "executive:1:role:5"],
+      "reviewed_text": "Hazen's disclosed CEO tenure and accepted prior company operating and finance roles may support continuity of operating knowledge. This is a limited credit-positive inference; the biographies do not establish competence, realized credit outcomes or future execution.",
+      "limitations": ["An inaccurate additional prior-role citation is excluded, without discarding the independently supported experience."]
+    },
+    {
+      "judgment_id": "jud_02",
+      "outcome": "qualified",
+      "reason": "The May 2024 CFO appointment and accepted prior finance roles support an internal transition. The original phrase 'internal finance roles since 1996' exceeds the evidence: joining HCA in 1996 does not date the start of finance responsibilities. Neutral treatment is reasonable; neither disruption nor improved credit performance follows from a title change alone.",
+      "supporting_claim_ids": ["fact_05", "executive:5:role:1", "executive:5:role:2", "executive:5:role:3", "executive:5:role:4"],
+      "reviewed_text": "Marks' CFO appointment and accepted prior finance responsibilities provide internal-transition context. The credit implication remains neutral pending evidence of execution in the CFO role. The filing's company-joining date does not establish when finance responsibilities began.",
+      "limitations": ["No realized financing, liquidity or debt-service outcome is established by these biographies."]
+    },
+    {
+      "judgment_id": "jud_03",
+      "outcome": "qualified",
+      "reason": "The accepted April 2024 appointment and prior internal legal role support a change in responsibilities. Transition monitoring is a reasonable analytical implication, but effectiveness and financial impact are not disclosed. The separate external-history quotation has an inaccurate passage reference and is excluded; it does not invalidate the internal appointment and legal-role claims.",
+      "supporting_claim_ids": ["fact_06", "executive:6:role:1"],
+      "reviewed_text": "McAlevey's expansion of legal and administrative responsibilities follows an accepted internal legal role. This supports neutral transition monitoring. The biography does not demonstrate effectiveness in the expanded remit or an adverse financial outcome.",
+      "limitations": ["The inaccurate separately submitted external-history citation is not used."]
+    },
+    {
+      "judgment_id": "jud_04",
+      "outcome": "qualified",
+      "reason": "Several independently accepted career histories support a bounded team-continuity inference. The original appointment facts alone do not demonstrate decades of cumulative internal experience, so accepted prior-role claims are explicitly added. Deep knowledge, organizational stability and the ability to offset labor or regulatory pressure are not demonstrated operating outcomes. Seven individuals appear in the roster, but seven individual credit judgments are not required.",
+      "supporting_claim_ids": ["fact_01", "fact_02", "fact_03", "fact_04", "fact_07", "executive:2:role:1", "executive:3:role:2", "executive:4:role:1", "executive:7:role:1"],
+      "reviewed_text": "Accepted management biographies show several internal operating, finance and clinical career paths. These may support continuity of company knowledge, a limited credit-positive consideration. They do not demonstrate operating performance, governance quality or an ability to offset industry-wide cost and regulatory pressures.",
+      "limitations": ["This team assessment uses surviving source claims; it does not inherit rejected role or citation assertions."]
+    }
+  ],
+  "overall": {
+    "signal": "credit_positive",
+    "text": "The surviving evidence supports a cautious continuity positive from internal career experience. Marks and McAlevey are neutral transitions without demonstrated execution outcomes. Citation gaps and missing outcome evidence limit the assessment; no competence, governance rating or measurable financial benefit is established.",
+    "judgment_ids": ["jud_01", "jud_02", "jud_03", "jud_04"],
+    "limitations": ["This is an explicitly authored offline Validator 7 fixture, not a live reviewer-model result.", "The original specialist answer is preserved; these qualifications are separate reviewer wording.", "Performance, incentive alignment and realized credit effects remain unverified."]
+  },
+  "principal_executives": ["Samuel N. Hazen", "Michael A. Marks", "Michael R. McAlevey"],
+  "scope_limitations": ["Three principal individual assessments and one management-team assessment; seven individual judgments are not mandatory.", "This fixture evaluates the saved FY2024 response and accepted claims only; it does not validate live Validator 7 performance."]
+}

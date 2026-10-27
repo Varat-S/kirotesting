@@ -39,6 +39,8 @@ AGENT_REGISTRY_VERSION = "agent-registry-1.1.0"
 # keep resolving against the unchanged v1 roster.
 AGENT_REGISTRY_VERSION_BO_V2 = "agent-registry-2.0.0"
 AGENT_REGISTRY_VERSION_BO_V3 = "agent-registry-3.0.0"
+# v3 with M3-v2: the M3 specialist is replaced by the rebuild workflow.
+AGENT_REGISTRY_VERSION_BO_V3_M3_V2 = "agent-registry-3.1.0"
 
 
 class AgentRegistryError(ValueError):
@@ -427,7 +429,7 @@ _MITIGANT = [
 ]
 
 
-def default_registry(bo_roster: str = "v1") -> AgentRegistry:
+def default_registry(bo_roster: str = "v1", *, m3_version: str = "v1") -> AgentRegistry:
     """Build the canonical 27-job agent registry.
 
     ``bo_roster="v1"`` (default) is the original roster. ``bo_roster="v2"``
@@ -438,7 +440,8 @@ def default_registry(bo_roster: str = "v1") -> AgentRegistry:
     ``bo_roster="v3"`` is the four-module Business roster (``bo/roster_v3.py``):
     five Module 1 specialists, Agent 6, and declared-but-not-executed agents for
     Modules 2-4 (30 jobs). Parameter ids are unchanged; ownership moves are in
-    ``BO_V2_TO_V3_PARAMETER_OWNER``.
+    ``BO_V2_TO_V3_PARAMETER_OWNER``. ``m3_version="v2"`` leaves the v3 M3
+    specialist out (M3-v2 runs outside the DAG); it has no effect on v1/v2.
     """
     if bo_roster not in ("v1", "v2", "v3"):
         raise AgentRegistryError(f"Unknown BO roster {bo_roster!r}.")
@@ -466,7 +469,7 @@ def default_registry(bo_roster: str = "v1") -> AgentRegistry:
         )
 
     if bo_roster == "v3":
-        defs.extend(_business_narrow_v3())
+        defs.extend(_business_narrow_v3(m3_version))
         business_narrow_ids = [d.agent_id for d in defs]
     elif bo_roster == "v2":
         defs.extend(_business_narrow_v2())
@@ -588,11 +591,11 @@ def default_registry(bo_roster: str = "v1") -> AgentRegistry:
     defs.append(_challenger("cross_topic_challenge", Topic.CROSS_TOPIC,
                             "credit_orchestrator"))
 
-    return AgentRegistry(
-        defs,
-        version={"v2": AGENT_REGISTRY_VERSION_BO_V2,
-                 "v3": AGENT_REGISTRY_VERSION_BO_V3}.get(bo_roster, AGENT_REGISTRY_VERSION),
-    )
+    version = {"v2": AGENT_REGISTRY_VERSION_BO_V2,
+               "v3": AGENT_REGISTRY_VERSION_BO_V3}.get(bo_roster, AGENT_REGISTRY_VERSION)
+    if bo_roster == "v3" and m3_version == "v2":
+        version = AGENT_REGISTRY_VERSION_BO_V3_M3_V2
+    return AgentRegistry(defs, version=version)
 
 
 def _bo_prompt(bo_roster: str, role: str) -> str | None:
@@ -650,12 +653,12 @@ def _business_narrow_v2() -> list[AgentDefinition]:
     return defs
 
 
-def _business_narrow_v3() -> list[AgentDefinition]:
+def _business_narrow_v3(m3_version: str = "v1") -> list[AgentDefinition]:
     """The executable four-module Business roster."""
-    from app.services.bo.roster_v3 import V3_M1_PRIMARY_IDS, V3_SPECS
+    from app.services.bo.roster_v3 import V3_M1_PRIMARY_IDS, v3_specs
 
     defs = []
-    for spec in V3_SPECS:
+    for spec in v3_specs(m3_version):
         if not spec.executable:
             # Ownership contract only: no prompt, no routing, never scheduled.
             defs.append(AgentDefinition(

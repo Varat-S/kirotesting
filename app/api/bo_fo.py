@@ -28,6 +28,7 @@ from app.core.config import get_settings
 from app.services import bo_fo
 from app.services.acquisition import shared_filing
 from app.services.acquisition.sec_edgar import EdgarError, SecEdgarClient
+from app.services.bo.m3_version import DEFAULT_M3_VERSION, M3_VERSION_LABELS, check_m3_version
 from app.services.audit.log import AuditLog
 from app.services.extraction.sec.xml import MAX_FILE_BYTES
 from app.services.fo import precheck
@@ -62,6 +63,8 @@ def _page(*, error=None, notice=None, selected_folder=None, job=None, values=Non
             reports=reports, company=company,
             sec_ok=bool(settings.sec_user_agent), fo_ok=fo_ok, fo_reason=fo_reason,
             bo_ok=bo_ok, bo_reason=bo_reason, models=models, models_note=models_note,
+            m3_versions=M3_VERSION_LABELS,
+            selected_m3_version=(values or {}).get("m3_version") or DEFAULT_M3_VERSION,
             selected_model=(values or {}).get("model") or fo_models.configured_model()),
         status_code=status_code)
 
@@ -160,9 +163,11 @@ def start_run(
     cutoff: str = Form(default=""),
     requested_amount_m: str = Form(default=""),
     tenor_years: str = Form(default=""),
+    m3_version: str = Form(default=DEFAULT_M3_VERSION),
 ):
     values = {"case_id": case_id, "model": model, "cutoff": cutoff,
-              "requested_amount_m": requested_amount_m, "tenor_years": tenor_years}
+              "requested_amount_m": requested_amount_m, "tenor_years": tenor_years,
+              "m3_version": m3_version}
     settings = get_settings()
     try:
         database = bo_fo.sqlite_path(settings.database_url)
@@ -172,7 +177,9 @@ def start_run(
                        if requested_amount_m.strip() else None)
         settled = bo_fo.plan(folder, case_id.strip() or None, parsed_cutoff)
         # The picked model runs both sections: every BO tier and the FO's Pre-check Agent.
+        m3_version = check_m3_version(m3_version)
         bo_backend = bo_fo.bo_live_backend(model.strip() or None)
+        m3_backend = bo_fo.m3_v2_live_backend(model.strip() or None) if m3_version == "v2" else None
         fo_backend = precheck.live_backend(model.strip() or None)
     except Exception as exc:  # a folder, cut-off or provider problem: nothing has started
         return _page(error=f"The run cannot start: {exc}", selected_folder=folder, values=values,
@@ -180,6 +187,7 @@ def start_run(
     job_id = bo_fo.jobs.start(
         database=database, folder=folder, case_id=settled["case_id"], cutoff=settled["cutoff"],
         bo_backend=bo_backend, fo_backend=fo_backend, fo_mode="live",
+        m3_version=m3_version, m3_backend=m3_backend,
         output_root=settings.output_dir, data_root=settings.data_dir, rms_request=rms_request)
     return RedirectResponse(f"/run?job={quote(job_id)}", status_code=303)
 

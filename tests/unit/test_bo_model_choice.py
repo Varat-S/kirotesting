@@ -44,5 +44,5 @@ def test_web_run_passes_the_picked_model_to_both_sections(monkeypatch):
     monkeypatch.setattr(precheck, "live_backend", lambda model=None: seen.setdefault("fo", model))
     monkeypatch.setattr(bo_fo.jobs, "start", lambda **kwargs: "job1")
     api.start_run(folder="f", case_id="", model="gemini-3.6-flash",
-                  cutoff="", requested_amount_m="", tenor_years="")
+                  cutoff="", requested_amount_m="", tenor_years="", m3_version="v1")
     assert seen == {"bo": "gemini-3.6-flash", "fo": "gemini-3.6-flash"}

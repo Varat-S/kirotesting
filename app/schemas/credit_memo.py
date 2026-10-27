@@ -4,7 +4,11 @@ from __future__ import annotations
 from typing import Literal
 from pydantic import Field, model_validator
 
-from app.schemas.structural_overview import StrictModel, StructuralOverviewAssessment
+from app.schemas.structural_overview import (
+    ASSESSMENT_SCHEMA_VERSIONS,
+    StrictModel,
+    StructuralOverviewAssessment,
+)
 
 
 class FinancialValue(StrictModel):
@@ -109,7 +113,7 @@ class CrossDomainFinding(StrictModel):
 
 
 class PartialCreditAssessment(StructuralOverviewAssessment):
-    schema_version: Literal["structural-overview-assessment-1.1"] = "structural-overview-assessment-1.1"
+    schema_version: ASSESSMENT_SCHEMA_VERSIONS = "structural-overview-assessment-1.1"
     status: Literal["partial"] = "partial"
     final_credit_score: None = None
     facility_approval: None = None

@@ -1,0 +1,15 @@
+{
+  "label": "Manually transcribed offline extraction verified against selected local FY2024 filing; no model request",
+  "source_path": "/Users/Daniel/Desktop/SMU/EYE Investment/ISP 1/HCA 10K/10K 2024.pdf",
+  "source_sha256": "64fa678981afe7c451820e9f59fc44ab41373702edc9d9175a6ec8a289df45a6",
+  "physical_pages": [
+    5,
+    35,
+    36
+  ],
+  "limitations": [
+    "PDF text extraction inserts spaces within some words; fixture retains the exact extracted spelling.",
+    "Hazen history preceding 1995 spans multiple employers and is not classified as solely internal."
+  ],
+  "expected_profiles": 7
+}

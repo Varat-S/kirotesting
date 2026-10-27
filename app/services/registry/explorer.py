@@ -67,7 +67,7 @@ def discover_cases(
     repo = Path(repo_root)
     found: dict[str, CaseSource] = {}
 
-    for family in ("bo", "fo"):
+    for family in ("bo", "fo", "m3_rebuild"):
         base = output_root / family
         if base.is_dir():
             for case_dir in sorted(p for p in base.iterdir() if p.is_dir()):

@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=120, ge=1, le=600)
     llm_max_output_tokens: int = Field(default=12000, ge=256, le=64000)
     llm_max_input_bytes: int = Field(default=1500000, ge=1000)
+    # User-supplied USD per million token rates, used only for cost estimates.
+    llm_prices: dict[str, dict[str, float]] = Field(default_factory=dict)
     # None preserves provider/model defaults. Overrides never guarantee determinism.
     llm_temperature: float | None = Field(default=None, ge=0, le=2, allow_inf_nan=False)
     # For custom/OpenAI-compatible models, explicitly declare capability and range.

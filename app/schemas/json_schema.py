@@ -16,6 +16,7 @@ import jsonschema
 
 from app.schemas.snapshots import (
     FINAL_SCHEMA_VERSION,
+    LEGACY_SCHEMA_VERSION,
     SCHEMA_VERSION,
     CanonicalEvidenceSnapshot,
     FinalCaseSnapshot,
@@ -58,14 +59,28 @@ def _final_schema_v1_1() -> dict[str, Any]:
     return schema
 
 
+def _canonical_schema_v1_1() -> dict[str, Any]:
+    """Frozen canonical v1.1 shape, before structured evidence was added."""
+    schema = CanonicalEvidenceSnapshot.model_json_schema()
+    schema = {**schema, "properties": {
+        key: value for key, value in schema.get("properties", {}).items()
+        if key != "structured_evidence"
+    }}
+    schema["properties"]["schema_version"] = {
+        "default": LEGACY_SCHEMA_VERSION, "title": "Schema Version", "type": "string"
+    }
+    return schema
+
+
 # Registry of versioned JSON Schemas, keyed by (snapshot_type, schema_version).
 _SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     (
         "canonical_evidence",
         SCHEMA_VERSION,
     ): CanonicalEvidenceSnapshot.model_json_schema(),
+    ("canonical_evidence", LEGACY_SCHEMA_VERSION): _canonical_schema_v1_1(),
     ("final_case", FINAL_SCHEMA_VERSION): FinalCaseSnapshot.model_json_schema(),
-    ("final_case", SCHEMA_VERSION): _final_schema_v1_1(),
+    ("final_case", LEGACY_SCHEMA_VERSION): _final_schema_v1_1(),
 }
 
 # Keep the original schema, rather than changing its definition under the same version.
@@ -77,6 +92,15 @@ legacy = json.loads(
 for kind, schema in legacy.items():
     _SCHEMAS[(kind, "1.0")] = schema
 _SCHEMAS[("canonical_evidence", SCHEMA_VERSION)]["properties"]["facts"]["items"] = {
+    "type": "object",
+    "properties": {
+        "dimensions": {"type": "object", "additionalProperties": {"type": "string"}},
+        "xbrl_context_id": {"type": ["string", "null"]},
+        "inline_element_id": {"type": ["string", "null"]},
+        "sec_accession": {"type": ["string", "null"]},
+    },
+}
+_SCHEMAS[("canonical_evidence", LEGACY_SCHEMA_VERSION)]["properties"]["facts"]["items"] = {
     "type": "object",
     "properties": {
         "dimensions": {"type": "object", "additionalProperties": {"type": "string"}},
