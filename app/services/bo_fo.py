@@ -52,11 +52,21 @@ class BoFoError(ValueError):
     """The combined run cannot start (no shared folder, no backend, a bad case id)."""
 
 
-def bo_live_backend():
-    """The configured live provider for the BO (LLM_PROVIDER), as ``run-bo-case --live`` uses it."""
+def bo_live_backend(model: str | None = None):
+    """The configured live provider for the BO (LLM_PROVIDER), as ``run-bo-case --live`` uses it. ``model``
+    (Vertex only) runs every BO tier (narrow, orchestrator, challenge) on that model for this run, so a combined
+    run uses the model picked for the FO's Pre-check Agent in both sections."""
     from app.core.config import get_settings
 
     settings = get_settings()
+    if model:
+        from app.services.fo.models import check_model
+
+        model = check_model(model)
+        if settings.llm_provider != "vertex":
+            raise ValueError("A model can only be picked for the Vertex provider (LLM_PROVIDER=vertex).")
+        settings = settings.model_copy(update={
+            "vertex_model_narrow": model, "vertex_model_orchestrator": model, "vertex_model_challenge": model})
     if settings.llm_provider == "vertex":
         from app.services.llm.providers_vertex import VertexProviderBackend
 

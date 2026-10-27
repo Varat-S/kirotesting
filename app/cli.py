@@ -363,7 +363,8 @@ def main(argv=None):
                       help="Both sections on the configured live provider (model cost)")
     both.add_argument("--bo-responses", type=Path, help="Scripted BO responses (JSON): the BO runs offline")
     both.add_argument("--fo-responses", type=Path, help="Scripted FO agent responses (JSON): the FO runs offline")
-    both.add_argument("--model", help="With a live FO: the Pre-check Agent's Vertex model")
+    both.add_argument("--model", help="With --live: the Vertex model for both sections (every BO tier and the "
+                                       "FO's Pre-check Agent); default: the VERTEX_MODEL_* settings")
     both.add_argument("--roster", choices=("v2", "v3"), default="v2")
     both.add_argument("--enable-m4-debt-specialist", action="store_true")
     both.add_argument(
@@ -725,12 +726,12 @@ def _run_bo_fo(session, database, args):
 
         bo_backend = ScriptedBoBackend.from_file(args.bo_responses)
     elif args.live:
-        bo_backend = _live_backend()
+        bo_backend = bo_fo.bo_live_backend(args.model) if args.model else _live_backend()
     else:
         raise ValueError("The BO needs --live or --bo-responses.")
+    if args.model and args.bo_responses and args.fo_responses:
+        raise ValueError("--model applies to a live section only.")
     if args.fo_responses:
-        if args.model:
-            raise ValueError("--model applies to a live FO only.")
         fo_backend, fo_mode = precheck.scripted_backend(args.fo_responses), "scripted"
     elif args.live:
         fo_backend, fo_mode = precheck.live_backend(args.model), "live"

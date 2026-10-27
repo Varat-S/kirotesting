@@ -175,7 +175,8 @@ def start_run(
         settled = bo_fo.plan(folder, case_id.strip() or None, parsed_cutoff)
         if roster not in ("v2", "v3"):
             raise ValueError("The BO roster is v2 or v3.")
-        bo_backend = bo_fo.bo_live_backend()
+        # The picked model runs both sections: every BO tier and the FO's Pre-check Agent.
+        bo_backend = bo_fo.bo_live_backend(model.strip() or None)
         fo_backend = precheck.live_backend(model.strip() or None)
     except Exception as exc:  # a folder, cut-off or provider problem: nothing has started
         return _page(error=f"The run cannot start: {exc}", selected_folder=folder, values=values,

@@ -349,7 +349,7 @@ def client(root, tmp_path, monkeypatch):
     monkeypatch.setattr(precheck, "live_backend", lambda model=None: agent())
     monkeypatch.setattr(precheck, "agent_available", lambda: (True, None))
     monkeypatch.setattr(fo_models, "available_models", lambda force=False: (["test-model"], None))
-    monkeypatch.setattr(bo_fo, "bo_live_backend", lambda: None)
+    monkeypatch.setattr(bo_fo, "bo_live_backend", lambda model=None: None)
     with TestClient(create_app()) as test_client:
         yield test_client
     deps._session_factory.cache_clear()
