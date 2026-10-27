@@ -98,6 +98,7 @@ from app.services.bo.retrieval import (
 from app.services.bo.synthesis import (
     challenge_outcome,
     conclusion_prechecks,
+    downgrade_overstated_claim_types,
     hypothesis_view,
     iter_claims,
     parameter_value_sets,
@@ -725,19 +726,27 @@ class _BoRun:
         if agent.agent_id == self.resilience_agent_id:
             primary = self._usable(self.m1_primary_ids)
             unresolved = [
-                c.check.check_id for c in self.coverage
+                c for c in self.coverage
                 if c.agent_id in self.m1_primary_ids
                 and not (c.addressed_by
                          or c.response_status == "not_supported_by_evidence")
             ]
             failed = [a for a in self.m1_primary_ids
                       if self.agents[a].status != "validated"]
-            if not primary or (self.roster_version == "v3" and (failed or unresolved)):
+            # Unanswered coverage questions do not block Agent 6: they reach it
+            # as open questions and still leave Module 1 incomplete.
+            if not primary or (self.roster_version == "v3" and failed):
                 self.agents[agent.agent_id].detail = (
                     "Module 1 completeness gate blocked Agent 6: "
-                    f"failed specialists={failed}; unresolved checks={unresolved}; "
+                    f"failed specialists={failed}; "
+                    f"unresolved checks={[c.check.check_id for c in unresolved]}; "
                     f"usable findings={len(primary)}.")
                 return None
+            if unresolved:
+                inputs["open_questions"] = [
+                    {"check_id": c.check.check_id, "agent_id": c.agent_id,
+                     "question": c.check.question}
+                    for c in unresolved]
             inputs["primary_hypotheses"] = [hypothesis_view(h) for h in primary]
             inputs["primary_coverage"] = {
                 a: c for a, c in self._coverage().items() if a in self.m1_primary_ids}
@@ -976,6 +985,7 @@ class _BoRun:
                 "rejected": "Module 4 debt-structure output failed schema validation.",
                 "failed": "Module 4 debt-structure Validator 8 failed; mandatory "
                           "escalation raised and unresolved.",
+                "error": f"Module 4 debt-structure specialist call failed ({result.reason}).",
             }.get(result.status, f"Module 4 debt-structure status: {result.status}.")
             m4["missing_information"] = sorted({*m4["missing_information"], note})
         # Deterministic assembly: fold the strategy agent's governed findings
@@ -1372,6 +1382,9 @@ class _BoRun:
             *(r.parameter_result_id for r in self.indicators.results),
             *(p.parameter_result_id for p in self._business_parameters()),
         }
+        downgrades = downgrade_overstated_claim_types(parsed, all_by_id)
+        # Adjustments describe THIS answer; an earlier rejected one's do not carry.
+        self.agents[agent.agent_id].adjustments = list(downgrades)
         issues = validate_orchestrator_output(
             parsed, hypotheses=all_by_id, reconciliation=self.reconciliation,
             indicators=self.indicators, accepted_parameter_ids=accepted_ids)
@@ -1430,6 +1443,7 @@ class _BoRun:
             "claims": len(iter_claims(parsed)),
             "hypotheses_available": len(by_id),
             "canonicalized_evidence_claims": canonicalized_claims,
+            "claim_type_downgrades": [d["claim_id"] for d in downgrades],
         })
         if conclusion is None:
             self._reject(agent.agent_id, run_id, issues)

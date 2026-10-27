@@ -550,7 +550,7 @@ SHARED_RULES = (
     "mark supported or qualified. If you reject or cannot verify a hypothesis, "
     "write the finding the evidence DOES support as its own hypothesis and link "
     "that one. If the evidence does not support a classification, use "
-    "'not_established' or status 'unavailable'; do not force a positive or "
+    "'not_established' with status 'unavailable'; do not force a positive or "
     "negative answer.\n"
     "- Answer every question in 'checklist' with a checklist_responses entry, "
     "using its check_id exactly. An answer of 'addressed' MUST cite the ids of "
@@ -769,6 +769,9 @@ _AGENT_BRIEFS.update({
         "You are Agent 6, the Business Resilience, Risk Interactions & Synthesis "
         "agent of Module 1. You receive the VALIDATED, completeness-gated "
         "hypotheses of the five Module 1 specialists in 'primary_hypotheses'.\n"
+        "Questions in 'open_questions' were left unanswered by the specialists. "
+        "Do not answer them yourself; where one bears on an interaction, name it "
+        "in that interaction's missing_information.\n"
         + _AGENT_BRIEFS["BO6"].split("\n", 1)[1]
     ),
     "M2": (

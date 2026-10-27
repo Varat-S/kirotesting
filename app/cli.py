@@ -136,34 +136,19 @@ def main(argv=None):
     )
     bo_run.add_argument("--pdf", action="store_true")
     bo_run.add_argument(
-        "--roster", choices=("v2", "v3"), default="v2",
-        help=("BO agent roster. 'v2' is the legacy six-specialist roster (default, "
-              "unchanged). 'v3' is the four-module eight-primary roster with the "
-              "stronger module-completeness and Agent 6 gates. The active roster is "
-              "always reported in the run summary."),
-    )
-    bo_run.add_argument(
-        "--enable-m4-debt-specialist", action="store_true",
-        help=("Also run the Module 4 debt-structure / refinancing specialist "
-              "inside the orchestrated BO run (v3 roster only), alongside "
-              "m4_strategy_capital, so both feed one governed Module 4 output. "
-              "Default off for backward compatibility. The effective flag is "
-              "recorded in the run metadata and reported in the summary."),
-    )
-    bo_run.add_argument(
         "--m3-responses", type=Path,
-        help=("v3 roster: scripted run-m3 response map (same format as run-m3 "
+        help=("Scripted run-m3 response map (same format as run-m3 "
               "--responses) for the standalone Module 3 step. Without it, Module 3 "
               "uses the run's own backend."),
     )
     bo_run.add_argument(
         "--corporate-structure", type=Path,
-        help=("v3 roster: simplified v1.0 corporate-structure onboarding JSON passed "
+        help=("Simplified v1.0 corporate-structure onboarding JSON passed "
               "to the standalone Module 3 step (as run-m3 --corporate-structure)."),
     )
     bo_spec = commands.add_parser(
         "run-bo-specialists",
-        help="Run the six BO specialists and validators only; write the demo reports",
+        help="Run the BO specialists and validators only; write the demo reports",
     )
     bo_spec.add_argument("case_id")
     bo_spec_source = bo_spec.add_mutually_exclusive_group(required=True)
@@ -188,8 +173,6 @@ def main(argv=None):
                          help="Model price per million input tokens (optional)")
     bo_spec.add_argument("--price-out", type=float,
                          help="Model price per million output tokens (optional)")
-    bo_spec.add_argument("--roster", choices=("v2", "v3"), default="v2",
-                         help="BO specialist roster to execute (default: v2)")
     bo_spec.add_argument(
         "--transaction-borrower-entity-id",
         help="Validated case-spec entity id for the proposed facility obligor; "
@@ -365,8 +348,6 @@ def main(argv=None):
     both.add_argument("--fo-responses", type=Path, help="Scripted FO agent responses (JSON): the FO runs offline")
     both.add_argument("--model", help="With --live: the Vertex model for both sections (every BO tier and the "
                                        "FO's Pre-check Agent); default: the VERTEX_MODEL_* settings")
-    both.add_argument("--roster", choices=("v2", "v3"), default="v2")
-    both.add_argument("--enable-m4-debt-specialist", action="store_true")
     both.add_argument(
         "--cutoff", type=lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")),
         help="BO evidence cut-off (default: the latest file availability, so every file is admitted)")
@@ -744,9 +725,7 @@ def _run_bo_fo(session, database, args):
     outcome = bo_fo.run_bo_fo(
         database=database, folder=folder, case_id=args.case_id, cutoff=args.cutoff,
         bo_backend=bo_backend, fo_backend=fo_backend, fo_mode=fo_mode,
-        output_root=args.output, roster=args.roster,
-        enable_m4_debt_specialist=args.enable_m4_debt_specialist, produce_pdf=args.pdf,
-        rms_request=rms_request, on_progress=show)
+        output_root=args.output, produce_pdf=args.pdf, rms_request=rms_request, on_progress=show)
     for section in ("bo", "fo", "rms"):
         if outcome[section]["status"] == "failed":
             print(outcome[section].pop("traceback"), file=sys.stderr)
@@ -754,11 +733,12 @@ def _run_bo_fo(session, database, args):
 
 
 def _run_bo_specialists(session, database, args):
-    """Six specialists + validators + demonstration reports (no memo, no score)."""
+    """Specialists + validators + demonstration reports (no memo, no score)."""
     from app.services.bo import benchmark
     from app.services.bo.demo import run_demo
     from app.services.bo.offline import ScriptedBoBackend
     from app.services.bo.sectors import load_case_checks
+    from app.services.bo_fo import BO_ROSTER
 
     if args.live:
         backend = _live_backend()
@@ -782,7 +762,7 @@ def _run_bo_specialists(session, database, args):
         session, args.case_id, package=package, backend=backend,
         data_root=database.parent, output_root=args.output,
         coverage_checks=load_case_checks(args.coverage) if args.coverage else None,
-        baseline_calls=args.baseline, prices=prices, bo_roster=args.roster,
+        baseline_calls=args.baseline, prices=prices, bo_roster=BO_ROSTER,
         transaction_borrower_entity_id=args.transaction_borrower_entity_id)
     payload = result["payload"]
     metrics = payload["metrics"]
@@ -970,6 +950,7 @@ def _run_fo_case(session, args):
 def _run_bo_case(session, database, args):
     """Run the BO-only path and summarise the recorded outcome."""
     from app.services.bo.runner import BusinessOverviewRunner
+    from app.services.bo_fo import BO_ROSTER
 
     backend = None
     if args.responses:
@@ -992,13 +973,11 @@ def _run_bo_case(session, database, args):
         from app.services.bo.evaluation import load_manifest
 
         manifest = load_manifest(args.manifest)
-    roster = getattr(args, "roster", "v2")
-    enable_m4_debt = bool(getattr(args, "enable_m4_debt_specialist", False))
     m3_responses_path = getattr(args, "m3_responses", None)
     corporate_structure_path = getattr(args, "corporate_structure", None)
     result = BusinessOverviewRunner(
         session, backend=backend, data_root=database.parent, output_root=args.output,
-        bo_roster=roster, enable_m4_debt_specialist=enable_m4_debt,
+        bo_roster=BO_ROSTER, enable_m4_debt_specialist=True,
         m3_responses=(json.loads(m3_responses_path.read_text(encoding="utf-8"))
                       if m3_responses_path else None),
         m3_corporate_structure=(
@@ -1022,15 +1001,10 @@ def _run_bo_case(session, database, args):
         # A-1: report the roster that actually ran, taken from the recorded
         # registry version, so a run can never be silently misattributed to a
         # different architecture than the one that produced it.
-        "bo_roster": roster,
+        "bo_roster": BO_ROSTER,
         "agent_registry_version": (result.audit or {}).get("registry", {}).get("version"),
-        # Effective Module 4 debt-specialist flag: what was requested, and whether
-        # it actually took effect (only on the v3 roster). Reported from the
-        # recorded run metadata, not just the CLI arg.
-        "m4_debt_specialist_requested": enable_m4_debt,
-        "m4_debt_specialist_enabled": bool(
-            result.record.get("m4_debt_specialist_enabled",
-                              enable_m4_debt and roster == "v3")),
+        # Whether the Module 4 debt specialist took effect, from the recorded run metadata.
+        "m4_debt_specialist_enabled": bool(result.record.get("m4_debt_specialist_enabled", True)),
         "conclusion_status": result.conclusion_status,
         "human_review_status": "pending",
         "handoff_id": result.handoff["handoff_id"],

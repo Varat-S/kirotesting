@@ -157,13 +157,11 @@ def start_run(
     folder: str = Form(...),
     case_id: str = Form(default=""),
     model: str = Form(default=""),
-    roster: str = Form(default="v2"),
-    enable_m4_debt_specialist: str = Form(default=""),
     cutoff: str = Form(default=""),
     requested_amount_m: str = Form(default=""),
     tenor_years: str = Form(default=""),
 ):
-    values = {"case_id": case_id, "model": model, "roster": roster, "cutoff": cutoff,
+    values = {"case_id": case_id, "model": model, "cutoff": cutoff,
               "requested_amount_m": requested_amount_m, "tenor_years": tenor_years}
     settings = get_settings()
     try:
@@ -173,8 +171,6 @@ def start_run(
                                   else None)
                        if requested_amount_m.strip() else None)
         settled = bo_fo.plan(folder, case_id.strip() or None, parsed_cutoff)
-        if roster not in ("v2", "v3"):
-            raise ValueError("The BO roster is v2 or v3.")
         # The picked model runs both sections: every BO tier and the FO's Pre-check Agent.
         bo_backend = bo_fo.bo_live_backend(model.strip() or None)
         fo_backend = precheck.live_backend(model.strip() or None)
@@ -184,8 +180,7 @@ def start_run(
     job_id = bo_fo.jobs.start(
         database=database, folder=folder, case_id=settled["case_id"], cutoff=settled["cutoff"],
         bo_backend=bo_backend, fo_backend=fo_backend, fo_mode="live",
-        output_root=settings.output_dir, data_root=settings.data_dir, roster=roster,
-        enable_m4_debt_specialist=bool(enable_m4_debt_specialist), rms_request=rms_request)
+        output_root=settings.output_dir, data_root=settings.data_dir, rms_request=rms_request)
     return RedirectResponse(f"/run?job={quote(job_id)}", status_code=303)
 
 

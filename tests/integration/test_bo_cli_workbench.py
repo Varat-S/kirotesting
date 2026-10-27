@@ -61,13 +61,21 @@ def _script(tmp_path):
     return path
 
 
+@pytest.fixture()
+def legacy_roster(monkeypatch):
+    """Pin the CLI to the six-specialist fixture roster: ``_script`` scripts that roster's
+    agents so the workbench has an accepted conclusion to show. Users always get v3."""
+    from app.services import bo_fo
+    monkeypatch.setattr(bo_fo, "BO_ROSTER", "v2")
+
+
 def _cli(tmp_path, capsys, *args):
     main(["--database", str(tmp_path / "case.db"), "--output", str(tmp_path / "out"),
           *args])
     return json.loads(capsys.readouterr().out)
 
 
-def test_cli_runs_bo_only_from_a_real_sec_bundle_and_records_review(tmp_path, capsys):
+def test_cli_runs_bo_only_from_a_real_sec_bundle_and_records_review(tmp_path, capsys, legacy_roster):
     summary = _cli(tmp_path, capsys, "run-bo-case", "POC_BO",
                    "--package", str(_package(tmp_path)),
                    "--responses", str(_script(tmp_path)))
@@ -99,7 +107,8 @@ def test_cli_runs_bo_only_from_a_real_sec_bundle_and_records_review(tmp_path, ca
 def test_cli_default_backend_asserts_nothing(tmp_path, capsys):
     summary = _cli(tmp_path, capsys, "run-bo-case", "POC_EMPTY",
                    "--package", str(_package(tmp_path)))
-    assert summary["conclusion_status"] == "unavailable"
+    # Nothing validated: Modules 3 and 4 stay incomplete, so the run goes to human review.
+    assert summary["conclusion_status"] == "human_review_required"
     assert summary["agents"]["business_challenge"] == "skipped"
     assert summary["challenge_rounds"] == []
     with pytest.raises(ValueError, match="no validated Business conclusion"):
@@ -108,7 +117,7 @@ def test_cli_default_backend_asserts_nothing(tmp_path, capsys):
 
 
 @pytest.fixture()
-def client(tmp_path, capsys):
+def client(tmp_path, capsys, legacy_roster):
     summary = _cli(tmp_path, capsys, "run-bo-case", "POC_BO",
                    "--package", str(_package(tmp_path)),
                    "--responses", str(_script(tmp_path)))

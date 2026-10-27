@@ -64,7 +64,7 @@ _DEBT_FACT_CUES = (
 class M4DebtResult:
     """The governed outcome of the orchestrated debt specialist."""
 
-    status: str                       # validated | qualified | rejected | failed | unavailable
+    status: str                       # validated | qualified | rejected | failed | unavailable | error
     assessment: Optional[dict[str, Any]] = None       # parsed Module4Output (json)
     validator_report: Optional[dict[str, Any]] = None  # DebtStructureValidatorReport (json)
     validated: bool = False
@@ -215,6 +215,13 @@ def run_debt_specialist(
             status="rejected",
             evidence_ids=inputs.evidence_ids(),
             reason=str(exc),
+            model_invoked=True,
+        )
+    except Exception as exc:  # a provider/call failure fails this specialist, not the whole BO
+        return M4DebtResult(
+            status="error",
+            evidence_ids=inputs.evidence_ids(),
+            reason=type(exc).__name__,
             model_invoked=True,
         )
 

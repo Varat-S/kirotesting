@@ -222,7 +222,8 @@ def test_both_sections_run_concurrently_into_one_database(shared, tmp_path):
     assert out["bo"]["status"] == "completed" and out["fo"]["status"] == "completed", out
     assert out["bo"]["summary"]["case_id"] == out["fo"]["summary"]["case_id"] == "NVDA_FY2026"
     assert out["cutoff"] == "2026-05-13T04:00:00+00:00"  # the latest file (the proxy): every file admitted
-    assert _count(db, "financial_overview_runs") == 1 and _count(db, "agentic_analysis_runs") == 1
+    # The BO run plus its standalone Module 3 run.
+    assert _count(db, "financial_overview_runs") == 1 and _count(db, "agentic_analysis_runs") == 2
     assert _count(db, "model_runs") >= 5  # the FO's agent calls came across from its staging database
     assert not list((tmp_path / "data" / "staging").iterdir())
     assert ("fo", "completed") in seen and ("bo", "completed") in seen
@@ -245,7 +246,7 @@ def test_rms_runs_after_both_sections_complete(shared, tmp_path):
     assert record["sources"]["bo_analysis_run_id"] == out["bo"]["summary"]["analysis_run_id"]
     assert record["sources"]["fo_run_id"] == out["fo"]["summary"]["run_id"]
     assert record["request"]["requested_amount_m"] == 500 and record["requires_human_review"] is True
-    # The v2 roster has no Module 4 output, so RMS refers the case rather than guessing.
+    # The offline BO asserts nothing, so Module 4 has no validated output and RMS refers the case.
     assert summary["verdict"] == "refer" and any(g.startswith("RMS-G05") for g in summary["gates"])
 
 

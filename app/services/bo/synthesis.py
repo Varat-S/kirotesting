@@ -92,6 +92,37 @@ def iter_claims(parsed: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     return claims
 
 
+def downgrade_overstated_claim_types(
+    parsed: dict[str, Any], hypotheses: dict[str, HypothesisRecord],
+) -> list[dict[str, str]]:
+    """Weaken a fact label that no established hypothesis supports (in place).
+
+    A claim typed ``fact``/``calculated_fact`` whose usable hypotheses are all
+    attributed becomes a ``management_claim``; otherwise an ``inference``.
+    Weakening a label cannot overstate anything, so it is done here rather
+    than rejecting the whole conclusion. Returns one adjustment per change.
+    """
+    changes = []
+    for _, claim in iter_claims(parsed):
+        stated = claim.get("claim_type")
+        if stated not in ("fact", "calculated_fact"):
+            continue
+        used = [hypotheses[h] for h in claim.get("hypothesis_ids") or []
+                if h in hypotheses and hypotheses[h].usable]
+        kinds = {h.admissibility for h in used}
+        if not used or Admissibility.ESTABLISHED in kinds:
+            continue
+        new = ("management_claim" if kinds == {Admissibility.ATTRIBUTED}
+               else "inference")
+        claim["claim_type"] = new
+        changes.append({
+            "claim_id": claim.get("claim_id", "?"),
+            "note": (f"Claim type {stated} lowered to {new}: it rests only on "
+                     f"{sorted(k.value for k in kinds)} hypotheses."),
+        })
+    return changes
+
+
 def validate_orchestrator_output(
     parsed: dict[str, Any],
     *,

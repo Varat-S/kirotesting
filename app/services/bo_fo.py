@@ -46,6 +46,8 @@ from app.services.pipeline.sec import sec_source_package
 LOCK_WAIT_SECONDS = 3 * 60 * 60
 # Reference rows the FO staging database starts with; only rows the FO run added are copied back.
 SEEDED_TABLES = ("prompt_versions",)
+# Every BO run uses the four-module v3 roster with the Module 4 debt specialist; there is no choice.
+BO_ROSTER = "v3"
 
 
 class BoFoError(ValueError):
@@ -103,7 +105,7 @@ def plan(folder: str, case_id: str | None = None, cutoff: datetime | None = None
 
 def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: str,
               output_root, data_root=None, case_id: str | None = None, cutoff: datetime | None = None,
-              roster: str = "v2", enable_m4_debt_specialist: bool = False, produce_pdf: bool = False,
+              produce_pdf: bool = False,
               rms_request: rms.RmsRequest | None = None, on_progress=None,
               lock_wait: float = LOCK_WAIT_SECONDS) -> dict:
     """Run both sections at once; returns ``{"case_id", "folder", "cutoff", "bo": {...}, "fo": {...},
@@ -134,13 +136,13 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
                 say("bo", "running the Business Overview")
                 result = BusinessOverviewRunner(
                     session, backend=bo_backend, data_root=data_root, output_root=output_root,
-                    bo_roster=roster, enable_m4_debt_specialist=enable_m4_debt_specialist,
+                    bo_roster=BO_ROSTER, enable_m4_debt_specialist=True,
                 ).run_case(case_id, package=package, produce_pdf=produce_pdf)
                 say("bo", "recording the Business Overview")
                 session.commit()
         finally:
             engine.dispose()
-        return bo_summary(result, roster)
+        return bo_summary(result)
 
     def fo():
         staging = data_root / "staging" / f"fo-{uuid.uuid4().hex[:16]}.db"
@@ -226,13 +228,13 @@ class StagingKept(RuntimeError):
         self.staging = staging
 
 
-def bo_summary(result, roster: str) -> dict:
+def bo_summary(result) -> dict:
     return {
         "case_id": result.case_id,
         "analysis_run_id": result.analysis_run_id,
         "scope": "business_overview_only",
         "execution_mode": result.execution_mode,
-        "bo_roster": roster,
+        "bo_roster": BO_ROSTER,
         "conclusion_status": result.conclusion_status,
         "human_review_status": "pending",
         "handoff_id": (result.handoff or {}).get("handoff_id"),

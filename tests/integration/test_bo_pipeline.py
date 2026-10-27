@@ -248,9 +248,6 @@ def test_orchestrator_input_is_validated_structure_only(db_session, tmp_path):
         ["BO5-H001"], claim_type="fact")), "double_counted_risk"),
     (lambda a: a["key_drivers"].append(claim(
         "bo_d8", "driver", "BO1", "Demand is durable.", [])), "no_validated_basis"),
-    (lambda a: a["key_drivers"].append(claim(
-        "bo_d7", "driver", "BO4", "The nursing college improves retention.",
-        ["BO4-H002"], claim_type="fact")), "overstated_claim_type"),
     (lambda a: a["key_drivers"].append({**claim(
         "bo_d6", "driver", "BO1", "Revenue is seasonal by quarter.", ["BO1-H004"],
         claim_type="fact"), "evidence_ids": [{"$hypothesis_evidence": "BO5-H001"}]}),
@@ -276,6 +273,27 @@ def test_invalid_orchestrator_answer_produces_no_conclusion(
     escalations = db_session.query(Escalation).filter_by(
         rule_id=RULE_UNRESOLVED_CHALLENGE).all()
     assert escalations and all(e.mandatory for e in escalations)
+
+
+def test_overstated_claim_type_is_lowered_not_rejected(db_session, tmp_path):
+    script = good_script()
+    answer = orchestrator_answer()
+    answer["key_drivers"].append({**claim(
+        "bo_d7", "driver", "BO4", "The nursing college improves retention.",
+        ["BO4-H002"], claim_type="fact"),
+        "uncertainty": "No retention outcome is measured."})
+    script["orchestrate"] = answer
+
+    result, backend = run(db_session, tmp_path, script)
+
+    assert result.conclusion_status == "accepted"
+    assert backend.calls("orchestrate") == 1
+    history = result.audit["orchestrator"]["history"]
+    assert history[0]["status"] == "accepted"
+    assert history[0]["claim_type_downgrades"] == ["bo_d7"]
+    adjustments = result.record["agents"]["business_orchestrator"]["adjustments"]
+    assert any(a["claim_id"] == "bo_d7" and "lowered to" in a["note"]
+               for a in adjustments)
 
 
 def test_orchestrator_validation_repair_is_bounded_and_targeted(db_session, tmp_path):
