@@ -27,7 +27,7 @@
 {% if view.run.execution_mode == 'offline_simulation' %}<p class="notice"><strong>{{ view.run.execution_label }}</strong></p>{% endif %}
 <p>Conclusion: {{ st(view.conclusion_status) }}. {{ view.status_text }}</p>
 <div class="actions"><a href="{{ credit.url if credit else '/cases/' ~ view.case.case_id ~ '/credit.html?bo_run=' ~ view.analysis_run_id }}"><strong>Credit view (BO + FO + RMS)</strong></a><a href="#evidence">Evidence status</a><a href="#agents">Agent execution</a><a href="#accepted">Accepted hypotheses</a><a href="#rejected">Rejected hypotheses</a><a href="#contradictions">Contradictions</a><a href="#open">Open questions</a><a href="#memo">Memo preview</a><a href="#audit">Audit preview</a><a href="#review">Review</a></div>
-<p class="subtle">Downloads: <a href="{{ base }}/memo.html">memo HTML</a> · <a href="{{ base }}/memo.json">memo JSON</a> · <a href="{{ base }}/audit.html">audit HTML</a> · <a href="{{ base }}/audit.json">audit JSON</a> · <a href="{{ base }}/handoff.json">handoff JSON</a></p>
+<p class="subtle">Downloads: <a href="{{ base }}/memo.pdf"><strong>memo PDF</strong></a> · <a href="{{ base }}/memo.html">memo HTML</a> · <a href="{{ base }}/memo.json">memo JSON</a> · <a href="{{ base }}/audit.pdf">audit PDF</a> · <a href="{{ base }}/audit.html">audit HTML</a> · <a href="{{ base }}/audit.json">audit JSON</a> · <a href="{{ base }}/handoff.json">handoff JSON</a></p>
 </section>
 
 <section id="evidence"><h2>Evidence status</h2>

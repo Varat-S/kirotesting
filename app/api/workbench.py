@@ -23,7 +23,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -304,6 +304,64 @@ def get_bo_artifact_html(
     payload = _bo_call(bo_artifact, session, analysis_run_id, kind)
     render = render_memo_html if kind == "memo" else render_audit_html
     return HTMLResponse(render(payload))
+
+
+# System fonts with arrows and maths symbols; the PDF backends' built-in
+# Helvetica draws characters such as "→" as blanks.
+_PDF_FONTS = (
+    Path("C:/Windows/Fonts/arial.ttf"),
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    Path("/Library/Fonts/Arial Unicode.ttf"),
+)
+
+
+def _with_pdf_font(html: str) -> str:
+    """Embed the first available system font so every glyph renders."""
+    import base64
+
+    font = next((f for f in _PDF_FONTS if f.is_file()), None)
+    if font is None:
+        return html
+    # Inline, since the renderer only reads files under the working directory.
+    data = base64.b64encode(font.read_bytes()).decode("ascii")
+    style = (f'<style>@font-face {{ font-family: "PdfBody"; src: url("data:font/ttf;base64,{data}"); }}'
+             ' body, body * { font-family: "PdfBody"; }</style>')
+    return html.replace("</head>", style + "</head>", 1)
+
+
+@router.get("/{case_id}/bo/runs/{analysis_run_id}/{kind}.pdf")
+def get_bo_artifact_pdf(
+    case_id: str, analysis_run_id: str, kind: str,
+    session: Session = Depends(get_session),
+) -> Response:
+    """The memo/audit page as a downloadable PDF, rendered from the same HTML."""
+    from app.services.bo.reporting import render_audit_html, render_memo_html
+    from app.services.bo.workbench import bo_artifact
+    from app.services.reporting.memo import (
+        PdfBackendUnavailableError,
+        _render_pdf_with,
+        detect_pdf_backend,
+    )
+
+    if kind not in ("memo", "audit"):
+        raise HTTPException(status_code=404, detail="Unknown Business Overview page.")
+    _bo_run_for_case(session, case_id, analysis_run_id)
+    payload = _bo_call(bo_artifact, session, analysis_run_id, kind)
+    render = render_memo_html if kind == "memo" else render_audit_html
+    backend = detect_pdf_backend()
+    if backend is None:
+        raise HTTPException(
+            status_code=501,
+            detail="No PDF backend is installed; run `pip install xhtml2pdf` and restart.")
+    try:
+        pdf = _render_pdf_with(backend, _with_pdf_font(render(payload)))
+    except PdfBackendUnavailableError as exc:
+        raise HTTPException(status_code=501, detail=str(exc)) from exc
+    name = "business_overview" if kind == "memo" else "audit_report"
+    return Response(
+        content=pdf, media_type="application/pdf",
+        headers={"Content-Disposition":
+                 f'attachment; filename="{case_id}_{analysis_run_id}_{name}.pdf"'})
 
 
 @router.post("/{case_id}/bo/runs/{analysis_run_id}/review")

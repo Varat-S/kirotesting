@@ -1,0 +1,32 @@
+{
+  "status": "prepared_only_not_authorized_or_executed",
+  "schema_adapter": "vertex-m3-1.5",
+  "schema_sha256": "55c71647fbde58f71a61ad381b1a39dff9f1fdd957e71ce5d9609b550a58a61f",
+  "model": "gemini-3.1-flash-lite",
+  "location": "global",
+  "authentication": "existing Google Cloud ADC; no credential edits",
+  "paid_requests": 1,
+  "sdk_attempts": 1,
+  "application_retries": 0,
+  "fallbacks": false,
+  "max_output_tokens": 1024,
+  "case_id": "M3_V15_NESTED_FACT_PROBE_20261026_01",
+  "fresh_database_candidate": "data/m3_v15_nested_fact_probe_20261026_01.db",
+  "fresh_output_candidate": "output/bo_m3/schema_verification/M3_V15_NESTED_FACT_PROBE_20261026_01",
+  "synthetic_source": {
+    "evidence_id": "synthetic-schema-source-1",
+    "text": "As of 2026-10-26, Alex Example is Chief Executive Officer of Fictional Schema Probe Ltd."
+  },
+  "system_instruction": "This is a synthetic JSON structure diagnostic, not credit analysis. Follow the supplied response JSON schema. Use only the synthetic source. Return one executive with at least one complete atomic current_role fact object with its evidence_id and an exact contiguous quote. Do not return strings in facts. Omit validator-owned derived fields. No invented biography or credit findings. Do not duplicate the schema.",
+  "contents": "Synthetic source: {\"evidence_id\": \"synthetic-schema-source-1\", \"text\": \"As of 2026-10-26, Alex Example is Chief Executive Officer of Fictional Schema Probe Ltd.\"}. Return parameters=[] and hypotheses=[]. In m3_assessment set schema_version=bo-m3-corporate-assessment-1.2, borrower_identification.status=unavailable, entity_id=null, evidence_ids=[] with limitation=\"Synthetic schema probe; no transaction evidence.\"; use empty arrays for legal_entities, ownership_relationships, cash_flow_locations, cash_transfer_relationships, structural_credit_findings, management_assessments, governance_screening, information_gaps and downstream_dependencies. In management_stability use schema_version=bo-m3-management-stability-1.0, review_scope=\"Synthetic schema diagnostic only\", as_of_date=\"2026-10-26\" and as_of_source pointing to the source. Include exactly Alex Example, current_role=\"Chief Executive Officer\", executive_id=\"alex-example\", with a current_role fact_id=\"alex-role\" and value=\"Chief Executive Officer\", source evidence_id and source quote from the supplied source. No empty executives or facts.",
+  "postconditions": [
+    "HTTP 2xx and STOP without truncation",
+    "valid JSON; current provider schema; full canonical JSON and typed management contract",
+    "at least one executive with nonempty facts made of complete objects",
+    "synthetic source ID and contiguous quote match; no invented role facts",
+    "record exact request schema/content, raw SDK response or sanitized detailed service error privately; record HTTP/SDK attempt counts and tokens",
+    "stop after the single generation regardless of outcome; no countTokens, repair, retry or fallback"
+  ],
+  "interpretation": "SDK mock checks are not remote acceptance. HTTP 200 with empty executives/facts is inconclusive. Success demonstrates schema acceptance and this small nested output only. It does not demonstrate full HCA completion, analytical accuracy, evidence-gate success or Validator 7 approval. A full HCA run requires separate approval.",
+  "execution_instructions": "Do not execute without new explicit approval. Recheck unused DB/output and SQLite sidecars before creating storage with exclusive creation and mode 0600. Use the exact prepared_request payload, global Vertex ADC, one generate_content invocation, retry attempts=1 and an HTTP guard that refuses a second generateContent request. Durably record preflight metadata before I/O, preserve original reply/error without headers or credentials, then inspect_probe_response offline and report finish reason/token usage. Do not replay this plan if storage exists."
+}

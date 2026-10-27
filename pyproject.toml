@@ -49,6 +49,8 @@ ocr = [
 # libraries, so PDF-production tests skip gracefully when it is unavailable.
 pdf = [
     "weasyprint>=60",
+    # Pure-Python fallback (no system libraries; works on Windows).
+    "xhtml2pdf>=0.2.11",
 ]
 # Optional Google Vertex AI (Gemini) provider backend (Milestone 18). Not needed
 # for OpenAI/compatible/fake backends; imported lazily. Live use is opt-in and

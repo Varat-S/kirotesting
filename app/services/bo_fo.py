@@ -39,6 +39,7 @@ from app.services.rms import runner as rms_runner
 from app.services.acquisition import shared_filing
 from app.services.fo import loader as fo_loader
 from app.services.fo.runner import FinancialOverviewRunner, default_case_id, validate_case_id
+from app.services.llm import usage
 from app.services.pipeline.sec import sec_source_package
 
 # How long a section waits for the other's write lock. The BO holds its lock for its whole run.
@@ -315,6 +316,7 @@ class Jobs:
     def __init__(self):
         self._lock = threading.Lock()
         self._jobs: dict[str, dict] = {}
+        self._meters: dict[str, dict[str, usage.Meter | None]] = {}  # per job: each section's backend meter
 
     def start(self, **kwargs) -> str:
         job_id = uuid.uuid4().hex[:12]
@@ -328,9 +330,12 @@ class Jobs:
                "result": None, "error": None}
         with self._lock:
             self._jobs[job_id] = job
+            self._meters[job_id] = {"bo": usage.meter_of(kwargs.get("bo_backend")),
+                                    "fo": usage.meter_of(kwargs.get("fo_backend"))}
             for old in sorted(self._jobs, key=lambda k: self._jobs[k]["started_at"])[:-self.KEEP]:
                 if self._jobs[old]["status"] != "running":
                     del self._jobs[old]
+                    self._meters.pop(old, None)
 
         def progress(section, message):
             with self._lock:
@@ -366,11 +371,19 @@ class Jobs:
     def get(self, job_id: str) -> dict | None:
         with self._lock:
             job = self._jobs.get(job_id)
-            return _copy(job) if job else None
+            return self._with_cost(_copy(job)) if job else None
 
     def recent(self) -> list[dict]:
         with self._lock:
-            return [_copy(j) for j in sorted(self._jobs.values(), key=lambda j: j["started_at"], reverse=True)]
+            return [self._with_cost(_copy(j))
+                    for j in sorted(self._jobs.values(), key=lambda j: j["started_at"], reverse=True)]
+
+    def _with_cost(self, job: dict) -> dict:
+        """The job's model cost so far, per section and in total (live while it runs)."""
+        meters = self._meters.get(job["job_id"], {})
+        job["cost"] = {**{s: usage.summary(meters=[meters.get(s)]) for s in ("bo", "fo")},
+                       "total": usage.summary(meters=meters.values())}
+        return job
 
 
 def _copy(job: dict) -> dict:

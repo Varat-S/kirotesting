@@ -29,6 +29,7 @@
 <div class="section-card" id="section-{{ key }}"><strong>{{ label }}</strong> <span class="state">{{ st(s.status) }}</span>
 <div class="track{% if s.status == 'completed' %} done{% elif s.status == 'failed' %} failed{% endif %}" aria-hidden="true"><div class="bar"></div></div>
 <div class="step subtle">{{ s.step }}</div>
+<p class="cost subtle">Model cost: <span class="cost-text">{{ job.cost[key].text if job.cost else "—" }}</span></p>
 {% set r = job.result[key] if job.result else none %}
 <p class="error bad"{% if not (r and r.status == 'failed') %} hidden{% endif %}>{{ r.error if r and r.status == 'failed' else '' }}</p>
 <p class="open"{% if not (r and r.status == 'completed') %} hidden{% endif %}>{% if r and r.status == 'completed' %}{% if key == 'bo' %}<a href="/cases/{{ job.case_id }}/bo.html?analysis_run_id={{ r.summary.analysis_run_id }}">Open the Business Overview</a>{% else %}<a href="/cases/{{ job.case_id }}/fo.html?run_id={{ r.summary.run_id }}">Open the Financial Overview</a>{% endif %}{% endif %}</p></div>
@@ -53,6 +54,7 @@
 <p class="subtle rms-output"><code>{{ x.output }}</code></p>{% endif %}</div>
 <p class="open"{% if not (r and r.status == 'completed') %} hidden{% endif %}><a class="credit-link" href="/cases/{{ job.case_id }}/credit.html{% if job.result and job.result.fo.summary %}?fo_run={{ job.result.fo.summary.run_id }}&amp;bo_run={{ job.result.bo.summary.analysis_run_id }}{% endif %}">Open the credit view (BO + FO + RMS, with review)</a></p></div>
 </div>
+<p id="job-cost"><strong>Model cost for this run:</strong> <span id="job-cost-text">{{ job.cost.total.text if job.cost else "—" }}</span><br><small class="subtle">Estimated from provider-reported tokens and the prices in <code>LLM_PRICES</code> (.env), not a provider invoice. Updates while the run is under way.</small></p>
 <p class="subtle">Live runs make model calls (billed) and usually take several minutes; the Business Overview takes longest. The Financial Overview's result is copied into the database once the Business Overview has finished writing. Keep this page open, or come back to it: the run continues in the server.</p>
 </section>{% endif %}
 
@@ -119,8 +121,8 @@
 </section>
 
 {% if jobs %}<section id="recent"><h2>Runs in this server session</h2>
-<div class="table-wrap"><table><thead><tr><th>Run</th><th>Folder</th><th>Case</th><th>Started</th><th>BO</th><th>FO</th><th>RMS</th><th>Open</th></tr></thead><tbody>
-{% for j in jobs %}<tr><td><code>{{ j.job_id }}</code></td><td>{{ j.folder }}</td><td>{{ j.case_id }}</td><td>{{ j.started_at }}</td><td>{{ st(j.sections.bo.status) }}</td><td>{{ st(j.sections.fo.status) }}</td><td>{% if j.result and j.result.rms.status == 'completed' %}{{ j.result.rms.summary.verdict|replace('_', ' ') }}{% else %}{{ st(j.sections.rms.status) }}{% endif %}</td><td><a href="/run?job={{ j.job_id }}">Progress</a>{% if j.result %}{% if j.result.bo.status == 'completed' %} · <a href="/cases/{{ j.case_id }}/bo.html?analysis_run_id={{ j.result.bo.summary.analysis_run_id }}">BO</a>{% endif %}{% if j.result.fo.status == 'completed' %} · <a href="/cases/{{ j.case_id }}/fo.html?run_id={{ j.result.fo.summary.run_id }}">FO</a>{% endif %}{% endif %}</td></tr>{% endfor %}
+<div class="table-wrap"><table><thead><tr><th>Run</th><th>Folder</th><th>Case</th><th>Started</th><th>BO</th><th>FO</th><th>RMS</th><th>Cost</th><th>Open</th></tr></thead><tbody>
+{% for j in jobs %}<tr><td><code>{{ j.job_id }}</code></td><td>{{ j.folder }}</td><td>{{ j.case_id }}</td><td>{{ j.started_at }}</td><td>{{ st(j.sections.bo.status) }}</td><td>{{ st(j.sections.fo.status) }}</td><td>{% if j.result and j.result.rms.status == 'completed' %}{{ j.result.rms.summary.verdict|replace('_', ' ') }}{% else %}{{ st(j.sections.rms.status) }}{% endif %}</td><td>{{ j.cost.total.text if j.cost else "—" }}</td><td><a href="/run?job={{ j.job_id }}">Progress</a>{% if j.result %}{% if j.result.bo.status == 'completed' %} · <a href="/cases/{{ j.case_id }}/bo.html?analysis_run_id={{ j.result.bo.summary.analysis_run_id }}">BO</a>{% endif %}{% if j.result.fo.status == 'completed' %} · <a href="/cases/{{ j.case_id }}/fo.html?run_id={{ j.result.fo.summary.run_id }}">FO</a>{% endif %}{% endif %}</td></tr>{% endfor %}
 </tbody></table></div></section>{% endif %}
 </main>
 <script>
@@ -139,6 +141,7 @@
       var tag = document.createElement("span"); state(tag, s.status);
       var holder = card.querySelector(".state"); holder.textContent = ""; holder.appendChild(tag);
       card.querySelector(".step").textContent = s.step;
+      if (job.cost) card.querySelector(".cost-text").textContent = job.cost[key].text;
       var track = card.querySelector(".track");
       track.className = "track" + (s.status === "completed" ? " done" : s.status === "failed" ? " failed" : "");
       var r = job.result && job.result[key];
@@ -152,6 +155,7 @@
         open.textContent = ""; open.appendChild(a); open.hidden = false;
       }
     });
+    if (job.cost) document.getElementById("job-cost-text").textContent = job.cost.total.text;
     renderRms(job);
     return job.status === "running";
   }

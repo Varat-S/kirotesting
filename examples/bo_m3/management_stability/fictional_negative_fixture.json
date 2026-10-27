@@ -1,0 +1,227 @@
+{
+  "fixture_kind": "fictional_developer_authored_offline_example",
+  "company_aliases": [
+    "ABC Corporation"
+  ],
+  "evidence": {
+    "header": "As of February 1, 2026, our executive officers were as follows.",
+    "ceo": "Dana Lee was appointed Chief Executive Officer effective January 1, 2025. Dana Lee was recruited externally as Chief Executive Officer. Dana Lee had no prior experience at the Company. Dana Lee previously worked in the industry at Meridian Group as an executive. Dana Lee replaced the outgoing executive following an abrupt departure on January 1, 2025.",
+    "cfo": "Alex Chen was appointed Chief Financial Officer effective January 1, 2025. Alex Chen was recruited externally as Chief Financial Officer. Alex Chen had no prior experience at the Company. Alex Chen previously worked in the industry at Meridian Group as an executive. Alex Chen replaced the outgoing executive following an abrupt departure on January 1, 2025."
+  },
+  "response": {
+    "parameters": [],
+    "hypotheses": [],
+    "m3_assessment": {
+      "schema_version": "bo-m3-corporate-assessment-1.2",
+      "borrower_identification": {
+        "status": "unavailable",
+        "entity_id": null,
+        "evidence_ids": [],
+        "limitation": "No transaction-specific obligor analysis in this leadership-only example."
+      },
+      "legal_entities": [],
+      "ownership_relationships": [],
+      "cash_flow_locations": [],
+      "cash_transfer_relationships": [],
+      "structural_credit_findings": [],
+      "governance_screening": [],
+      "downstream_dependencies": [],
+      "information_gaps": [
+        "Authored leadership-only example; independent legal/structural/governance analysis has not been performed."
+      ],
+      "management_assessments": [
+        {
+          "observation_id": "ABC-TRANSITION-01",
+          "management_id": "reviewed-team",
+          "legal_name": "Disclosed executive group",
+          "role": "Senior executives",
+          "dimension": "transition_risk",
+          "evidence_basis": "disclosed_leadership_history",
+          "attribution": "company_reported",
+          "hypothesis": "The recent external appointments may increase company-specific learning and coordination uncertainty.",
+          "credit_mechanism": "Leadership continuity or transition uncertainty may affect operating coordination and cash-flow predictability.",
+          "executive_ids": [
+            "ceo",
+            "cfo"
+          ],
+          "fact_ids": [
+            "ceo-appointment",
+            "ceo-external_appointment",
+            "ceo-no_prior_company_experience",
+            "ceo-external_role",
+            "ceo-departure",
+            "cfo-appointment",
+            "cfo-external_appointment",
+            "cfo-no_prior_company_experience",
+            "cfo-external_role",
+            "cfo-departure"
+          ],
+          "evidence_summary": "Disclosed appointment and role history, with exact quoted evidence.",
+          "supporting_evidence_ids": [
+            "ceo",
+            "cfo"
+          ],
+          "contradicting_evidence_ids": [],
+          "supporting_evidence_investigated": true,
+          "contradictory_evidence_investigated": true,
+          "disposition": "qualified",
+          "admissibility": "qualified_narrative",
+          "credit_direction": "negative",
+          "materiality": "medium",
+          "confidence": "medium",
+          "missing_information": [],
+          "uncertainties": [
+            "Realised disruption and decision-making quality are not established."
+          ],
+          "mitigating_considerations": [
+            "Disclosed external expertise and succession arrangements may mitigate learning risk."
+          ],
+          "effective_from": null,
+          "effective_to": null,
+          "assurance_scope": null,
+          "assurance_date": null
+        }
+      ],
+      "management_stability": {
+        "schema_version": "bo-m3-management-stability-1.0",
+        "as_of_date": "2026-02-01",
+        "as_of_source": {
+          "evidence_id": "header",
+          "quote": "As of February 1, 2026, our executive officers were as follows."
+        },
+        "recent_change_window_years": 3,
+        "review_scope": "ABC fictional annual filing: CEO/CFO external appointments, explicit lack of prior company service and disclosed industry experience.",
+        "executives": [
+          {
+            "executive_id": "ceo",
+            "name": "Dana Lee",
+            "current_role": "Chief Executive Officer",
+            "facts": [
+              {
+                "fact_id": "ceo-appointment",
+                "kind": "appointment",
+                "value": "Chief Executive Officer",
+                "date": "2025-01-01",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "ceo",
+                  "quote": "Dana Lee was appointed Chief Executive Officer effective January 1, 2025."
+                }
+              },
+              {
+                "fact_id": "ceo-external_appointment",
+                "kind": "external_appointment",
+                "value": "recruited externally",
+                "date": null,
+                "end_date": null,
+                "source": {
+                  "evidence_id": "ceo",
+                  "quote": "Dana Lee was recruited externally as Chief Executive Officer."
+                }
+              },
+              {
+                "fact_id": "ceo-no_prior_company_experience",
+                "kind": "no_prior_company_experience",
+                "value": "no prior experience",
+                "date": null,
+                "end_date": null,
+                "source": {
+                  "evidence_id": "ceo",
+                  "quote": "Dana Lee had no prior experience at the Company."
+                }
+              },
+              {
+                "fact_id": "ceo-external_role",
+                "kind": "external_role",
+                "value": "Meridian Group",
+                "date": null,
+                "end_date": null,
+                "source": {
+                  "evidence_id": "ceo",
+                  "quote": "Dana Lee previously worked in the industry at Meridian Group as an executive."
+                }
+              },
+              {
+                "fact_id": "ceo-departure",
+                "kind": "departure",
+                "value": "abrupt departure",
+                "date": "2025-01-01",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "ceo",
+                  "quote": "Dana Lee replaced the outgoing executive following an abrupt departure on January 1, 2025."
+                }
+              }
+            ]
+          },
+          {
+            "executive_id": "cfo",
+            "name": "Alex Chen",
+            "current_role": "Chief Financial Officer",
+            "facts": [
+              {
+                "fact_id": "cfo-appointment",
+                "kind": "appointment",
+                "value": "Chief Financial Officer",
+                "date": "2025-01-01",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "cfo",
+                  "quote": "Alex Chen was appointed Chief Financial Officer effective January 1, 2025."
+                }
+              },
+              {
+                "fact_id": "cfo-external_appointment",
+                "kind": "external_appointment",
+                "value": "recruited externally",
+                "date": null,
+                "end_date": null,
+                "source": {
+                  "evidence_id": "cfo",
+                  "quote": "Alex Chen was recruited externally as Chief Financial Officer."
+                }
+              },
+              {
+                "fact_id": "cfo-no_prior_company_experience",
+                "kind": "no_prior_company_experience",
+                "value": "no prior experience",
+                "date": null,
+                "end_date": null,
+                "source": {
+                  "evidence_id": "cfo",
+                  "quote": "Alex Chen had no prior experience at the Company."
+                }
+              },
+              {
+                "fact_id": "cfo-external_role",
+                "kind": "external_role",
+                "value": "Meridian Group",
+                "date": null,
+                "end_date": null,
+                "source": {
+                  "evidence_id": "cfo",
+                  "quote": "Alex Chen previously worked in the industry at Meridian Group as an executive."
+                }
+              },
+              {
+                "fact_id": "cfo-departure",
+                "kind": "departure",
+                "value": "abrupt departure",
+                "date": "2025-01-01",
+                "end_date": null,
+                "source": {
+                  "evidence_id": "cfo",
+                  "quote": "Alex Chen replaced the outgoing executive following an abrupt departure on January 1, 2025."
+                }
+              }
+            ]
+          }
+        ],
+        "limitations": [
+          "No comprehensive three-year change log is established.",
+          "Appointment/current-role tenure differs from total company service."
+        ]
+      }
+    }
+  }
+}

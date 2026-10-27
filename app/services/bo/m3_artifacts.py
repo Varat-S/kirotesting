@@ -222,6 +222,7 @@ def build_m3_analysis_artifact(
             "governance_signals": governance_signals,
             "borrower_identification": section_b.get("borrower_identification"),
             "limitations": section_b.get("limitations", []),
+            **(section_b.get("management_stability") or {}),
         },
         # Evidence/verification posture carried from the governed assessment.
         # EVERY rejected/unresolved item is retained here for audit, including

@@ -103,8 +103,30 @@ def validate_specialist_output(
     if issues:
         result.records = []
         return result
+    if spec.code == "M3":
+        # The application sealed these separately labelled case assumptions;
+        # never label their quotations as verified actual company disclosure.
+        from app.schemas.bo import Admissibility, Disposition
+        case_ids = {p["evidence_id"] for p in packet.narrative_evidence
+                    if p.get("evidence_category") == "hypothetical_case_assumptions"}
+        for record in result.records:
+            citations = set(record.supporting_evidence_ids) | {q["evidence_id"] for q in record.evidence_quotes}
+            if citations & case_ids:
+                record.evidence_basis = ("hypothetical_case_assumptions" if citations <= case_ids
+                                         else "mixed_case_and_filing_evidence")
+                if record.usable:
+                    record.disposition = Disposition.QUALIFIED
+                    record.admissibility = Admissibility.QUALIFIED_NARRATIVE
+                    record.review_required = True
+                record.validation_notes.append("Scenario assumptions only; no real-world legal verification is implied.")
     gated, result.parameter_changes = gate_parameters(
         parsed, validation.records, value_sets=value_sets, primary=primary)
+    if spec.code == "M3":
+        from app.services.bo.m3_grounding import gate_m3_parameters
+        gated, m3_changes = gate_m3_parameters(
+            gated, validation.records,
+            evidence_texts={e: passage_text[e] for e in allowed if e in passage_text})
+        result.parameter_changes.extend(m3_changes)
     if prompt_id is not None:
         try:
             validated = ValidatedAgentOutput.gate(

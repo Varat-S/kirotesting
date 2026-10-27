@@ -220,7 +220,7 @@ def test_live_path_has_structure_and_evidence_in_specialist_context(monkeypatch)
     captured: dict = {}
     real = m3_standalone.run_single_pass
 
-    def spy(session, prep, response=None, *, backend=None):
+    def spy(session, prep, response=None, *, backend=None, **kwargs):
         captured["structural_facts"] = prep.structural_facts is not None
         inputs = m3_standalone._single_pass_inputs(prep) \
             if hasattr(m3_standalone, "_single_pass_inputs") else None

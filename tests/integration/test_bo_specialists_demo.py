@@ -157,10 +157,12 @@ def test_coverage_is_judged_by_validated_answers_not_by_the_agents_say_so(
     assert geography["status"] != "addressed"
     assert geography["addressed_by_validated_hypotheses"] == []
     assert coverage[("bo_customers_contracts", "hc.payer_mix")]["agent_response"] == "no_response"
-    sent = result["payload"]["agents"][3]["calls"][0]["inputs"]
+    call = result["payload"]["agents"][3]["calls"][0]
+    sent = call["inputs"]
     assert {c["check_id"] for c in sent["checklist"]} == {
         "hc.operating_entities", "hc.workforce", "case.nursing_college"}
-    assert "ev_labor" in {p["evidence_id"] for p in sent["evidence"]}
+    # The model sees short evidence labels; the transcript maps them back.
+    assert "ev_labor" in {call["evidence_aliases"][p["evidence_id"]] for p in sent["evidence"]}
 
 
 def test_answer_to_an_unasked_coverage_question_is_ignored_and_noted(

@@ -38,6 +38,10 @@ class RecordingBackend(LLMBackend):
     def cache_identity(self, model_tier: str | None = None):
         return self._inner.cache_identity(model_tier)
 
+    def prepare_diagnostics(self, request):
+        prepare = getattr(self._inner, "prepare_diagnostics", None)
+        return prepare(request) if prepare else {}
+
     def generate(self, request: LLMRequest) -> LLMRawResult:
         entry: dict[str, Any] = {
             "task_type": request.method, "prompt_id": request.prompt.prompt_id,
@@ -46,6 +50,12 @@ class RecordingBackend(LLMBackend):
             "instructions": request.prompt.template, "inputs": request.inputs,
             "model_tier": request.model_tier,
         }
+        if request.alias_evidence and request.evidence_ids:
+            from app.services.bo.citations import evidence_aliases
+
+            # The inputs carry short evidence labels; this maps them back.
+            entry["evidence_aliases"] = {
+                alias: eid for eid, alias in evidence_aliases(request.evidence_ids).items()}
         try:
             result = self._inner.generate(request)
         except Exception as exc:

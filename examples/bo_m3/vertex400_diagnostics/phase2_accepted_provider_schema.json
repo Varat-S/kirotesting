@@ -1,0 +1,799 @@
+{
+  "type": "object",
+  "required": [
+    "parameters",
+    "hypotheses",
+    "m3_assessment"
+  ],
+  "properties": {
+    "parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "parameter_id",
+          "value_type",
+          "status",
+          "evidence_ids",
+          "hypothesis_ids"
+        ],
+        "properties": {
+          "parameter_id": {
+            "type": "string"
+          },
+          "value": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value_type": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "provisional",
+              "unavailable",
+              "not_applicable",
+              "requires_review"
+            ]
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "materiality": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "hypothesis_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "hypothesis_id",
+          "claim",
+          "claim_type",
+          "direction",
+          "disposition"
+        ],
+        "properties": {
+          "hypothesis_id": {
+            "type": "string"
+          },
+          "claim": {
+            "type": "string"
+          },
+          "claim_type": {
+            "type": "string",
+            "enum": [
+              "fact",
+              "calculated_fact",
+              "management_claim",
+              "inference",
+              "assumption"
+            ]
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "negative",
+              "mixed",
+              "neutral"
+            ]
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "qualified",
+              "rejected",
+              "unverified"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "medium_low",
+              "low"
+            ]
+          },
+          "materiality": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "credit_mechanism": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supporting_evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "contradicting_evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence_quotes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "evidence_id",
+                "quote"
+              ],
+              "properties": {
+                "evidence_id": {
+                  "type": "string"
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "quoted_values": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "parameter_result_id",
+                "value"
+              ],
+              "properties": {
+                "parameter_result_id": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "number"
+                },
+                "unit": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "period": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "denominator": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "missing_information": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "display_priority": {
+            "type": "string",
+            "enum": [
+              "display",
+              "on_demand",
+              "suppress"
+            ]
+          },
+          "review_required": {
+            "type": "boolean"
+          },
+          "corrects_hypothesis_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parameter_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence_basis": {
+            "type": "string",
+            "enum": [
+              "company_specific_disclosure",
+              "deterministic_calculation",
+              "management_statement",
+              "generic_risk_disclosure",
+              "inference",
+              "none"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "retrieval_requests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "purpose",
+          "terms"
+        ],
+        "properties": {
+          "hypothesis_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "support",
+              "contradict",
+              "mitigant",
+              "mitigant_challenge"
+            ]
+          },
+          "terms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "checklist_responses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "check_id",
+          "status"
+        ],
+        "properties": {
+          "check_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "addressed",
+              "not_supported_by_evidence",
+              "not_applicable"
+            ]
+          },
+          "hypothesis_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "missing_information": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "m3_assessment": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "borrower_identification",
+        "legal_entities",
+        "ownership_relationships",
+        "cash_flow_locations",
+        "cash_transfer_relationships",
+        "structural_credit_findings",
+        "management_assessments",
+        "governance_screening",
+        "information_gaps",
+        "downstream_dependencies"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "bo-m3-corporate-assessment-1.0",
+            "bo-m3-corporate-assessment-1.1"
+          ]
+        },
+        "borrower_identification": {
+          "type": "object",
+          "required": [
+            "status",
+            "entity_id",
+            "evidence_ids",
+            "limitation"
+          ],
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "identified",
+                "unavailable",
+                "disputed"
+              ]
+            },
+            "entity_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "evidence_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "limitation": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "legal_entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "ownership_relationships": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "cash_flow_locations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "cash_transfer_relationships": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "structural_credit_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "finding_id",
+              "hypothesis_id",
+              "credit_hypothesis",
+              "causal_mechanism",
+              "supporting_evidence_ids",
+              "contradicting_evidence_ids",
+              "supporting_evidence_investigated",
+              "contradictory_evidence_investigated",
+              "disposition",
+              "admissibility",
+              "confidence",
+              "materiality",
+              "downstream_verification_requirements",
+              "borrower_specific"
+            ],
+            "properties": {
+              "finding_id": {
+                "type": "string"
+              },
+              "hypothesis_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "credit_hypothesis": {
+                "type": "string"
+              },
+              "causal_mechanism": {
+                "type": "string"
+              },
+              "supporting_evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "contradicting_evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "supporting_evidence_investigated": {
+                "type": "boolean"
+              },
+              "contradictory_evidence_investigated": {
+                "type": "boolean"
+              },
+              "disposition": {
+                "type": "string",
+                "enum": [
+                  "supported",
+                  "qualified",
+                  "rejected",
+                  "unverified"
+                ]
+              },
+              "admissibility": {
+                "type": "string",
+                "enum": [
+                  "established",
+                  "attributed",
+                  "qualified_narrative",
+                  "audit_only"
+                ]
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "medium_low",
+                  "low"
+                ]
+              },
+              "materiality": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "downstream_verification_requirements": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "borrower_specific": {
+                "type": "boolean"
+              },
+              "analytical_dimension": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "borrower_position",
+                  "guarantor_coverage",
+                  "cash_flow_access",
+                  "operating_debt_structure",
+                  "minority_or_jv",
+                  "structural_complexity",
+                  null
+                ]
+              },
+              "structural_observation": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "referenced_node_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "referenced_link_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "onboarding_source_reference": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "credit_direction": {
+                "type": "string",
+                "enum": [
+                  "positive",
+                  "negative",
+                  "mixed",
+                  "neutral"
+                ]
+              },
+              "assessment_availability": {
+                "type": "string",
+                "enum": [
+                  "sufficient",
+                  "insufficient_evidence"
+                ]
+              },
+              "qualifications": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "missing_information": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "management_assessments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "governance_screening": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "finding_id",
+              "hypothesis_id",
+              "credit_hypothesis",
+              "causal_mechanism",
+              "supporting_evidence_ids",
+              "contradicting_evidence_ids",
+              "supporting_evidence_investigated",
+              "contradictory_evidence_investigated",
+              "disposition",
+              "admissibility",
+              "confidence",
+              "materiality",
+              "downstream_verification_requirements",
+              "borrower_specific"
+            ],
+            "properties": {
+              "finding_id": {
+                "type": "string"
+              },
+              "hypothesis_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "credit_hypothesis": {
+                "type": "string"
+              },
+              "causal_mechanism": {
+                "type": "string"
+              },
+              "supporting_evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "contradicting_evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "supporting_evidence_investigated": {
+                "type": "boolean"
+              },
+              "contradictory_evidence_investigated": {
+                "type": "boolean"
+              },
+              "disposition": {
+                "type": "string",
+                "enum": [
+                  "supported",
+                  "qualified",
+                  "rejected",
+                  "unverified"
+                ]
+              },
+              "admissibility": {
+                "type": "string",
+                "enum": [
+                  "established",
+                  "attributed",
+                  "qualified_narrative",
+                  "audit_only"
+                ]
+              },
+              "confidence": {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "medium_low",
+                  "low"
+                ]
+              },
+              "materiality": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "downstream_verification_requirements": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "borrower_specific": {
+                "type": "boolean"
+              },
+              "analytical_dimension": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "borrower_position",
+                  "guarantor_coverage",
+                  "cash_flow_access",
+                  "operating_debt_structure",
+                  "minority_or_jv",
+                  "structural_complexity",
+                  null
+                ]
+              },
+              "structural_observation": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "referenced_node_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "referenced_link_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "onboarding_source_reference": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "credit_direction": {
+                "type": "string",
+                "enum": [
+                  "positive",
+                  "negative",
+                  "mixed",
+                  "neutral"
+                ]
+              },
+              "assessment_availability": {
+                "type": "string",
+                "enum": [
+                  "sufficient",
+                  "insufficient_evidence"
+                ]
+              },
+              "qualifications": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "missing_information": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "information_gaps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "downstream_dependencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "module",
+              "question"
+            ],
+            "properties": {
+              "module": {
+                "type": "string",
+                "enum": [
+                  "FO",
+                  "M4",
+                  "SO"
+                ]
+              },
+              "question": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

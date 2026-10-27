@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     # For custom/OpenAI-compatible models, explicitly declare capability and range.
     llm_temperature_supported: bool | None = None
     llm_temperature_max: float = Field(default=2, gt=0, le=2, allow_inf_nan=False)
+    # USD per million tokens by model id, for the cost shown after a run, e.g.
+    # {"gemini-3.5-flash-lite": {"input": 0.10, "output": 0.40}}. A model left
+    # out is reported by tokens only; no price is guessed.
+    llm_prices: dict[str, dict[str, float]] = Field(default_factory=dict)
     sec_user_agent: str | None = Field(default=None)
 
     # --- Agentic analysis executor (Milestone 5) ---

@@ -111,6 +111,14 @@ def _section_b(governed_m3: dict[str, Any] | None) -> dict[str, Any]:
         "and canonical figures; it is not a judgement of personal competence or "
         "integrity.",
     ]
+    if governed_m3.get("management_stability") is not None:
+        from app.services.bo.m3_management import stability_view
+        section["title"] = "Senior Management Stability, Continuity & Relevant Experience"
+        section["management_stability"] = stability_view(governed_m3["management_stability"], management)
+        section["assessment_status"] = "assessed" if any(
+            p["profile_status"] == "verified" for p in section["management_stability"]["key_executive_details"]
+        ) else "insufficient_evidence"
+        section["limitations"] = section["management_stability"]["overall_management_stability_assessment"]["limitations"]
     return section
 
 
@@ -247,6 +255,8 @@ def _finding_statement(finding: dict[str, Any], *, pillar: str,
         mechanism = finding.get("credit_mechanism") or ""
         why = _MANAGEMENT_LENDER_RELEVANCE.get(
             direction, _MANAGEMENT_LENDER_RELEVANCE["neutral"])
+        if dimension in {"leadership_continuity", "relevant_experience", "transition_risk"}:
+            why = mechanism + " This is a qualified continuity implication, not proof of management competence."
 
     qualifications = _dedupe(finding.get("qualifications"))
     if is_simulated and pillar == "A":
@@ -394,10 +404,15 @@ def _section_c(section_a: dict[str, Any], section_b: dict[str, Any],
 
     # Pillar B narrative lead-in.
     b_status = section_b["assessment_status"]
-    if b_status == "assessed" and pillar_b_statements:
+    if section_b.get("management_stability"):
+        pillar_b_summary = "Pillar B — Senior Management Stability & Continuity: " + section_b["management_stability"]["consolidated_management_stability_conclusion"]["summary"]
+        if admitted_b_gov:
+            pillar_b_summary += " Independent governance observations remain separate from the leadership-stability conclusion."
+    elif b_status == "assessed" and pillar_b_statements:
         pillar_b_summary = _pillar_summary(
             pillar_b_statements,
-            pillar_label="Pillar B — Senior Management & execution credibility",
+            pillar_label=("Pillar B — Senior Management Stability & Continuity" if section_b.get("management_stability")
+                          else "Pillar B — Senior Management & execution credibility"),
             directions=[s["credit_direction"] for s in pillar_b_statements])
     elif b_status == "assessed":
         pillar_b_summary = (

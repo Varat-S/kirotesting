@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 import uuid
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import jsonschema
@@ -70,6 +70,11 @@ class LLMRequest:
     # Model tier for provider routing (narrow|orchestrator|challenge). The
     # fake/OpenAI backends ignore it; the Vertex backend maps it to a model.
     model_tier: str | None = None
+    # Only the standalone M3 owner-only recorder opts in to private telemetry.
+    record_private_diagnostics: bool = False
+    # BO opts in: the model sees short evidence labels (E01...) instead of the
+    # 64-character ids, and its answer is mapped back before validation.
+    alias_evidence: bool = False
 
 
 @dataclass
@@ -210,12 +215,14 @@ class LLMClient:
         session: Session | None = None,
         audit: AuditLog | None = None,
         prompt_versions: dict[str, int] | None = None,
+        alias_evidence: bool = False,
     ) -> None:
         self._backend = backend
         self._prompts = prompts
         self._session = session
         self._audit = audit
         self._prompt_versions = prompt_versions
+        self._alias_evidence = alias_evidence
 
     # -- public interface -----------------------------------------------------
 
@@ -360,16 +367,36 @@ class LLMClient:
             temperature=None,
             key=key,
             model_tier=model_tier,
+            alias_evidence=self._alias_evidence,
         )
+
+    @staticmethod
+    def outgoing(request: LLMRequest) -> LLMRequest:
+        """The request exactly as the backend receives it (evidence aliased)."""
+        if not request.alias_evidence or not request.evidence_ids:
+            return request
+        from app.services.bo.citations import alias_inputs, evidence_aliases
+
+        return replace(request, inputs=alias_inputs(
+            request.inputs, evidence_aliases(request.evidence_ids)))
+
+    @staticmethod
+    def incoming(request: LLMRequest, answer: Any) -> Any:
+        """A parsed answer with evidence aliases mapped back to real ids."""
+        if not request.alias_evidence or not request.evidence_ids:
+            return answer
+        from app.services.bo.citations import evidence_aliases, unalias_answer
+
+        return unalias_answer(answer, evidence_aliases(request.evidence_ids))
 
     def _generate_and_validate(
         self, request: LLMRequest
     ) -> tuple[LLMRawResult, dict[str, Any] | None, str, str | None]:
         """Call the backend (sync) and validate; NO database mutation."""
         try:
-            raw = self._backend.generate(request)
+            raw = self._backend.generate(self.outgoing(request))
         except RuntimeError as exc:
-            return self._sanitize_provider_error(exc)
+            return self._sanitize_provider_error(exc, request)
         return self._validate_raw(request, raw)
 
     async def _generate_and_validate_async(
@@ -377,19 +404,27 @@ class LLMClient:
     ) -> tuple[LLMRawResult, dict[str, Any] | None, str, str | None]:
         """Await the backend off the event loop and validate; NO DB mutation."""
         try:
-            raw = await self._backend.generate_async(request)
+            raw = await self._backend.generate_async(self.outgoing(request))
         except RuntimeError as exc:
-            return self._sanitize_provider_error(exc)
+            return self._sanitize_provider_error(exc, request)
         return self._validate_raw(request, raw)
 
     def _sanitize_provider_error(
-        self, exc: RuntimeError
+        self, exc: RuntimeError, request=None
     ) -> tuple[LLMRawResult, None, str, str]:
         """Turn a provider exception into a rejected result WITHOUT leaking secrets."""
+        metadata = {}
+        if request is not None and request.method == "m3_corporate_management" and type(exc).__module__ == "app.services.llm.providers":
+            candidate = getattr(exc, "diagnostic_metadata", None)
+            if isinstance(candidate, dict):
+                from app.services.llm.vertex_m3_diagnostics import public_diagnostics
+                metadata = public_diagnostics(candidate)
+                if request.record_private_diagnostics:
+                    metadata.update({k: candidate[k] for k in ("provider_request", "provider_request_json", "private_service_error") if k in candidate})
         raw = LLMRawResult(
             raw_response="",
-            model_id=getattr(self._backend, "model_id", "unknown"),
-            model_config={"error_type": type(exc).__name__},
+            model_id=metadata.get("model_id") or getattr(self._backend, "model_id", "unknown"),
+            model_config={"error_type": type(exc).__name__, **metadata},
         )
         detail = f"Provider call failed ({type(exc).__name__})."
         if type(exc).__module__ == "app.services.llm.providers" and hasattr(
@@ -405,17 +440,29 @@ class LLMClient:
         outcome = "valid"
         detail: str | None = None
         try:
-            parsed_obj = json.loads(raw.raw_response)
+            parsed_obj = self.incoming(request, json.loads(raw.raw_response))
             jsonschema.validate(
                 instance=parsed_obj, schema=request.prompt.response_schema
             )
             parsed = parsed_obj
         except json.JSONDecodeError as exc:
             outcome = "rejected"
-            detail = f"Response was not valid JSON: {exc}"
+            if request.method == "m3_corporate_management":
+                detail = (f"Response was not valid JSON (line {exc.lineno}, "
+                          f"column {exc.colno}).")
+            else:
+                detail = f"Response was not valid JSON: {exc}"
         except jsonschema.ValidationError as exc:
             outcome = "rejected"
-            detail = f"Response failed schema validation: {exc.message}"
+            if request.method == "m3_corporate_management":
+                # Schema paths contain contract keys, never instance values or
+                # user-supplied property names. exc.message can quote evidence,
+                # credentials echoed by a model, or an entire malformed item.
+                path = "/".join(str(part) for part in exc.absolute_schema_path)
+                detail = (f"Response failed schema validation "
+                          f"(rule={exc.validator}; schema_path={path or '/'}).")
+            else:
+                detail = f"Response failed schema validation: {exc.message}"
         return raw, parsed, outcome, detail
 
     def generate_only(self, request: LLMRequest) -> GenerateOnlyResult:

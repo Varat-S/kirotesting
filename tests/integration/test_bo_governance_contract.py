@@ -48,8 +48,8 @@ def test_run_records_the_roster_it_used_v3(db_session, tmp_path):
 # --- A-2: v2 vs v3 completeness-governance asymmetry is explicit -----------
 
 def _break_one_specialist_v3(script):
-    """Make one M1 specialist fail validation (unadmitted evidence id)."""
-    script["m1_pricing_power"]["hypotheses"][0]["supporting_evidence_ids"] = ["invented"]
+    """Make one M1 specialist fail validation (invalid disposition)."""
+    script["m1_pricing_power"]["hypotheses"][0]["disposition"] = "invented"
     return script
 
 

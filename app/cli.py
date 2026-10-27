@@ -19,6 +19,7 @@ from app.core.config import get_settings
 from app.services.acquisition.sec_edgar import SecEdgarClient, EdgarError, write_bundle
 from app.services.extraction.sec.bundle import SecFilingBundle
 from app.services.pipeline.sec import sec_source_package
+from app.services.llm import usage
 
 
 def main(argv=None):
@@ -148,6 +149,17 @@ def main(argv=None):
               "m4_strategy_capital, so both feed one governed Module 4 output. "
               "Default off for backward compatibility. The effective flag is "
               "recorded in the run metadata and reported in the summary."),
+    )
+    bo_run.add_argument(
+        "--m3-responses", type=Path,
+        help=("v3 roster: scripted run-m3 response map (same format as run-m3 "
+              "--responses) for the standalone Module 3 step. Without it, Module 3 "
+              "uses the run's own backend."),
+    )
+    bo_run.add_argument(
+        "--corporate-structure", type=Path,
+        help=("v3 roster: simplified v1.0 corporate-structure onboarding JSON passed "
+              "to the standalone Module 3 step (as run-m3 --corporate-structure)."),
     )
     bo_spec = commands.add_parser(
         "run-bo-specialists",
@@ -393,6 +405,7 @@ def main(argv=None):
     database.parent.mkdir(parents=True, exist_ok=True)
     engine, factory = create_engine_and_session(f"sqlite:///{database.as_posix()}")
     init_db(engine)
+    usage.reset()
     try:
         with factory() as session:
             runner = CreditMemoPipeline(
@@ -402,11 +415,11 @@ def main(argv=None):
                 analysis_mode=args.analysis_mode,
             )
             if args.command == "run-bo-case":
-                print(json.dumps(_run_bo_case(session, database, args), indent=2))
+                print(json.dumps(_with_cost(_run_bo_case(session, database, args)), indent=2))
                 session.commit()
                 return
             if args.command == "run-fo-case":
-                print(json.dumps(_run_fo_case(session, args), indent=2))
+                print(json.dumps(_with_cost(_run_fo_case(session, args)), indent=2))
                 session.commit()
                 return
             if args.command in {"fetch-filing", "import-filing"}:
@@ -415,7 +428,7 @@ def main(argv=None):
                 return
             if args.command == "run-bo-fo":
                 outcome = _run_bo_fo(session, database, args)
-                print(json.dumps(outcome, indent=2))
+                print(json.dumps(_with_cost(outcome), indent=2))
                 if any(outcome[s]["status"] == "failed" for s in ("bo", "fo")):
                     raise SystemExit(1)
                 return
@@ -457,12 +470,17 @@ def main(argv=None):
                                              fo_run_id=args.fo_run, bo_run_id=args.bo_run), indent=2))
                 return
             if args.command == "run-bo-specialists":
-                print(json.dumps(_run_bo_specialists(session, database, args), indent=2))
+                print(json.dumps(_with_cost(_run_bo_specialists(session, database, args)), indent=2))
                 session.commit()
                 return
             if args.command == "run-m3":
-                print(json.dumps(_run_m3(session, database, args), indent=2))
+                m3_summary = _run_m3(session, database, args)
+                print(json.dumps(_with_cost(m3_summary), indent=2))
                 session.commit()
+                # Persist database/artifacts first. An execution/validation
+                # failure must not be reported as a successful shell command.
+                if str(m3_summary.get("validation_stages", {}).get("module_completion", "")).startswith("failed_"):
+                    raise SystemExit(1)
                 return
             if args.command == "bo-review":
                 from app.services.bo.handoff import review_handoff
@@ -625,9 +643,21 @@ def main(argv=None):
                     },
                 }
             session.commit()
-            print(json.dumps(summary, indent=2))
+            print(json.dumps(_with_cost(summary), indent=2))
     finally:
         engine.dispose()
+        # Last on stderr, so it is the final line of a run, and shown even when the run failed.
+        cost = usage.summary()
+        if cost["calls"]:
+            print(usage.describe(cost), file=sys.stderr)
+
+
+def _with_cost(summary):
+    """Add the run's model token usage and estimated cost, when a live model was called."""
+    cost = usage.summary()
+    if cost["calls"]:
+        summary["cost"] = cost
+    return summary
 
 
 
@@ -786,9 +816,11 @@ def _run_m3(session, database, args):
     synthesis, scoring, memo, handoff or downstream agent runs.
     """
     from app.services.bo.m3_demo import write_m3_demo
+    from app.services.bo.m3_diagnostics import ensure_local_store
     from app.services.bo.m3_standalone import run_m3
     from app.services.pipeline.runner import CreditMemoPipeline
 
+    ensure_local_store(session)
     # OPT-IN, default-off real-model pathway. Offline (scripted --responses) is
     # the default and is clearly separated from the live path. --live constructs
     # the configured provider backend through the existing provider abstraction
@@ -841,18 +873,47 @@ def _run_m3(session, database, args):
         metrics=prepared.metrics, m3_responses=m3_responses,
         corporate_structure_document=corporate_structure_document,
         transaction_borrower_entity_id=args.transaction_borrower_entity_id,
-        live_backend=live_backend, live_config=live_config)
+        live_backend=live_backend, live_config=live_config,
+        required_assessment_version=("bo-m3-corporate-assessment-1.2" if args.live else None))
 
     reference_output = None
     reference_path = Path("examples/bo_m3/Sample HCA Corp Structure Final Output.json")
     if simplified_document is not None and reference_path.is_file():
         reference_output = json.loads(reference_path.read_text(encoding="utf-8"))
 
+    reproduce_argv = [sys.executable, "-m", "app.cli", "--database", str(database),
+                      "--output", str(args.output), "run-m3", args.case_id]
+    for flag, value in (("--package", args.package), ("--bundle", args.bundle),
+                        ("--cutoff", args.cutoff.isoformat() if args.cutoff else None),
+                        ("--entity-id", args.entity_id), ("--entity-name", args.entity_name),
+                        ("--corporate-structure", args.corporate_structure),
+                        ("--transaction-borrower-entity-id", args.transaction_borrower_entity_id),
+                        ("--responses", args.responses)):
+        if value is not None:
+            reproduce_argv += [flag, str(value)]
+    reproduce_env = {"DEBUG": "false"}
+    if args.live:
+        reproduce_argv.append("--live")
+        reproduce_env.update({
+            "LLM_PROVIDER": settings.llm_provider,
+            "LLM_TIMEOUT_SECONDS": str(settings.llm_timeout_seconds),
+            "LLM_MAX_OUTPUT_TOKENS": str(settings.llm_max_output_tokens),
+            "LLM_MAX_INPUT_BYTES": str(settings.llm_max_input_bytes),
+        })
+        if settings.llm_provider == "vertex":
+            reproduce_env.update({k: str(v) for k, v in {
+                "VERTEX_MODEL_NARROW": settings.vertex_model_narrow,
+                "GOOGLE_CLOUD_PROJECT": settings.google_cloud_project,
+                "GOOGLE_CLOUD_LOCATION": settings.google_cloud_location,
+            }.items() if v is not None})
+        elif settings.llm_model:
+            reproduce_env["LLM_MODEL"] = settings.llm_model
     paths = write_m3_demo(
         result, args.output, simplified_document=simplified_document,
         reference_output=reference_output,
         corporate_structure_path=corporate_structure_path,
-        responses_path=(str(args.responses) if args.responses else None))
+        responses_path=(str(args.responses) if args.responses else None),
+        reproduce_argv=reproduce_argv, reproduce_env=reproduce_env)
 
     return {
         "case_id": result.case_id,
@@ -870,6 +931,7 @@ def _run_m3(session, database, args):
         "completion_status": result.completion_status,
         "validation_issue_count": len(result.validation_issues),
         "rejected_item_count": len(result.rejected_items),
+        "validation_stages": result.validation_stages,
         "outputs": {k: str(v) for k, v in paths.items()},
     }
 
@@ -931,9 +993,16 @@ def _run_bo_case(session, database, args):
         manifest = load_manifest(args.manifest)
     roster = getattr(args, "roster", "v2")
     enable_m4_debt = bool(getattr(args, "enable_m4_debt_specialist", False))
+    m3_responses_path = getattr(args, "m3_responses", None)
+    corporate_structure_path = getattr(args, "corporate_structure", None)
     result = BusinessOverviewRunner(
         session, backend=backend, data_root=database.parent, output_root=args.output,
         bo_roster=roster, enable_m4_debt_specialist=enable_m4_debt,
+        m3_responses=(json.loads(m3_responses_path.read_text(encoding="utf-8"))
+                      if m3_responses_path else None),
+        m3_corporate_structure=(
+            json.loads(corporate_structure_path.read_text(encoding="utf-8"))
+            if corporate_structure_path else None),
     ).run_case(
         args.case_id, package=package, produce_pdf=args.pdf, manifest=manifest,
     )

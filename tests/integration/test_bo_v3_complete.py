@@ -205,8 +205,9 @@ def test_validated_m3_extension_flows_through_module_conclusion_and_handoff(
 
 def test_incomplete_module_blocks_agent6_and_remains_visible(db_session, tmp_path):
     script = _script()
-    script["m1_pricing_power"]["hypotheses"][0][
-        "supporting_evidence_ids"] = ["invented"]
+    # An invalid disposition still rejects the agent (an unknown citation
+    # alone is now removed on its own).
+    script["m1_pricing_power"]["hypotheses"][0]["disposition"] = "invented"
     result, _ = _run(db_session, tmp_path, script=script)
     m1 = result.memo["module_conclusions"]["M1"]
     assert m1["status"] == "incomplete"

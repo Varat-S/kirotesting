@@ -9,6 +9,7 @@ from app.core.config import Settings, get_settings
 from app.core.hashing import canonical_json, content_hash
 from app.services.llm.client import LLMBackend, LLMRawResult, LLMRequest
 from app.services.llm.sampling import sampling_temperature
+from app.services.llm.usage import Meter, record as record_usage
 
 
 class ProviderNotConfiguredError(RuntimeError):
@@ -18,9 +19,10 @@ class ProviderNotConfiguredError(RuntimeError):
 class ProviderCallError(RuntimeError):
     """Sanitized failure; never contains credentials or HTTP response bodies."""
 
-    def __init__(self, message):
+    def __init__(self, message, *, diagnostic_metadata=None):
         super().__init__(message)
         self.public_message = message
+        self.diagnostic_metadata = diagnostic_metadata
 
 
 def strict_schema(schema):
@@ -46,6 +48,8 @@ class RealProviderBackend(LLMBackend):
     def __init__(self, settings: Settings | None = None, *, transport=None):
         self._settings = settings or get_settings()
         self._transport = transport
+        # This backend's own calls, for the cost of the web job it was built for.
+        self.usage = Meter()
 
     @property
     def model_id(self):
@@ -146,6 +150,8 @@ class RealProviderBackend(LLMBackend):
                     f"Provider returned HTTP {response.status_code}; request was not retried automatically."
                 )
             raw = response.json()
+            usage = _extract_usage(raw)
+            record_usage(raw.get("model") or self.model_id, usage, self.usage)
             if s.llm_provider == "openai":
                 if raw.get("status") != "completed":
                     raise ProviderCallError(
@@ -190,5 +196,22 @@ class RealProviderBackend(LLMBackend):
                 "temperature": body.get("temperature"),
                 "requested_temperature": requested_temperature,
                 "effective_temperature": effective_temperature,
+                **usage,
             },
         )
+
+
+def _extract_usage(raw):
+    """Token usage from a Responses or Chat Completions body. Reasoning tokens
+    are already inside the output count here, so they are not added again."""
+    usage = raw.get("usage") if isinstance(raw, dict) else None
+    if not isinstance(usage, dict):
+        return {}
+    out = {}
+    for dst, sources in (("input_tokens", ("input_tokens", "prompt_tokens")),
+                         ("output_tokens", ("output_tokens", "completion_tokens")),
+                         ("total_tokens", ("total_tokens",))):
+        value = next((usage[k] for k in sources if isinstance(usage.get(k), int)), None)
+        if value is not None:
+            out[dst] = value
+    return out

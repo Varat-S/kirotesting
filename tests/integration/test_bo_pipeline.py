@@ -133,7 +133,7 @@ def test_bo6_receives_only_validated_primary_output(db_session, tmp_path):
 # -- C. evidence validation in the pipeline --------------------------------------
 
 
-def test_invalid_evidence_reference_promotes_nothing_for_that_agent(db_session, tmp_path):
+def test_invalid_evidence_reference_is_removed_without_rejecting_the_agent(db_session, tmp_path):
     script = good_script()
     script["bo_competition_pricing"]["hypotheses"][0]["supporting_evidence_ids"] = [
         "ev_does_not_exist"]
@@ -142,18 +142,17 @@ def test_invalid_evidence_reference_promotes_nothing_for_that_agent(db_session, 
     script["orchestrate"] = answer
     result, _ = run(db_session, tmp_path, script)
     rid = result.analysis_run_id
-    assert result.record["agents"]["bo_competition_pricing"]["status"] == "rejected"
-    row = _runs(db_session, rid, "bo_competition_pricing")[0]
-    assert row.validation_status == "rejected"
-    assert "ev_does_not_exist" in row.validation_detail
-    assert db_session.query(ParameterResultRow).filter_by(
-        analysis_run_id=rid, agent_id="bo_competition_pricing").count() == 0
-    assert db_session.query(HypothesisRecordRow).filter_by(
-        analysis_run_id=rid, agent_id="bo_competition_pricing").count() == 0
-    # The orchestrator still ran and was told about the coverage gap.
-    assert result.conclusion_status == "accepted"
-    section = next(s for s in result.memo["sections"] if s["code"] == "BO3")
-    assert section["claims"] == [] and "coverage gap" in section["notice"]
+    # Only the unknown citation is removed (and noted); the agent's other
+    # findings survive, and the hypothesis left without support is not usable.
+    agent = result.record["agents"]["bo_competition_pricing"]
+    assert agent["status"] == "validated"
+    assert any("not admitted" in a["note"] for a in agent["adjustments"]
+               if a["hypothesis_id"] == "BO3-H001")
+    stored = {r.hypothesis_id: r for r in db_session.query(HypothesisRecordRow).filter_by(
+        analysis_run_id=rid, agent_id="bo_competition_pricing")}
+    assert len(stored) > 1
+    assert "ev_does_not_exist" not in json.dumps(
+        [r.payload for r in stored.values()], default=str)
 
 
 def test_prompt_injection_in_source_text_does_not_change_behaviour(db_session, tmp_path):

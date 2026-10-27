@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from app.services.bo.hypotheses import normalise
-from app.services.llm.client import FakeLLMBackend, LLMRawResult, LLMRequest
+from app.services.llm.client import FakeLLMBackend, LLMClient, LLMRawResult, LLMRequest
 
 SIMULATION_MODEL_ID = "scripted-offline-simulation-v1"
 
@@ -64,7 +64,9 @@ class ScriptedBoBackend(FakeLLMBackend):
         with self._lock:
             index = self._calls.get(script_key, 0)
             self._calls[script_key] = index + 1
-            self.requests.append((request.method, request.inputs))
+            # Recorded with the application's evidence ids for inspection; the
+            # scripted answer below resolves against the aliased inputs it was sent.
+            self.requests.append((request.method, LLMClient.incoming(request, request.inputs)))
         responses = self._script.get(script_key)
         if not responses:
             raise KeyError(f"No scripted response for {request.method!r}"

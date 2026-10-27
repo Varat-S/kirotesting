@@ -42,13 +42,15 @@ from app.services.bo.completion import (
     build_m3_corporate_structure,
 )
 from app.services.bo.m3_artifacts import build_m3_deliverables
+from app.services.bo.m3_diagnostics import ensure_local_store, record_final_validation
+from app.services.bo.m3_grounding import M3_GROUNDING_VERSION, strengthen_m3_assessment
 from app.services.bo.m3_output import assemble_m3_output
 from app.services.bo.m3_structure_context import build_structural_facts
-from app.services.bo.m3_validation import validate_m3_assessment
+from app.services.bo.m3_validation import M3AssessmentError, validate_m3_assessment
 from app.services.bo.roster_v3 import ROSTER_V3_VERSION, V3_SPEC_BY_CODE
 
 
-M3_STANDALONE_POLICY_VERSION = "bo-m3-standalone-1.0"
+M3_STANDALONE_POLICY_VERSION = "bo-m3-standalone-1.4"
 
 
 def _canonical_metrics_from_prep(prep) -> dict[str, dict[str, Any]]:
@@ -109,6 +111,12 @@ class M3StandaloneResult:
     specialist_failure: str | None = None
     model_called: bool = False
     run_manifest: dict[str, Any] = field(default_factory=dict)
+    validation_stages: dict[str, Any] = field(default_factory=dict)
+    # The specialist's own validation (governed hypotheses + promoted
+    # parameters) and parsed answer, for callers that embed this run (the
+    # orchestrated BO runner); not used by the standalone deliverables.
+    specialist_validation: Any = None
+    specialist_parsed: dict[str, Any] | None = None
 
 
 def run_m3(
@@ -124,6 +132,8 @@ def run_m3(
     sector: str = "auto",
     live_backend=None,
     live_config: dict[str, Any] | None = None,
+    management_window_years: int = 3,
+    required_assessment_version: str | None = None,
 ) -> M3StandaloneResult:
     """Run ONLY Module 3 (specialist + Validator 7) and build the governed JSON.
 
@@ -160,6 +170,9 @@ def run_m3(
     renderer) is ever invoked on either path. This function does not itself make
     a paid call; the caller supplies a configured provider backend.
     """
+    if isinstance(management_window_years, bool) or not isinstance(management_window_years, int) or management_window_years < 1:
+        raise ValueError("management_window_years must be a positive integer (default three years)")
+    ensure_local_store(session)
     live_mode = live_backend is not None
     if not live_mode and m3_responses is None:
         raise ValueError(
@@ -184,6 +197,10 @@ def run_m3(
 
     execution_mode = "live" if live_mode else "offline_simulation"
     model_configuration = {
+        "m3_grounding_policy": M3_GROUNDING_VERSION,
+        "m3_validation_revision": "bo-m3-v14-correction-1.0",
+        "management_stability_policy": "bo-m3-management-stability-1.0",
+        "management_recent_change_window_years": management_window_years,
         "scope": "M3_only",
         "execution_mode": execution_mode,
         "runner_policy_version": M3_STANDALONE_POLICY_VERSION,
@@ -192,6 +209,41 @@ def run_m3(
         "validator_id": spec.validator_id,
         "packet_hash": prep.packet.packet_hash,
     }
+    # --- CRITICAL ORDERING FIX: build + validate the corporate structure and
+    #     inject it into the specialist's input context BEFORE the pass runs. --
+    # The structure is built from the admitted, case-associated source (not from
+    # a synthetic record created after the fact). Its `status` is set to
+    # "validated" provisionally only so the structure builder reads the admitted
+    # source; structure validity is independent of the specialist's own
+    # validation (re-derived below) and never feeds the structure graph.
+    structure_calls = [{"inputs": (
+        {"corporate_structure_source": structure_source}
+        if structure_source is not None else {})}]
+    pre_structure_agent_calls = [{
+        "agent_id": "m3_corporate_management", "code": "M3",
+        "status": "validated", "coverage": [], "calls": structure_calls,
+    }]
+    structure_artifact, structure_svg = build_m3_corporate_structure(
+        pre_structure_agent_calls, case_id=case_id)
+
+    # Compact, provenance-preserving representation (validated nodes + links with
+    # stable ids, borrower, guarantor indicators, grouping classifications,
+    # source doc id/hash, simulation status, deterministic observations). None
+    # when no structure is available -> no invented facts enter the context.
+    structural_facts = build_structural_facts(structure_artifact)
+    prep = replace(prep, structural_facts=structural_facts, record_model_run=True,
+                   management_window_years=management_window_years,
+                   m3_case_context={"validated_borrower_entity_ids": (
+                       [transaction_borrower_entity_id] if transaction_borrower_entity_id else [])})
+
+    from app.services.bo.m3_case_evidence import attach_case_evidence
+    prep = attach_case_evidence(prep)
+    # Explicit request contract, independent of backend type, preserves legacy
+    # API replays. The live standalone CLI requests 1.2 explicitly.
+    prep = replace(prep, required_m3_version=required_assessment_version)
+    model_configuration["required_assessment_version"] = required_assessment_version
+    structural_facts = prep.structural_facts
+    model_configuration["packet_hash"] = prep.packet.packet_hash
     row = RunRow(
         analysis_run_id=prep.analysis_run_id, case_id=case_id,
         evidence_snapshot_version=prep.snapshot_version, status="created",
@@ -217,30 +269,6 @@ def run_m3(
         evidence_ids=list(prep.packet.evidence_ids)))
     session.flush()
 
-    # --- CRITICAL ORDERING FIX: build + validate the corporate structure and
-    #     inject it into the specialist's input context BEFORE the pass runs. --
-    # The structure is built from the admitted, case-associated source (not from
-    # a synthetic record created after the fact). Its `status` is set to
-    # "validated" provisionally only so the structure builder reads the admitted
-    # source; structure validity is independent of the specialist's own
-    # validation (re-derived below) and never feeds the structure graph.
-    structure_calls = [{"inputs": (
-        {"corporate_structure_source": structure_source}
-        if structure_source is not None else {})}]
-    pre_structure_agent_calls = [{
-        "agent_id": "m3_corporate_management", "code": "M3",
-        "status": "validated", "coverage": [], "calls": structure_calls,
-    }]
-    structure_artifact, structure_svg = build_m3_corporate_structure(
-        pre_structure_agent_calls, case_id=case_id)
-
-    # Compact, provenance-preserving representation (validated nodes + links with
-    # stable ids, borrower, guarantor indicators, grouping classifications,
-    # source doc id/hash, simulation status, deterministic observations). None
-    # when no structure is available -> no invented facts enter the context.
-    structural_facts = build_structural_facts(structure_artifact)
-    prep = replace(prep, structural_facts=structural_facts)
-
     # --- The ONE specialist call (single pass) -------------------------------
     # The specialist genuinely has the validated structure in its input context
     # (via prep.structural_facts -> _single_pass_inputs) when reasoning. Offline:
@@ -248,7 +276,8 @@ def run_m3(
     # run_single_pass. Live (opt-in): the configured provider backend is used
     # exactly ONCE; there is NO silent fallback to the scripted path on failure.
     if live_mode:
-        arm = run_single_pass(session, prep, backend=live_backend)
+        arm = run_single_pass(session, prep, backend=live_backend,
+                              repair_attempts=int((live_config or {}).get("max_retries", 0)))
     else:
         arm = run_single_pass(session, prep, dict(m3_responses["single_pass"]))
 
@@ -266,8 +295,12 @@ def run_m3(
     # fake/scripted backend. The offline path is scripted by design; the live
     # path records the actual provider identity on each call. A real model is
     # counted ONLY when a genuine (non-fake) provider answered.
-    model_called = any(not _is_offline_call(c) for c in arm.calls)
+    model_called = ((live_mode and arm.metadata.get("diagnostics", {}).get("request_attempted") is True)
+                    or any(not _is_offline_call(c) for c in arm.calls))
     specialist_validated = bool(arm.validation and arm.validation.valid)
+    if arm.validation is not None and not arm.validation.valid and not arm.failure:
+        arm.failure = (f"Specialist evidence validation rejected "
+                       f"({len(arm.validation.issues)} issues; see local validation diagnostics).")
     if arm.validation is not None:
         persist_arm(session, prep, arm)
 
@@ -278,30 +311,68 @@ def run_m3(
     governed_assessment: dict[str, Any] | None = None
     validation_issues: list[dict[str, Any]] = []
     rejected_items: list[dict[str, Any]] = []
+    assessment_failure: str | None = None
+    claim_reviews: list[dict[str, Any]] = []
     canonical_metrics = _canonical_metrics_from_prep(prep)
     proposal = (arm.parsed or {}).get("m3_assessment")
-    if isinstance(proposal, dict):
-        governed = validate_m3_assessment(
-            proposal, allowed_evidence_ids=allowed,
-            validated_borrower_entity_ids=(
-                {transaction_borrower_entity_id}
-                if transaction_borrower_entity_id else set()),
-            evidence_texts=evidence_texts,
-            structure_facts=structural_facts,
-            canonical_metrics=canonical_metrics)
-        governed_assessment = governed.model_dump(mode="json")
-        governed_assessment["replay_provenance"] = {
-            "kind": ("live_standalone_validation" if live_mode
-                     else "offline_deterministic_standalone_validation"),
-            "execution_mode": execution_mode,
-            "model_called": model_called,
-            "source_analysis_run_id": prep.analysis_run_id,
-            "transaction_borrower_entity_ids": (
-                [transaction_borrower_entity_id]
-                if transaction_borrower_entity_id else []),
-        }
-        validation_issues = list(governed_assessment.get("validation_issues") or [])
-        rejected_items = list(governed_assessment.get("rejected_items") or [])
+    draft_contract = bool(arm.metadata.get("generation_contract"))
+    if isinstance(proposal, dict) and (not draft_contract or specialist_validated):
+        try:
+            governed = validate_m3_assessment(
+                proposal, allowed_evidence_ids=allowed,
+                validated_borrower_entity_ids=(
+                    {transaction_borrower_entity_id}
+                    if transaction_borrower_entity_id else set()),
+                evidence_texts=evidence_texts,
+                structure_facts=structural_facts,
+                canonical_metrics=canonical_metrics,
+                management_company_aliases=prep.entity_aliases,
+                management_window_years=management_window_years,
+                usable_hypothesis_ids=({r.hypothesis_id for r in arm.validation.records if r.usable}
+                                       if arm.validation else set()),
+                hypothesis_proposals=((arm.parsed or {}).get("hypotheses", [])
+                    if proposal.get("schema_version") == "bo-m3-corporate-assessment-1.2" else None),
+                generation_draft=draft_contract)
+        except M3AssessmentError:
+            # Pydantic's substantive contract can reject schema-valid JSON.
+            # Preserve the raw registry record and fail closed; exception text
+            # may echo the proposal, so keep it out of shareable diagnostics.
+            assessment_failure = "Validator 7 assessment contract rejected; see the local recorded response."
+        else:
+            governed, claim_reviews = strengthen_m3_assessment(
+                governed, evidence_texts=evidence_texts, structure_facts=structural_facts)
+            governed_assessment = governed.model_dump(mode="json")
+            if draft_contract:
+                from app.services.bo.m3_contract import validate_governed_response
+                import jsonschema
+                try:
+                    validate_governed_response(arm.parsed, governed_assessment)
+                except jsonschema.ValidationError:
+                    assessment_failure = "Governed response failed final canonical JSON validation."
+                    governed_assessment = None
+                    arm.metadata["diagnostics"]["canonical_schema_validation"] = "rejected"
+                    arm.metadata["diagnostics"]["canonical_validation_occurred"] = True
+                else:
+                    arm.metadata["diagnostics"]["canonical_schema_validation"] = "valid"
+                    arm.metadata["diagnostics"]["canonical_validation_occurred"] = True
+            if governed_assessment is not None:
+                if governed_assessment.get("management_stability"):
+                    source_metadata = governed_assessment["management_stability"]["source_metadata"]
+                    governed_assessment["management_stability"]["source_metadata"] = {
+                        eid: {**prep.management_source_metadata.get(eid, {}), **source_metadata.get(eid, {})}
+                        for eid in prep.management_source_metadata.keys() | source_metadata.keys()}
+                governed_assessment["replay_provenance"] = {
+                    "kind": ("live_standalone_validation" if live_mode
+                             else "offline_deterministic_standalone_validation"),
+                    "execution_mode": execution_mode,
+                    "model_called": model_called,
+                    "source_analysis_run_id": prep.analysis_run_id,
+                    "transaction_borrower_entity_ids": (
+                        [transaction_borrower_entity_id]
+                        if transaction_borrower_entity_id else []),
+                }
+                validation_issues = list(governed_assessment.get("validation_issues") or [])
+                rejected_items = list(governed_assessment.get("rejected_items") or [])
 
     # NOTE: the corporate-structure artifact + SVG were already built ABOVE,
     # before the specialist pass, and injected into prep.structural_facts. The
@@ -315,16 +386,33 @@ def run_m3(
     deliverables = build_m3_deliverables(
         structure_artifact, governed_assessment, m3_output)
 
+    if (structural_facts or {}).get("source", {}).get("authority") == "hypothetical_case_assumptions":
+        deliverables["m3_analysis"]["scenario_assumptions"] = {
+            **structural_facts["source"], "borrower": structural_facts.get("borrower"),
+            "guarantor_node_ids": structural_facts.get("guarantor_node_ids", []),
+            "scope": "Authoritative hypothetical case assumptions only; not verified real-world legal facts."}
+
     # --- Finalise the run row ------------------------------------------------
     completion_status = m3_output["completion"]["status"]
-    row.status = "completed" if specialist_validated else "partially_failed"
+    row.status = "completed" if specialist_validated and not assessment_failure else "partially_failed"
     row.completed_at = datetime.now(timezone.utc)
-    row.failure_state = arm.failure
+    row.failure_state = arm.failure or assessment_failure
     usage = arm.usage()
     if usage["input_tokens"] or usage["output_tokens"]:
         row.total_input_tokens = usage["input_tokens"]
         row.total_output_tokens = usage["output_tokens"]
         row.total_tokens = usage["input_tokens"] + usage["output_tokens"]
+
+    diagnostics = record_final_validation(
+        session, case_id=case_id, snapshot_version=prep.snapshot_version,
+        diagnostics=arm.metadata["diagnostics"], specialist_valid=specialist_validated,
+        specialist_issues=list(arm.validation.issues) if arm.validation else [],
+        assessment_present=governed_assessment is not None,
+        validation_issues=validation_issues, rejected_items=rejected_items,
+        run_status=row.status, artifact_status=completion_status,
+        conclusion=deliverables["m3_analysis"].get("consolidated_conclusion") or {},
+        governed_assessment=governed_assessment, assessment_failure=assessment_failure,
+        claim_reviews=claim_reviews)
 
     manifest = {
         "document": "bo_m3_standalone_run",
@@ -332,6 +420,10 @@ def run_m3(
         "case_id": case_id,
         "analysis_run_id": prep.analysis_run_id,
         "scope": "M3_only",
+        "validation_stages": diagnostics,
+        "completion_status_meaning": (
+            "Legacy completion_status describes artifact availability only. "
+            "Use validation_stages for execution, validation and analytical acceptance."),
         "invoked_specialist_agent_id": spec.agent_id,
         "invoked_specialist_code": spec.code,
         "validator_id": spec.validator_id,
@@ -423,4 +515,5 @@ def run_m3(
         specialist_validated=specialist_validated,
         specialist_failure=arm.failure,
         model_called=model_called,
-        run_manifest=manifest)
+        run_manifest=manifest, validation_stages=diagnostics,
+        specialist_validation=arm.validation, specialist_parsed=arm.parsed)

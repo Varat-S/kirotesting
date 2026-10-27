@@ -206,6 +206,8 @@ class BusinessOverviewRunner:
         transaction_borrower_entity_id: str | None = None,
         investigation_mode: InvestigationMode = InvestigationMode.SINGLE_PASS,
         enable_m4_debt_specialist: bool = False,
+        m3_responses: dict | None = None,
+        m3_corporate_structure: dict | None = None,
     ) -> None:
         settings = get_settings()
         # Sector profile: "auto" detects it from the admitted evidence, None
@@ -248,6 +250,12 @@ class BusinessOverviewRunner:
         # BOTH Module 4 capabilities feed one governed Module 4 output. Default
         # off preserves the established v2/v3 behaviour and its recorded scripts.
         self.enable_m4_debt_specialist = bool(enable_m4_debt_specialist)
+        # v3 roster: Module 3 runs through Daniel's standalone run_m3 instead of
+        # the engine's own M3 task. ``m3_responses`` is a scripted run-m3
+        # response map ({"single_pass": ...}); without it the run's backend is
+        # used. ``m3_corporate_structure`` is the optional onboarding JSON.
+        self.m3_responses = m3_responses
+        self.m3_corporate_structure = m3_corporate_structure
 
     # -- entry points ---------------------------------------------------------
 
@@ -349,6 +357,8 @@ class _BoRun:
             self.spec_by_agent = V3_SPEC_BY_AGENT
             self.narrow_agent_ids = tuple(spec.agent_id for spec in V3_SPECS)
             self.primary_agent_ids = V3_PRIMARY_AGENT_IDS
+            self.m3_standalone_agent_id = next(
+                spec.agent_id for spec in V3_SPECS if spec.code == "M3")
             self.m1_primary_ids = V3_M1_PRIMARY_IDS
             self.resilience_agent_id = V3_AGENT_6_ID
             self.active_agent_ids = (*self.narrow_agent_ids,
@@ -361,6 +371,7 @@ class _BoRun:
             self.spec_by_agent = BO_SPEC_BY_AGENT
             self.narrow_agent_ids = BO_NARROW_AGENT_IDS
             self.primary_agent_ids = BO_PRIMARY_AGENT_IDS
+            self.m3_standalone_agent_id = None
             self.m1_primary_ids = BO_PRIMARY_AGENT_IDS
             self.resilience_agent_id = BO_RESILIENCE_AGENT_ID
             self.active_agent_ids = BO_ACTIVE_AGENT_IDS
@@ -368,6 +379,11 @@ class _BoRun:
             check_mapper = list
             prompt_entries = bo_prompt_catalogue()
         self.registry = default_registry(self.roster_version)
+        # Primary specialists the engine itself executes; M3 (v3) is excluded
+        # because Daniel's run_m3 runs it (see _module3_standalone_phase).
+        self.engine_primary_ids = tuple(
+            a for a in self.primary_agent_ids if a != self.m3_standalone_agent_id)
+        self.m3_standalone_result = None
 
         prompts = PromptRegistry(self.session)
         prompts.register_catalogue()
@@ -379,7 +395,8 @@ class _BoRun:
             for entry in prompt_entries
         }
         self.client = LLMClient(runner.backend, prompts=prompts, session=self.session,
-                                prompt_versions=runner.prompt_versions)
+                                prompt_versions=runner.prompt_versions,
+                                alias_evidence=True)
         self.runtime = AgentRuntime(self.client)
 
         cfg_registry = ConfigRegistry(self.session)
@@ -459,7 +476,8 @@ class _BoRun:
     def execute(self) -> None:
         self._open_run()
         self._foundation()
-        self._stage("primary_specialists", set(self.primary_agent_ids))
+        self._stage("primary_specialists", set(self.engine_primary_ids))
+        self._module3_standalone_phase()
         self._follow_up_retrieval()
         self._coverage_follow_up()
         self._stage("resilience", {self.resilience_agent_id})
@@ -489,7 +507,8 @@ class _BoRun:
         self.scope = "business_overview_specialists_only"
         self._open_run()
         self._foundation()
-        self._stage("primary_specialists", set(self.primary_agent_ids))
+        self._stage("primary_specialists", set(self.engine_primary_ids))
+        self._module3_standalone_phase()
         self._follow_up_retrieval()
         self._coverage_follow_up()
         self._stage("resilience", {self.resilience_agent_id})
@@ -755,6 +774,73 @@ class _BoRun:
         schema = BO_M3_JSON_SCHEMA if spec.code == "M3" else BO_NARROW_JSON_SCHEMA
         return self._task(agent, inputs, evidence_ids, schema, parents)
 
+    def _module3_standalone_phase(self) -> None:
+        """Run Module 3 through Daniel's standalone ``run_m3`` (v3 roster only).
+
+        Everything M3 does (passage selection, inputs, the model call, Validator
+        7, grounding, the three-section output) is run_m3's logic. This phase
+        only files its governed hypotheses and parameters under this BO run so
+        M4, synthesis, the challenger, scoring and the memo consume them exactly
+        as they would the engine's own M3 output.
+        """
+        agent_id = self.m3_standalone_agent_id
+        if agent_id is None:
+            return
+        from app.services.bo.m3_standalone import run_m3
+
+        outcome = self.agents[agent_id]
+        backend = self.runner.backend
+        scripted = isinstance(backend, FakeLLMBackend)
+        try:
+            # An explicit run-m3 response map replays offline; otherwise the
+            # run's own backend (scripted or a live provider) answers once.
+            result = run_m3(
+                self.session, case_id=self.case_id, evidence=self.evidence,
+                metrics=self.metrics, m3_responses=self.runner.m3_responses,
+                corporate_structure_document=self.runner.m3_corporate_structure,
+                transaction_borrower_entity_id=self.runner.transaction_borrower_entity_id,
+                sector=self.runner.sector,
+                live_backend=None if self.runner.m3_responses is not None else backend,
+                # One bounded repair call if the live answer is still unusable
+                # after item-level repair (never on a provider error).
+                live_config={"max_retries": 1},
+                required_assessment_version=(
+                    None if scripted or self.runner.m3_responses is not None
+                    else "bo-m3-corporate-assessment-1.2"))
+        except Exception as exc:  # recorded like a failed DAG task, never raised
+            outcome.status = "failed"
+            outcome.detail = f"Standalone Module 3 (run_m3) failed: {type(exc).__name__}: {exc}"
+            return
+        self.m3_standalone_result = result
+
+        validation = result.specialist_validation
+        spec = self.spec_by_agent[agent_id]
+        records = [r.model_copy(update={"analysis_run_id": self.analysis_run_id})
+                   for r in (validation.records if validation else [])]
+        promoted = [p.model_copy(update={"analysis_run_id": self.analysis_run_id})
+                    for p in (validation.parameters if validation else [])]
+        for record in records:
+            self.hypothesis_store.persist(record)
+        for parameter in promoted:
+            self.promoter.persist(parameter, case_id=self.case_id,
+                                  snapshot_version=self.snapshot_version)
+        self.hypotheses[agent_id] = records
+        self.promoted[agent_id] = promoted
+        if validation is not None:
+            self.parameter_adjustments[agent_id] = list(validation.parameter_changes)
+            outcome.issues = list(validation.issues)
+            outcome.adjustments = list(validation.adjustments)
+        self._record_coverage(spec, result.specialist_parsed or {}, records)
+        if result.governed_assessment is not None:
+            self.m3_assessments[agent_id] = result.governed_assessment
+        outcome.status = ("validated" if result.specialist_validated
+                          else "failed" if result.specialist_failure and validation is None
+                          else "rejected")
+        outcome.detail = (
+            f"Run by standalone Module 3 (run_m3), analysis run "
+            f"{result.analysis_run_id}; completion {result.completion_status}."
+            + (f" {result.specialist_failure}" if result.specialist_failure else ""))
+
     def _business_parameters(self) -> list[ParameterResult]:
         return [p for a in self.narrow_agent_ids for p in self.promoted.get(a, [])]
 
@@ -845,6 +931,17 @@ class _BoRun:
                         *out[module]["missing_information"],
                         "Versioned M3 entity, cash-flow and management assessment unavailable.",
                     })
+                standalone = self.m3_standalone_result
+                if standalone is not None:
+                    out[module]["m3_standalone"] = {
+                        "analysis_run_id": standalone.analysis_run_id,
+                        "completion_status": standalone.completion_status,
+                        "corporate_structure_status": standalone.corporate_structure_status,
+                        "validation_stages": standalone.validation_stages,
+                        "m3_output": standalone.m3_output,
+                        "m3_analysis": standalone.m3_analysis,
+                        "m3_corporate_structure": standalone.m3_corporate_structure,
+                    }
             if module == "M4" and self.enable_m4_debt:
                 out[module] = self._apply_m4_debt(out[module])
         self.module_conclusions = out
@@ -1012,8 +1109,14 @@ class _BoRun:
             self.session.flush()
 
     def _on_narrow(self, agent, parsed, run_id) -> None:
+        from app.services.bo.citations import repair_citations
+
         spec = self.spec_by_agent[agent.agent_id]
         packet = self.packets[agent.agent_id]
+        # One mistyped or unadmitted citation is corrected or removed on its
+        # own; it no longer rejects the agent's other findings.
+        parsed, citation_notes = repair_citations(
+            parsed, set(packet.evidence_ids), passages=self.passage_text)
         outcome = DeterministicValidator.for_agent(
             packet, agent, known_parameters=self.indicators.known_values(),
         ).validate(parsed, schema=(BO_M3_JSON_SCHEMA if spec.code == "M3"
@@ -1029,6 +1132,7 @@ class _BoRun:
                 if agent.agent_id == self.resilience_agent_id else None),
             corpus=self.corpus,
         ).validate(parsed, analysis_run_id=self.analysis_run_id, agent_run_id=run_id)
+        validation.adjustments[:0] = citation_notes
         issues += validation.issues
         m3_assessment = None
         if spec.code == "M3" and isinstance(parsed.get("m3_assessment"), dict):
@@ -1188,7 +1292,7 @@ class _BoRun:
         if self.runner.retriever.budget.max_followup_rounds < 1:
             return
         again = set()
-        for agent_id in self.primary_agent_ids:
+        for agent_id in self.engine_primary_ids:
             if self.agents[agent_id].status != "validated":
                 continue
             records = {h.hypothesis_id: h for h in self.hypotheses.get(agent_id, [])}
@@ -1227,7 +1331,7 @@ class _BoRun:
         if budget.max_followup_rounds < 1:
             return
         again = set()
-        for agent_id in self.primary_agent_ids:
+        for agent_id in self.engine_primary_ids:
             requests = self.retrieval_requests.get(agent_id) or []
             if not requests or self.agents[agent_id].status != "validated":
                 continue
@@ -1418,6 +1522,11 @@ class _BoRun:
             # the finding stays open for a reviewer.
             bo_scope = {BO_ORCHESTRATOR_ID, BO_CHALLENGER_ID}
         bo_scope |= {BO_ORCHESTRATOR_ID, BO_CHALLENGER_ID}
+        # Daniel's standalone M3 is a single bounded execution: a challenge
+        # against it is recorded (feedback below) but it is not re-run, so its
+        # governed findings are not superseded either.
+        m3_not_rerun = sorted(bo_scope & {self.m3_standalone_agent_id})
+        bo_scope -= set(m3_not_rerun)
         narrow = sorted(bo_scope & set(self.narrow_agent_ids))
         primary = set(narrow) & set(self.primary_agent_ids)
         findings = [f for f in challenge["findings"]
@@ -1456,6 +1565,7 @@ class _BoRun:
             "trigger_challenge_ids": [f["challenge_id"] for f in findings],
             "requested_scope": sorted(scope),
             "executed_scope": sorted(bo_scope),
+            "standalone_m3_not_rerun": m3_not_rerun,
             # Non-BO descendants (mitigants, structuring, credit orchestrator)
             # are invalidated by the DAG but are not part of a BO-only run.
             "deferred_descendants": sorted(scope - set(self.active_agent_ids)),

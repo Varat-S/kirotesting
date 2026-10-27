@@ -154,6 +154,14 @@ def test_workbench_shows_run_status_hypotheses_and_previews(client):
     memo = http.get(f"/cases/POC_BO/bo/runs/{run_id}/memo.html")
     audit = http.get(f"/cases/POC_BO/bo/runs/{run_id}/audit.html")
     assert "Business Overview" in memo.text and "Explainability" in audit.text
+    from app.services.reporting.memo import detect_pdf_backend
+    pdf = http.get(f"/cases/POC_BO/bo/runs/{run_id}/memo.pdf")
+    if detect_pdf_backend() is None:
+        assert pdf.status_code == 501 and "xhtml2pdf" in pdf.json()["detail"]
+    else:
+        assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF-")
+        assert pdf.headers["content-disposition"].startswith("attachment;")
+    assert http.get(f"/cases/POC_BO/bo/runs/{run_id}/other.pdf").status_code == 404
     assert http.get(f"/cases/POC_BO/bo/runs/{run_id}/memo.json").json()[
         "document"] == "business_overview_memo"
     assert http.get(f"/cases/POC_BO/bo/runs/{run_id}/handoff.json").json()[
