@@ -46,6 +46,29 @@ and the live-Vertex run instructions, and the full spec in
 
 ## Business Overview module (BO-only)
 
+Module 3 uses one supported [two-component workflow](docs/m3-rebuild.md):
+deterministic corporate conversion and filing-only management assessment.
+The management specialist identifies quoted facts and assesses their credit
+implications in one shared BO runtime call; Python calculates dates and validates
+evidence/references without assigning qualitative directions. See the
+[Milestone 3 report](docs/m3-milestone3-report.md) for the exact prompt and live
+test result. [Milestone 4](docs/m3-milestone4-report.md) adds claim-level source
+matching and Validator 7 qualitative review. A single live HCA review and
+[explicit closeout corrections](docs/m3-milestone4-closeout.md) preserve the model
+answers alongside the corrected findings.
+
+This project is a credit memo drafting aid. Its analyses can contain errors and
+require professional judgment before they inform a credit decision.
+Normal BO orchestration admits the selected corporate JSON and 10-K with the case,
+then runs both components from a persisted shared-router evidence packet; missing
+or rejected inputs produce independent statuses. Direct M3 file and manifest flags
+are not accepted by normal BO execution. Run either component independently with
+`run-m3`; saved rebuild manifests remain readable as historical artifacts through
+the registry/adapters. Legacy M3 specialists and validators have been retired.
+See the [retirement report](docs/m3-retirement-report.md) and
+[contracts](docs/m3-rebuild-contracts.md). Paid extraction requires explicit
+authorization; supplying a filing alone does not initiate a paid call.
+
 The Business Overview runs on its own, without the Financial, Structuring or
 Credit Orchestrator agents. Six narrow specialists (BO6 analyses interactions
 across the validated output of BO1-BO5) return evidence-based hypotheses;

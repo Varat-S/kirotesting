@@ -91,7 +91,8 @@ def test_both_m4_specialists_reach_governed_output_and_synthesis(db_session, tmp
     assert result.handoff["module_conclusions"]["M4"]["m4_debt_assessment"]["validated"]
     assert result.audit["challenger"]["rounds"]  # challenger ran
     # A clean debt result does not block the run.
-    assert result.conclusion_status in {"accepted", "accepted_with_qualification"}
+    assert result.conclusion_status == "human_review_required"
+    assert result.memo["module_conclusions"]["M3"]["status"] == "incomplete"
 
 
 def test_flag_off_preserves_single_specialist_behaviour(db_session, tmp_path):

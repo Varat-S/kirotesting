@@ -33,49 +33,10 @@
       {{ assessment.borrower.identification_limitation }}
     {% endif %}
   </p>
-  <p>M3 source status: <strong>{{ assessment.corporate_structure.source_status }}</strong>
-    {% if assessment.corporate_structure.validator_version %}· Validator <code>{{ assessment.corporate_structure.validator_version }}</code>{% endif %}</p>
-  <table><thead><tr><th>Legal entity</th><th>Classification</th><th>Verification</th><th>Evidence</th></tr></thead><tbody>
-  {% for entity in assessment.corporate_structure.legal_entities %}
-    <tr data-entity-id="{{ entity.entity_id }}"><td>{{ entity.legal_name }}<br><code>{{ entity.entity_id }}</code></td><td>{{ entity.classification }}</td><td>{{ entity.verification_status }}</td><td>{% for ref in entity.evidence_ids %}<code>{{ ref }}</code><br>{% else %}unavailable{% endfor %}</td></tr>
-  {% else %}<tr><td colspan="4">No validator-admitted legal entities.</td></tr>{% endfor %}
-  </tbody></table>
-  <h3>Ownership and cash-transfer edges</h3>
-  <ul>
-  {% for edge in assessment.corporate_structure.ownership_relationships %}
-    <li><code>{{ edge.parent_entity_id }}</code> → <code>{{ edge.subsidiary_entity_id }}</code> [{{ edge.confirmation_status }}]</li>
-  {% endfor %}
-  {% for edge in assessment.corporate_structure.cash_transfer_relationships %}
-    <li><code>{{ edge.source_entity_id }}</code> → <code>{{ edge.destination_entity_id }}</code> via {{ edge.mechanism }} [{{ edge.confirmation_status }}; {{ edge.transfer_evidence_state }}]</li>
-  {% endfor %}
-  {% if not assessment.corporate_structure.ownership_relationships and not assessment.corporate_structure.cash_transfer_relationships %}<li>No validator-admitted relationship edges.</li>{% endif %}
-  </ul>
-  <h3>Cash-flow locations</h3>
-  <table><thead><tr><th>Entity</th><th>Measure and scope</th><th>Amount</th><th>Role</th><th>Provenance</th></tr></thead><tbody>
-  {% for item in assessment.corporate_structure.cash_flow_locations %}
-    <tr data-cash-flow-id="{{ item.cash_flow_id }}"><td><code>{{ item.entity_id }}</code></td><td>{{ item.measure_type }} · {{ item.reporting_scope }}</td><td>{% if item.amount is not none %}{{ item.amount }} {{ item.units }} {{ item.currency }} · {{ item.period }}{% else %}not quantified{% endif %}</td><td>{{ item.cash_flow_roles | join(', ') }}</td><td>{{ item.provenance_status }}</td></tr>
-  {% else %}<tr><td colspan="5">No validator-admitted cash-flow locations.</td></tr>{% endfor %}
-  </tbody></table>
-  <h3>Structural credit findings and SO verification</h3>
-  <ul>{% for finding in assessment.corporate_structure.structural_credit_findings %}
-    <li data-finding-id="{{ finding.finding_id }}">{{ finding.credit_hypothesis }}
-      <em>[{{ finding.disposition }}; {{ finding.admissibility }}]</em>
-      {% for requirement in finding.downstream_verification_requirements %}<br>SO must verify: {{ requirement }}{% endfor %}
-    </li>
-  {% else %}<li>No admitted structural credit findings.</li>{% endfor %}</ul>
-  <h3>Information gaps and downstream dependencies</h3>
-  <ul>
-    {% for gap in assessment.corporate_structure.information_gaps %}<li>{{ gap }}</li>{% endfor %}
-    {% for dependency in assessment.corporate_structure.downstream_dependencies %}<li>{{ dependency.module }}: {{ dependency.question }}</li>{% endfor %}
-    {% if not assessment.corporate_structure.information_gaps and not assessment.corporate_structure.downstream_dependencies %}<li>No M3 gaps or dependencies were recorded.</li>{% endif %}
-  </ul>
-  {% if assessment.corporate_structure.audit.validation_issues or assessment.corporate_structure.audit.rejected_items %}
-  <details><summary>Audit-only M3 exclusions and validation issues</summary>
-    <p>These records are retained for traceability and are not part of the consumable legal-entity graph.</p>
-    <ul>{% for issue in assessment.corporate_structure.audit.validation_issues %}<li>{{ issue.rule_id }} — {{ issue.action }}: {{ issue.reason }}</li>{% endfor %}</ul>
-    <p>Rejected items: {{ assessment.corporate_structure.audit.rejected_items | length }}</p>
-  </details>
-  {% endif %}
+  <p>Legal structure verification: {{ assessment.corporate_structure.source_status }}. Submitted M3 corporate assumptions do not establish transaction obligor identity.</p>
+  <h3>Management continuity and information limitations</h3>
+  {% for c in assessment.management_claims %}<p><strong>{{ c.executive or 'Information limitation' }}</strong>: {{ c.text }} [{{ c.direction }}; {{ c.category }}] · {{ c.observation_id }} · {{ c.citation_ids | join(', ') }}</p>{% endfor %}
+  {% if assessment.m3_rebuild and assessment.m3_rebuild.structure.artifact %}<p>{{ assessment.m3_rebuild.structure.artifact.simulation_disclaimer }}</p>{% endif %}
 
   <h2>Business Overview findings</h2>
   {% for key, title in [

@@ -107,8 +107,6 @@ def _contains_cue(text: str, cues: tuple[str, ...]) -> bool:
 
 def build_debt_inputs(
     evidence,
-    *,
-    verified_m3_relationships: Optional[list[dict]] = None,
 ) -> Module4Inputs:
     """Assemble :class:`Module4Inputs` from ADMITTED snapshot evidence only.
 
@@ -156,18 +154,6 @@ def build_debt_inputs(
     if not structured:
         missing.append("No admitted structured financial fact references debt.")
 
-    # Verified M3 relationships are passed read-only and clearly context-labelled,
-    # never as debt facts. Supplied only when the caller explicitly opts in.
-    if verified_m3_relationships:
-        for rel in verified_m3_relationships:
-            if isinstance(rel, dict):
-                structured.append({
-                    "fact_id": rel.get("fact_id") or rel.get("relationship_id")
-                    or "m3_verified_relationship",
-                    "context": "verified_m3_entity_relationship",
-                    **{k: v for k, v in rel.items() if k not in {"fact_id"}},
-                })
-
     return Module4Inputs(
         sec_filing_snippets=snippets,
         structured_financials=structured,
@@ -183,7 +169,6 @@ def run_debt_specialist(
     case_id: str,
     snapshot_version: int,
     escalation_engine=None,
-    verified_m3_relationships: Optional[list[dict]] = None,
     key: str = "m4_debt",
 ) -> M4DebtResult:
     """Run the orchestrated debt specialist and return a governed result.
@@ -192,8 +177,7 @@ def run_debt_specialist(
     Validator-8 failure -> ``failed`` (+ mandatory escalation); missing essential
     evidence -> ``unavailable``. A clean run is ``validated``.
     """
-    inputs = build_debt_inputs(
-        evidence, verified_m3_relationships=verified_m3_relationships)
+    inputs = build_debt_inputs(evidence)
 
     # Fail CLOSED when no admitted debt evidence exists: report unavailable,
     # do not invent a successful analysis or call the model on empty inputs.

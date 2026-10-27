@@ -1,0 +1,286 @@
+{
+  "schema_version": "2.0",
+  "artifact_type": "llm_reproducible_corporate_structure_diagrams",
+  "purpose": "Reproduce the HCA corporate-structure diagram only, using simulated entity names, hypothetical ownership stakes and illustrative guarantor markings. This file is a single-company example of the reusable onboarding JSON format; no debt tables or lender commentary.",
+  "simulation_disclaimer": "THIS HCA ORGANISATION CHART IS A SIMULATED EDUCATIONAL EXAMPLE. Listed legal entities, ownership percentages, borrower designation and guarantor assignments are hypothetical and must not be described as HCA Healthcare\u2019s verified actual corporate structure.",
+  "how_to_use": [
+    "This file contains one case only: companies.HCA. Other companies must be supplied through their own separate single-company corporate-structure JSON files using this same schema.",
+    "Select the sole company entry and draw the structure from its nodes, ownership_links and visual_spec; do not infer or invent missing nodes or relationships.",
+    "Use display_name exactly, including punctuation and capitalization, and show role below each company name.",
+    "Render percentage labels only from ownership_links, and never infer unstated ownership.",
+    "Draw a shield when and only when is_guarantor=true.",
+    "Draw only the corporate structure, title, subtitle, legend and simulation footnote. No debt table, financial analysis, proposed loan, bank branding or other panels.",
+    "If the rendering system does not support precise pixel positioning, preserve hierarchy, left-to-right sibling order, node grouping, percentage labels and shield markers.",
+    "Never use this example unless it has been explicitly uploaded or associated with the current HCA analysis case; do not use it to infer any other company structure."
+  ],
+  "visual_spec": {
+    "canvas": {
+      "width_px": 1440,
+      "height_px": 1080,
+      "aspect_ratio": "4:3",
+      "background_hex": "#FFFFFF"
+    },
+    "header": {
+      "title": "Corporate Structure",
+      "title_position": {
+        "x_px": 32,
+        "y_px": 26
+      },
+      "title_font_size_px": 53,
+      "title_color_hex": "#142340",
+      "subtitle_format": "{company_display_name} (Illustrative / Simulated)",
+      "subtitle_position": {
+        "x_px": 34,
+        "y_px": 92
+      },
+      "subtitle_font_size_px": 26,
+      "subtitle_color_hex": "#142340"
+    },
+    "colors_by_role": {
+      "Parent Co": "#74150F",
+      "Parent / Borrower": "#74150F",
+      "HoldCo": "#B34B08",
+      "Borrower": "#C25A13",
+      "OpCo": "#D99337",
+      "Other": "#A7A7A7",
+      "JV": "#A7A7A7"
+    },
+    "node_style": {
+      "shape": "rounded_rectangle",
+      "corner_radius_px": 18,
+      "fill": "look up colors_by_role using node.role",
+      "name_font": "Arial or Aptos Bold",
+      "name_font_size_px": 19,
+      "role_font_size_px": 17,
+      "text_color_hex": "#FFFFFF",
+      "horizontal_alignment": "center",
+      "vertical_alignment": "center",
+      "name_wrapping": "Wrap long names into 2-3 centered lines within their rectangle. Reduce size to 15 px only when needed to prevent overflow.",
+      "role_format": "({role})",
+      "role_name_override": "If role is Parent / Borrower, show (Parent / Borrower) exactly.",
+      "guarantor_shield": {
+        "display_when": "node.is_guarantor is true",
+        "shape": "outlined shield with checkmark",
+        "stroke_hex": "#000000",
+        "fill": "none",
+        "position": "inside node near lower-right corner",
+        "size_px": 32
+      }
+    },
+    "ownership_links_style": {
+      "style": "black orthogonal (right-angle) connector from bottom center of parent node to top center of child node",
+      "line_color_hex": "#141414",
+      "line_width_px": 3,
+      "sibling_grouping": "For multiple children, draw one horizontal bus per parent with individual vertical drops to each child; all drops attach to the same parent.",
+      "bus_y_rule": "Bus lies approximately midway between the parent bottom and child top; do not overlap any node.",
+      "percentage_label": {
+        "format": "{ownership_percent}%",
+        "font_size_px": 19,
+        "font_color_hex": "#111111",
+        "location": "beside child-specific vertical drop, above child box",
+        "applies_to": "one specified parent-child link only"
+      },
+      "avoid": "Crossed lines, arrowheads, percent labels disconnected from their links, ambiguous step-parent relationships.",
+      "single_child_rule": "If a parent has exactly one child, do not draw a horizontal bus. Draw one perfectly straight vertical connector from the parent bottom center to the child top center, with no elbow, no jog and no lateral offset.",
+      "single_child_alignment_rule": "For any one-to-one parent-child relationship, the child node center_x_px must equal the parent node center_x_px. If supplied coordinates differ slightly, snap the child to the parent centerline.",
+      "bus_exception_rule": "Use a horizontal bus only when a parent has two or more children."
+    },
+    "legend": {
+      "x_px": 1155,
+      "y_px": 25,
+      "width_px": 255,
+      "height_px": 250,
+      "background_hex": "#F7F9FB",
+      "border_hex": "#C8D4DF",
+      "entries": [
+        {
+          "label": "Parent Co",
+          "color_hex": "#74150F"
+        },
+        {
+          "label": "HoldCo",
+          "color_hex": "#B34B08"
+        },
+        {
+          "label": "Borrower",
+          "color_hex": "#C25A13"
+        },
+        {
+          "label": "Operating Co",
+          "color_hex": "#D99337"
+        },
+        {
+          "label": "Other / JV",
+          "color_hex": "#A7A7A7"
+        },
+        {
+          "label": "Illustrative guarantor",
+          "symbol": "outlined shield with checkmark"
+        }
+      ]
+    },
+    "footer": {
+      "text": "Illustrative only \u2014 simulated legal entities, ownership stakes and guarantor assignments; not actual corporate information.",
+      "x_px": 30,
+      "y_px": 1038,
+      "font_size_px": 16,
+      "color_hex": "#6A6A6A"
+    },
+    "negative_requirements": [
+      "No JPMorgan or any other bank name.",
+      "No loan arrows or proposed-loan callouts.",
+      "No debt obligations list.",
+      "No credit commentary or bottom callout panels.",
+      "No financial metrics, data tables, or invented numbers.",
+      "No spell-check underlines or image watermarks.",
+      "No extra header disclaimer line below the subtitle.",
+      "No legend footnote or legend note outside the listed legend entries.",
+      "For single-child relationships, no bent, stepped or diagonal-looking connectors."
+    ]
+  },
+  "revision_notes": [
+    "Reduced original four-company refined file to companies.HCA only; preserved HCA nodes, ownership links, per-node coordinates, roles, guarantor flags and full visual_spec.",
+    "Removed the non-essential header disclaimer and legend note as in the refined source.",
+    "Specified straight vertical connectors for parent-child pairs where a parent has only one child."
+  ],
+  "reference_boxes": {
+    "hca_top": {
+      "center_x_px": 720,
+      "top_y_px": 180,
+      "width_px": 315,
+      "height_px": 90
+    },
+    "hca_intermediate": {
+      "center_x_px": 720,
+      "top_y_px": 313,
+      "width_px": 310,
+      "height_px": 90
+    },
+    "hca_borrower": {
+      "center_x_px": 720,
+      "top_y_px": 446,
+      "width_px": 310,
+      "height_px": 90
+    },
+    "hca_regional": {
+      "center_x_px": 145,
+      "top_y_px": 637,
+      "width_px": 222,
+      "height_px": 110
+    },
+    "hca_hosp_ops": {
+      "center_x_px": 537,
+      "top_y_px": 637,
+      "width_px": 222,
+      "height_px": 110
+    },
+    "hca_shared": {
+      "center_x_px": 974,
+      "top_y_px": 637,
+      "width_px": 216,
+      "height_px": 110
+    },
+    "hca_other": {
+      "center_x_px": 1302,
+      "top_y_px": 637,
+      "width_px": 213,
+      "height_px": 110
+    },
+    "hca_atlantic": {
+      "center_x_px": 145,
+      "top_y_px": 860,
+      "width_px": 173,
+      "height_px": 112
+    },
+    "hca_east": {
+      "center_x_px": 343,
+      "top_y_px": 860,
+      "width_px": 173,
+      "height_px": 112
+    },
+    "hca_west": {
+      "center_x_px": 537,
+      "top_y_px": 860,
+      "width_px": 173,
+      "height_px": 112
+    },
+    "hca_ambulatory": {
+      "center_x_px": 735,
+      "top_y_px": 860,
+      "width_px": 173,
+      "height_px": 112
+    },
+    "hca_revenue": {
+      "center_x_px": 920,
+      "top_y_px": 860,
+      "width_px": 173,
+      "height_px": 112
+    },
+    "hca_physician": {
+      "center_x_px": 1102,
+      "top_y_px": 860,
+      "width_px": 173,
+      "height_px": 112
+    },
+    "hca_jv": {
+      "center_x_px": 1302,
+      "top_y_px": 860,
+      "width_px": 175,
+      "height_px": 112
+    }
+  },
+  "reference_edges": [
+    [
+      "hca_top",
+      "hca_intermediate"
+    ],
+    [
+      "hca_intermediate",
+      "hca_borrower"
+    ],
+    [
+      "hca_borrower",
+      "hca_regional"
+    ],
+    [
+      "hca_regional",
+      "hca_atlantic"
+    ],
+    [
+      "hca_borrower",
+      "hca_hosp_ops"
+    ],
+    [
+      "hca_hosp_ops",
+      "hca_east"
+    ],
+    [
+      "hca_hosp_ops",
+      "hca_west"
+    ],
+    [
+      "hca_hosp_ops",
+      "hca_ambulatory"
+    ],
+    [
+      "hca_borrower",
+      "hca_shared"
+    ],
+    [
+      "hca_shared",
+      "hca_revenue"
+    ],
+    [
+      "hca_shared",
+      "hca_physician"
+    ],
+    [
+      "hca_borrower",
+      "hca_other"
+    ],
+    [
+      "hca_other",
+      "hca_jv"
+    ]
+  ]
+}

@@ -47,7 +47,7 @@ def test_each_specialist_is_discovered_as_an_artifact(bo_run):
     for aid in ("m1_revenue_quality", "m1_customer_stickiness", "m1_pricing_power",
                 "m1_operating_model", "m1_competitive_durability",
                 "m1_resilience_integration", "m2_industry",
-                "m3_corporate_management", "m4_strategy_capital"):
+                "m4_strategy_capital"):
         assert aid in agent_entries, aid
 
 
@@ -67,10 +67,10 @@ def test_graph_nodes_resolve_to_per_agent_artifacts_in_same_run(bo_run):
     result, out = bo_run
     g = build_pipeline_graph(_manifest(out))
     run_id = result.analysis_run_id
-    m3 = next(n for n in g["nodes"] if n["id"] == "agent.m3_corporate_management")
+    m3 = next(n for n in g["nodes"] if n["id"] == "agent.m4_strategy_capital")
     syn = next(n for n in g["nodes"] if n["id"] == "synthesis_v1")
     ch = next(n for n in g["nodes"] if n["id"] == "challenger")
-    assert m3["artifact_id"] == f"bo.agent.m3_corporate_management.{run_id}"
+    assert m3["artifact_id"] == f"bo.agent.m4_strategy_capital.{run_id}"
     assert syn["artifact_id"] == f"bo.synthesis.{run_id}"
     assert ch["artifact_id"] == f"bo.challenger.{run_id}"
     # Every resolved per-agent id carries the SAME run id (no cross-run leakage).
@@ -83,14 +83,14 @@ def test_graph_nodes_resolve_to_per_agent_artifacts_in_same_run(bo_run):
 def test_clicking_specialist_returns_its_own_output_not_the_memo(bo_run):
     result, out = bo_run
     run_id = result.analysis_run_id
-    info = inspect_node(h.CASE, f"bo.agent.m3_corporate_management.{run_id}",
+    info = inspect_node(h.CASE, f"bo.agent.m4_strategy_capital.{run_id}",
                         str(out), repo_root=str(out))
     assert info["status"] == "validated"
     payload = info["payload"]
     # The slice is the M3 agent's own record: its agent block + hypotheses only.
-    assert payload["agent_id"] == "m3_corporate_management"
-    assert payload["agent"]["agent_id"] == "m3_corporate_management"
-    assert all(hhh["agent_id"] == "m3_corporate_management"
+    assert payload["agent_id"] == "m4_strategy_capital"
+    assert payload["agent"]["agent_id"] == "m4_strategy_capital"
+    assert all(hhh["agent_id"] == "m4_strategy_capital"
                for hhh in payload["hypotheses"])
     # It is NOT the whole memo (no memo-level sections).
     assert "sections" not in payload

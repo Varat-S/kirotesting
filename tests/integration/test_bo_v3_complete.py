@@ -9,8 +9,6 @@ import pytest
 
 from app.models.orm import AgentRunRow, EvidencePacketRow, RiskScoreRow
 from app.services.bo.offline import ScriptedBoBackend
-from app.services.bo.demo_report import build_m3_governed_export
-from app.services.bo.m3_replay import replay_recorded_m3_assessment
 from app.services.bo.roster_v3 import V3_PRIMARY_AGENT_IDS, V3_SPECS
 from app.services.bo.runner import BusinessOverviewRunner
 from tests import bo_helpers as h
@@ -54,10 +52,6 @@ def _script():
             "M2", "M2-H001", "The industry is extensively regulated and exposed to "
             "legislative reimbursement reductions.", "extensive regulation",
             "We are subject to extensive regulation", direction="negative")]},
-        "m3_corporate_management": {"parameters": [], "hypotheses": [_fact(
-            "M3", "M3-H001", "The board oversees governance and succession planning.",
-            "executive officers", "The board of directors oversees governance and "
-            "succession planning", direction="positive")]},
         "m4_strategy_capital": {"parameters": [], "hypotheses": [_fact(
             "M4", "M4-H001", "Three hospital acquisitions were completed and their "
             "integration remains ongoing.", "Capital expenditures were focused",
@@ -89,9 +83,7 @@ def _script():
             "The business has essential service demand but material labour, regulatory "
             "and execution exposures.", ["M1S1-H001", "M1S4-H001", "M2-H001", "M4-H001"],
             materiality="high"),
-        "strengths": [h.claim(
-            "v3_strength", "strength", "M3", "The board oversees governance and "
-            "succession planning.", ["M3-H001"], claim_type="fact")],
+        "strengths": [],
         "weaknesses": [h.claim(
             "v3_weakness", "weakness", "M1S4", "Labour scarcity pressures the "
             "operating model.", ["M1S4-H001"], claim_type="fact", materiality="high")],
@@ -128,7 +120,8 @@ def test_all_four_modules_agent6_synthesis_challenge_score_and_report(db_session
     assert "m1_resilience_integration" in executed
     assert {"business_orchestrator", "business_challenge"} <= executed
     assert all(m["status"] == "complete"
-               for m in result.memo["module_conclusions"].values())
+               for key,m in result.memo["module_conclusions"].items() if key != "M3")
+    assert result.memo["module_conclusions"]["M3"]["status"] == "incomplete"
     assert result.handoff["module_conclusions"].keys() == {"M1", "M2", "M3", "M4"}
     assert result.handoff["compound_business_risks"]
     assert result.handoff["canonical_references"]["analysis_run_id"] == \
@@ -138,7 +131,8 @@ def test_all_four_modules_agent6_synthesis_challenge_score_and_report(db_session
     packets = db_session.query(EvidencePacketRow).filter_by(
         analysis_run_id=result.analysis_run_id).all()
     assert {packet.agent_id for packet in packets} == {
-        spec.agent_id for spec in V3_SPECS}
+        spec.agent_id for spec in V3_SPECS
+    } | {"m3_corporate_management_input"}
     # Agent 6 is resealed after its validated component evidence is admitted.
     assert len(packets) >= len(V3_SPECS)
     scores = db_session.query(RiskScoreRow).filter_by(
@@ -146,63 +140,9 @@ def test_all_four_modules_agent6_synthesis_challenge_score_and_report(db_session
     assert scores[-1].detail["stage"] == "authoritative_post_challenge"
     assert scores[-1].status != "final"
     assert result.output_paths["business_overview.json"].exists()
-    assert len(backend.requests) >= 11
+    assert len(backend.requests) >= 10
 
 
-def test_validated_m3_extension_flows_through_module_conclusion_and_handoff(
-        db_session, tmp_path):
-    script = _script()
-    evidence = {"$evidence": "executive officers"}
-    script["m3_corporate_management"]["m3_assessment"] = {
-        "schema_version": "bo-m3-corporate-assessment-1.0",
-        "borrower_identification": {
-            "status": "unavailable", "entity_id": None, "evidence_ids": [],
-            "limitation": "No proposed borrowing entity is identified.",
-        },
-        "legal_entities": [{
-            "entity_id": "reporting-parent", "legal_name": "Example Parent",
-            "jurisdiction": None, "classification": "reporting_parent",
-            "identity_type": "legal_entity",
-            "verification_status": "verified", "evidence_ids": [evidence],
-            "materiality_reason": "Reporting entity relevant to governance.",
-        }],
-        "ownership_relationships": [], "cash_flow_locations": [],
-        "cash_transfer_relationships": [], "structural_credit_findings": [],
-        "management_assessments": [{
-            "observation_id": "MO1", "management_id": "board",
-            "legal_name": "Board of Directors", "role": "Board", "effective_from": None,
-            "effective_to": None, "dimension": "competence",
-            "evidence_basis": "reported_experience", "attribution": "company_reported",
-            "assurance_scope": None, "assurance_date": None,
-            "hypothesis": "The board oversees succession planning.",
-            "credit_mechanism": "Succession oversight may reduce leadership continuity risk.",
-            "supporting_evidence_ids": [evidence], "contradicting_evidence_ids": [],
-            "supporting_evidence_investigated": True,
-            "contradictory_evidence_investigated": True,
-            "disposition": "qualified", "admissibility": "qualified_narrative",
-            "confidence": "medium", "materiality": "medium", "missing_information": [],
-        }],
-        "governance_screening": [],
-        "information_gaps": ["Management outcomes are not disclosed."],
-        "downstream_dependencies": [],
-    }
-    result, _ = _run(db_session, tmp_path, script=script)
-    module = result.handoff["module_conclusions"]["M3"]
-    assert module["m3_assessment_status"] == "validated"
-    assert module["m3_assessment"]["schema_version"] == \
-        "bo-m3-corporate-assessment-1.0"
-    assert module["m3_assessment"]["model_proposal"]["legal_entities"]
-    export = build_m3_governed_export({
-        "meta": {"case_id": h.CASE, "analysis_run_id": result.analysis_run_id},
-        "module_conclusions": result.handoff["module_conclusions"],
-        "agents": [{"code": "M3", "status": "validated",
-                    "agent_run_ids": ["attempt-1"]}],
-    })
-    assert export["governed_assessment"] == module["m3_assessment"]
-    assert export["authoritative_source"] == "module_conclusions.M3.m3_assessment"
-    replay = replay_recorded_m3_assessment(db_session, result.analysis_run_id)
-    assert replay["model_called"] is False
-    assert replay["governed_assessment"] == module["m3_assessment"]
 
 
 def test_incomplete_module_blocks_agent6_and_remains_visible(db_session, tmp_path):

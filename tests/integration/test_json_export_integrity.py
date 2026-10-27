@@ -23,9 +23,23 @@ from app.services.registry.explorer import (
     load_artifact_bytes,
 )
 
-DEMO_CASE = "demo:hca_simulated"
-M3_FILE = Path(
-    "examples/bo_m3/structural_credit/demo_output/hca_simulated/m3_analysis.json")
+from tests.registry_fixture import write_fixture,CASE,MANAGEMENT_ID
+DEMO_CASE = CASE
+DEMO_ROOT = Path("output")
+M3_FILE = Path("unused")
+
+
+@pytest.fixture(autouse=True)
+def current_m3_fixture(tmp_path,monkeypatch):
+    global DEMO_ROOT,M3_FILE
+    DEMO_ROOT=tmp_path/'output'
+    directory=write_fixture(DEMO_ROOT)
+    M3_FILE=directory/'Senior Management Assessment.json'
+    monkeypatch.setenv('OUTPUT_DIR',str(DEMO_ROOT))
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 def _q(s: str) -> str:
@@ -41,16 +55,16 @@ def client() -> TestClient:
 
 def test_original_bytes_match_disk_and_hash(tmp_path):
     raw, original_sha, _ = load_artifact_bytes(
-        DEMO_CASE, "m3.analysis", "output", repo_root=".")
+        DEMO_CASE, MANAGEMENT_ID, str(DEMO_ROOT), repo_root=".")
     disk = M3_FILE.read_bytes()
     assert raw == disk  # byte-for-byte
     assert original_sha == hashlib.sha256(disk).hexdigest()
 
 
 def test_normalized_hash_is_canonical_and_distinct():
-    payload, _ = load_artifact(DEMO_CASE, "m3.analysis", "output", repo_root=".")
+    payload, _ = load_artifact(DEMO_CASE, MANAGEMENT_ID, str(DEMO_ROOT), repo_root=".")
     _, original_sha, _ = load_artifact_bytes(
-        DEMO_CASE, "m3.analysis", "output", repo_root=".")
+        DEMO_CASE, MANAGEMENT_ID, str(DEMO_ROOT), repo_root=".")
     canonical_sha = content_hash(payload)
     # The canonical hash matches the recorded entry hash, and differs from the
     # original file hash (the recorded file is pretty-printed, not canonical).
@@ -82,7 +96,7 @@ def test_slice_artifact_has_no_original_bytes(tmp_path):
 # -- HTTP endpoints -----------------------------------------------------------
 
 def test_original_endpoint_preserves_bytes_and_sets_hash_header(client):
-    base = f"/pipeline/{_q(DEMO_CASE)}/node/{_q('m3.analysis')}"
+    base = f"/pipeline/{_q(DEMO_CASE)}/node/{_q(MANAGEMENT_ID)}"
     r = client.get(base + "/original.json")
     assert r.status_code == 200
     assert r.content == M3_FILE.read_bytes()
@@ -91,17 +105,17 @@ def test_original_endpoint_preserves_bytes_and_sets_hash_header(client):
 
 
 def test_normalized_endpoint_is_canonical_and_labelled(client):
-    base = f"/pipeline/{_q(DEMO_CASE)}/node/{_q('m3.analysis')}"
+    base = f"/pipeline/{_q(DEMO_CASE)}/node/{_q(MANAGEMENT_ID)}"
     r = client.get(base + "/normalized.json")
     assert r.status_code == 200
-    payload, _ = load_artifact(DEMO_CASE, "m3.analysis", "output", repo_root=".")
+    payload, _ = load_artifact(DEMO_CASE, MANAGEMENT_ID, str(DEMO_ROOT), repo_root=".")
     assert json.loads(r.content) == payload               # semantically equivalent
     assert r.headers["X-Canonical-SHA256"] == content_hash(payload)
     assert r.headers["X-Export-Kind"] == "normalized-canonical"
 
 
 def test_download_json_backwards_compatible_returns_original(client):
-    base = f"/pipeline/{_q(DEMO_CASE)}/node/{_q('m3.analysis')}"
+    base = f"/pipeline/{_q(DEMO_CASE)}/node/{_q(MANAGEMENT_ID)}"
     r = client.get(base + "/download.json")
     assert r.status_code == 200
     # Whole-file artifact -> original bytes preserved on the legacy endpoint.

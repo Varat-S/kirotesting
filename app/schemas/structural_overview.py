@@ -4,22 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from app.schemas.bo_m3 import (
-    BorrowerIdentification,
-    CashFlowLocation,
-    CashTransferRelationship,
-    LegalEntity,
-    M3ValidationIssue,
-    ManagementObservation,
-    OwnershipRelationship,
-    StructuralCreditFinding,
-)
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-ASSESSMENT_SCHEMA_VERSION = "structural-overview-assessment-1.1"
-TRANSFORMATION_VERSION = "bo-to-so-1.1"
+
+
+ASSESSMENT_SCHEMA_VERSION = "structural-overview-assessment-1.2"
+TRANSFORMATION_VERSION = "bo-to-so-1.2"
 
 
 class StrictModel(BaseModel):
@@ -101,37 +92,19 @@ class BusinessAssessment(StrictModel):
     compound_risks: list[CompoundRisk] = Field(default_factory=list)
 
 
-class CorporateStructureAudit(StrictModel):
-    """Non-consumable M3 material retained only for traceability."""
-
-    validation_issues: list[M3ValidationIssue] = Field(default_factory=list)
-    rejected_items: list[dict[str, Any]] = Field(default_factory=list)
-    model_proposal: dict[str, Any] = Field(default_factory=dict)
+class BorrowerIdentification(StrictModel):
+    status: Literal["unavailable"] = "unavailable"
+    entity_id: None = None
+    evidence_ids: list[str] = Field(default_factory=list)
+    limitation: str
 
 
 class CorporateStructureAssessment(StrictModel):
-    """Governed M3 output crossing the BO-to-SO boundary.
-
-    Lists outside ``audit`` contain only records admitted by validator 7.  SO
-    must still independently verify obligor identity, ranking, restrictions,
-    and facility-specific legal effect.
-    """
-
-    source_status: Literal["validated", "unavailable"]
-    source_schema_version: str | None = None
-    validator_id: str | None = None
-    validator_version: str | None = None
+    """SO legal/transaction boundary. Submitted case assumptions are separate."""
+    source_status: Literal["unavailable"] = "unavailable"
     borrower_identification: BorrowerIdentification
-    legal_entities: list[LegalEntity] = Field(default_factory=list)
-    ownership_relationships: list[OwnershipRelationship] = Field(default_factory=list)
-    cash_flow_locations: list[CashFlowLocation] = Field(default_factory=list)
-    cash_transfer_relationships: list[CashTransferRelationship] = Field(default_factory=list)
-    structural_credit_findings: list[StructuralCreditFinding] = Field(default_factory=list)
-    management_assessments: list[ManagementObservation] = Field(default_factory=list)
-    governance_screening: list[StructuralCreditFinding] = Field(default_factory=list)
     information_gaps: list[str] = Field(default_factory=list)
     downstream_dependencies: list[dict[str, str]] = Field(default_factory=list)
-    audit: CorporateStructureAudit = Field(default_factory=CorporateStructureAudit)
 
 
 class EvidenceReference(StrictModel):
@@ -177,8 +150,17 @@ class AssessmentAuditMetadata(StrictModel):
     canonical_references: dict[str, Any] = Field(default_factory=dict)
 
 
+class ManagementMemoClaim(StrictModel):
+    observation_id: str
+    executive: str | None
+    direction: Literal["positive", "negative", "neutral", "unavailable"]
+    category: Literal["transition", "integration", "continuity", "information_gap"]
+    text: str
+    citation_ids: list[str]
+
+
 class StructuralOverviewAssessment(StrictModel):
-    schema_version: Literal["structural-overview-assessment-1.1"] = ASSESSMENT_SCHEMA_VERSION
+    schema_version: Literal["structural-overview-assessment-1.2"] = ASSESSMENT_SCHEMA_VERSION
     assessment_id: str
     status: Literal["complete", "partial", "blocked"]
     source_handoff_id: str
@@ -186,6 +168,8 @@ class StructuralOverviewAssessment(StrictModel):
     borrower: BorrowerContext
     business_assessment: BusinessAssessment
     corporate_structure: CorporateStructureAssessment
+    m3_rebuild: dict[str, Any] | None = None
+    management_claims: list[ManagementMemoClaim] = Field(default_factory=list)
     evidence_references: list[EvidenceReference] = Field(default_factory=list)
     governance: GovernanceState
     downstream_dependencies: DownstreamDependencies
@@ -193,3 +177,9 @@ class StructuralOverviewAssessment(StrictModel):
     final_credit_score: int | None = None
     facility_approval: str | None = None
     content_hash: str
+
+    @model_validator(mode="after")
+    def validate_management_narrative(self):
+        from app.services.bo.m3_rebuild.narrative import validate_claims
+        validate_claims([c.model_dump(mode="json") for c in self.management_claims], self.m3_rebuild)
+        return self

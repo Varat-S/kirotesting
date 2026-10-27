@@ -128,7 +128,7 @@ M1_AGENT_6 = BoAgentSpec(
 
 M2_INDUSTRY = BoAgentSpec(
     "M2", "m2_industry", "Industry Information",
-    ("regulatory_dependency_assessment", "external_event_exposure_assessment"),
+    ("regulatory_dependency_assessment", "external_event_exposure_assessment", "litigation_risk_assessment", "material_event_assessment"),
     (
         _q("m2.structure", "support", r"industry", r"market structure",
            r"fragmented", r"consolidat", r"competitors?"),
@@ -141,43 +141,6 @@ M2_INDUSTRY = BoAgentSpec(
            r"market growth", r"technological change", r"sustainable cash"),
     ), module="M2", dimension="industry", validator_id="validator_6",
     indicator_groups=("growth", "payer", "geography", "segment"),
-)
-
-M3_CORPORATE_MANAGEMENT = BoAgentSpec(
-    "M3", "m3_corporate_management", "Corporate Structure & Senior Management",
-    ("management_quality_assessment", "key_person_dependency_assessment",
-     "governance_concern_assessment", "litigation_risk_assessment",
-     "material_event_assessment"),
-    (
-        _reuse("m3", "bo4.management"),
-        _reuse("m3", "bo5.litigation"),
-        _q("m3.structure", "support", r"subsidiar", r"corporate structure",
-           r"operating entities", r"joint venture", r"ownership", r"parent company"),
-        _q("m3.named_legal_entities", "support", r"significant subsidiaries?",
-           r"name of (?:the )?subsidiar", r"Exhibit 21", r"jurisdiction",
-           r"incorporat(?:ed|ion)",
-           r"\b(?:Inc\.?|LLC|L\.L\.C\.|L\.P\.|Ltd\.?|Corporation)\b"),
-        _q("m3.cash_location", "support", r"cash (?:flow|generated|held)",
-           r"operating cash", r"distributions?", r"dividends?", r"cash pool"),
-        _q("m3.cash_transfer_limits", "contradict", r"restricted payments?",
-           r"distribution restrictions?", r"noncontrolling interests?",
-           r"intercompany", r"joint venture agreements?", r"prior-ranking"),
-        _q("m3.management_outcomes", "support", r"executive officers?",
-           r"appointed", r"resigned", r"succession", r"operating performance",
-           r"remediation", r"restatement"),
-        _q("m3.management_limits", "contradict", r"succession", r"key person",
-           r"material weakness", r"internal control", r"misconduct",
-           r"enforcement", r"conflicts? of interest"),
-        _q("m3.related_parties", "contradict", r"related part(?:y|ies)",
-           r"controlling shareholder", r"affiliate transactions?", r"conflict"),
-        _reuse("m3", "bo5.forecast_vs_existing"),
-    ), module="M3", dimension="corporate_structure_management",
-    validator_id="validator_7", indicator_groups=("segment",),
-    task_sections=("corporate_and_cash_flow_structure",
-                   "senior_management_competence",
-                   "senior_management_credibility_integrity",
-                   "governance_and_related_party_screening",
-                   "litigation_and_material_events"),
 )
 
 M4_STRATEGY_CAPITAL = BoAgentSpec(
@@ -203,7 +166,7 @@ M4_STRATEGY_CAPITAL = BoAgentSpec(
 V3_SPECS: tuple[BoAgentSpec, ...] = (
     M1_REVENUE_QUALITY, M1_CUSTOMER_STICKINESS, M1_PRICING_POWER,
     M1_OPERATING_MODEL, M1_COMPETITIVE_DURABILITY, M1_AGENT_6,
-    M2_INDUSTRY, M3_CORPORATE_MANAGEMENT, M4_STRATEGY_CAPITAL,
+    M2_INDUSTRY, M4_STRATEGY_CAPITAL,
 )
 V3_SPEC_BY_AGENT = {s.agent_id: s for s in V3_SPECS}
 V3_SPEC_BY_CODE = {s.code: s for s in V3_SPECS}
@@ -225,9 +188,9 @@ BO_V2_TO_V3_PARAMETER_OWNER: dict[str, tuple[str, str]] = {
 # Review notes that travel with the ownership decision (17 Oct 2026).
 OWNERSHIP_NOTES: dict[str, str] = {
     "litigation_risk_assessment":
-        "Owned by M3 subject to a future review of legal-risk ownership.",
+        "Legacy M3 ownership retired; no subjective M3 classification is produced.",
     "material_event_assessment":
-        "M3 assesses company-specific events; cross-module synthesis assesses "
+        "M2 covers external context; cross-module synthesis assesses "
         "their wider interactions.",
     "external_event_exposure_assessment":
         "Owned by M2. Geographic concentration evidence may be consumed by M1S2 "
@@ -244,7 +207,7 @@ V3_CHECK_ASSIGNMENT: dict[str, tuple[str, ...]] = {
     "hc.contract_rates_vs_volumes": ("M1S1", "M1S2"),
     "hc.unit_revenue_vs_pricing": ("M1S3",),
     "hc.revenue_realisation": ("M1S3",),
-    "hc.operating_entities": ("M3",),
+    "hc.operating_entities": ("M1S4",),
     "hc.workforce": ("M1S4",),
     "hc.geography": ("M2",),
     "hc.local_competition": ("M1S5",),

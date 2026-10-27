@@ -218,7 +218,7 @@ def test_narrow_agents_run_concurrently_in_wave0(db_session):
     ex = DagExecutor(db_session, reg, AgentRuntime(client), max_concurrency=6)
     report = ex.run(_seed_run(db_session), build_task=build, on_result=on_result)
 
-    assert len(report.executed) == 15  # the 15 narrow/early-extraction agents
+    assert len(report.executed) == 14  # the 15 narrow/early-extraction agents
     rows = db_session.query(ParameterResultRow).all()
     assert len(rows) > 0
     assert all(r.acceptance_state == "accepted" for r in rows)

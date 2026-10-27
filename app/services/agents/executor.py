@@ -283,6 +283,21 @@ class DagExecutor:
         bad = set(report.failed) | set(report.skipped)
         return any(dep in bad for dep in agent.dependencies)
 
+    def persist_runtime_output(self, output: AgentRuntimeOutput) -> None:
+        """Persist an independently scheduled specialist through the common audit path."""
+        if self._session is not None and output.generate_result is not None:
+            self._runtime._client.log_run(output.generate_result)
+        self._persist_agent_run(output.agent_run)
+        if self._audit is not None:
+            from app.services.audit.log import EventType, ActorType
+            run = output.agent_run
+            self._audit.record(EventType.AGENT_RUN, case_id=run.case_id,
+                actor_type=ActorType.SYSTEM, actor_id=run.agent_id,
+                after={"run_id": run.run_id, "analysis_run_id": run.analysis_run_id,
+                       "validation_status": run.validation_status.value,
+                       "input_hash": run.input_hash},
+                linked_objects=[run.run_id, run.input_hash])
+
     def _persist_and_record(
         self,
         agent_id: str,

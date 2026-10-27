@@ -14,7 +14,10 @@ class SourceInput(BaseModel):
     filename: str
     path: str | None = None
     data: bytes | None = Field(default=None, repr=False, exclude=True)
-    parser: Literal["xbrl", "inline_xbrl", "xlsx", "csv", "pdf_table", "pdf_text"]
+    parser: Literal[
+        "xbrl", "inline_xbrl", "xlsx", "csv", "pdf_table", "pdf_text",
+        "structured_json",
+    ]
     tags: list[str] = Field(default_factory=list)
     available_at: datetime
     entity_id: str
@@ -77,6 +80,16 @@ class SectorBenchmarkInput(BaseModel):
     identity: CompanyIdentityInput = Field(default_factory=CompanyIdentityInput)
 
 
+class Module3Input(BaseModel):
+    """References to sources admitted with the normal case package."""
+    model_config = ConfigDict(extra="forbid")
+    corporate_source: str | None = None
+    management_source: str | None = None
+    company: str | None = None
+    filing_period: str | None = None
+    extraction: dict | None = None
+
+
 class SourcePackage(BaseModel):
     model_config = ConfigDict(extra="forbid")
     as_of_date: date
@@ -86,6 +99,7 @@ class SourcePackage(BaseModel):
     sources: list[SourceInput]
     sec_bundles: list[SecBundleInput] = Field(default_factory=list)
     sector_benchmark: SectorBenchmarkInput | None = None
+    module3: Module3Input | None = None
 
     @model_validator(mode="after")
     def validate_package(self):
@@ -98,6 +112,27 @@ class SourcePackage(BaseModel):
             raise ValueError("Each source must identify a registered entity.")
         if any(b.entity_id not in ids for b in self.sec_bundles):
             raise ValueError("Each SEC bundle must identify a registered entity.")
+        if self.module3 is not None:
+            by_filename: dict[str, list[SourceInput]] = {}
+            for source in self.sources:
+                by_filename.setdefault(source.filename, []).append(source)
+            selections = (
+                ("corporate_source", self.module3.corporate_source, {"structured_json"}),
+                ("management_source", self.module3.management_source,
+                 {"pdf_text", "pdf_table"}),
+            )
+            for field, filename, parsers in selections:
+                if filename is None:
+                    continue
+                matches = by_filename.get(filename, [])
+                if len(matches) != 1:
+                    raise ValueError(
+                        f"module3.{field} must name exactly one declared source"
+                    )
+                if matches[0].parser not in parsers:
+                    raise ValueError(
+                        f"module3.{field} has incompatible parser {matches[0].parser!r}"
+                    )
         return self
 
     @classmethod

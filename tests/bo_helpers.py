@@ -266,12 +266,6 @@ def good_script() -> dict:
     }
     script["bo_operations_management"] = {
         "parameters": [
-            param("management_quality_assessment", "adequate", "executive officers",
-                  ["BO4-H004"]),
-            param("key_person_dependency_assessment", "low", "succession planning",
-                  ["BO4-H004"]),
-            param("governance_concern_assessment", "none", "board of directors",
-                  ["BO4-H004"]),
             param("workforce_cost_resilience_assessment", "pressured",
                   "nursing shortage", ["BO4-H001"]),
             param("capex_strategy_assessment", "growth_oriented",
@@ -306,13 +300,6 @@ def good_script() -> dict:
                     "parameter_result_id": {"$indicator": "capex_to_revenue"},
                     "value": {"$indicator_value": "capex_to_revenue"},
                     "unit": "ratio", "period": PERIOD, "denominator": "revenue"}]),
-            hyp("BO4-H004",
-                "Long-tenured executive officers are overseen by a board that "
-                "covers governance and succession planning.", "fact", "positive",
-                "supported", support=["executive officers"],
-                quotes=[("executive officers",
-                         "The board of directors oversees governance and succession "
-                         "planning")]),
         ],
     }
     script["bo_regulation_external"] = {

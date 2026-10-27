@@ -39,9 +39,6 @@ RUBRIC_SOURCES: dict[str, tuple[str, str]] = {
     "switching_cost_assessment": ("competitive_position_risk_signal", "switching_costs"),
     "pricing_power_assessment": ("competitive_position_risk_signal", "pricing_power"),
     "competitive_pressure_assessment": ("competitive_position_risk_signal", "competitive_pressure"),
-    "management_quality_assessment": ("management_governance_risk_signal", "management_quality"),
-    "key_person_dependency_assessment": ("management_governance_risk_signal", "key_person_dependency"),
-    "governance_concern_assessment": ("management_governance_risk_signal", "governance_concern"),
 }
 
 CLAIM_LISTS = ("strengths", "weaknesses", "key_drivers", "material_risks")

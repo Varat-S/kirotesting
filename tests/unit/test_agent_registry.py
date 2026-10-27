@@ -21,7 +21,7 @@ from app.services.agents.registry import (
 
 def test_roster_is_exactly_27_logical_jobs():
     reg = default_registry()
-    assert len(reg) == 27
+    assert len(reg) == 26
 
 
 def test_roster_composition():
@@ -32,7 +32,7 @@ def test_roster_composition():
         by_topic[d.topic] += 1
         tiers[d.model_tier] += 1
     # 6 business narrow + business orchestrator + business challenge = 8
-    assert by_topic[Topic.BUSINESS] == 8
+    assert by_topic[Topic.BUSINESS] == 7
     assert by_topic[Topic.FINANCIAL] == 8
     # 3 extraction + 4 mitigant + orchestrator + challenge = 9
     assert by_topic[Topic.STRUCTURING] == 9
@@ -86,7 +86,7 @@ def test_topological_waves_respect_dependencies():
     reg = default_registry()
     waves = reg.topological_waves()
     # Wave 0 is the narrow + early-extraction set (no dependencies) ~ 15 jobs.
-    assert len(waves[0]) == 15
+    assert len(waves[0]) == 14
     # Orchestrators appear only after their narrow agents.
     position = {a: i for i, wave in enumerate(waves) for a in wave}
     assert position["business_orchestrator"] > position["business_model"]
@@ -203,13 +203,14 @@ def test_facility_terms_agent_excludes_collateral():
 def test_business_agents_have_distinct_narrow_topics():
     reg = default_registry()
     bm = set(reg.get("business_model").selector_identity)
-    mg = set(reg.get("management_governance").selector_identity)
+    assert "management_governance" not in reg
+    mg = set()
     cp = set(reg.get("competition_pricing").selector_identity)
     # business_model does not pull the management corpus; management_governance
     # does not pull the competitive-position corpus (review point 6).
     assert "narrative:management" not in bm
     assert "narrative:competitive_position" not in mg
-    assert "narrative:management" in mg
+    assert not mg
     assert "narrative:competitive_position" in cp
     # The six business agents are not all identical.
     identities = {d.agent_id: tuple(d.selector_identity)

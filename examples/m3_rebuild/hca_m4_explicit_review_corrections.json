@@ -1,0 +1,58 @@
+{
+  "author": "Explicit closeout review by coding assistant, authorized by user",
+  "reason": "Correct two overstatements identified during inspection of the saved live Validator 7 answer; preserve factual admission and raw responses.",
+  "source_sha256": "64fa678981afe7c451820e9f59fc44ab41373702edc9d9175a6ec8a289df45a6",
+  "original_judgments_sha256": "5285c78b5bc5c188b54db6b1aa411045624c76d5643e29dd4909f217f48b5132",
+  "original_review_sha256": "c5d20efe118aacc83c4faf704ee000e827ed5d4801db45bd583c96ebba50397a",
+  "decisions": [
+    {
+      "judgment_id": "jud_02",
+      "outcome": "qualified",
+      "reason": "Joining HCA in 1996 does not establish finance-role tenure since 1996. Disclosed finance history starts in July 2004; an internal transition does not establish lower integration risk or financial benefit.",
+      "supporting_claim_ids": [
+        "fact_05",
+        "executive:5:role:1",
+        "executive:5:role:2",
+        "executive:5:role:3",
+        "executive:5:role:4"
+      ],
+      "reviewed_text": "Marks became CFO in May 2024 after disclosed internal finance roles dating to July 2004. This supports neutral internal-transition context; execution in the CFO role and any financial benefit remain unestablished.",
+      "limitations": [
+        "The 1996 company-joining date is not a finance-role start date."
+      ]
+    },
+    {
+      "judgment_id": "jud_04",
+      "outcome": "qualified",
+      "reason": "Roster and current appointments alone do not establish cumulative career experience. Accepted operating, finance, human-resources and clinical role histories support a narrower continuity inference, not demonstrated stability or performance.",
+      "supporting_claim_ids": [
+        "executive:1:role:3",
+        "executive:1:role:4",
+        "executive:2:role:1",
+        "executive:3:role:1",
+        "executive:4:role:1",
+        "executive:5:role:4",
+        "executive:7:role:1"
+      ],
+      "reviewed_text": "Several accepted internal career histories may support continuity of company knowledge, a limited credit-positive consideration. Those histories do not establish management competence, operating performance or protection from cost, labor and regulatory pressures.",
+      "limitations": [
+        "Career-history references replace the insufficient roster/appointment-only basis."
+      ]
+    }
+  ],
+  "overall": {
+    "signal": "credit_positive",
+    "text": "The surviving management evidence supports a limited continuity positive from Hazen's disclosed internal experience and several accepted team career histories. Marks' May 2024 CFO appointment follows disclosed finance roles dating to July 2004; it supports neutral transition monitoring, not finance tenure since his 1996 company joining. McAlevey's expanded remit also warrants neutral transition monitoring. These histories do not demonstrate competence, execution outcomes or a measurable financial benefit. Labor, regulatory and debt-service risks remain relevant; two inaccurate citation claims remain excluded.",
+    "judgment_ids": [
+      "jud_01",
+      "jud_02",
+      "jud_03",
+      "jud_04"
+    ],
+    "limitations": [
+      "Continuity is a bounded analytical inference; competence and realized credit effects are unestablished.",
+      "Performance, incentive alignment and future execution remain unverified.",
+      "Two inaccurate citation claims are excluded without discarding independently supported findings."
+    ]
+  }
+}

@@ -129,15 +129,11 @@ BO_AGENT_SPECS: tuple[BoAgentSpec, ...] = (
         indicator_groups=('growth', 'payer', 'segment'),
     ),
     BoAgentSpec(
-        "BO4", "bo_operations_management", "Operations, Management & Execution",
-        ("management_quality_assessment", "key_person_dependency_assessment",
-         "governance_concern_assessment", "acquisition_strategy_assessment",
+        "BO4", "bo_operations_management", "Operations & Execution",
+        ("acquisition_strategy_assessment",
          "integration_risk_assessment", "capex_strategy_assessment",
          "workforce_cost_resilience_assessment"),
         (
-            _q("bo4.management", "support", r"executive officers?", r"management team",
-               r"board of directors", r"governance", r"succession",
-               r"key (?:personnel|employees|management)", k=2),
             _q("bo4.workforce", "contradict", r"labor", r"nurs", r"physicians?",
                r"staffing", r"contract labor", r"shortage", r"collective bargaining",
                r"turnover"),
@@ -153,7 +149,7 @@ BO_AGENT_SPECS: tuple[BoAgentSpec, ...] = (
                r"divestitures?"),
         ),
         task_sections=(
-            "management_and_governance", "workforce_and_cost_structure",
+            "workforce_and_cost_structure",
             "procurement_and_suppliers", "capital_deployment_ma_capex",
         ),
         indicator_groups=('workforce', 'capital', 'margin', 'cash'),
@@ -278,7 +274,6 @@ BO_V1_TO_V2_AGENT = {
     "business_model": "bo_business_model_revenue",
     "customer_supplier_contract": "bo_customers_contracts",
     "competition_pricing": "bo_competition_pricing",
-    "management_governance": "bo_operations_management",
     "ma_capex_execution": "bo_operations_management",
     "regulatory_material_events": "bo_regulation_external",
 }

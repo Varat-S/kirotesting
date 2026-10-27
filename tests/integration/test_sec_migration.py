@@ -12,6 +12,7 @@ from app.schemas.json_schema import (
     SchemaValidationError,
 )
 from app.schemas.snapshots import CanonicalEvidenceSnapshot
+from app.schemas.snapshots import SCHEMA_VERSION
 
 
 def test_sec_migration_defaults_preserves_frozen_legacy_bytes_and_hash(tmp_path):
@@ -95,7 +96,7 @@ def test_schema_versions_do_not_mutate_old_definitions():
             }
         ],
     )
-    assert validate_snapshot(snapshot)["schema_version"] == "1.1"
+    assert validate_snapshot(snapshot)["schema_version"] == SCHEMA_VERSION == "1.2"
     bad = snapshot.model_dump(mode="json")
     bad["facts"][0]["dimensions"] = {"Axis": 5}
     with pytest.raises(SchemaValidationError):

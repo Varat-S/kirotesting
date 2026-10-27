@@ -33,15 +33,7 @@ from app.schemas.agentic import (
     Topic,
 )
 from app.schemas.bo import AcceptedBusinessOverview, CalculationTrace, HypothesisRecord
-from app.services.bo.corporate_structure import (
-    CaseCorporateStructureSource,
-    build_corporate_structure_artifact,
-)
-from app.services.bo.corporate_structure_render import render_corporate_structure_svg
 from app.services.bo.indicators import IndicatorSet
-from app.services.bo.m3_artifacts import build_m3_deliverables
-from app.services.bo.m3_output import assemble_m3_output
-from app.services.bo.m3_validation import validate_m3_assessment
 from app.services.bo.reconcile import reconcile
 from app.services.bo.reporting import handoff_content_hash
 from app.services.bo.synthesis import (
@@ -63,7 +55,7 @@ NARROW_AGENT_IDS = frozenset({
     "m1_revenue_quality", "m1_customer_stickiness", "m1_pricing_power",
     "m1_operating_model", "m1_competitive_durability",
     "m1_resilience_integration", "m2_industry",
-    "m3_corporate_management", "m4_strategy_capital",
+    "m4_strategy_capital",
 })
 COMPLETION_AGENT_IDS = NARROW_AGENT_IDS | {
     "business_orchestrator", "business_challenge"
@@ -194,7 +186,6 @@ class RecordedSpecialists:
     parameters: list[ParameterResult]
     module_conclusions: dict[str, dict[str, Any]]
     reconciliation: Any
-    governed_m3: dict[str, Any] | None
     validation: dict[str, Any]
 
 
@@ -225,6 +216,8 @@ def load_recorded_specialists(path: str | Path) -> RecordedSpecialists:
     if not isinstance(agents, list) or not agents:
         raise RecordedCompletionError("Specialists run contains no agents.")
 
+    if any(a.get("agent_id") == "m3_corporate_management" or a.get("code") == "M3" for a in agents):
+        raise RecordedCompletionError("Unsupported legacy M3 specialists artifact; regenerate with the supported two-component workflow")
     passage_ids = set((payload.get("passages") or {}).keys())
     hypotheses: dict[str, HypothesisRecord] = {}
     duplicate_ids: list[str] = []
@@ -256,9 +249,8 @@ def load_recorded_specialists(path: str | Path) -> RecordedSpecialists:
     audit_only = [h for h in hypotheses.values() if not h.usable]
     reconciliation = reconcile(
         usable, [h for h in audit_only if h.disposition.value == "rejected"])
-    governed_m3 = _govern_m3(agents)
     case_id = meta.get("case_id") or payload.get("case_id")
-    modules = _module_conclusions(agents, hypotheses, governed_m3, case_id=case_id)
+    modules = _module_conclusions(agents, hypotheses, payload.get("module_conclusions", {}).get("M3"), case_id=case_id)
 
     computed = {
         "agents_validated": sum(a.get("status") == "validated" for a in agents),
@@ -291,7 +283,6 @@ def load_recorded_specialists(path: str | Path) -> RecordedSpecialists:
         source_sha256=_sha256_bytes(raw), hypotheses=hypotheses,
         indicators=indicators, parameters=parameters,
         module_conclusions=modules, reconciliation=reconciliation,
-        governed_m3=governed_m3,
         validation={"status": "valid", "computed_counts": computed,
                     "evidence_ids": len(passage_ids), "mismatches": {}},
     )
@@ -343,102 +334,16 @@ def _load_parameters(agents, run_id: str, passage_ids: set[str]) -> list[Paramet
     return results
 
 
-def _govern_m3(agents: list[dict[str, Any]]) -> dict[str, Any] | None:
-    agent = next((a for a in agents if a.get("agent_id") == "m3_corporate_management"), None)
-    if agent is None:
-        return None
-    calls = [c for c in agent.get("calls") or []
-             if isinstance((c.get("output") or {}).get("m3_assessment"), dict)]
-    if not calls:
-        return None
-    call = calls[-1]
-    evidence = (call.get("inputs") or {}).get("evidence") or []
-    allowed = {p["evidence_id"] for p in evidence if p.get("evidence_id")}
-    texts = {p["evidence_id"]: p.get("text") or "" for p in evidence
-             if p.get("evidence_id")}
-    governed = validate_m3_assessment(
-        call["output"]["m3_assessment"], allowed_evidence_ids=allowed,
-        validated_borrower_entity_ids=set(), evidence_texts=texts,
-    ).model_dump(mode="json")
-    governed["replay_provenance"] = {
-        "kind": "offline_deterministic_validator_replay", "model_called": False,
-        "source_agent_run_id": (agent.get("agent_run_ids") or [None])[-1],
-        "transaction_borrower_entity_ids": [],
-    }
-    return governed
 
 
-def build_m3_corporate_structure(
-    agents: list[dict[str, Any]], *, case_id: str | None,
-):
-    """Build + render the Module 3 corporate-structure artifact for a case.
-
-    Honours the mandatory rule: a diagram is produced only when an explicitly
-    case-associated corporate-structure JSON is present in the M3 agent's call
-    inputs. A bundled development fixture is never auto-loaded here; absence
-    yields the mandated ``unavailable`` artifact. Returns ``(artifact, svg_or_none)``.
-    """
-    source = None
-    if case_id:
-        agent = next((a for a in agents
-                      if a.get("agent_id") == "m3_corporate_management"), None)
-        raw = None
-        if agent is not None:
-            for call in agent.get("calls") or []:
-                candidate = (call.get("inputs") or {}).get("corporate_structure_source")
-                if isinstance(candidate, dict):
-                    raw = candidate
-        if isinstance(raw, dict):
-            source = CaseCorporateStructureSource(
-                case_id=raw.get("case_id") or case_id,
-                payload=raw.get("payload") or {},
-                source_document_id=raw.get("source_document_id"),
-                document_hash=raw.get("document_hash"),
-                registered_case_id=raw.get("registered_case_id"),
-            )
-    artifact = build_corporate_structure_artifact(
-        source, expected_case_id=case_id or "")
-    svg = None
-    if artifact.status == "available":
-        # Render the optional SVG preview from the REFINED (validated / generated)
-        # v2.0 structure, not the raw source — for a transformed v1.0 onboarding
-        # document the source has no visual_spec.
-        visual_spec = (artifact.refined_structure or {}).get("visual_spec") or {}
-        svg = render_corporate_structure_svg(artifact, visual_spec)
-    return artifact, svg
 
 
-def admit_corporate_structure_source(
-    document: dict[str, Any], *, case_id: str, source_document_id: str,
-) -> dict[str, Any]:
-    """Build a case-associated corporate-structure source context for M3.
-
-    This is the smallest correct, auditable admission seam: a caller (a run
-    driver or CLI) that has a corporate-structure onboarding JSON for a SPECIFIC
-    case uses this to attach it to the M3 agent call inputs under
-    ``corporate_structure_source``. Case association is recorded explicitly via
-    ``registered_case_id`` and ``case_id`` (never inferred from filename or
-    company name), and a content hash is computed for provenance. The resulting
-    dict is what :func:`build_m3_corporate_structure` reads.
-
-    It does NOT auto-load any fixture and does NOT select a case; the caller must
-    supply the trusted case id. Accepts either the simplified v1.0 onboarding
-    document or a legacy rich v2.0 document.
-    """
-    return {
-        "case_id": case_id,
-        "registered_case_id": case_id,
-        "source_document_id": source_document_id,
-        "document_hash": content_hash(document),
-        "payload": deepcopy(document),
-    }
 
 
-def _module_conclusions(agents, hypotheses, governed_m3, *, case_id=None):
+def _module_conclusions(agents, hypotheses, m3_block, *, case_id=None):
     module_agents = {
         "M1": {a.get("agent_id") for a in agents if str(a.get("code", "")).startswith("M1")},
         "M2": {a.get("agent_id") for a in agents if a.get("code") == "M2"},
-        "M3": {a.get("agent_id") for a in agents if a.get("code") == "M3"},
         "M4": {a.get("agent_id") for a in agents if a.get("code") == "M4"},
     }
     by_agent = {a.get("agent_id"): a for a in agents}
@@ -459,29 +364,8 @@ def _module_conclusions(agents, hypotheses, governed_m3, *, case_id=None):
             "audit_only_hypothesis_ids": sorted(h.hypothesis_id for h in findings if not h.usable),
             "missing_information": sorted({m for h in findings for m in h.missing_information}),
         }
-    out["M3"]["m3_assessment"] = governed_m3
-    out["M3"]["m3_assessment_status"] = "validated" if governed_m3 else "unavailable"
-    structure_artifact, structure_svg = build_m3_corporate_structure(
-        agents, case_id=case_id)
-    m3_output = assemble_m3_output(
-        structure=structure_artifact, governed_m3=governed_m3,
-        structure_svg=structure_svg)
-    out["M3"]["m3_output"] = m3_output
-    out["M3"]["corporate_structure_status"] = structure_artifact.status
-    # Architecture V6 two-output deliverables: A (m3_corporate_structure, the
-    # refined presentation-ready JSON; None when unavailable) and B (m3_analysis,
-    # the governed analytical record referencing A). These are also written as
-    # standalone files by write_completion_artifacts.
-    deliverables = build_m3_deliverables(structure_artifact, governed_m3, m3_output)
-    out["M3"]["m3_corporate_structure"] = deliverables["m3_corporate_structure"]
-    out["M3"]["m3_structure_sidecar"] = deliverables["m3_structure_sidecar"]
-    out["M3"]["m3_analysis"] = deliverables["m3_analysis"]
-    # Reflect partial completion (A unavailable, B assessed) without silently
-    # marking the module fully complete, but never weaken an already-incomplete
-    # module (missing/failed narrative agents still dominate).
-    overall = m3_output["completion"]["status"]
-    if out["M3"]["status"] == "complete" and overall == "partial":
-        out["M3"]["status"] = "partial"
+    from app.services.bo.m3_rebuild.adapters import unavailable_block, validate_context
+    out["M3"] = validate_context(m3_block) if m3_block else unavailable_block(case_id)
     return out
 
 
@@ -750,7 +634,7 @@ def complete_recorded_specialists(
         "deterministic_prechecks": conclusion_prechecks(synthesis, usable),
         "score": score_explanation(pre_score, pre_notes),
         "transaction_obligor": synthesis_inputs["transaction_obligor"],
-        "governed_m3": source.governed_m3,
+        "m3_components": source.module_conclusions["M3"],
         "mandatory_tests": [
             "unsupported facts or causal claims", "insufficient entailment",
             "specialist contradictions", "overstated management competence or governance",
@@ -835,13 +719,8 @@ def complete_recorded_specialists(
                                       "governance_state")}
 
     mitigants = [h for h in usable.values() if h.mitigant is not None]
-    m3 = source.governed_m3 or {}
-    borrower = m3.get("borrower_identification") or {}
-    # Validator 7 is authoritative: unavailable/unknown is never promoted.
-    borrower_known = borrower.get("status") in {"verified", "identified"} and not (
-        any(i.get("item_id") == borrower.get("entity_id")
-            for i in m3.get("validation_issues") or [])
-    )
+    borrower_known = False
+    borrower = {}
     handoff = AcceptedBusinessOverview(
         handoff_id=_stable_id("bo", [run_id, conclusion_id]), analysis_run_id=run_id,
         case_id=meta["case_id"], borrower_name=(meta.get("borrower") if borrower_known else None),
@@ -961,33 +840,6 @@ def write_completion_artifacts(packet: dict[str, Any], output_dir: str | Path) -
     paths["packet"].write_text(canonical_json(packet) + "\n", encoding="utf-8")
     paths["handoff"].write_text(canonical_json(packet["handoff"]) + "\n", encoding="utf-8")
 
-    # Module 3 Architecture V6 standalone deliverables. Deliverable A
-    # (m3_corporate_structure.json) is written ONLY when a validated corporate
-    # structure is available (fail-closed: no diagram is fabricated when the
-    # onboarding JSON is absent). Deliverable B (m3_analysis.json) is always
-    # written and references A by stable artifact id.
-    #
-    # Deliverable A is the de-wrapped refined v2.0 payload at root (matching the
-    # final-output contract); its governed internal record (artifact id +
-    # provenance + round-trip) is written to a separate governed sidecar
-    # m3_structure_provenance.json so source/audit metadata stays out of the
-    # presentation-ready export.
-    m3 = ((packet.get("handoff") or {}).get("module_conclusions") or {}).get("M3") or {}
-    m3_structure = m3.get("m3_corporate_structure")
-    m3_structure_sidecar = m3.get("m3_structure_sidecar")
-    m3_analysis = m3.get("m3_analysis")
-    if m3_structure is not None:
-        paths["m3_corporate_structure"] = folder / "m3_corporate_structure.json"
-        paths["m3_corporate_structure"].write_text(
-            canonical_json(m3_structure) + "\n", encoding="utf-8")
-        if m3_structure_sidecar is not None:
-            paths["m3_structure_provenance"] = folder / "m3_structure_provenance.json"
-            paths["m3_structure_provenance"].write_text(
-                canonical_json(m3_structure_sidecar) + "\n", encoding="utf-8")
-    if m3_analysis is not None:
-        paths["m3_analysis"] = folder / "m3_analysis.json"
-        paths["m3_analysis"].write_text(
-            canonical_json(m3_analysis) + "\n", encoding="utf-8")
     source = packet["source"]["summary"]
     usage = packet["incremental_usage"]
     findings = packet["challenge"]["findings"]

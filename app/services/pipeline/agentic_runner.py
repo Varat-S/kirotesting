@@ -83,7 +83,7 @@ def agentic_offline_backend() -> FakeLLMBackend:
     """
     backend = FakeLLMBackend()
     for tt in ("business_model", "competition_pricing",
-               "customer_supplier_contract", "management_governance",
+               "customer_supplier_contract",
                "ma_capex_execution", "regulatory_material_events",
                "ebitda_adjustments", "cashflow_working_capital",
                "debt_liquidity_terms", "covenant_extraction",

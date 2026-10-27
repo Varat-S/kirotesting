@@ -109,7 +109,7 @@ class CrossDomainFinding(StrictModel):
 
 
 class PartialCreditAssessment(StructuralOverviewAssessment):
-    schema_version: Literal["structural-overview-assessment-1.1"] = "structural-overview-assessment-1.1"
+    schema_version: Literal["structural-overview-assessment-1.2"] = "structural-overview-assessment-1.2"
     status: Literal["partial"] = "partial"
     final_credit_score: None = None
     facility_approval: None = None

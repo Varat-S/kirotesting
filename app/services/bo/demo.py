@@ -68,7 +68,7 @@ def run_demo(
             session, backend=replay, data_root=data_root, output_root=output_root,
             coverage_checks=coverage_checks, sector=sector, bo_roster=bo_roster,
             transaction_borrower_entity_id=transaction_borrower_entity_id,
-        ).run_specialists(case_id, prepared=prepared)
+        ).run_specialists(case_id, package=package, prepared=prepared)
         replayed = build_payload(replay_run, calls=replay.calls,
                                  execution_mode="offline_simulation")
         # The replay made no model call; carry over the baseline's own usage.
@@ -96,7 +96,7 @@ def run_demo(
         session, backend=recorder, data_root=data_root, output_root=output_root,
         coverage_checks=coverage_checks, sector=sector, bo_roster=bo_roster,
         transaction_borrower_entity_id=transaction_borrower_entity_id,
-    ).run_specialists(case_id, prepared=prepared)
+    ).run_specialists(case_id, package=package, prepared=prepared)
     mode = execution_mode(backend)
     payload = build_payload(run, calls=recorder.calls, execution_mode=mode, prices=prices)
     folder = output_root / "bo" / case_id / run.analysis_run_id

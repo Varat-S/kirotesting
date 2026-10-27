@@ -18,12 +18,14 @@ registry under :mod:`app.schemas.json_schema`.
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = "1.1"
-# FinalCaseSnapshot gains additive agentic fields at v1.2 (Milestone 1.3). The
-# CanonicalEvidenceSnapshot boundary is unchanged and stays at SCHEMA_VERSION.
+SCHEMA_VERSION = "1.2"
+LEGACY_SCHEMA_VERSION = "1.1"
+# Both snapshot families now have a v1.2 contract. Canonical evidence v1.2 adds
+# admitted structured evidence; the final-case v1.2 agentic fields are unchanged.
 FINAL_SCHEMA_VERSION = "1.2"
 
 
@@ -66,6 +68,26 @@ class DataQualityState(BaseModel):
     selection_version: int | None = None
 
 
+class StructuredEvidenceRecord(BaseModel):
+    """An admitted, typed non-tabular payload with document provenance."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: str
+    evidence_type: Literal["corporate_structure_onboarding"]
+    document_id: str
+    document_sha256: str
+    filename: str
+    entity_id: str
+    reporting_company: str
+    available_at: datetime
+    schema_version: str
+    declared_status: str
+    assumption_status: Literal["simulated", "submitted_unverified"]
+    validation_status: Literal["contract_validated"] = "contract_validated"
+    payload: dict[str, Any]
+
+
 class CanonicalEvidenceSnapshot(BaseModel):
     """Mid-pipeline canonical evidence snapshot (Req 5.1, 5.3, 5.5, 5.6).
 
@@ -91,6 +113,7 @@ class CanonicalEvidenceSnapshot(BaseModel):
     documents: list[dict] = Field(default_factory=list)
     sec_filings: list[dict] = Field(default_factory=list)
     narrative_evidence: list[dict] = Field(default_factory=list)
+    structured_evidence: list[StructuredEvidenceRecord] = Field(default_factory=list)
     entities: list[dict] = Field(default_factory=list)
     facts: list[dict] = Field(default_factory=list)
     # Normalized financials (formula inputs) kept independent of derived metrics.

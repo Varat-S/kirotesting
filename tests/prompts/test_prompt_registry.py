@@ -31,7 +31,7 @@ def test_register_catalogue_includes_agent_prompts_by_default(db_session):
     # Baseline prompts plus the 27 agentic agent prompts.
     assert {e["name"] for e in PROMPT_CATALOGUE} <= names
     assert "business_model" in names and "credit_orchestrator" in names
-    assert len(names) == len(PROMPT_CATALOGUE) + 27
+    assert len(names) == len(PROMPT_CATALOGUE) + 26
 
 
 def test_register_is_idempotent_for_identical_content(db_session):

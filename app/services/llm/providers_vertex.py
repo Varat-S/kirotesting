@@ -59,11 +59,13 @@ class VertexProviderBackend(LLMBackend):
         settings: Settings | None = None,
         *,
         client_factory: Callable[[], Any] | None = None,
+        schema_transform: Callable[[dict], dict] | None = None,
     ) -> None:
         self._settings = settings or get_settings()
         # Injection point for tests: a factory returning an object exposing
         # ``.models.generate_content(...)`` like the google-genai client.
         self._client_factory = client_factory
+        self._schema_transform = schema_transform or strict_schema
 
     @property
     def model_id(self) -> str:
@@ -153,7 +155,7 @@ class VertexProviderBackend(LLMBackend):
                 "Prepared input exceeds LLM_MAX_INPUT_BYTES; no evidence was "
                 "silently truncated."
             )
-        schema = strict_schema(request.prompt.response_schema)
+        schema = self._schema_transform(request.prompt.response_schema)
         model = self.model_for_tier(request.model_tier)
         requested_temperature, effective_temperature = sampling_temperature(s, request.temperature, model)
         system = (
@@ -172,6 +174,7 @@ class VertexProviderBackend(LLMBackend):
                 # Raw JSON Schema. The SDK's typed ``response_schema`` rejects
                 # nullable type unions (e.g. ["string", "null"]) client-side.
                 "response_json_schema": schema,
+                "http_options": {"retry_options": {"attempts": 1}},
             },
             "_schema_sha256": content_hash(schema),
             "_inputs_sha256": content_hash(request.inputs),
@@ -201,11 +204,16 @@ class VertexProviderBackend(LLMBackend):
         if not output:
             raise ProviderCallError("Vertex returned no structured output.")
         usage = _extract_usage(response)
+        http_response = getattr(response, "sdk_http_response", None)
         return LLMRawResult(
             raw_response=output,
             model_id=model,
             model_config={
                 "backend": "vertex",
+                "request_attempted": True,
+                "sdk_attempts": 1,
+                "http_status": getattr(http_response, "status_code", None),
+                "response_model_version": getattr(response, "model_version", None),
                 "model_tier": request.model_tier,
                 "request_inputs_sha256": payload["_inputs_sha256"],
                 "request_schema_sha256": payload["_schema_sha256"],

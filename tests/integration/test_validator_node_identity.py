@@ -75,7 +75,7 @@ def test_each_validator_node_maps_within_the_same_run(dual_m4_run):
     assert by_id["validator.v8_strategy"]["artifact_id"] == f"bo.validator8_strategy.{run_id}"
     assert by_id["validator.v8_debt"]["artifact_id"] == f"bo.validator8_debt.{run_id}"
     # No validator node points at another run or another producer's artifact.
-    for nid in ("validator.v8_strategy", "validator.v8_debt", "validator.v7"):
+    for nid in ("validator.v8_strategy", "validator.v8_debt"):
         aid = by_id[nid]["artifact_id"] or ""
         assert aid == "" or aid.endswith(run_id)
 

@@ -307,12 +307,9 @@ def _render_any_pdf(value: Any, st: dict, story: list, *,
 
 # Specialised ordering for known credit-memo schemas (top-level section order).
 _KNOWN_SCHEMA_SECTION_ORDER: dict[str, list[str]] = {
-    "bo-m3-analysis-1.0": [
-        "module", "completion", "corporate_structure_status",
-        "senior_management_assessment", "structural_observations",
-        "material_credit_implications", "consolidated_conclusion",
-        "evidence_verification", "information_gaps", "structural_limitations",
-    ],
+    "m3-management-assessment-1.0": ["company", "filing_period", "roster_date", "review_window", "profiles", "observations", "overall_assessment", "limitations", "citations"],
+    "m3-management-assessment-2.0": ["company", "filing_period", "roster_date", "review_window", "profiles", "facts", "observations", "overall_assessment", "model_assessment", "validation", "limitations", "citations"],
+    "m3-management-assessment-3.0": ["company", "filing_period", "roster_date", "review_window", "profiles", "facts", "observations", "overall_assessment", "model_assessment", "validation", "limitations", "citations"],
     "bo-memo-1.0": ["document", "case", "run", "status", "score", "sections",
                     "module_conclusions", "sources"],
 }

@@ -1,4 +1,4 @@
-"""Agent registry — the declared roster of 27 logical LLM jobs (Milestone 4).
+"""Agent registry — the current declared model-job roster (Milestone 4).
 
 The registry is DATA (it never calls an LLM). It declares, per agent: topic,
 task type, dependencies, routing spec (evidence selectors), owned parameters,
@@ -16,13 +16,13 @@ prompt reference, response-schema reference and model tier. From this it derives
 Load-time validation rejects duplicate ids, unknown/cyclic dependencies and any
 parameter owned by more than one agent (Req 5.2).
 
-The roster is EXACTLY 27 logical jobs (Req 5.3):
-    15 narrow / early extraction  (6 Business + 6 Financial + 3 Structuring)
+The original 27-job baseline loses the retired management/governance job; the current default is 26:
+    14 narrow / early extraction  (6 Business + 6 Financial + 3 Structuring)
   +  4 risk-to-mitigant
   +  4 orchestrators (Business, Financial, Structuring, Credit)
   +  4 challengers  (Business, Financial, Structuring, Cross-Topic)
-  = 27
-Peak initially-ready Wave 0 jobs are ~15 (the narrow + early-extraction set).
+  = 26
+Peak initially-ready Wave 0 jobs are ~14 (the narrow + early-extraction set).
 """
 
 from __future__ import annotations
@@ -33,12 +33,12 @@ from app.core.hashing import content_hash
 from app.schemas.agentic import ModelTier, Topic
 from app.services.agents.router import RoutingSpec, Selector
 
-AGENT_REGISTRY_VERSION = "agent-registry-1.1.0"
+AGENT_REGISTRY_VERSION = "agent-registry-1.2.0"
 # The v2 Business Overview roster (hybrid six-agent arrangement). It is a
 # separate registry VERSION, not an in-place rewrite: runs recorded under 1.1.0
 # keep resolving against the unchanged v1 roster.
-AGENT_REGISTRY_VERSION_BO_V2 = "agent-registry-2.0.0"
-AGENT_REGISTRY_VERSION_BO_V3 = "agent-registry-3.0.0"
+AGENT_REGISTRY_VERSION_BO_V2 = "agent-registry-2.1.0"
+AGENT_REGISTRY_VERSION_BO_V3 = "agent-registry-3.1.0"
 
 
 class AgentRegistryError(ValueError):
@@ -362,10 +362,6 @@ _BUSINESS_NARROW = [
      ("customer_dependence_assessment", "supplier_dependence_assessment",
       "contract_termination_risk_assessment"),
      ("industry_risk",)),
-    ("management_governance",
-     ("management_quality_assessment", "key_person_dependency_assessment",
-      "governance_concern_assessment"),
-     ("management", "ownership")),
     ("ma_capex_execution",
      ("acquisition_strategy_assessment", "integration_risk_assessment",
       "capex_strategy_assessment"),

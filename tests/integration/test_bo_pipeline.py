@@ -80,7 +80,7 @@ def test_bo_only_run_executes_exactly_the_eight_business_agents(db_session, tmp_
         "inactive_registered_agent_ids"]
     row = db_session.get(AgenticAnalysisRun, result.analysis_run_id)
     assert row.analysis_mode == "agentic_bo_only" and row.status == "completed"
-    assert row.agent_registry_version == "agent-registry-2.0.0"
+    assert row.agent_registry_version == "agent-registry-2.1.0"
 
 
 def test_orchestrator_and_challenger_are_real_recorded_executions(db_session, tmp_path):
@@ -231,7 +231,7 @@ def test_orchestrator_input_is_validated_structure_only(db_session, tmp_path):
         assert text not in dumped  # no raw passage is forwarded
     assert {p["parameter_id"] for p in inputs["parameters"]} >= {
         "competitive_position_risk_signal", "pricing_power_assessment"}
-    assert inputs["score"]["status"] == "provisional"
+    assert inputs["score"]["status"] == "unavailable"
     assert all(h["admissibility"] != "audit_only" for h in inputs["hypotheses"])
     assert {h["hypothesis_id"] for h in inputs["audit_only_hypotheses"]} >= {
         "BO1-H003", "BO3-H003", "BO5-H003"}
@@ -553,7 +553,7 @@ def test_memo_and_audit_are_written_and_labelled_offline(db_session, tmp_path):
                     "Business Model &amp; Revenue Quality",
                     "Customers, Contracts &amp; Revenue Realisation",
                     "Competition &amp; Pricing Power",
-                    "Operations, Management &amp; Execution",
+                    "Operations &amp; Execution",
                     "Regulation, Litigation &amp; External Risks",
                     "Business Resilience &amp; Risk Interactions",
                     "Key Credit Strengths and Vulnerabilities",
@@ -602,12 +602,12 @@ def test_every_citation_resolves_to_an_admitted_source(db_session, tmp_path):
 def test_score_is_deterministic_and_never_fabricated(db_session, tmp_path):
     result, _ = run(db_session, tmp_path)
     score = result.memo["score"]
-    assert score["status"] == "provisional" and score["band"] == 2
+    assert score["status"] == "unavailable" and score["band"] is None
     assert score["method"] == "deterministic"
-    assert score["missing_required_parameter_ids"] == ["customer_hhi"]
+    assert score["missing_required_parameter_ids"] == ["customer_hhi", "management_governance_risk_signal"]
     assert "customer_hhi is not available" in score["explanation"]
     row = db_session.query(RiskScoreRow).one()
-    assert row.kind == "business" and row.coverage_weight == pytest.approx(0.7)
+    assert row.kind == "business" and row.coverage_weight == pytest.approx(0.4)
     signals = db_session.query(ParameterResultRow).filter(
         ParameterResultRow.parameter_id.like("%risk_signal")).all()
     assert all(s.method == "deterministic" and s.agent_id is None for s in signals)
@@ -637,7 +637,7 @@ def test_handoff_is_valid_independently_readable_and_review_gated(db_session, tm
     handoff = AcceptedBusinessOverview.model_validate(result.handoff)
     assert handoff.human_review_status == "pending"
     assert handoff.business_topic_conclusion_id.startswith("tc_")
-    assert handoff.business_risk_score_status == "provisional"
+    assert handoff.business_risk_score_status == "unavailable"
     assert handoff.material_risk_ids == ["bo_r1", "bo_r2", "bo_r3"]
     assert "BO2-H001" in handoff.accepted_finding_ids
     assert handoff.validated_mitigants == []

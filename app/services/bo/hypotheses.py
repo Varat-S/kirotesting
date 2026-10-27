@@ -474,7 +474,7 @@ class HypothesisValidator:
         # reports experience or tenure; that does not independently establish
         # superior competence or execution quality.
         claim_text = (item.get("claim") or "").casefold()
-        if (self._spec.code == "M3" and live
+        if (live
                 and any(term in claim_text for term in ("management", "leadership"))
                 and any(term in claim_text for term in ("experience", "tenure", "credential"))):
             if claim_type is ClaimType.FACT:
@@ -482,7 +482,7 @@ class HypothesisValidator:
             if disposition is Disposition.SUPPORTED:
                 disposition = Disposition.QUALIFIED
             adjust("Management experience or tenure is attributed to the reporting source; without demonstrated outcomes it does not establish superior competence or execution.")
-        if (self._spec.code == "M3" and live and "internal control" in claim_text
+        if (live and "internal control" in claim_text
                 and "financial reporting" in claim_text):
             adjust("Scoped to the cited auditor assurance over internal control over financial reporting, at its stated reporting date and materiality threshold; no broader operational, clinical or strategic governance conclusion is implied.")
 

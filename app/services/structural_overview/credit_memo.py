@@ -104,47 +104,10 @@ def build_partial_assessment(bo_payload: dict, fo_payload: dict) -> PartialCredi
         source_refs=[bo.source_handoff_id],
         provenance="bo_analytical_finding" if borrower_identified else "unavailable",
     )]
-    entities = bo.corporate_structure.legal_entities
-    ownership = bo.corporate_structure.ownership_relationships
-    cash_locations = bo.corporate_structure.cash_flow_locations
-    relationships.extend([
-        StructuralItem(
-            topic="Material legal entities",
-            status="partial" if entities else "unavailable",
-            description=(
-                "; ".join(
-                    f"{entity.legal_name} ({entity.classification}; {entity.verification_status})"
-                    for entity in entities
-                ) if entities else "No validator-admitted legal entities are available."
-            ),
-            source_refs=[entity.entity_id for entity in entities],
-            provenance="bo_analytical_finding" if entities else "unavailable",
-        ),
-        StructuralItem(
-            topic="Parent/subsidiary and ownership relationships",
-            status="partial" if ownership else "unavailable",
-            description=(
-                "; ".join(
-                    f"{edge.parent_entity_id} -> {edge.subsidiary_entity_id} ({edge.confirmation_status})"
-                    for edge in ownership
-                ) if ownership else "No validator-admitted ownership edges are available."
-            ),
-            source_refs=[edge.relationship_id for edge in ownership],
-            provenance="bo_analytical_finding" if ownership else "unavailable",
-        ),
-        StructuralItem(
-            topic="Cash-flow locations",
-            status="partial" if cash_locations else "unavailable",
-            description=(
-                "; ".join(
-                    f"{item.entity_id}: {item.measure_type} ({item.reporting_scope}; {item.provenance_status})"
-                    for item in cash_locations
-                ) if cash_locations else "No validator-admitted cash-flow locations are available."
-            ),
-            source_refs=[item.cash_flow_id for item in cash_locations],
-            provenance="bo_analytical_finding" if cash_locations else "unavailable",
-        ),
-    ])
+    for topic in ("Material legal entities", "Parent/subsidiary and ownership relationships", "Cash-flow locations"):
+        relationships.append(StructuralItem(topic=topic, status="unavailable",
+            description="No independently verified legal/transaction evidence; submitted M3 structure remains case assumptions.",
+            provenance="unavailable"))
     for topic in ("Debt composition and existing obligations", "Maturity profile",
                   "Guarantees and collateral", "Facility terms and covenants"):
         relationships.append(StructuralItem(topic=topic, status="unavailable",
@@ -178,7 +141,7 @@ def build_partial_assessment(bo_payload: dict, fo_payload: dict) -> PartialCredi
     sections["facility_underwriting"] = DownstreamSection(status="blocked", reason=gaps["facility_underwriting"][0])
     sections["human_approval"] = DownstreamSection(status="blocked", reason="BO review pending; full credit assessment incomplete.")
     data = bo.model_dump(mode="json")
-    data.update(schema_version="structural-overview-assessment-1.1", financial_overview=fo.model_dump(mode="json"),
+    data.update(schema_version="structural-overview-assessment-1.2", financial_overview=fo.model_dump(mode="json"),
                 financial_calculations=[c.model_dump(mode="json") for c in calculations],
                 source_fo_content_hash=content_hash(fo.model_dump(mode="json")),
                 structural_relationships=[r.model_dump(mode="json") for r in relationships],

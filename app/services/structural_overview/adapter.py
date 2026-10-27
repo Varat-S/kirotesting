@@ -8,9 +8,10 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from app.services.bo.m3_rebuild.narrative import management_claims
+
 from app.core.hashing import content_hash
 from app.schemas.bo import AcceptedBusinessOverview
-from app.schemas.bo_m3 import M3CorporateAssessment
 from app.schemas.structural_overview import (
     ASSESSMENT_SCHEMA_VERSION,
     TRANSFORMATION_VERSION,
@@ -19,7 +20,6 @@ from app.schemas.structural_overview import (
     BusinessAssessment,
     CompoundRisk,
     CorporateStructureAssessment,
-    CorporateStructureAudit,
     CuratedClaim,
     DownstreamDependencies,
     DownstreamSection,
@@ -38,7 +38,6 @@ _ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
 _MODULE_BUCKETS = {
     "M1": "business_model_and_revenue_drivers",
     "M2": "industry_and_competitive_risks",
-    "M3": "management_and_operational_findings",
     "M4": "strategy_and_capital_allocation_findings",
 }
 
@@ -74,116 +73,13 @@ def _corporate_structure(
     module_data: dict[str, Any],
 ) -> tuple[CorporateStructureAssessment, str | None, str | None, list[str], str | None]:
     """Map only validator-admitted M3 records into consumable SO fields."""
-    status = module_data.get("m3_assessment_status", "unavailable")
-    raw = module_data.get("m3_assessment")
-    if status != "validated":
-        if raw is not None:
-            raise StructuralOverviewInputError(
-                "M3 assessment is present but is not marked validated; refusing ambiguous structural input."
-            )
-        limitation = (
-            "BO supplied no validated M3 corporate assessment; SO must establish "
-            "the transaction borrower and legal structure independently."
-        )
-        unavailable = CorporateStructureAssessment(
-            source_status="unavailable",
-            borrower_identification={"status": "unavailable", "limitation": limitation},
-            information_gaps=[limitation],
-            downstream_dependencies=[{
-                "module": "SO",
-                "question": "Confirm the proposed facility obligor and legal borrower from transaction-specific evidence.",
-            }],
-        )
-        return unavailable, None, None, [], limitation
-    if not isinstance(raw, dict):
-        raise StructuralOverviewInputError(
-            "M3 is marked validated but module_conclusions.M3.m3_assessment is missing."
-        )
-    try:
-        governed = M3CorporateAssessment.model_validate(raw)
-    except ValidationError as exc:
-        raise StructuralOverviewInputError(f"Invalid governed M3 assessment: {exc}") from exc
-
-    borrower = governed.borrower_identification
-    by_id: dict[str, Any] = {}
-    for entity in governed.legal_entities:
-        _valid_id(entity.entity_id, "M3 legal entity ID")
-        if entity.entity_id in by_id:
-            raise StructuralOverviewInputError(
-                f"Duplicate governed M3 legal entity ID {entity.entity_id!r}."
-            )
-        if entity.identity_type != "legal_entity":
-            raise StructuralOverviewInputError(
-                f"Governed M3 graph contains non-legal identity {entity.entity_id!r}."
-            )
-        by_id[entity.entity_id] = entity
-    for relationship in governed.ownership_relationships:
-        _valid_id(relationship.relationship_id, "M3 ownership relationship ID")
-        if (relationship.parent_entity_id not in by_id
-                or relationship.subsidiary_entity_id not in by_id):
-            raise StructuralOverviewInputError(
-                f"Governed ownership relationship {relationship.relationship_id!r} references an unadmitted entity."
-            )
-    for relationship in governed.cash_transfer_relationships:
-        _valid_id(relationship.transfer_id, "M3 cash-transfer relationship ID")
-        if (relationship.source_entity_id not in by_id
-                or relationship.destination_entity_id not in by_id):
-            raise StructuralOverviewInputError(
-                f"Governed cash-transfer relationship {relationship.transfer_id!r} references an unadmitted entity."
-            )
-    for location in governed.cash_flow_locations:
-        _valid_id(location.cash_flow_id, "M3 cash-flow location ID")
-        if location.entity_id not in by_id:
-            raise StructuralOverviewInputError(
-                f"Governed cash-flow location {location.cash_flow_id!r} references an unadmitted entity."
-            )
-    for records, attribute, label in (
-        (governed.ownership_relationships, "relationship_id", "ownership relationship"),
-        (governed.cash_transfer_relationships, "transfer_id", "cash-transfer relationship"),
-        (governed.cash_flow_locations, "cash_flow_id", "cash-flow location"),
-    ):
-        identifiers = [getattr(record, attribute) for record in records]
-        if len(identifiers) != len(set(identifiers)):
-            raise StructuralOverviewInputError(
-                f"Governed M3 graph contains a duplicate {label} ID."
-            )
-    borrower_name = None
-    if borrower.status == "identified":
-        entity = by_id.get(borrower.entity_id or "")
-        if entity is None or entity.identity_type != "legal_entity":
-            raise StructuralOverviewInputError(
-                "Governed M3 borrower does not resolve to an admitted legal entity."
-            )
-        borrower_name = entity.legal_name
-
-    mapped = CorporateStructureAssessment(
-        source_status="validated",
-        source_schema_version=governed.schema_version,
-        validator_id=governed.validator_id,
-        validator_version=governed.validator_version,
-        borrower_identification=borrower,
-        legal_entities=governed.legal_entities,
-        ownership_relationships=governed.ownership_relationships,
-        cash_flow_locations=governed.cash_flow_locations,
-        cash_transfer_relationships=governed.cash_transfer_relationships,
-        structural_credit_findings=governed.structural_credit_findings,
-        management_assessments=governed.management_assessments,
-        governance_screening=governed.governance_screening,
-        information_gaps=governed.information_gaps,
-        downstream_dependencies=governed.downstream_dependencies,
-        audit=CorporateStructureAudit(
-            validation_issues=governed.validation_issues,
-            rejected_items=governed.rejected_items,
-            model_proposal=governed.model_proposal,
-        ),
-    )
-    return (
-        mapped,
-        borrower_name,
-        borrower.entity_id if borrower.status == "identified" else None,
-        borrower.evidence_ids if borrower.status == "identified" else [],
-        borrower.limitation,
-    )
+    if module_data.get("m3_assessment") is not None or module_data.get("findings"):
+        raise StructuralOverviewInputError("Unsupported legacy M3 output; regenerate with the two-component workflow")
+    limitation = "Submitted corporate assumptions do not establish a verified legal structure or transaction obligor; SO legal verification is outstanding."
+    unavailable = CorporateStructureAssessment(
+        borrower_identification={"limitation": limitation}, information_gaps=[limitation],
+        downstream_dependencies=[{"module": "SO", "question": "Verify transaction obligor, legal ownership, ranking and guarantees from transaction-specific evidence."}])
+    return unavailable, None, None, [], limitation
 
 
 def adapt_business_overview(
@@ -197,6 +93,14 @@ def adapt_business_overview(
     except ValidationError as exc:
         raise StructuralOverviewInputError(f"Invalid BO handoff: {exc}") from exc
     source = handoff.model_dump(mode="json")
+    rebuild_module = handoff.module_conclusions.get("M3", {})
+    if rebuild_module.get("workflow") == "m3-rebuild":
+        from app.services.bo.m3_rebuild.adapters import validate_context
+        try:
+            validate_context(rebuild_module, company=handoff.borrower_name,
+                             filing_period=handoff.as_of_date, cutoff=handoff.evidence_cutoff_timestamp)
+        except ValueError as exc:
+            raise StructuralOverviewInputError(str(exc)) from exc
 
     if handoff.schema_version != SUPPORTED_HANDOFF_VERSION:
         raise StructuralOverviewInputError(
@@ -223,6 +127,7 @@ def adapt_business_overview(
     evidence_to_hypotheses: dict[str, set[str]] = defaultdict(set)
     evidence_to_sections: dict[str, set[str]] = defaultdict(set)
     buckets: dict[str, list[NormalizedFinding]] = {name: [] for name in _MODULE_BUCKETS.values()}
+    buckets["management_and_operational_findings"] = []
     qualified_ids: list[str] = []
 
     for module, target in _MODULE_BUCKETS.items():
@@ -342,36 +247,6 @@ def adapt_business_overview(
         ) for x in handoff.compound_business_risks
     ]
 
-    for entity in corporate_structure.legal_entities:
-        for evidence_id in entity.evidence_ids:
-            evidence_to_sections[evidence_id].add("M3.corporate_structure")
-    for relationship in corporate_structure.ownership_relationships:
-        for evidence_id in relationship.evidence_ids:
-            evidence_to_sections[evidence_id].add("M3.corporate_structure")
-    for location in corporate_structure.cash_flow_locations:
-        for evidence_id in location.evidence_ids:
-            evidence_to_sections[evidence_id].add("M3.corporate_structure")
-    for relationship in corporate_structure.cash_transfer_relationships:
-        for evidence_id in relationship.evidence_ids:
-            evidence_to_sections[evidence_id].add("M3.corporate_structure")
-    for finding in [
-        *corporate_structure.structural_credit_findings,
-        *corporate_structure.governance_screening,
-    ]:
-        for evidence_id in [
-            *finding.supporting_evidence_ids,
-            *finding.contradicting_evidence_ids,
-        ]:
-            evidence_to_sections[evidence_id].add("M3.corporate_structure")
-            if finding.hypothesis_id:
-                evidence_to_hypotheses[evidence_id].add(finding.hypothesis_id)
-    for observation in corporate_structure.management_assessments:
-        for evidence_id in [
-            *observation.supporting_evidence_ids,
-            *observation.contradicting_evidence_ids,
-        ]:
-            evidence_to_sections[evidence_id].add("M3.corporate_structure")
-
     evidence_references = [
         EvidenceReference(
             evidence_id=evidence_id,
@@ -394,21 +269,8 @@ def adapt_business_overview(
         if dependency.get("module") == "SO" and dependency.get("question")
         and dependency["question"] not in structural_topics
     )
-    if corporate_structure.source_status == "unavailable":
-        structural_status = "unavailable"
-        structural_reason = (
-            "BO supplied no validated M3 corporate assessment; obligor and legal structure are unavailable."
-        )
-    elif corporate_structure.borrower_identification.status != "identified":
-        structural_status = "partial"
-        structural_reason = (
-            "A validator-admitted corporate graph is available, but the proposed facility obligor is unavailable; SO must confirm it from transaction evidence."
-        )
-    else:
-        structural_status = "partial"
-        structural_reason = (
-            "The governed M3 graph is available; SO must independently verify obligor identity, ranking, restrictions, and facility terms."
-        )
+    structural_status = "unavailable"
+    structural_reason = "Legal/obligor facts require independent transaction evidence; M3 case assumptions remain explicitly simulated."
     sections = {
         "business_overview": DownstreamSection(
             status="partial" if qualification or handoff.human_review_status != "accepted" else "complete",
@@ -455,6 +317,9 @@ def adapt_business_overview(
             business_strengths=strengths, mitigants=mitigants, compound_risks=compound,
         ),
         corporate_structure=corporate_structure,
+        m3_rebuild=handoff.module_conclusions.get("M3", {}).get("m3_rebuild"),
+        management_claims=management_claims(
+            handoff.module_conclusions.get("M3", {}).get("m3_rebuild")),
         evidence_references=evidence_references,
         governance=GovernanceState(
             conclusion_status=handoff.conclusion_status,

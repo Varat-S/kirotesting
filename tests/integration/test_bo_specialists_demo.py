@@ -205,8 +205,7 @@ def test_reports_are_written_and_faithful_to_the_structured_output(db_session, t
     result, _ = _demo(db_session, tmp_path)
     payload, paths = result["payload"], result["paths"]
     assert {"specialists_run.json", "executive_summary.html",
-            "specialists_comparison.html", "validation_audit.html",
-            "m3_governed_assessment.json", "m3_governed_assessment.html"} <= set(paths)
+            "specialists_comparison.html", "validation_audit.html"} <= set(paths)
     stored = json.loads(paths["specialists_run.json"].read_text("utf-8"))
     assert stored["metrics"] == json.loads(json.dumps(payload["metrics"]))
     assert compute_metrics(stored)["hypotheses_usable"] == stored["metrics"]["hypotheses_usable"]
@@ -214,9 +213,8 @@ def test_reports_are_written_and_faithful_to_the_structured_output(db_session, t
     summary = paths["executive_summary.html"].read_text("utf-8")
     comparison = paths["specialists_comparison.html"].read_text("utf-8")
     audit = paths["validation_audit.html"].read_text("utf-8")
-    m3_export = json.loads(paths["m3_governed_assessment.json"].read_text("utf-8"))
-    assert m3_export["assessment_status"] == "unavailable"
-    assert "unavailable" in paths["m3_governed_assessment.html"].read_text("utf-8")
+    assert "m3_governed_assessment.json" not in paths
+    assert {c["status"] for c in payload["module_conclusions"]["M3"]["m3_rebuild"].values()} == {"not_attempted"}
     hypotheses = [h for a in payload["agents"] for h in a["hypotheses"]]
     for h in hypotheses:
         assert h["hypothesis_id"] in comparison

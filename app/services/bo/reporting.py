@@ -26,6 +26,8 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.services.bo.m3_rebuild.narrative import management_claims
+
 from app.core.hashing import canonical_json, content_hash
 from app.models.orm import (
     AcceptedBusinessOverviewRow,
@@ -367,6 +369,8 @@ class BoReportBuilder:
             },
             "sections": sections,
             "module_conclusions": run.module_conclusions,
+            "management_claims": management_claims(
+                run.module_conclusions.get("M3", {}).get("m3_rebuild")),
             "cross_module_risk_interactions": [
                 c for name, c, _ in claims
                 if name in ("material_risks", "key_drivers")
@@ -634,6 +638,8 @@ class BoReportBuilder:
                 if run.agents[run.resilience_agent_id].status == "validated"
                 else run.agents[run.resilience_agent_id].status),
             "module_conclusions": run.module_conclusions,
+            "management_claims": management_claims(
+                run.module_conclusions.get("M3", {}).get("m3_rebuild")),
             "orchestrator": {
                 "history": run.orchestrator_history or "not_executed",
                 "claims": provenance,

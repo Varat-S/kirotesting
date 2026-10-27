@@ -116,11 +116,11 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                        prefer_artifact_type="agent_output"))
     edge("canonical_snapshot", "agent.m2_industry", "declared_dependency")
 
-    # Module 3 (authoritative for corporate/entity relationships).
-    nodes.append(_node("agent.m3_corporate_management", "M3 Corporate Structure & Management", 3,
-                       kind="agent", group="M3", producer_agent="m3_corporate_management",
-                       artifact_id="m3.analysis", prefer_artifact_type="agent_output"))
-    edge("canonical_snapshot", "agent.m3_corporate_management", "declared_dependency")
+    # Exactly two Python-orchestrated M3 components; neither is the retired specialist.
+    for aid, title in (("m3_structure_conversion", "M3 Corporate conversion"), ("m3_management_assessment", "M3 Management continuity")):
+        nodes.append(_node("agent." + aid, title, 3, kind="agent", group="M3", producer_agent=aid))
+        edge("raw_input", "agent." + aid, "independent_selected_source")
+        edge("agent." + aid, "synthesis_v1", "typed_observations_and_case_assumptions")
 
     # Module 4: TWO internal specialists, one governed Module 4 output.
     nodes.append(_node("agent.m4_strategy_capital", "M4 Strategy & Capital Allocation", 3,
@@ -132,10 +132,6 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                        prefer_artifact_type="module_output"))
     edge("canonical_snapshot", "agent.m4_strategy_capital", "declared_dependency")
     edge("canonical_snapshot", "agent.m4_debt_structure", "declared_dependency")
-    # M4 may *consume* verified M3 entity relationships when available (never as fact).
-    edge("agent.m3_corporate_management", "agent.m4_debt_structure",
-         "optional_verified_entity_relationships")
-
     # Financial Overview branches from the canonical evidence / financial facts
     # layer, alongside BO. Deterministic measures + pre-check + triggers.
     nodes.append(_node("fo.precheck", "FO Pre-check (going concern, covenants)", 3,
@@ -152,8 +148,6 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     # artifact entries the indexer extracts from the recorded memo/audit so each
     # node resolves to its own persisted validation record.
     validators = [
-        ("validator.v7", "Validator 7 (M3 numeric binding)", "validator_7",
-         "agent.m3_corporate_management"),
         ("validator.v8_strategy", "Validator 8 (M4 strategy/capital)", "validator_8",
          "agent.m4_strategy_capital"),
         ("validator.v8_debt", "Validator 8 (M4 debt-structure reconciliation)",
@@ -178,7 +172,6 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     for agent_id, _ in _M1_AGENTS:
         edge(f"agent.{agent_id}", "synthesis_v1", "declared_dependency")
     edge("agent.m2_industry", "synthesis_v1", "declared_dependency")
-    edge("validator.v7", "synthesis_v1", "declared_dependency")
     edge("validator.v8_strategy", "synthesis_v1", "declared_dependency")
     edge("validator.v8_debt", "synthesis_v1", "declared_dependency")
 
@@ -270,6 +263,13 @@ def build_pipeline_graph(
     """
     nodes, edges = _skeleton()
     if manifest is not None:
+        for entry in manifest.artifacts:
+            if entry.artifact_id.startswith("m3.rebuild."):
+                node_id = "artifact." + entry.artifact_id
+                nodes.append(_node(node_id, "M3 " + ("Corporate conversion" if entry.producer_agent == "m3_structure_conversion" else "Management continuity"),
+                                   4, kind="output", group="M3", artifact_id=entry.artifact_id))
+                edges.append({"source": "raw_input", "target": node_id, "reason": "independent_selected_source"})
+                edges.append({"source": node_id, "target": "synthesis_v1", "reason": "optional_typed_artifact"})
         _apply_manifest(nodes, manifest)
 
     layers = {

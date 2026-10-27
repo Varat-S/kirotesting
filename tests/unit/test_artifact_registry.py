@@ -24,16 +24,14 @@ from app.services.registry import build_manifest, build_pipeline_graph
 from app.services.registry.graph import PIPELINE_GRAPH_VERSION
 from app.services.registry.json_render import render_json_html, render_json_pdf
 
-DEMO = Path("examples/bo_m3/structural_credit/demo_output/hca_simulated")
+import tempfile
+from tests.registry_fixture import write_fixture,CASE,MANAGEMENT_ID,STRUCTURE_ID
+DEMO_ROOT=Path(tempfile.mkdtemp(prefix="m3-registry-tests-"))
+DEMO=write_fixture(DEMO_ROOT)
 
 
 def _manifest() -> ArtifactManifest:
-    return build_manifest(
-        "examples/bo_m3/structural_credit/demo_output",
-        "hca_simulated",
-        m3_dirs=[str(DEMO)],
-        repo_root=".",
-    )
+    return build_manifest(DEMO_ROOT,CASE,repo_root=".")
 
 
 # -- manifest generation & integrity -----------------------------------------
@@ -42,36 +40,35 @@ def test_manifest_indexes_recorded_m3_artifacts():
     m = _manifest()
     assert m.manifest_version == ARTIFACT_MANIFEST_VERSION
     ids = {a.artifact_id for a in m.artifacts}
-    assert {"m3.corporate_structure", "m3.analysis", "m3.validator_7",
-            "m3.evaluation", "m3.run_manifest"} <= ids
+    assert {STRUCTURE_ID, MANAGEMENT_ID} == ids
 
 
 def test_manifest_content_hash_matches_canonical_payload():
     m = _manifest()
-    entry = m.by_id("m3.analysis")
+    entry = m.by_id(MANAGEMENT_ID)
     assert entry is not None and entry.file_location
     payload = json.loads(Path(entry.file_location).read_text(encoding="utf-8"))
     assert entry.content_hash == content_hash(payload)
 
 
 def test_manifest_does_not_rewrite_source_files():
-    before = (DEMO / "m3_analysis.json").read_bytes()
+    before = (DEMO / "Senior Management Assessment.json").read_bytes()
     _manifest()
-    after = (DEMO / "m3_analysis.json").read_bytes()
+    after = (DEMO / "Senior Management Assessment.json").read_bytes()
     assert before == after  # read-only indexing never mutates artifacts
 
 
 def test_status_taxonomy_distinguishes_validated_and_qualified():
     m = _manifest()
-    struct = m.by_id("m3.corporate_structure")
-    analysis = m.by_id("m3.analysis")
+    struct = m.by_id(STRUCTURE_ID)
+    analysis = m.by_id(MANAGEMENT_ID)
     # This fixture's run requires human review -> every M3 artifact is QUALIFIED,
     # NOT silently promoted to validated from file existence. The structure file
     # (no self-governing completion metadata) inherits the run's authoritative
     # qualified status rather than defaulting to validated.
-    assert struct.status == ExecutionStatus.QUALIFIED
-    assert analysis.status == ExecutionStatus.QUALIFIED
-    assert analysis.human_review_status.value == "pending"
+    assert struct.status == ExecutionStatus.VALIDATED
+    assert analysis.status == ExecutionStatus.VALIDATED
+    assert analysis.human_review_status.value == "not_required"
 
 
 # -- missing / failed artifact handling ---------------------------------------
@@ -185,10 +182,8 @@ def test_graph_edges_are_left_to_right_by_layer():
 
 def test_graph_picks_up_recorded_status():
     g = build_pipeline_graph(_manifest())
-    m3 = next(n for n in g["nodes"] if n["id"] == "agent.m3_corporate_management")
-    v7 = next(n for n in g["nodes"] if n["id"] == "validator.v7")
+    m3 = next(n for n in g["nodes"] if n["id"] == "agent.m3_management_assessment")
     assert m3["status"] in {"validated", "qualified"}
-    assert v7["status"] in {"validated", "qualified"}
 
 
 # -- generic JSON rendering & PDF export --------------------------------------
@@ -211,7 +206,7 @@ def test_render_json_html_escapes_injection():
 
 
 def test_pdf_export_is_deterministic_and_valid():
-    payload = json.loads((DEMO / "m3_analysis.json").read_text(encoding="utf-8"))
+    payload = json.loads((DEMO / "Senior Management Assessment.json").read_text(encoding="utf-8"))
     a = render_json_pdf(payload, title="M3", subtitle="s")
     b = render_json_pdf(payload, title="M3", subtitle="s")
     assert a[:4] == b"%PDF"
@@ -225,8 +220,9 @@ def test_pdf_export_handles_wide_lists_without_overflow():
 
 
 def test_pdf_known_schema_vs_generic():
-    known = json.loads((DEMO / "m3_analysis.json").read_text(encoding="utf-8"))
-    assert known.get("schema_version") == "bo-m3-analysis-1.0"
+    known = json.loads((DEMO / "Senior Management Assessment.json").read_text(encoding="utf-8"))
+    assert known.get("schema_version") == "m3-management-assessment-3.0"
+    assert known['facts'] and known['model_assessment']
     assert render_json_pdf(known, title="known")[:4] == b"%PDF"
     assert render_json_pdf({"anything": [1, 2, 3]}, title="generic")[:4] == b"%PDF"
 

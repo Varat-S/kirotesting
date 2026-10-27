@@ -179,107 +179,14 @@ def _entry_for_file(
 
 
 def _index_m3_dir(dir_path: Path, root: Path, case_id: str) -> list[ArtifactEntry]:
-    """Index an M3 standalone demo directory, reading its run_manifest."""
-    manifest = _load_json(dir_path / "run_manifest.json") or {}
-    run_id = manifest.get("analysis_run_id")
-    model_id = manifest.get("execution", {}).get("model_id") if isinstance(
-        manifest.get("execution"), dict) else None
-    model_invoked = manifest.get("execution", {}).get("real_model_invoked") if isinstance(
-        manifest.get("execution"), dict) else None
-    snapshot_v = None
-    if isinstance(manifest.get("evidence"), dict):
-        snapshot_v = manifest["evidence"].get("snapshot_version")
-    snapshot_ref = f"{case_id}@v{snapshot_v}" if snapshot_v is not None else None
-    # The run_manifest is the AUTHORITATIVE status record for the standalone M3
-    # run. Its real status lives in the ``validation`` sub-block (top-level keys
-    # are absent). Derived files (structure, provenance, the manifest itself)
-    # carry no completion metadata of their own, so their status is inherited
-    # from here rather than judged from file existence (Priority 4: no false
-    # "validated").
-    val_block = manifest.get("validation") if isinstance(
-        manifest.get("validation"), dict) else {}
-    authoritative = _status_from_completion(
-        val_block.get("completion_status"),
-        requires_review=bool(val_block.get("requires_human_review")),
-        validated=val_block.get("specialist_valid",
-                                val_block.get("specialist_validated")),
-    )
-
-    entries: list[ArtifactEntry] = []
-
-    def _apply_snapshot(entry: ArtifactEntry) -> None:
-        entry.source_evidence_snapshot = snapshot_ref or entry.source_evidence_snapshot
-        entry.model_id, entry.model_invoked = model_id, model_invoked
-        if entry.provenance is not None and snapshot_v is not None:
-            entry.provenance.canonical_snapshot_version = snapshot_v
-            from app.schemas.artifact_manifest import SnapshotEquivalence
-            entry.provenance.snapshot_equivalence = SnapshotEquivalence.VERIFIED
-            entry.provenance.equivalence_note = (
-                "Standalone M3 run recorded its canonical snapshot version.")
-
-    def _inherit_status(entry: ArtifactEntry) -> None:
-        # Only inherit when the file carries no self-governing completion signal.
-        if entry.status == ExecutionStatus.INCOMPLETE and \
-                entry.status_reason == "unknown_completion_status":
-            entry.status, entry.status_reason = authoritative
-
-    struct = _entry_for_file(
-        dir_path / "m3_corporate_structure.json", root,
-        artifact_id="m3.corporate_structure", artifact_type=ArtifactType.CORPORATE_STRUCTURE,
-        case_id=case_id, run_id=run_id, producer_module="M3",
-        producer_agent="m3_corporate_management",
-    )
-    _apply_snapshot(struct)
-    _inherit_status(struct)
-    entries.append(struct)
-
-    analysis = _entry_for_file(
-        dir_path / "m3_analysis.json", root,
-        artifact_id="m3.analysis", artifact_type=ArtifactType.MODULE_OUTPUT,
-        case_id=case_id, run_id=run_id, producer_module="M3",
-        producer_agent="m3_corporate_management",
-        depends_on=["m3.corporate_structure"],
-    )
-    _apply_snapshot(analysis)
-    entries.append(analysis)
-
-    provenance_entry = _entry_for_file(
-        dir_path / "m3_structure_provenance.json", root,
-        artifact_id="m3.structure_provenance", artifact_type=ArtifactType.OTHER,
-        case_id=case_id, run_id=run_id, producer_module="M3",
-        producer_agent="m3_corporate_management", depends_on=["m3.corporate_structure"],
-    )
-    _apply_snapshot(provenance_entry)
-    _inherit_status(provenance_entry)
-    entries.append(provenance_entry)
-
-    val = _entry_for_file(
-        dir_path / "validation_report.json", root,
-        artifact_id="m3.validator_7", artifact_type=ArtifactType.VALIDATION_REPORT,
-        case_id=case_id, run_id=run_id, producer_module="M3",
-        producer_validator="validator_7", depends_on=["m3.analysis"],
-    )
-    entries.append(val)
-
-    entries.append(_entry_for_file(
-        dir_path / "evaluation_scorecard.json", root,
-        artifact_id="m3.evaluation", artifact_type=ArtifactType.EVALUATION,
-        case_id=case_id, run_id=run_id, producer_module="M3",
-        depends_on=["m3.validator_7"],
-    ))
-
-    run_manifest_entry = _entry_for_file(
-        dir_path / "run_manifest.json", root,
-        artifact_id="m3.run_manifest", artifact_type=ArtifactType.RUN_MANIFEST,
-        case_id=case_id, run_id=run_id, producer_module="M3",
-    )
-    _apply_snapshot(run_manifest_entry)
-    _inherit_status(run_manifest_entry)
-    entries.append(run_manifest_entry)
-    return entries
+    """Read-only unsupported historical artifact discovery; never revalidate as rebuilt M3."""
+    return [ArtifactEntry(artifact_id="legacy.m3." + path.stem, artifact_type=ArtifactType.OTHER,
+            case_id=case_id, producer_module="M3", file_location=_rel(path, root),
+            status=ExecutionStatus.SKIPPED, validation_status="unsupported_legacy",
+            status_reason="Unsupported legacy M3 output; retained only for historical inspection")
+            for path in sorted(dir_path.glob("*.json"))]
 
 
-# BO specialist ids grouped by module, matching roster v3 (app/services/bo/roster_v3.py).
 _BO_AGENT_MODULE = {
     "m1_revenue_quality": "M1", "m1_customer_stickiness": "M1",
     "m1_pricing_power": "M1", "m1_operating_model": "M1",
@@ -287,6 +194,7 @@ _BO_AGENT_MODULE = {
     "m2_industry": "M2", "m3_corporate_management": "M3",
     "m4_strategy_capital": "M4",
 }
+
 
 
 def _bo_status_from_audit(agent_status: Any, validation_status: Any) -> ExecutionStatus:
@@ -348,6 +256,9 @@ def _index_bo_agents(
         runs = agent.get("runs") or []
         val_status = runs[-1].get("validation_status") if runs else None
         status = _bo_status_from_audit(agent.get("status"), val_status)
+        unsupported_m3 = aid == "m3_corporate_management"
+        if unsupported_m3:
+            status, val_status = ExecutionStatus.SKIPPED, "unsupported_legacy"
         if aid in synthesis_ids:
             art_type, kind_id = ArtifactType.MODULE_OUTPUT, f"bo.synthesis.{run_id}"
             module = "BO"
@@ -369,7 +280,7 @@ def _index_bo_agents(
             file_location=audit_loc,            # points into the recorded audit
             depends_on=[f"bo.agent.{d}.{run_id}" for d in (agent.get("dependencies") or [])],
             status=status,
-            status_reason=agent.get("detail"),
+            status_reason="Unsupported legacy M3 specialist output" if unsupported_m3 else agent.get("detail"),
             validation_status=val_status,
             validator_issues_count=len(agent.get("validation_issues") or []),
             evidence_ids=sorted(ev_by_agent.get(aid, set())),
@@ -390,7 +301,7 @@ def _module_status(status: Any) -> ExecutionStatus:
         return ExecutionStatus.QUALIFIED
     if s in {"failed", "rejected", "fail"}:
         return ExecutionStatus.FAILED
-    if s in {"unavailable", "not_run", "not_executed", "absent"}:
+    if s in {"unavailable", "not_run", "not_executed", "not_attempted", "absent"}:
         return ExecutionStatus.ABSENT
     if s in {"skipped"}:
         return ExecutionStatus.SKIPPED
@@ -406,7 +317,7 @@ def _index_bo_module_artifacts(
 
     These are the already-persisted outputs that live inside the memo's
     ``module_conclusions`` and the audit (M4 debt assessment + its Validator 8,
-    the M4 strategy Validator 8, Validator 7, final governance, canonical
+    the M4 strategy Validator 8, rebuilt M3 components, final governance, canonical
     snapshot). Only stages that ACTUALLY executed and were persisted are indexed;
     an absent stage is either omitted or recorded ``absent`` with a reason — never
     fabricated. Each entry points into the recorded memo/audit file via
@@ -482,22 +393,19 @@ def _index_bo_module_artifacts(
             depends_on=[f"bo.agent.m4_strategy_capital.{run_id}"],
         ))
 
-    # --- Validator 7 (M3 numeric binding) ------------------------------------
-    m3 = mc.get("M3") if isinstance(mc.get("M3"), dict) else {}
-    if "m3_assessment_status" in m3:
-        v7_status = str(m3.get("m3_assessment_status") or "")
-        entries.append(ArtifactEntry(
-            artifact_id=f"bo.validator7.{run_id}",
-            artifact_type=ArtifactType.VALIDATION_REPORT,
-            case_id=case_id, run_id=run_id, producer_module="M3",
-            producer_validator="validator_7",
-            file_location=memo_loc, audit_subpath="module_conclusions.M3.m3_assessment",
-            status=_module_status(v7_status),
-            status_reason=(None if v7_status == "validated"
-                           else "M3 assessment unavailable; Validator 7 did not bind numeric evidence"),
-            validation_status=v7_status or None,
-            depends_on=[f"bo.agent.m3_corporate_management.{run_id}"],
-        ))
+    m3 = mc.get("M3") or {}
+    if m3.get("workflow") == "m3-rebuild":
+        for kind, component in (m3.get("m3_rebuild") or {}).items():
+            payload = component.get("artifact") or {}
+            entries.append(ArtifactEntry(
+                artifact_id=f"bo.m3.{kind}.{run_id}",
+                artifact_type=ArtifactType.CORPORATE_STRUCTURE if kind == "structure" else ArtifactType.MODULE_OUTPUT,
+                case_id=case_id, run_id=run_id, producer_module="M3",
+                producer_agent="m3_structure_conversion" if kind == "structure" else "m3_management_assessment",
+                schema_version=payload.get("schema_version"),
+                file_location=memo_loc, audit_subpath=f"module_conclusions.M3.m3_rebuild.{kind}",
+                status=_module_status(component.get("status")),
+                status_reason=component.get("error"), validation_status=component.get("validation_status")))
 
     # --- Final deterministic governance --------------------------------------
     fc = audit.get("final_conclusion") if isinstance(audit.get("final_conclusion"), dict) else None
@@ -744,7 +652,7 @@ def index_case_from_dir(
 ) -> ArtifactManifest:
     """Index all recorded BO / FO / M3 artifacts for ``case_id`` under ``output_root``.
 
-    ``m3_dirs`` optionally names standalone M3 demo directories (which live
+    ``m3_dirs`` optionally names rebuilt or unsupported historical M3 directories (which live
     outside ``<output>/bo`` — e.g. ``examples/bo_m3/.../demo_output/<x>``).
     ``repo_root`` is used only to make ``file_location`` repo-relative.
     """
@@ -762,9 +670,19 @@ def index_case_from_dir(
         for run_dir in sorted(p for p in fo_case.iterdir() if p.is_dir()):
             manifest.artifacts.extend(_index_fo_run(run_dir, root, case_id))
 
+    from app.services.bo.m3_rebuild.adapters import registry_entries
+    rebuild_root = output_root / "m3_rebuild" / case_id
+    if rebuild_root.is_dir():
+        for recorded in sorted(rebuild_root.glob("*/m3_rebuild_manifest.json")):
+            manifest.artifacts.extend(registry_entries(recorded, root, case_id))
+
     for m3_dir in m3_dirs or []:
         m3_path = Path(m3_dir)
-        if m3_path.is_dir():
+        if (m3_path / "m3_rebuild_manifest.json").is_file():
+            entries = registry_entries(m3_path / "m3_rebuild_manifest.json", root, case_id)
+            existing = {a.artifact_id for a in manifest.artifacts}
+            manifest.artifacts.extend(e for e in entries if e.artifact_id not in existing)
+        elif m3_path.is_dir():
             manifest.artifacts.extend(_index_m3_dir(m3_path, root, case_id))
 
     return manifest

@@ -2,13 +2,11 @@
 one into a manifest + dataflow graph, with artifact-access safety.
 
 This layer is deliberately filesystem-driven so the Explorer is demonstrable
-with real recorded artifacts even when no live DB run exists. It resolves two
-kinds of sources:
+with real recorded artifacts even when no live DB run exists. It resolves current outputs and unsupported historical recordings:
 
 * the configured ``output_dir`` (``<output>/bo/<case>`` and ``<output>/fo/<case>``),
-* registered M3 standalone demo directories under ``examples/bo_m3`` — these are
-  real, byte-stable recorded fixtures shipped in the repo, clearly labelled as
-  deterministic demo data (never presented as a live HCA run).
+* any surviving legacy M3 directories under ``examples/bo_m3`` are labelled
+  unsupported historical outputs; the legacy fixtures are no longer shipped.
 
 Artifact access is validated: an artifact id must resolve to a file *inside* the
 configured roots, and resolved paths are confirmed not to escape them (no
@@ -35,17 +33,17 @@ class CaseSource:
 
     case_id: str
     label: str
-    kind: str                      # "live" | "demo_fixture"
+    kind: str                      # "live" | "unsupported_legacy"
     output_root: Path
     repo_root: Path
     m3_dirs: tuple[Path, ...] = ()
     note: Optional[str] = None
 
 
-# Recorded, byte-stable M3 demo fixtures shipped in the repo. These are labelled
-# "deterministic fixture" everywhere in the UI, never a live run.
-_M3_DEMO_ROOT = Path("examples/bo_m3/structural_credit/demo_output")
-_M3_DEMO_CASES = {
+# Read-only discovery of historical outputs if a user restores them. These
+# locations cannot select or execute the retired implementation.
+_LEGACY_M3_ROOT = Path("examples/bo_m3/structural_credit/demo_output")
+_LEGACY_M3_CASES = {
     "hca_simulated": ("HCA (simulated M3 fixture)",
                       "Deterministic recorded Module 3 fixture — NOT a live HCA run."),
     "fictional_positive": ("Fictional — positive structure", "Deterministic M3 fixture."),
@@ -62,12 +60,12 @@ def discover_cases(
     repo_root: str | Path = ".",
     include_demo: bool = True,
 ) -> list[CaseSource]:
-    """List the cases the Explorer can render (live output + demo fixtures)."""
+    """List current cases and explicitly unsupported historical outputs."""
     output_root = Path(output_dir)
     repo = Path(repo_root)
     found: dict[str, CaseSource] = {}
 
-    for family in ("bo", "fo"):
+    for family in ("bo", "fo", "m3_rebuild"):
         base = output_root / family
         if base.is_dir():
             for case_dir in sorted(p for p in base.iterdir() if p.is_dir()):
@@ -80,14 +78,14 @@ def discover_cases(
                     )
 
     if include_demo:
-        for sub, (label, note) in _M3_DEMO_CASES.items():
-            demo_dir = repo / _M3_DEMO_ROOT / sub
-            if demo_dir.is_dir():
+        for sub, (label, note) in _LEGACY_M3_CASES.items():
+            demo_dir = repo / _LEGACY_M3_ROOT / sub
+            if demo_dir.is_dir() and any(demo_dir.glob("*.json")):
                 cid = f"demo:{sub}"
                 found[cid] = CaseSource(
-                    case_id=cid, label=label, kind="demo_fixture",
-                    output_root=repo / _M3_DEMO_ROOT, repo_root=repo,
-                    m3_dirs=(demo_dir,), note=note,
+                    case_id=cid, label="UNSUPPORTED LEGACY M3 — " + label, kind="unsupported_legacy",
+                    output_root=repo / _LEGACY_M3_ROOT, repo_root=repo,
+                    m3_dirs=(demo_dir,), note="Historical inspection only; not a supported M3 workflow. " + note,
                 )
 
     return list(found.values())
@@ -108,7 +106,7 @@ def manifest_for_case(
     source = _source_for(case_id, output_dir, repo_root)
     if source is None:
         return None
-    lookup_id = source.m3_dirs[0].name if source.kind == "demo_fixture" else case_id
+    lookup_id = source.m3_dirs[0].name if source.m3_dirs else case_id
     return build_manifest(
         source.output_root, lookup_id,
         m3_dirs=list(source.m3_dirs), repo_root=source.repo_root,

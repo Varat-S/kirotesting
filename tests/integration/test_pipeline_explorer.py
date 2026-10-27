@@ -27,7 +27,23 @@ from app.services.registry.explorer import (
     load_artifact,
 )
 
-DEMO_CASE = "demo:hca_simulated"
+from tests.registry_fixture import write_fixture,CASE,MANAGEMENT_ID
+DEMO_CASE = CASE
+DEMO_ROOT = Path("output")
+M3_FILE = Path("unused")
+
+
+@pytest.fixture(autouse=True)
+def current_m3_fixture(tmp_path,monkeypatch):
+    global DEMO_ROOT,M3_FILE
+    DEMO_ROOT=tmp_path/'output'
+    directory=write_fixture(DEMO_ROOT)
+    M3_FILE=directory/'Senior Management Assessment.json'
+    monkeypatch.setenv('OUTPUT_DIR',str(DEMO_ROOT))
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 def _q(s: str) -> str:
@@ -56,11 +72,11 @@ def test_graph_and_manifest_for_demo_case(client):
     assert m.status_code == 200
     body = m.json()
     assert body["manifest_version"] == "artifact-manifest-1.0"
-    assert any(a["artifact_id"] == "m3.analysis" for a in body["artifacts"])
+    assert any(a["artifact_id"] == MANAGEMENT_ID for a in body["artifacts"])
 
 
 def test_node_inspector_download_and_pdf(client):
-    base = f"/pipeline/{_q(DEMO_CASE)}/node/{_q('m3.analysis')}"
+    base = f"/pipeline/{_q(DEMO_CASE)}/node/{_q(MANAGEMENT_ID)}"
     node = client.get(base)
     assert node.status_code == 200
     assert node.json()["status"] in {"validated", "qualified"}
@@ -77,9 +93,9 @@ def test_node_inspector_download_and_pdf(client):
 
 
 def test_download_json_matches_recorded_artifact(client):
-    payload, _ = load_artifact(DEMO_CASE, "m3.analysis", "output", repo_root=".")
+    payload, _ = load_artifact(DEMO_CASE, MANAGEMENT_ID, str(DEMO_ROOT), repo_root=".")
     dl = client.get(
-        f"/pipeline/{_q(DEMO_CASE)}/node/{_q('m3.analysis')}/download.json")
+        f"/pipeline/{_q(DEMO_CASE)}/node/{_q(MANAGEMENT_ID)}/download.json")
     assert json.loads(dl.content) == payload  # export == actual recorded artifact
 
 
@@ -101,16 +117,16 @@ def test_illustration_graph_when_no_run(client):
 def test_access_is_bounded_to_known_artifacts():
     # A valid-looking id that is not in the manifest is rejected.
     with pytest.raises(ArtifactAccessError):
-        load_artifact(DEMO_CASE, "../../../../etc/passwd", "output", repo_root=".")
+        load_artifact(DEMO_CASE, "../../../../etc/passwd", str(DEMO_ROOT), repo_root=".")
 
 
 def test_absent_node_reports_reason_not_mock():
     # Craft an id that maps to an absent entry via a synthetic empty case.
-    info = inspect_node(DEMO_CASE, "m3.run_manifest", "output", repo_root=".")
+    info = inspect_node(DEMO_CASE, MANAGEMENT_ID, str(DEMO_ROOT), repo_root=".")
     assert info["payload_available"] is True  # this one exists
     # A missing-file artifact in a fresh case returns a reason, no payload.
-    cases = discover_cases("output", repo_root=".")
-    assert any(c.kind == "demo_fixture" for c in cases)
+    cases = discover_cases(str(DEMO_ROOT), repo_root=".")
+    assert any(c.case_id == DEMO_CASE for c in cases)
 
 
 # -- Shared CLI commands coexist after integration ----------------------------
