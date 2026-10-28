@@ -133,14 +133,16 @@ def test_dimension_values_match_the_imported_credit_dimensions():
                for s in V3_SPECS if s.module == "M1")
 
 
-def test_geographic_evidence_is_shared_but_not_owned_by_customer_stickiness():
+def test_new_specialist_ownership_and_coverage():
     m1s2 = V3_SPEC_BY_CODE["M1S2"]
     assert "external_event_exposure_assessment" not in m1s2.owned_parameters
-    assert any(q.query_id == "m1s2.geographic_context" for q in m1s2.plan)
+    assert any(q.query_id == "m1s2.volume_trends" for q in m1s2.plan)
+    assert V3_SPEC_BY_CODE["M1S1"].title == "Pricing Power"
+    assert V3_SPEC_BY_CODE["M1S3"].title == "Customer Stickiness"
     checks = {c.check_id: c for c in
               v3_coverage_checks(SECTOR_PROFILES["healthcare_provider"].checklist)}
     assert checks["hc.geography"].agent_codes == ("M2",)
-    assert checks["hc.revenue_realisation"].agent_codes == ("M1S3",)
+    assert checks["hc.revenue_realisation"].agent_codes == ("M1S1",)
 
 
 def test_case_coverage_checks_follow_the_code_map():
@@ -185,12 +187,20 @@ def test_a_not_assessed_result_cannot_carry_a_value_or_a_run():
 # -- prompts -----------------------------------------------------------------
 
 
-def test_v3_prompts_are_specialist_blocks_plus_unchanged_shared_rules():
+def test_v3_prompts_classify_primary_claims_without_changing_agent_6():
+    from app.prompts.bo_prompts import M1_SHARED_RULES
+
     v2_names = {e["name"] for e in bo_prompt_catalogue()}
     for entry in bo_v3_prompt_catalogue():
         assert entry["name"] not in v2_names  # v2 prompt versions never alternate
         if entry["name"] in V3_SPEC_BY_AGENT:  # specialist prompts
-            assert entry["template"].endswith(SHARED_RULES)
+            code = V3_SPEC_BY_AGENT[entry["name"]].code
+            if code in {"M1S1", "M1S2", "M1S3", "M1S4", "M1S5"}:
+                assert entry["template"].endswith(M1_SHARED_RULES)
+                assert all(label in entry["template"] for label in (
+                    "GREEN FACT", "YELLOW INFERENCE", "RED ASSUMPTION"))
+            else:
+                assert entry["template"].endswith(SHARED_RULES)
     for code in ("M1S1", "M1S2", "M1S3", "M1S4", "M1S5", "M1A6"):
         assert code not in SHARED_RULES
 

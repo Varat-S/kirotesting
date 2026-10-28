@@ -40,11 +40,11 @@ PIPELINE_GRAPH_VERSION = "pipeline-graph-1.0"
 # labels (the FO service is deterministic, not registry-driven).
 
 _M1_AGENTS = [
-    ("m1_revenue_quality", "BO1 Revenue Quality"),
-    ("m1_customer_stickiness", "BO2 Customer Stickiness"),
-    ("m1_pricing_power", "BO3 Pricing Power"),
-    ("m1_operating_model", "BO4 Operating Model"),
-    ("m1_competitive_durability", "BO5 Competitive Durability"),
+    ("m1_revenue_quality", "M1S1 Pricing Power"),
+    ("m1_customer_stickiness", "M1S2 Demand Defensiveness"),
+    ("m1_pricing_power", "M1S3 Customer Stickiness"),
+    ("m1_operating_model", "M1S4 Cost Resilience"),
+    ("m1_competitive_durability", "M1S5 Competitive Positioning"),
     ("m1_resilience_integration", "Agent 6 Synthesis (resilience)"),
 ]
 _M1_PRIMARY_IDS = [a for a, _ in _M1_AGENTS[:5]]

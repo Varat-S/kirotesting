@@ -17,6 +17,9 @@
   .tag.positive { border-color: #2f6b45; color: #2f6b45; }
   .tag.negative { border-color: #9a3324; color: #9a3324; }
   .tag.mixed { border-color: #8a6d1c; color: #8a6d1c; }
+  .tag.epi-fact { background: #e1f3e7; border-color: #78b58c; color: #205537; font-weight: bold; }
+  .tag.epi-inference { background: #fff3bf; border-color: #d4aa39; color: #775700; font-weight: bold; }
+  .tag.epi-assumption { background: #fde5e2; border-color: #d58880; color: #942d29; font-weight: bold; }
   .qual { font-style: italic; color: #55606e; }
   sup a { text-decoration: none; color: #23527c; font-family: Arial, Helvetica, sans-serif; font-size: .7rem; }
   table { border-collapse: collapse; width: 100%; font-family: Arial, Helvetica, sans-serif; font-size: .8rem; margin: .5rem 0; }
@@ -43,7 +46,7 @@
 {% macro cites(c) %}{% for n in c.citations %}<sup><a href="#src-{{ n }}">[{{ n }}]</a></sup>{% endfor %}{% endmacro %}
 {% macro claim(c) %}
 <div class="claim" id="claim-{{ c.claim_id }}">
-  <span class="tag {{ c.signal }}">{{ c.signal }}</span>{% if c.claim_type %}<span class="tag">{{ c.claim_type|replace('_', ' ') }}</span>{% endif %}<span class="tag">{{ c.materiality }} materiality</span><br>
+  <span class="tag {{ c.signal }}">{{ c.signal }}</span>{% if c.claim_type in ['fact', 'calculated_fact'] %}<span class="tag epi-fact">FACT</span>{% elif c.claim_type == 'assumption' %}<span class="tag epi-assumption">ASSUMPTION</span>{% elif c.claim_type == 'management_claim' %}<span class="tag epi-inference">ATTRIBUTED CLAIM</span>{% elif c.claim_type == 'inference' %}<span class="tag epi-inference">INFERENCE</span>{% endif %}<span class="tag">{{ c.materiality }} materiality</span><br>
   {% if c.title %}<strong>{{ c.title }}.</strong> {% endif %}{{ c.text }}{{ cites(c) }}
   {% if c.uncertainty %}<div class="qual">Qualification: {{ c.uncertainty }}</div>{% endif %}
   {% for q in c.quoted_values %}<div class="small">Calculation: {{ q.label }} = {{ q.value }}{% if q.unit %} ({{ q.unit }}){% endif %}{% if q.denominator %}, denominator {{ q.denominator }}{% endif %}{% if q.period %}, period {{ q.period }}{% endif %}</div>{% endfor %}
@@ -51,7 +54,7 @@
 {% endmacro %}
 {% macro finding(f) %}
 <div class="claim">
-  <span class="tag {{ f.direction }}">{{ f.direction }}</span><span class="tag">{{ f.materiality }} materiality</span>{% if f.attributed %}<span class="tag">management claim</span>{% endif %}{% if f.disposition == 'qualified' %}<span class="tag mixed">qualified</span>{% endif %}<br>
+  <span class="tag {{ f.direction }}">{{ f.direction }}</span>{% if f.claim_type in ['fact', 'calculated_fact'] %}<span class="tag epi-fact">FACT</span>{% elif f.claim_type == 'assumption' %}<span class="tag epi-assumption">ASSUMPTION</span>{% elif f.claim_type == 'management_claim' or f.attributed %}<span class="tag epi-inference">ATTRIBUTED CLAIM</span>{% elif f.claim_type == 'inference' %}<span class="tag epi-inference">INFERENCE</span>{% endif %}<span class="tag">{{ f.materiality }} materiality</span>{% if f.disposition == 'qualified' %}<span class="tag mixed">qualified</span>{% endif %}<br>
   {{ f.text }}{{ cites(f) }}
   {% if f.mechanism %}<div class="small">Credit mechanism: {{ f.mechanism }}</div>{% endif %}
   {% for q in f.qualifications or [] %}<div class="qual">Qualification: {{ q }}</div>{% endfor %}

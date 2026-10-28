@@ -367,9 +367,9 @@ def render_executive_summary(payload: dict[str, Any]) -> str:
     codes = {a["code"] for a in payload["agents"]}
     if "M3" in codes:  # specialist-only v3: provisional findings, no synthesis claim
         sections = [
-            ("Business model and revenue quality", "", pick(agent("M1S1"))),
-            ("Customer, payer and pricing risks", "", pick(agent("M1S2", "M1S3"))),
-            ("Operating model and competitive position", "",
+            ("Pricing power", "", pick(agent("M1S1"))),
+            ("Demand defensiveness and customer stickiness", "", pick(agent("M1S2", "M1S3"))),
+            ("Cost resilience and competitive positioning", "",
              pick(agent("M1S4", "M1S5"))),
             ("Industry context and disclosed risks", "", pick(agent("M2"))),
             ("Corporate structure, management and governance", "", pick(agent("M3"))),

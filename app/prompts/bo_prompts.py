@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.prompts.m1_specialist_briefs import M1_SPECIALIST_BRIEFS
 from app.schemas.bo_m3_management import stability_json_schema
 
 from app.prompts.agent_schemas import AGENT_PARAMETER_STATUSES
@@ -901,6 +902,58 @@ _AGENT_BRIEFS.update({
     ),
 })
 
+# The five primary M1 briefs are reviewed as a set.  Agent 6 retains its
+# existing interaction prompt and the original shared rules verbatim.
+_AGENT_BRIEFS.update(M1_SPECIALIST_BRIEFS)
+
+_M1_EPISTEMIC_RULES = (
+    "\nClassify each hypothesis clearly by epistemic status. Use claim_type as the "
+    "machine-readable color label: 'fact' or 'calculated_fact' = GREEN FACT; "
+    "'inference' = YELLOW INFERENCE; 'assumption' = RED ASSUMPTION. A "
+    "'management_claim' is a YELLOW ATTRIBUTED CLAIM, not an independently "
+    "established fact. Keep a sourced observation and your interpretation in "
+    "separate hypotheses when both are material. An assumption must be "
+    "identified as unverified and must not be presented as evidence. Do not "
+    "insert HTML, color codes, or label prefixes into claim text; the renderer "
+    "uses claim_type to show the colored label.\n"
+)
+
+_M1_LEGACY_PARAMETER_NOTES = {
+    "M1S1": (
+        "\nThe inherited revenue_realisation_assessment parameter is not a request "
+        "to analyze collections or credit losses. Classify it only where the "
+        "evidence directly establishes realised price; otherwise use "
+        "not_established/unavailable.\n"),
+    "M1S2": (
+        "\nThe inherited business_model_classification and "
+        "revenue_recurrence_assessment fields do not expand your remit. Assess "
+        "recurrence only as a property of demand volume; do not imply committed "
+        "revenue from repeat demand. If a full business-model classification "
+        "cannot be established within this remit, use not_established/unavailable.\n"),
+    "M1S3": (
+        "\nThe inherited customer_dependence_assessment field is relevant only "
+        "where dependence affects customer choice, retention, or switching. "
+        "Otherwise use not_established/unavailable rather than producing a "
+        "standalone concentration analysis.\n"),
+}
+
+# The new briefs permit transparent comparisons.  Keep numeric provenance
+# compatible with the current validator: a newly derived figure must first be
+# supplied as a governed indicator before it appears in a claim.
+_m1_numeric_start = SHARED_RULES.index("- Never calculate.")
+_m1_numeric_end = SHARED_RULES.index("- disposition and direction", _m1_numeric_start)
+M1_SHARED_RULES = (
+    SHARED_RULES[:_m1_numeric_start]
+    + "- Use sourced figures with their exact value, unit, period and denominator. "
+      "Copy filing figures in a verbatim evidence_quotes entry; bind indicators "
+      "in quoted_values using the exact parameter_result_id and value. You may "
+      "compare sourced figures and explain their relationship. For simple "
+      "arithmetic, identify the source inputs and method, but do not place a "
+      "newly calculated result in a claim until it is supplied as a governed "
+      "indicator. Never estimate unavailable values.\n"
+    + SHARED_RULES[_m1_numeric_end:]
+)
+
 _PARAMETER_TEMPLATE = (
     "You classify the categorical parameters you own from hypotheses that have "
     "ALREADY been investigated and governed. The input lists each hypothesis "
@@ -1084,6 +1137,8 @@ def specialist_block(spec) -> str:
         "Your parameters - emit ONLY these, and no other: "
         + ", ".join(spec.owned_parameters) + ".\n"
         f"Your hypothesis ids: '{spec.code}-H001', '{spec.code}-H002', ..."
+        + (_M1_EPISTEMIC_RULES if spec.code in M1_SPECIALIST_BRIEFS else "")
+        + _M1_LEGACY_PARAMETER_NOTES.get(spec.code, "")
         + (_M3_GROUNDING_RULES if spec.code == "M3" else "")
         + (_M3_STABILITY_RULES if spec.code == "M3" else "")
     )
@@ -1232,7 +1287,8 @@ def bo_v3_prompt_catalogue() -> list[dict]:
             continue
         entries.append({
             "name": spec.agent_id, "role": spec.agent_id,
-            "template": specialist_block(spec) + "\n" + SHARED_RULES,
+            "template": specialist_block(spec) + "\n" + (
+                M1_SHARED_RULES if spec.code in M1_SPECIALIST_BRIEFS else SHARED_RULES),
             "response_schema": (BO_M3_JSON_SCHEMA if spec.code == "M3"
                                 else BO_NARROW_JSON_SCHEMA),
             "label": f"Business Overview v3 specialist {spec.code}: {spec.title}",

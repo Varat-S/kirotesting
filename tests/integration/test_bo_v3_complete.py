@@ -27,19 +27,17 @@ def _fact(code, hid, claim, phrase, quote, *, direction="neutral"):
 def _script():
     answers = {
         "m1_revenue_quality": {"parameters": [], "hypotheses": [_fact(
-            "M1S1", "M1S1-H001", "Revenue comes from patient services at hospitals "
-            "and outpatient facilities.", "Our sources of revenue",
-            "Our sources of revenue are patient services provided at our facilities")]},
+            "M1S1", "M1S1-H001", "Managed-care agreements set negotiated rates.",
+            "managed care contracts",
+            "Our managed care contracts are generally multi-year agreements that set negotiated rates")]},
         "m1_customer_stickiness": {"parameters": [], "hypotheses": [_fact(
-            "M1S2", "M1S2-H001", "Managed-care contracts set rates and do not "
-            "guarantee minimum patient volumes.", "managed care contracts",
-            "the contracts do not guarantee minimum volumes of patients",
-            direction="negative")]},
+            "M1S2", "M1S2-H001", "Admissions were stable during the year.",
+            "admissions were stable", "admissions were stable during the year",
+            direction="positive")]},
         "m1_pricing_power": {"parameters": [], "hypotheses": [_fact(
-            "M1S3", "M1S3-H001", "Revenue per equivalent admission increased from "
-            "pricing, payer mix and case mix together.", "Revenue per equivalent",
-            "Revenue per equivalent admission increased 4.1% due to pricing, payer "
-            "mix and case mix acuity", direction="mixed")]},
+            "M1S3", "M1S3-H001", "Either party may terminate a managed-care agreement on notice.",
+            "managed care contracts", "Either party may terminate an agreement on notice",
+            direction="negative")]},
         "m1_operating_model": {"parameters": [], "hypotheses": [_fact(
             "M1S4", "M1S4-H001", "A nursing shortage and rising contract labour "
             "costs pressure the operating model.", "nursing shortage",
@@ -86,7 +84,7 @@ def _script():
     answers["orchestrate"] = {
         "overall_assessment": h.claim(
             "v3_overall", "assessment", "executive",
-            "The business has essential service demand but material labour, regulatory "
+            "The business has negotiated rates but material labour, regulatory "
             "and execution exposures.", ["M1S1-H001", "M1S4-H001", "M2-H001", "M4-H001"],
             materiality="high"),
         "strengths": [h.claim(
@@ -169,7 +167,7 @@ def test_m1_sections_list_validated_findings_the_narrative_skipped(db_session, t
     assert stickiness["notice"] is None
     assert stickiness["further_findings"][0]["citations"]
     html = render_memo_html(memo)
-    assert "do not guarantee minimum patient volumes" in html
+    assert "Admissions were stable during the year" in html
     assert all(s["notice"] is None for s in sections if s["further_findings"])
     # A memo recorded before this change derives the same findings at render time.
     legacy = copy.deepcopy(memo)

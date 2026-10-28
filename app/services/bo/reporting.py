@@ -104,6 +104,7 @@ def _further_findings(findings, used, cite, citable) -> list[dict[str, Any]]:
             continue
         item = {"hypothesis_id": f["hypothesis_id"], "text": f["claim"],
                 "mechanism": f.get("credit_mechanism"),
+                "claim_type": f.get("claim_type"),
                 "direction": f["direction"], "materiality": f["materiality"],
                 "attributed": f["admissibility"] == "attributed",
                 "citations": cite(f.get("supporting_evidence_ids") or [])}

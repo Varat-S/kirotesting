@@ -38,61 +38,62 @@ def _reuse(prefix: str, query_id: str, *, purpose: str | None = None) -> Retriev
 
 
 M1_REVENUE_QUALITY = BoAgentSpec(
-    "M1S1", "m1_revenue_quality", "Revenue Quality & Demand Defensiveness",
-    ("business_model_classification", "revenue_recurrence_assessment",
-     "demand_defensiveness_assessment", "cyclicality_seasonality_assessment"),
-    tuple(_reuse("m1s1", q) for q in (
-        "bo1.revenue_model", "bo1.demand_resilience", "bo1.demand_fragility",
-        "bo1.stabilisers", "bo1.stabiliser_limits")),
-    indicator_groups=("growth", "segment", "payer", "capital"),
+    "M1S1", "m1_revenue_quality", "Pricing Power",
+    ("pricing_power_assessment", "revenue_realisation_assessment"),
+    (
+        _reuse("m1s1", "bo3.pricing"),
+        _q("m1s1.rate_setting", "support", r"reimbursement rates?", r"negotiated rates?",
+           r"pricing terms?", r"Medicare benchmark", r"contract renewals?"),
+        _q("m1s1.price_limits", "contradict", r"price transparency",
+           r"reimbursement (?:cuts?|reductions?)", r"site-neutral",
+           r"payer consolidation", r"pricing pressure"),
+        _q("m1s1.realised_price", "support", r"net revenue per",
+           r"revenue per (?:admission|visit|unit)", r"commercial rates?",
+           r"implicit price concessions"),
+    ),
+    indicator_groups=("payer", "realisation", "growth"),
     dimension="revenue_quality_demand_defensiveness", validator_id="validator_1",
 )
 
 M1_CUSTOMER_STICKINESS = BoAgentSpec(
-    "M1S2", "m1_customer_stickiness", "Customer Stickiness & Concentration",
-    ("customer_dependence_assessment", "contract_termination_risk_assessment",
-     "switching_cost_assessment"),
+    "M1S2", "m1_customer_stickiness", "Demand Defensiveness",
+    ("business_model_classification", "revenue_recurrence_assessment",
+     "demand_defensiveness_assessment", "cyclicality_seasonality_assessment"),
     (
-        _reuse("m1s2", "bo2.customer_payer_mix"),
-        _reuse("m1s2", "bo2.contract_terms"),
-        _reuse("m1s2", "bo2.contract_limits"),
-        _q("m1s2.switching", "support", r"switching", r"retention", r"narrow networks?",
-           r"out-of-network", r"relationships? with", r"loyal"),
-        _q("m1s2.stickiness_limits", "contradict", r"shift\w* (?:to|away)",
-           r"alternative (?:sites?|providers?)", r"lose\w* (?:a )?(?:significant|major)",
-           r"exclu\w* from (?:networks?|plans?)"),
-        _q("m1s2.offsets", "mitigant", r"diversif\w* (?:payer|customer)",
-           r"long-term (?:contracts?|agreements?)", r"multi-?year"),
-        _q("m1s2.offset_limits", "mitigant_challenge", r"concentrat",
-           r"significant portion", r"depend\w* (?:up)?on"),
-        # Context only: geographic exposure is owned by M2. M1S2 may use it to
-        # describe where its customers are, never as evidence of stickiness.
-        _q("m1s2.geographic_context", "support", r"geographic\w* concentrat",
-           r"states? of", k=2),
+        _reuse("m1s2", "bo1.demand_resilience"),
+        _reuse("m1s2", "bo1.demand_fragility"),
+        _q("m1s2.volume_trends", "support", r"admissions?", r"visits?",
+           r"procedures?", r"surgeries", r"transactions?", r"shipments?"),
+        _q("m1s2.volume_mix", "contradict", r"uninsured", r"payer mix",
+           r"disenrollment", r"disenrolment", r"elective", r"outpatient"),
+        _q("m1s2.capacity", "mitigant_challenge", r"occupancy", r"length of stay",
+           r"staffing (?:shortage|constraint)", r"capacity constraints?"),
     ),
-    indicator_groups=("payer", "growth", "geography"),
+    indicator_groups=("growth", "segment", "payer", "workforce"),
     dimension="customer_stickiness_concentration", validator_id="validator_2",
 )
 
 M1_PRICING_POWER = BoAgentSpec(
-    "M1S3", "m1_pricing_power", "Pricing Power & Revenue Realisation",
-    ("pricing_power_assessment", "revenue_realisation_assessment"),
+    "M1S3", "m1_pricing_power", "Customer Stickiness",
+    ("customer_dependence_assessment", "contract_termination_risk_assessment",
+     "switching_cost_assessment"),
     (
-        _reuse("m1s3", "bo3.pricing"),
-        _reuse("m1s3", "bo2.realisation"),
-        _q("m1s3.pricing_limits", "contradict", r"price transparency",
-           r"reimbursement (?:cuts?|reductions?)", r"rate (?:reductions?|cuts?)",
-           r"site-neutral", r"pricing pressure"),
-        _q("m1s3.realisation_offsets", "mitigant", r"supplemental payments?",
-           r"collection (?:efforts|procedures)", r"eligibility"),
-        _reuse("m1s3", "bo3.defence_limits"),
+        _reuse("m1s3", "bo2.contract_terms"),
+        _reuse("m1s3", "bo2.contract_limits"),
+        _q("m1s3.retention", "support", r"retention", r"repeat (?:use|purchase)",
+           r"renewal", r"referrals?", r"in-network", r"continuity of care"),
+        _q("m1s3.switching", "contradict", r"narrow networks?",
+           r"out-of-network", r"switching", r"exclusive arrangements?",
+           r"physician (?:recruitment|retention)"),
+        _q("m1s3.access", "mitigant", r"network of", r"outpatient sites?",
+           r"access points?", r"integrated services?", r"patient experience"),
     ),
-    indicator_groups=("payer", "realisation", "growth"),
+    indicator_groups=("payer", "growth", "geography"),
     dimension="pricing_power_revenue_realisation", validator_id="validator_3",
 )
 
 M1_OPERATING_MODEL = BoAgentSpec(
-    "M1S4", "m1_operating_model", "Operating Model & Cost Resilience",
+    "M1S4", "m1_operating_model", "Cost Resilience",
     ("workforce_cost_resilience_assessment", "supplier_dependence_assessment"),
     (
         _q("m1s4.cost_structure", "support", r"fixed costs?", r"operating leverage",
@@ -108,7 +109,7 @@ M1_OPERATING_MODEL = BoAgentSpec(
 )
 
 M1_COMPETITIVE_DURABILITY = BoAgentSpec(
-    "M1S5", "m1_competitive_durability", "Competitive Durability",
+    "M1S5", "m1_competitive_durability", "Competitive Positioning",
     ("competitive_position_assessment", "competitive_pressure_assessment",
      "barriers_to_entry_assessment"),
     tuple(_reuse("m1s5", q) for q in (
@@ -243,20 +244,20 @@ OWNERSHIP_NOTES: dict[str, str] = {
         "M3 assesses company-specific events; cross-module synthesis assesses "
         "their wider interactions.",
     "external_event_exposure_assessment":
-        "Owned by M2. Geographic concentration evidence may be consumed by M1S2 "
-        "as context, never as evidence of customer stickiness.",
+        "Owned by M2. Geographic context may inform the M1 specialists but "
+        "does not by itself establish demand defensiveness or customer stickiness.",
     "supplier_dependence_assessment": "Moved from BO2 to Operating Model (M1S4).",
 }
 
 # Coverage questions: which v3 agent must answer each sector check. Checks not
 # listed (for example case-specific ones) follow the v2 -> v3 code map.
-V2_CODE_TO_V3_CODE = {"BO1": "M1S1", "BO2": "M1S2", "BO3": "M1S5", "BO4": "M1S4",
+V2_CODE_TO_V3_CODE = {"BO1": "M1S2", "BO2": "M1S3", "BO3": "M1S5", "BO4": "M1S4",
                       "BO5": "M2", "BO6": "M1A6"}
 V3_CHECK_ASSIGNMENT: dict[str, tuple[str, ...]] = {
-    "hc.payer_mix": ("M1S2",),
+    "hc.payer_mix": ("M1S1", "M1S2"),
     "hc.contract_rates_vs_volumes": ("M1S1", "M1S2"),
-    "hc.unit_revenue_vs_pricing": ("M1S3",),
-    "hc.revenue_realisation": ("M1S3",),
+    "hc.unit_revenue_vs_pricing": ("M1S1",),
+    "hc.revenue_realisation": ("M1S1",),
     "hc.operating_entities": ("M3",),
     "hc.workforce": ("M1S4",),
     "hc.geography": ("M2",),

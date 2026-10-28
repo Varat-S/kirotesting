@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 
 
-OWNERSHIP_POLICY_VERSION = "bo-semantic-ownership-1"
+OWNERSHIP_POLICY_VERSION = "bo-semantic-ownership-2"
 
 
 @dataclass(frozen=True)
@@ -42,10 +42,10 @@ _RULES = (
     _Rule("M1S5", "M4", r"\b(?:capital allocation|acquisition strategy|share repurchase|dividend policy|capex strategy)\b",
           "Strategy and capital-allocation conclusions are owned by M4."),
     _Rule("M1S3", "M1S2", r"\b(?:payer|customer) mix\b",
-          "Payer/customer mix alone is a concentration conclusion owned by M1S2.",
-          unless=r"\b(?:price|pricing|rate|reimbursement|realisation|realization|collection)\b"),
-    _Rule("M1S3", "M1S2", r"\brevenue (?:grew|growth|declined|fell|increased)\b",
-          "Realized revenue movement alone does not establish pricing discretion.",
+          "Payer/customer mix alone is a volume-quality conclusion owned by M1S2.",
+          unless=r"\b(?:retention|switching|loyalty|referral|steer|network access)\b"),
+    _Rule("M1S1", "M1S2", r"\brevenue (?:grew|growth|declined|fell|increased)\b",
+          "Revenue movement alone does not establish pricing discretion.",
           unless=r"\b(?:price|pricing|rate|reimbursement|yield|unit revenue)\b"),
 )
 

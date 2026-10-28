@@ -3,6 +3,10 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Business Overview workbench</title>{% include 'browser_style.html.j2' %}
 <style>
   .ok { color: #2f6b45; font-weight: bold; } .bad { color: #9a3324; font-weight: bold; } .warn { color: #8a6d1c; font-weight: bold; }
+  .epistemic { display: inline-block; padding: .15rem .45rem; border-radius: .3rem; font-size: .78rem; font-weight: 700; letter-spacing: .02em; }
+  .epistemic.fact { color: #205537; background: #e1f3e7; border: 1px solid #78b58c; }
+  .epistemic.inference { color: #775700; background: #fff3bf; border: 1px solid #d4aa39; }
+  .epistemic.assumption { color: #942d29; background: #fde5e2; border: 1px solid #d58880; }
   iframe { width: 100%; height: 720px; border: 1px solid #c9d1da; background: #fff; }
   form.review input[type=text] { width: 22rem; max-width: 100%; }
 </style></head>
@@ -46,7 +50,7 @@
 
 {% macro hypotheses(items) %}
 {% if items %}<div class="table-wrap"><table><thead><tr><th>Id</th><th>Claim</th><th>Type</th><th>Direction</th><th>Disposition</th><th>Confidence</th><th>Notes</th></tr></thead><tbody>
-{% for h in items %}<tr><td><code>{{ h.hypothesis_id }}</code></td><td>{{ h.claim }}{% if h.corrects_hypothesis_id %}<br><span class="subtle">corrects {{ h.corrects_hypothesis_id }}</span>{% endif %}</td><td>{{ h.claim_type|replace('_', ' ') }}</td><td>{{ h.direction }}</td><td>{{ st(h.disposition) }}<br><span class="subtle">{{ h.admissibility|replace('_', ' ') }}</span></td><td>{{ h.confidence|replace('_', ' ') }}</td><td>{% for n in h.validation_notes %}{{ n }}<br>{% endfor %}{% for m in h.missing_information %}<span class="subtle">missing: {{ m }}</span><br>{% endfor %}</td></tr>{% endfor %}
+{% for h in items %}<tr><td><code>{{ h.hypothesis_id }}</code></td><td>{{ h.claim }}{% if h.corrects_hypothesis_id %}<br><span class="subtle">corrects {{ h.corrects_hypothesis_id }}</span>{% endif %}</td><td>{% if h.claim_type in ['fact', 'calculated_fact'] %}<span class="epistemic fact">FACT</span>{% elif h.claim_type == 'assumption' %}<span class="epistemic assumption">ASSUMPTION</span>{% elif h.claim_type == 'management_claim' %}<span class="epistemic inference">ATTRIBUTED CLAIM</span>{% else %}<span class="epistemic inference">INFERENCE</span>{% endif %}</td><td>{{ h.direction }}</td><td>{{ st(h.disposition) }}<br><span class="subtle">{{ h.admissibility|replace('_', ' ') }}</span></td><td>{{ h.confidence|replace('_', ' ') }}</td><td>{% for n in h.validation_notes %}{{ n }}<br>{% endfor %}{% for m in h.missing_information %}<span class="subtle">missing: {{ m }}</span><br>{% endfor %}</td></tr>{% endfor %}
 </tbody></table></div>{% else %}<p>None.</p>{% endif %}
 {% endmacro %}
 <section id="accepted"><h2>Accepted and qualified hypotheses</h2>{{ hypotheses(view.accepted_hypotheses) }}</section>
