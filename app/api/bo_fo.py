@@ -4,8 +4,9 @@
 * ``GET  /run/reports?ticker=`` -- a ticker's 10-Ks on SEC EDGAR, to choose which year to download
 * ``POST /run/fetch`` -- download the chosen 10-K into ``edgar_filings/``
 * ``POST /run/import`` -- upload a 10-K's files (or a .zip) into ``edgar_filings/``
-* ``POST /run/start`` -- start both sections in the background over one folder
+* ``POST /run/start`` -- start both sections (or the Business Overview alone) in the background over one folder
 * ``GET  /run/jobs/{job_id}`` -- a run's progress (JSON, polled by the page)
+* ``POST /run/jobs/{job_id}/stop`` -- stop a run at its sections' next step
 
 Runs started here are live (both sections on the configured provider), as on ``/fo``. Offline
 runs are available from the CLI (``run-bo-fo --bo-responses ... --fo-responses ...``).
@@ -55,7 +56,7 @@ def _page(*, error=None, notice=None, selected_folder=None, job=None, values=Non
     settings = get_settings()
     fo_ok, fo_reason = precheck.agent_available()
     bo_ok, bo_reason = _bo_available()
-    models, models_note = fo_models.available_models() if fo_ok else ([], None)
+    models, models_note = fo_models.available_models() if fo_ok or bo_ok else ([], None)
     return HTMLResponse(
         _env.get_template("bo_fo_run.html.j2").render(
             filings=shared_filing.list_shared(), selected_folder=selected_folder,
@@ -65,6 +66,7 @@ def _page(*, error=None, notice=None, selected_folder=None, job=None, values=Non
             bo_ok=bo_ok, bo_reason=bo_reason, models=models, models_note=models_note,
             m3_versions=M3_VERSION_LABELS,
             selected_m3_version=(values or {}).get("m3_version") or DEFAULT_M3_VERSION,
+            selected_sections=(values or {}).get("sections") or "both",
             selected_model=(values or {}).get("model") or fo_models.configured_model()),
         status_code=status_code)
 
@@ -164,23 +166,28 @@ def start_run(
     requested_amount_m: str = Form(default=""),
     tenor_years: str = Form(default=""),
     m3_version: str = Form(default=DEFAULT_M3_VERSION),
+    sections: str = Form(default="both"),
 ):
     values = {"case_id": case_id, "model": model, "cutoff": cutoff,
               "requested_amount_m": requested_amount_m, "tenor_years": tenor_years,
-              "m3_version": m3_version}
+              "m3_version": m3_version, "sections": sections}
+    bo_only = sections == "bo"
     settings = get_settings()
     try:
         database = bo_fo.sqlite_path(settings.database_url)
         parsed_cutoff = datetime.fromisoformat(cutoff.replace("Z", "+00:00")) if cutoff.strip() else None
+        if sections not in ("both", "bo"):
+            raise ValueError(f"Unknown sections {sections!r}.")
+        # RMS needs the FO, so a Business Overview only run ignores a loan request.
         rms_request = (RmsRequest(float(requested_amount_m), tenor_years=int(tenor_years) if tenor_years.strip()
                                   else None)
-                       if requested_amount_m.strip() else None)
+                       if requested_amount_m.strip() and not bo_only else None)
         settled = bo_fo.plan(folder, case_id.strip() or None, parsed_cutoff)
         # The picked model runs both sections: every BO tier and the FO's Pre-check Agent.
         m3_version = check_m3_version(m3_version)
         bo_backend = bo_fo.bo_live_backend(model.strip() or None)
         m3_backend = bo_fo.m3_v2_live_backend(model.strip() or None) if m3_version == "v2" else None
-        fo_backend = precheck.live_backend(model.strip() or None)
+        fo_backend = None if bo_only else precheck.live_backend(model.strip() or None)
     except Exception as exc:  # a folder, cut-off or provider problem: nothing has started
         return _page(error=f"The run cannot start: {exc}", selected_folder=folder, values=values,
                      status_code=400)
@@ -188,7 +195,7 @@ def start_run(
         database=database, folder=folder, case_id=settled["case_id"], cutoff=settled["cutoff"],
         bo_backend=bo_backend, fo_backend=fo_backend, fo_mode="live",
         m3_version=m3_version, m3_backend=m3_backend,
-        output_root=settings.output_dir, data_root=settings.data_dir, rms_request=rms_request)
+        output_root=settings.output_dir, data_root=settings.data_dir, rms_request=rms_request, bo_only=bo_only)
     return RedirectResponse(f"/run?job={quote(job_id)}", status_code=303)
 
 
@@ -198,3 +205,11 @@ def job_status(job_id: str) -> JSONResponse:
     if job is None:
         raise HTTPException(status_code=404, detail="Unknown run.")
     return JSONResponse(jsonable_encoder(job), headers={"Cache-Control": "no-store"})
+
+
+@router.post("/run/jobs/{job_id}/stop")
+def stop_job(job_id: str):
+    if bo_fo.jobs.get(job_id) is None:
+        raise HTTPException(status_code=404, detail="Unknown run.")
+    bo_fo.jobs.stop(job_id)  # a run that already ended is left as it is
+    return RedirectResponse(f"/run?job={quote(job_id)}", status_code=303)

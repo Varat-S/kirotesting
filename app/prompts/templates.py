@@ -70,7 +70,7 @@ from app.schemas.llm import (
     HYPOTHESIS_TESTING_JSON_SCHEMA,
     MODULE_RED_CHALLENGE_JSON_SCHEMA,
 )
-from app.services.modules.module4.prompt import MODULE4_PROMPT
+from app.services.modules.module4.prompt import MODULE4_PROMPT, MODULE4_RECONCILIATION_PROMPT
 
 # Role identifiers map a prompt to the LLMClient method it drives.
 ROLE_EXTRACT = "extract"
@@ -494,4 +494,6 @@ PROMPT_CATALOGUE: list[dict] = [
     # Module 4 debt-structure specialist (independent; driven via ``analyze``
     # with ``prompt_name="module4_debt_structure_specialist"``).
     MODULE4_PROMPT,
+    # Its one follow-up when Validator 8's reconciliation leaves a gap.
+    MODULE4_RECONCILIATION_PROMPT,
 ]

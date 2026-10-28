@@ -16,6 +16,12 @@ two never share a database while running:
 
 If that copy cannot be made, the staging database is kept and its path reported; nothing is lost.
 
+With ``bo_only`` the FO is not run at all (its entry is ``skipped``), so the BO can be run by itself.
+
+A run can be stopped (``stop``, set from the browser by :meth:`Jobs.stop`): each section checks it before every
+step and ends ``stopped``, recording nothing, and RMS is skipped. A model call already in flight can't be
+interrupted, so the stop takes effect when it returns. A section that already finished keeps its result.
+
 With a loan request, Risk Mitigation & Structuring (:mod:`app.services.rms`) runs once both threads have
 finished, and only when both sections completed: it reads the BO's ``handoff.json`` and the FO's
 ``financial_overview.json`` and writes ``<output>/rms/<case>/<run>/rms.json``. It is deterministic (no model)
@@ -145,7 +151,8 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
               output_root, data_root=None, case_id: str | None = None, cutoff: datetime | None = None,
               produce_pdf: bool = False, m3_version: str | None = None, m3_backend=None,
               rms_request: rms.RmsRequest | None = None, on_progress=None,
-              lock_wait: float = LOCK_WAIT_SECONDS) -> dict:
+              lock_wait: float = LOCK_WAIT_SECONDS, bo_only: bool = False,
+              stop: threading.Event | None = None) -> dict:
     """Run both sections at once; returns ``{"case_id", "folder", "cutoff", "bo": {...}, "fo": {...},
     "rms": {...}}``.
 
@@ -153,13 +160,22 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
     ``error``. ``m3_version`` picks the BO's Module 3 (``v1`` default, ``v2`` the rebuild, whose management
     specialist and reviewer use ``m3_backend``). ``rms`` is ``completed``, ``failed`` or ``skipped`` (no request, or a section didn't complete),
     with its ``summary``, ``error`` or ``reason``. ``on_progress(section, message)`` is called from the worker
-    threads as they advance, and for ``rms`` once both have finished.
+    threads as they advance, and for ``rms`` once both have finished. ``bo_only`` runs the BO by itself: the FO
+    (and so RMS) is ``skipped`` and ``fo_backend`` is not used. Setting ``stop`` ends each unfinished section
+    ``stopped`` at its next step.
     """
     database = Path(database).resolve()
     data_root = Path(data_root) if data_root is not None else database.parent
     settled = plan(folder, case_id, cutoff)
     case_id = settled["case_id"]
     say = on_progress or (lambda section, message: None)
+
+    def checker(section):
+        def check(step):
+            if stop is not None and stop.is_set():
+                raise RunStopped(f"Stopped by the analyst before {step}; nothing was recorded.")
+            say(section, step)
+        return check
 
     def bo():
         from app.services.bo.runner import BusinessOverviewRunner
@@ -174,11 +190,11 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
             f"sqlite:///{database.as_posix()}", sqlite_timeout=lock_wait)
         try:
             with factory() as session:
-                say("bo", "running the Business Overview")
                 result = BusinessOverviewRunner(
                     session, backend=bo_backend, data_root=data_root, output_root=output_root,
                     bo_roster=BO_ROSTER, enable_m4_debt_specialist=True,
                     m3_version=m3_version, m3_backend=m3_backend, m3_reviewer_backend=m3_backend,
+                    check_stop=checker("bo"),
                 ).run_case(case_id, package=package, produce_pdf=produce_pdf)
                 say("bo", "recording the Business Overview")
                 session.commit()
@@ -196,7 +212,7 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
             with factory() as session:
                 result = FinancialOverviewRunner(
                     session, output_root=output_root, agent_backend=fo_backend, agent_mode=fo_mode,
-                    check_stop=lambda step: say("fo", step),
+                    check_stop=checker("fo"),
                 ).run_filing(folder, case_id)
                 session.commit()
         except BaseException:
@@ -213,20 +229,32 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
         return result.summary()
 
     outcome = {"case_id": case_id, "folder": folder, "cutoff": settled["cutoff"].isoformat()}
+    if bo_only:
+        outcome["fo"] = {"status": "skipped", "reason": "Business Overview only run."}
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix="bo-fo") as pool:
-        futures = {pool.submit(bo): "bo", pool.submit(fo): "fo"}
+        futures = {pool.submit(bo): "bo"}
+        if not bo_only:
+            futures[pool.submit(fo)] = "fo"
         for future in as_completed(futures):
             section = futures[future]
             try:
                 outcome[section] = {"status": "completed", "summary": future.result()}
                 say(section, "completed")
+            except RunStopped as exc:
+                outcome[section] = {"status": "stopped", "reason": str(exc)}
+                say(section, "stopped")
             except Exception as exc:  # one section's failure is reported, never raised over the other's result
                 outcome[section] = {"status": "failed", "error": f"{type(exc).__name__}: {exc}",
                                     "traceback": traceback.format_exc(limit=8)}
                 if isinstance(exc, StagingKept):
                     outcome[section]["staging_database"] = str(exc.staging)
                 say(section, "failed")
-    outcome["rms"] = run_rms(outcome, rms_request, output_root, say)
+    if stop is not None and stop.is_set():
+        outcome["rms"] = {"status": "skipped", "reason": "The run was stopped."}
+        if rms_request is not None:
+            say("rms", "skipped")
+    else:
+        outcome["rms"] = run_rms(outcome, rms_request, output_root, say)
     return outcome
 
 
@@ -234,6 +262,9 @@ def run_rms(outcome: dict, request: rms.RmsRequest | None, output_root, say) -> 
     """Risk Mitigation & Structuring over the two sections' recorded outputs, once both have completed."""
     if request is None:
         return {"status": "skipped", "reason": "No requested loan amount was given."}
+    if outcome["fo"]["status"] == "skipped":
+        say("rms", "skipped")
+        return {"status": "skipped", "reason": "Needs both sections; this run was Business Overview only."}
     unfinished = [s.upper() for s in ("bo", "fo") if outcome[s]["status"] != "completed"]
     if unfinished:
         say("rms", "skipped")
@@ -262,6 +293,10 @@ def run_rms(outcome: dict, request: rms.RmsRequest | None, output_root, say) -> 
                 "traceback": traceback.format_exc(limit=8)}
     say("rms", "completed")
     return {"status": "completed", "summary": rms_runner.rms_summary(record, path)}
+
+
+class RunStopped(RuntimeError):
+    """The analyst stopped the run; the section recorded nothing."""
 
 
 class StagingKept(RuntimeError):
@@ -372,30 +407,39 @@ class Jobs:
         self._lock = threading.Lock()
         self._jobs: dict[str, dict] = {}
         self._meters: dict[str, dict[str, usage.Meter | None]] = {}  # per job: each section's backend meter
+        self._stops: dict[str, threading.Event] = {}
 
     def start(self, **kwargs) -> str:
         job_id = uuid.uuid4().hex[:12]
         now = datetime.now(timezone.utc).isoformat()
+        bo_only = kwargs.get("bo_only", False)
+        rms_waits = bool(kwargs.get("rms_request")) and not bo_only
         job = {"job_id": job_id, "status": "running", "started_at": now, "finished_at": None,
-               "folder": kwargs["folder"], "case_id": kwargs.get("case_id"),
-               "sections": {**{s: {"status": "running", "step": "starting", "steps": []} for s in ("bo", "fo")},
-                            "rms": {"status": "waiting" if kwargs.get("rms_request") else "skipped",
-                                    "step": "waits for both sections" if kwargs.get("rms_request")
+               "folder": kwargs["folder"], "case_id": kwargs.get("case_id"), "bo_only": bo_only,
+               "stop_requested": False,
+               "sections": {"bo": {"status": "running", "step": "starting", "steps": []},
+                            "fo": ({"status": "skipped", "step": "not run (Business Overview only)", "steps": []}
+                                   if bo_only else {"status": "running", "step": "starting", "steps": []}),
+                            "rms": {"status": "waiting" if rms_waits else "skipped",
+                                    "step": "waits for both sections" if rms_waits
+                                    else "not run (Business Overview only)" if bo_only
                                     else "no requested loan amount", "steps": []}},
                "result": None, "error": None}
         with self._lock:
             self._jobs[job_id] = job
             self._meters[job_id] = {"bo": usage.meter_of(kwargs.get("bo_backend")),
                                     "fo": usage.meter_of(kwargs.get("fo_backend"))}
+            stop = self._stops[job_id] = threading.Event()
             for old in sorted(self._jobs, key=lambda k: self._jobs[k]["started_at"])[:-self.KEEP]:
                 if self._jobs[old]["status"] != "running":
                     del self._jobs[old]
                     self._meters.pop(old, None)
+                    self._stops.pop(old, None)
 
         def progress(section, message):
             with self._lock:
                 state = job["sections"][section]
-                if message in ("completed", "failed", "skipped"):
+                if message in ("completed", "failed", "skipped", "stopped"):
                     state["status"] = message
                 else:
                     state["status"] = "running"
@@ -404,9 +448,10 @@ class Jobs:
 
         def work():
             try:
-                result = run_bo_fo(on_progress=progress, **kwargs)
+                result = run_bo_fo(on_progress=progress, stop=stop, **kwargs)
                 with self._lock:
-                    job.update(result=result, case_id=result["case_id"], status="finished")
+                    job.update(result=result, case_id=result["case_id"],
+                               status="stopped" if stop.is_set() else "finished")
                     for section in ("bo", "fo", "rms"):
                         job["sections"][section]["status"] = result[section]["status"]
                     if result["rms"]["status"] == "skipped":
@@ -422,6 +467,19 @@ class Jobs:
 
         threading.Thread(target=work, name=f"bo-fo-{job_id}", daemon=True).start()
         return job_id
+
+    def stop(self, job_id: str) -> bool:
+        """Ask a running job to stop at its sections' next step; False when there is no such running job."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None or job["status"] != "running":
+                return False
+            job["stop_requested"] = True
+            for state in job["sections"].values():
+                if state["status"] == "running":
+                    state["step"] = "stopping after the current step"
+            self._stops[job_id].set()
+            return True
 
     def get(self, job_id: str) -> dict | None:
         with self._lock:

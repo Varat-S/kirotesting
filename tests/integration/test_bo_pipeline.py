@@ -39,6 +39,7 @@ from app.services.bo.plans import (
     BO_PRIMARY_AGENT_IDS,
 )
 from app.services.bo.runner import BusinessOverviewRunner
+from app.services.bo.synthesis import NARRATIVE_ONLY_UNCERTAINTY
 from app.services.orchestration.business import ALLOWED_ORCHESTRATOR_EXTRAS
 from app.services.orchestration.challenge_loop import RULE_UNRESOLVED_CHALLENGE
 from tests.bo_helpers import (
@@ -246,8 +247,9 @@ def test_orchestrator_input_is_validated_structure_only(db_session, tmp_path):
     (lambda a: a["material_risks"].append(claim(
         "bo_r9", "risk", "BO5", "Regional concentration in two states is a risk.",
         ["BO5-H001"], claim_type="fact")), "double_counted_risk"),
-    (lambda a: a["key_drivers"].append(claim(
-        "bo_d8", "driver", "BO1", "Demand is durable.", [])), "no_validated_basis"),
+    (lambda a: a.update(overall_assessment=claim(
+        "bo_overall", "assessment", "executive", "Provisional view only.", [],
+        uncertainty="Inferred.")), "no_validated_basis"),
     (lambda a: a["key_drivers"].append({**claim(
         "bo_d6", "driver", "BO1", "Revenue is seasonal by quarter.", ["BO1-H004"],
         claim_type="fact"), "evidence_ids": [{"$hypothesis_evidence": "BO5-H001"}]}),
@@ -293,6 +295,49 @@ def test_overstated_claim_type_is_lowered_not_rejected(db_session, tmp_path):
     assert history[0]["claim_type_downgrades"] == ["bo_d7"]
     adjustments = result.record["agents"]["business_orchestrator"]["adjustments"]
     assert any(a["claim_id"] == "bo_d7" and "lowered to" in a["note"]
+               for a in adjustments)
+
+
+def test_missing_qualification_is_filled_not_rejected(db_session, tmp_path):
+    script = good_script()
+    answer = orchestrator_answer()
+    answer["key_drivers"].append(claim(
+        "bo_d7", "driver", "BO4", "A training pipeline supports staffing.", ["BO4-H002"]))
+    script["orchestrate"] = answer
+
+    result, backend = run(db_session, tmp_path, script)
+
+    assert result.conclusion_status == "accepted"
+    assert backend.calls("orchestrate") == 1
+    history = result.audit["orchestrator"]["history"]
+    assert history[0]["status"] == "accepted"
+    assert history[0]["added_qualifications"] == ["bo_d7"]
+    conclusion = db_session.query(TopicConclusionRow).one()
+    assert NARRATIVE_ONLY_UNCERTAINTY in json.dumps(conclusion.payload)
+    adjustments = result.record["agents"]["business_orchestrator"]["adjustments"]
+    assert any(a["claim_id"] == "bo_d7" and "Standard uncertainty added" in a["note"]
+               for a in adjustments)
+
+
+def test_uncited_claim_is_dropped_not_rejected(db_session, tmp_path):
+    script = good_script()
+    answer = orchestrator_answer()
+    answer["strengths"].append(claim(
+        "bo_s9", "strength", "M4", "Refinancing discipline is exemplary.", [],
+        title="Exemplary Refinancing Discipline", claim_type="fact"))
+    script["orchestrate"] = answer
+
+    result, backend = run(db_session, tmp_path, script)
+
+    assert result.conclusion_status == "accepted"
+    assert backend.calls("orchestrate") == 1
+    history = result.audit["orchestrator"]["history"]
+    assert history[0]["status"] == "accepted"
+    assert history[0]["dropped_uncited_claims"] == ["bo_s9"]
+    claim_ids = {c["claim_id"] for c in result.audit["orchestrator"]["claims"]}
+    assert "bo_s9" not in claim_ids and "bo_s1" in claim_ids
+    adjustments = result.record["agents"]["business_orchestrator"]["adjustments"]
+    assert any(a["claim_id"] == "bo_s9" and "dropped from strengths" in a["note"]
                for a in adjustments)
 
 

@@ -27,7 +27,7 @@ import copy
 import re
 import uuid
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -105,6 +105,8 @@ from app.services.bo.synthesis import (
     challenge_outcome,
     conclusion_prechecks,
     downgrade_overstated_claim_types,
+    drop_uncited_claims,
+    fill_missing_qualifications,
     hypothesis_view,
     iter_claims,
     parameter_value_sets,
@@ -144,6 +146,24 @@ DATA_NOTICE = (
 # M3-v2's routed input packet is persisted under this pseudo agent id.
 M3_PACKET_AGENT_ID = "m3_corporate_management_input"
 ANALYSIS_MODE = "agentic_bo_only"
+
+
+def _linked_proxy(documents, primary) -> dict | None:
+    """The admitted DEF 14A for a selected SEC 10-K: same CIK, in the acquisition window
+    (filed up to 180 days after the 10-K, else up to 45 days before), nearest first."""
+    if not primary or primary.get("parser") != "inline_xbrl" or not primary.get("filing_date"):
+        return None
+    filed = date.fromisoformat(str(primary["filing_date"])[:10])
+    proxies = [
+        (date.fromisoformat(str(d["filing_date"])[:10]), d) for d in documents
+        if d.get("role") == "proxy" and d.get("form") == "DEF 14A"
+        and d.get("cik") == primary.get("cik") and d.get("filing_date")
+    ]
+    after = [p for p in proxies if filed <= p[0] <= filed + timedelta(days=180)]
+    before = [p for p in proxies if filed - timedelta(days=45) <= p[0] < filed]
+    if after:
+        return min(after, key=lambda p: p[0])[1]
+    return max(before, key=lambda p: p[0])[1] if before else None
 
 
 def bo_offline_backend(narrow_ids=BO_NARROW_AGENT_IDS) -> FakeLLMBackend:
@@ -222,8 +242,13 @@ class BusinessOverviewRunner:
         m3_structure=None, m3_filing=None, m3_company=None, m3_filing_period=None,
         m3_extraction=None, m3_extractor=None, m3_backend=None, m3_reviewer_backend=None,
         m3_review_corrections=None,
+        check_stop=None,
     ) -> None:
         settings = get_settings()
+        # Called before each step with its name; raises to stop the run. Nothing is
+        # committed by the runner, so a stopped run leaves the database untouched. A
+        # model call already in flight can't be interrupted: the stop waits for it.
+        self.check_stop = check_stop or (lambda step: None)
         # Sector profile: "auto" detects it from the admitted evidence, None
         # disables it, or pass a SectorProfile. ``coverage_checks`` are extra
         # case-specific coverage tests supplied with the case.
@@ -327,6 +352,7 @@ class BusinessOverviewRunner:
         run = _BoRun(self, case_id, evidence, metrics,
                      escalations or [], rejected_sources or [])
         run.execute()
+        self.check_stop("writing the Business Overview")
         from app.core.hashing import canonical_json
         from app.services.bo.evaluation import evaluate_run
         from app.services.bo.reporting import BoReportBuilder
@@ -607,6 +633,7 @@ class _BoRun:
 
     def _foundation(self) -> None:
         """Indicators + routed, budgeted evidence packets (deterministic)."""
+        self.runner.check_stop("routing the evidence")
         self.indicators = build_indicators(
             self.evidence, self.metrics, analysis_run_id=self.analysis_run_id,
             sector=self.sector)
@@ -633,6 +660,7 @@ class _BoRun:
             self._record_attempts(self.retrieval[agent_id].attempts)
             self._seal_packet(agent_id, routed)
         if self.m3_version == "v2":
+            self.runner.check_stop("the Module 3 management assessment")
             self._build_m3_packet(router, router_inputs)
 
     def _build_m3_packet(self, router, router_inputs) -> None:
@@ -657,7 +685,7 @@ class _BoRun:
         filing_period = config.get("filing_period") or (
             self.evidence.as_of_date.isoformat() if self.evidence.as_of_date else None
         )
-        context = {
+        base_context = {
             "company": company,
             "filing_period": filing_period,
             "evidence_cutoff_timestamp": (
@@ -666,47 +694,76 @@ class _BoRun:
             ),
             "corporate_document_id": corporate_id,
             "corporate_document_sha256": corporate.get("sha256") if corporate else None,
-            "management_document_id": management_id,
-            "management_document_sha256": management.get("sha256") if management else None,
         }
-        if management and management.get("parser") == "inline_xbrl":
-            # An SEC 10-K: M3-v2 confirms company and period from the filing's
-            # admitted metadata, since its passages carry no cover page.
-            context.update({
-                "management_document_format": "sec_inline_xbrl",
-                "management_document_form": management.get("form"),
-                "management_document_report_date": management.get("report_date"),
-                "management_document_cik": management.get("cik"),
-            })
-        spec = RoutingSpec(
-            agent_id=M3_PACKET_AGENT_ID,
-            structured_evidence_selector=(
-                (lambda item: item.get("document_id") == corporate_id)
-                if corporate_id else None
-            ),
-            narrative_selector=(
-                (lambda item: item.get("document_id") == management_id)
-                if management_id else None
-            ),
-            include_conflicts=False,
-            include_limitations=False,
-            extra=context,
-        )
-        packet = router.build_packet(spec, router_inputs)
-        if management_id:
-            from app.services.bo.m3_rebuild.sources import sources_from_evidence_packet
-            try:
-                discovered = sources_from_evidence_packet(packet)
-                visible = set(discovered.pages)
-                # Retain all ordered chunks on discovered pages, including cover
-                # identity and continuation context, with original evidence IDs.
-                if visible:
-                    spec = replace(spec, narrative_selector=lambda item: item.get("evidence_id") in visible)
-                    packet = router.build_packet(spec, router_inputs)
-            except ValueError:
-                # Source discovery fails independently inside the management
-                # component; preserve its canonical packet for diagnosis.
-                pass
+
+        def build(source):
+            """The M3 packet with ``source`` as its only management document."""
+            source_id = source.get("document_id") if source else None
+            context = {
+                **base_context,
+                "management_document_id": source_id,
+                "management_document_sha256": source.get("sha256") if source else None,
+            }
+            if source and source.get("parser") == "inline_xbrl":
+                # An SEC 10-K: M3-v2 confirms company and period from the filing's
+                # admitted metadata, since its passages carry no cover page.
+                context.update({
+                    "management_document_format": "sec_inline_xbrl",
+                    "management_document_form": source.get("form"),
+                    "management_document_report_date": source.get("report_date"),
+                    "management_document_cik": source.get("cik"),
+                })
+            elif source and source.get("role") == "proxy":
+                # The linked DEF 14A has no fiscal period; the selected 10-K's applies.
+                context.update({
+                    "management_document_format": "sec_proxy_html",
+                    "management_document_form": source.get("form"),
+                    "management_document_cik": source.get("cik"),
+                    "management_document_accession": source.get("accession"),
+                    "management_document_filing_date": source.get("filing_date"),
+                    "management_primary_report_date": management.get("report_date"),
+                })
+            spec = RoutingSpec(
+                agent_id=M3_PACKET_AGENT_ID,
+                structured_evidence_selector=(
+                    (lambda item: item.get("document_id") == corporate_id)
+                    if corporate_id else None
+                ),
+                narrative_selector=(
+                    (lambda item: item.get("document_id") == source_id)
+                    if source_id else None
+                ),
+                include_conflicts=False,
+                include_limitations=False,
+                extra=context,
+            )
+            packet = router.build_packet(spec, router_inputs)
+            discovered = None
+            if source_id:
+                from app.services.bo.m3_rebuild.sources import sources_from_evidence_packet
+                try:
+                    discovered = sources_from_evidence_packet(packet)
+                    visible = set(discovered.pages)
+                    # Retain all ordered chunks on discovered pages, including cover
+                    # identity and continuation context, with original evidence IDs.
+                    if visible:
+                        spec = replace(spec, narrative_selector=lambda item: item.get("evidence_id") in visible)
+                        packet = router.build_packet(spec, router_inputs)
+                except ValueError:
+                    # Source discovery fails independently inside the management
+                    # component; preserve its canonical packet for diagnosis.
+                    pass
+            return packet, discovered
+
+        packet, discovered = build(management)
+        if discovered is not None and not discovered.section_ids:
+            # The 10-K has no executive section (Item 10 incorporated by reference):
+            # use its linked proxy only when that proxy yields one.
+            proxy = _linked_proxy(documents, management)
+            if proxy is not None:
+                proxy_packet, proxy_found = build(proxy)
+                if proxy_found is not None and proxy_found.section_ids:
+                    packet = proxy_packet
         packet = packet.model_copy(update={
             "narrative_evidence": sorted(packet.narrative_evidence,
                 key=lambda item: (item.get("page") or 0, item.get("location") or 0)),
@@ -793,6 +850,7 @@ class _BoRun:
         self.session.flush()
 
     def _stage(self, name: str, only: set[str], *, force: bool = False) -> None:
+        self.runner.check_stop(name.replace("_", " "))
         executor = DagExecutor(
             self.session, self.registry, self.runtime,
             max_concurrency=self.runner.max_concurrency,
@@ -972,6 +1030,7 @@ class _BoRun:
         agent_id = self.m3_standalone_agent_id
         if agent_id is None:
             return
+        self.runner.check_stop("Module 3")
         from app.services.bo.m3_standalone import run_m3
 
         outcome = self.agents[agent_id]
@@ -1041,6 +1100,7 @@ class _BoRun:
         """
         from app.services.bo.m4_debt import run_debt_specialist
 
+        self.runner.check_stop("the Module 4 debt specialist")
         self.m4_debt_result = run_debt_specialist(
             self.client, self.evidence,
             case_id=self.case_id, snapshot_version=self.snapshot_version,
@@ -1561,9 +1621,11 @@ class _BoRun:
             *(r.parameter_result_id for r in self.indicators.results),
             *(p.parameter_result_id for p in self._business_parameters()),
         }
+        dropped = drop_uncited_claims(parsed)
         downgrades = downgrade_overstated_claim_types(parsed, all_by_id)
+        qualified = fill_missing_qualifications(parsed, all_by_id)
         # Adjustments describe THIS answer; an earlier rejected one's do not carry.
-        self.agents[agent.agent_id].adjustments = list(downgrades)
+        self.agents[agent.agent_id].adjustments = [*dropped, *downgrades, *qualified]
         issues = validate_orchestrator_output(
             parsed, hypotheses=all_by_id, reconciliation=self.reconciliation,
             indicators=self.indicators, accepted_parameter_ids=accepted_ids)
@@ -1623,6 +1685,8 @@ class _BoRun:
             "hypotheses_available": len(by_id),
             "canonicalized_evidence_claims": canonicalized_claims,
             "claim_type_downgrades": [d["claim_id"] for d in downgrades],
+            "dropped_uncited_claims": [d["claim_id"] for d in dropped],
+            "added_qualifications": [d["claim_id"] for d in qualified],
         })
         if conclusion is None:
             self._reject(agent.agent_id, run_id, issues)

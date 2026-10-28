@@ -59,6 +59,7 @@ def test_deliverable1_has_four_sections() -> None:
         "senior_notes_schedule",
         "non_note_obligations_schedule",
         "creditor_priority_framework",
+        "reconciling_items",  # lines between the instruments and the total (Validator 8, check 6)
     }
 
 

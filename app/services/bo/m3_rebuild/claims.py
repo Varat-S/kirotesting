@@ -17,13 +17,29 @@ class ClaimValidator:
         self.full=''
         self.starts={}
         prior_page=None
+        self.proxy=getattr(sources,'document_kind','10-K')=='DEF 14A'
+        breaks=[]
         for sid in sources.section_ids:
             page=sources.physical_pages.get(sid)
             if self.full and page!=prior_page:
                 self.full+='\n'
+            elif self.full and self.proxy and sources.passage_offsets.get(sid)!=prior_end:
+                # Non-contiguous proxy passages (director biography, officer section).
+                breaks.append(len(self.full)); self.full+='\n'
             self.starts[sid]=len(self.full)
             self.full+=sources.pages[sid]
             prior_page=page
+            prior_end=sources.passage_offsets.get(sid,0)+len(sources.pages[sid])
+        self.biographies={}
+        if self.proxy:
+            from .sources import proxy_bio_starts, proxy_boundaries
+            heads={key(n):p for p,n in proxy_bio_starts(self.full)}
+            ends=sorted(set(proxy_boundaries(self.full))|set(breaks)|{len(self.full)})
+            for row in sources.expected_roster:
+                start=heads.get(key(row['name']))
+                if start is not None:
+                    self.biographies[key(row['name'])]=(start,next(e for e in ends if e>start))
+            return
         text,mapping=mapped_text(self.full,pdf=True)
         beginnings=[]
         for row in sources.expected_roster:
@@ -33,7 +49,6 @@ class ClaimValidator:
             if len(matches)==1:
                 beginnings.append((mapping[matches[0].start()],key(name)))
         beginnings.sort()
-        self.biographies={}
         for i,(start,name) in enumerate(beginnings):
             end=beginnings[i+1][0] if i+1<len(beginnings) else len(self.full)
             boundary=re.search(r'^Item\s+\d+[A-Z]?\.',self.full[start:end],re.M|re.I)
@@ -109,9 +124,15 @@ def assess_claims(payload,sources,reviewer=None):
             raise ValueError('Selected section does not establish one consistent roster date')
         if date.fromisoformat(anchor)<date.fromisoformat(sources.filing_period):
             raise ValueError('Roster date precedes selected filing period')
-    roster=validator.admit('roster','roster','',payload['roster_quote'],
-        [{'source_id':payload['roster_source_id'],'quote':payload['roster_quote']}],roster_check)
-    window=review_window(payload['roster_date']) if roster['outcome']!='unsupported' else None
+    if validator.proxy:
+        # A proxy's officer table states no as-of date: no roster-date claim is made,
+        # so recency and tenure are not calculated rather than counted as a failure.
+        roster=None
+        window=None
+    else:
+        roster=validator.admit('roster','roster','',payload['roster_quote'],
+            [{'source_id':payload['roster_source_id'],'quote':payload['roster_quote']}],roster_check)
+        window=review_window(payload['roster_date']) if roster['outcome']!='unsupported' else None
     profiles=[]
     profile_map={}
     for i,raw in enumerate(payload['executives'],1):
@@ -133,10 +154,14 @@ def assess_claims(payload,sources,reviewer=None):
             [{'source_id':roster_sid,'quote':roster_line}],position_check)
         def appointment_check(text,claim):
             if identity['outcome']=='unsupported': raise ValueError('Executive identity is unsupported')
-            scope=re.sub(r'\s+and Director$','',raw['position'],flags=re.I)
+            scope=re.sub(r'(?:\s+and|;)\s+Director$','',raw['position'],flags=re.I)
             # Director appointment can differ from CEO appointment: never assign
             # the CEO date to both. Preserve submitted title and record date scope.
             clause=re.search(r'(?:was appointed|has served as|became|has been)\b.*?(?=\.\s+[A-Z]|$)',text,re.I)
+            if not clause or key(scope) not in key(clause[0]):
+                # Proxy wording ("was named …", "joined … as …"); tried only after the
+                # original clause fails, so a previously supported claim is unaffected.
+                clause=re.search(r'(?:was named|joined)\b.*?(?=\.\s+[A-Z]|$)',text,re.I)
             if not clause or key(scope) not in key(clause[0]): raise ValueError('Current title is not supported by its appointment clause')
             if not raw['appointment_date']: raise ValueError('Current appointment date is unavailable')
             if not date_supported(raw['appointment_date'],clause[0]): raise ValueError('Appointment date/role is not supported')
@@ -171,7 +196,7 @@ def assess_claims(payload,sources,reviewer=None):
                     if 'ambiguous' not in str(exc): raise
                     from .employers import company_link
                     first=re.split(r'(?<![A-Z])(?<!Mr)(?<!Dr)(?<!Ms)\.\s+(?=[A-Z])',biography,maxsplit=1)[0]
-                    boundary=re.search(r'Prior to joining',biography,re.I)
+                    boundary=re.search(r'(?:Prior to|Before) joining',biography,re.I)
                     location=biography.find(text)
                     entities=re.findall(r'([A-Z][a-z]+ Group) of the Company',biography)
                     internal_entity=any(key(entity) in key(role['position']) for entity in entities)
@@ -304,6 +329,7 @@ def assess_claims(payload,sources,reviewer=None):
     overall=review['overall']
     overall_valid=bool(overall['judgment_ids']) and set(overall['judgment_ids'])<=surviving
     limitations=list(sources.limitations)+payload['overall_assessment']['uncertainties']+payload['overall_assessment']['missing_information']+overall['limitations']+review.get('scope_limitations',[])
+    if validator.proxy:limitations.append('The proxy statement states no as-of date for its executive officer table; recency and tenure were not calculated.')
     failed=[c for c in validator.claims if c['outcome']=='unsupported']
     if failed:limitations.append(f'{len(failed)} individual evidence claims are unsupported; other supported claims remain usable.')
     if any(j['outcome']!='accepted' for j in judgment_results):limitations.append('Qualified or withheld judgments are identified individually in the review record.')
@@ -315,7 +341,7 @@ def assess_claims(payload,sources,reviewer=None):
     result={'schema_version':'m3-management-assessment-3.0','artifact_type':'senior_management_assessment',
         'company':sources.company,'filing_period':sources.filing_period,
         'source':{'path':sources.source_path,'sha256':sources.sha256,'section_ids':sources.section_ids,'physical_pages':sources.physical_pages},
-        'roster_date':payload['roster_date'] if window else None,'roster_citation':roster['citations'][0] if roster['citations'] else None,
+        'roster_date':payload['roster_date'] if window else None,'roster_citation':roster['citations'][0] if roster and roster['citations'] else None,
         'review_window':window,'profiles':profiles,'observations':observations,'facts':facts,
         'model_assessment':payload['overall_assessment'],
         'validation':{'claim_results':validator.claims,'judgment_results':judgment_results,

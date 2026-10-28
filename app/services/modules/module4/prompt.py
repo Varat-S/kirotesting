@@ -9,7 +9,7 @@ hard constraints explicit so a real provider is held to the same rules.
 
 from __future__ import annotations
 
-from app.schemas.module4 import MODULE4_JSON_SCHEMA
+from app.schemas.module4 import MODULE4_JSON_SCHEMA, MODULE4_RECONCILIATION_JSON_SCHEMA
 
 # Driven via the existing ``analyze`` method with
 # ``prompt_name="module4_debt_structure_specialist"`` -- no new LLMClient
@@ -44,6 +44,11 @@ MODULE4_PROMPT_TEMPLATE = (
     "debt tranche (e.g. an OpCo issuer vs a HoldCo guarantor).\n"
     "- Exclude undrawn revolver limits and intercompany borrowings from total "
     "indebtedness; report available facility limits separately.\n"
+    "- Report each instrument at its principal (face) amount. When the debt note "
+    "shows lines between the instruments and Total debt (e.g. 'Debt issuance "
+    "costs and discounts (436)'), list each in deliverable_1.reconciling_items "
+    "with its signed amount and a VERBATIM quote of that line; never adjust an "
+    "instrument's principal to make the schedule reconcile.\n"
     "\n"
     "DELIVERABLES (produce all four, using the exact schema fields):\n"
     "1. Existing Debt & Creditor Priority Map: extraction-source mapping; the "
@@ -92,4 +97,47 @@ MODULE4_PROMPT: dict = {
     "template": MODULE4_PROMPT_TEMPLATE,
     "response_schema": MODULE4_JSON_SCHEMA,
     "label": "Module 4 debt structure / refinancing / debt-utilisation specialist prompt",
+}
+
+
+# One bounded follow-up, made only when Validator 8's reconciliation leaves a gap.
+MODULE4_RECONCILIATION_NAME = "module4_debt_reconciliation"
+
+MODULE4_RECONCILIATION_TEMPLATE = (
+    "You are the Module 4 Debt Structure Specialist, answering one follow-up.\n"
+    "\n"
+    "Your debt schedule does not reconcile: the instruments you listed (plus any "
+    "reconciling items already accepted) sum to tranche_sum_m, but the reported "
+    "total indebtedness is reported_total_m. The unexplained gap is gap_m "
+    "(reported total minus your sum; negative means your instruments exceed the "
+    "total).\n"
+    "\n"
+    "Find the line(s) in the supplied filing passages that explain the gap. "
+    "Debt notes commonly show such lines between the instruments and Total "
+    "debt: debt issuance costs and discounts, unamortized premiums, fair value "
+    "hedge adjustments, purchase accounting adjustments.\n"
+    "\n"
+    "RULES:\n"
+    "- Use ONLY the supplied sec_filing_snippets. Every item's quote must be "
+    "copied VERBATIM from one snippet and must state the item's amount; give that "
+    "snippet's fact_id as evidence_id. A quote that is not in the filing, or "
+    "does not contain the amount, is rejected.\n"
+    "- amount_m is signed so the instruments plus your items equal the reported "
+    "total: costs and discounts are negative, premiums positive. Use the "
+    "current-year figure, not a prior-year column.\n"
+    "- Report only lines the filing actually shows. Never invent an item, round, "
+    "or force the total to balance. If no line in the filing explains the gap, "
+    "or only part of it, return what the filing shows and say in 'unexplained' "
+    "why the rest is not shown; the gap may be an error in your schedule.\n"
+    "- Do not restate or change your debt schedule.\n"
+    "\n"
+    "Return structured JSON matching the response schema EXACTLY."
+)
+
+MODULE4_RECONCILIATION_PROMPT: dict = {
+    "name": MODULE4_RECONCILIATION_NAME,
+    "role": MODULE4_ROLE,
+    "template": MODULE4_RECONCILIATION_TEMPLATE,
+    "response_schema": MODULE4_RECONCILIATION_JSON_SCHEMA,
+    "label": "Module 4 debt reconciliation follow-up (explains a Validator 8 gap from the filing)",
 }

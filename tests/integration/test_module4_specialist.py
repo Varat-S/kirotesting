@@ -127,3 +127,90 @@ def test_module4_does_not_consume_other_module_outputs(db_session) -> None:
     }
     # No cross-module synthesis inputs leak in.
     assert not any("module" in key for key in payload)
+
+
+NOTE8 = ("Senior unsecured notes payable through 2095 (effective interest rate of 5.1%)\n"
+         "43,700\n41,116\nDebt issuance costs and discounts\n(436\n)\n(369\n)\n"
+         "Total debt\n46,492\n43,031")
+
+
+def _filing_inputs() -> Module4Inputs:
+    return Module4Inputs(sec_filing_snippets=[{"fact_id": "ev_note8", "text": NOTE8}],
+                         structured_financials=[{"fact_id": "total_indebtedness_2025"}])
+
+
+def _unreconciled():
+    """HCA output listing the notes at face value with no issuance-cost line (a $436M gap)."""
+    data = copy.deepcopy(hca_module4_output())
+    d1 = data["deliverable_1"]
+    d1["non_note_obligations_schedule"] = [
+        o for o in d1["non_note_obligations_schedule"]
+        if o["obligation_facility"] != "Debt issuance costs and discounts"]
+    return data
+
+
+def _item(**overrides):
+    return {"kind": "debt_issuance_costs_and_discounts", "label": "Debt issuance costs and discounts",
+            "amount_m": -436.0, "quote": "Debt issuance costs and discounts (436)",
+            "evidence_id": "ev_note8", **overrides}
+
+
+def test_a_reconciliation_gap_is_explained_from_the_filing(db_session) -> None:
+    specialist, backend, _ = _specialist(db_session)
+    backend.register("analyze", _unreconciled())
+    backend.register("analyze", {"reconciling_items": [_item()]}, key="m4_debt_reconcile")
+
+    result = specialist.run(_filing_inputs())
+
+    assert result.validated is True, [c.detail for c in result.validator8.failures]
+    assert result.escalation_id is None
+    assert [i.amount_m for i in result.output.deliverable_1.reconciling_items] == [-436.0]
+    followup = result.reconciliation_followup
+    assert followup["status"] == "answered" and followup["gap_m"] == -436.0
+    assert followup["reconciled"] is True and followup["gap_after_m"] == 0
+
+
+def test_an_explanation_not_in_the_filing_is_refused(db_session) -> None:
+    specialist, backend, _ = _specialist(db_session)
+    backend.register("analyze", _unreconciled())
+    backend.register("analyze", {"reconciling_items": [_item(quote="Other adjustments to debt (436)")]},
+                     key="m4_debt_reconcile")
+
+    result = specialist.run(_filing_inputs())
+
+    assert result.validated is False and result.escalation_id is not None
+    failed = {c.check_id for c in result.validator8.failures}
+    assert {"V8-01-RECONCILIATION", "V8-06-RECONCILING-ITEMS"} <= failed
+    assert result.reconciliation_followup["reconciled"] is False
+
+
+def test_a_failed_follow_up_keeps_the_first_answer(db_session) -> None:
+    specialist, backend, _ = _specialist(db_session)
+    backend.register("analyze", _unreconciled())  # no follow-up response scripted
+
+    result = specialist.run(_filing_inputs())
+
+    assert result.validated is False
+    assert result.reconciliation_followup["status"] == "error"
+    assert result.output.deliverable_1.reconciling_items == []
+
+
+def test_no_follow_up_when_the_schedule_reconciles(db_session) -> None:
+    specialist, backend, _ = _specialist(db_session)
+    backend.register("analyze", hca_module4_output())
+
+    result = specialist.run(_filing_inputs())
+
+    assert result.validated is True and result.reconciliation_followup is None
+
+
+def test_senior_notes_are_listed_in_maturity_order(db_session) -> None:
+    specialist, backend, _ = _specialist(db_session)
+    shuffled = copy.deepcopy(hca_module4_output())
+    shuffled["deliverable_1"]["senior_notes_schedule"].reverse()
+    backend.register("analyze", shuffled)
+
+    result = specialist.run(_inputs())
+
+    years = [t.maturity_year for t in result.output.deliverable_1.senior_notes_schedule]
+    assert years == sorted(years) and result.validated is True

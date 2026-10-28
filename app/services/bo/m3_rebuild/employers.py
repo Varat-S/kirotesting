@@ -72,7 +72,7 @@ def internal_employer(role, profile, company):
         years = re.findall(r"\b(?:19|20)\d{2}\b", joined[2])
         if years and role['start_date'] and role['start_date'][:4] >= years[0]:
             return "dated_company_join_and_biography_scope"
-    boundary = re.search(r"prior to joining\s+(.+?)(?=[,.])", bio, re.I)
+    boundary = re.search(r"(?:prior to|before) joining\s+(.+?)(?=[,.])", bio, re.I)
     if boundary and company_link(boundary[1], company) and found.start() < boundary.start() and company_link(bio[:found.start()], company):
         return "explicit_company_scope_before_external_history"
     for other in profile['prior_internal_roles']:

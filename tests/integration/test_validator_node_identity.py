@@ -61,9 +61,9 @@ def test_strategy_and_debt_v8_are_distinct(dual_m4_run):
     debt = inspect_node(h.CASE, f"bo.validator8_debt.{run_id}",
                         str(out), repo_root=str(out))["payload"]
     assert strat["validator_id"] == "validator_8"
-    # Debt V8 is its own deterministic five-check report, not the strategy record.
+    # Debt V8 is its own deterministic six-check report, not the strategy record.
     assert debt.get("passed") is True
-    assert len(debt.get("checks", [])) == 5
+    assert len(debt.get("checks", [])) == 6
     assert strat != debt
 
 

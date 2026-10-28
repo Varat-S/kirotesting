@@ -147,6 +147,40 @@ def test_all_four_modules_agent6_synthesis_challenge_and_report(db_session,
     assert len(backend.requests) >= 11
 
 
+def test_m1_sections_list_validated_findings_the_narrative_skipped(db_session, tmp_path):
+    from app.services.bo.reporting import _m1_sections_with_further_findings, render_memo_html
+
+    result, _ = _run(db_session, tmp_path)
+    memo = result.memo
+    sections = [s for s in memo["sections"] if s["code"].startswith("M1")]
+    further = {s["code"]: [f["hypothesis_id"] for f in s["further_findings"]] for s in sections}
+    used = {h for s in memo["sections"] for c in s["claims"] for h in c["hypothesis_ids"]}
+    used |= {h for side in memo["strengths_vulnerabilities"].values() for c in side
+             for h in c["hypothesis_ids"]}
+    used |= set((memo["executive"]["provisional_view"] or {}).get("hypothesis_ids") or [])
+    # Every M1 finding is either in the narrative or listed under its own section.
+    expected = {s["code"]: [f["hypothesis_id"] for f in memo["module_conclusions"]["M1"]["findings"]
+                            if f["section"] == s["code"] and f["hypothesis_id"] not in used]
+                for s in sections}
+    assert further == expected
+    # The scripted M1S2 finding is never in the narrative, so it must not be lost.
+    assert further["M1S2"] == ["M1S2-H001"]
+    stickiness = next(s for s in sections if s["code"] == "M1S2")
+    assert stickiness["notice"] is None
+    assert stickiness["further_findings"][0]["citations"]
+    html = render_memo_html(memo)
+    assert "do not guarantee minimum patient volumes" in html
+    assert all(s["notice"] is None for s in sections if s["further_findings"])
+    # A memo recorded before this change derives the same findings at render time.
+    legacy = copy.deepcopy(memo)
+    for section in legacy["sections"]:
+        section.pop("further_findings", None)
+    derived = {s["code"]: [f["hypothesis_id"] for f in s["further_findings"]]
+               for s in _m1_sections_with_further_findings(legacy)["sections"]
+               if s["code"].startswith("M1")}
+    assert derived == further
+
+
 def test_validated_m3_extension_flows_through_module_conclusion_and_handoff(
         db_session, tmp_path):
     script = _script()

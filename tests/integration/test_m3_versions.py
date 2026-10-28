@@ -182,6 +182,29 @@ def test_combined_m3_v2_run_takes_the_corporate_structure_from_the_folder(root, 
     page = next((tmp_path / "out" / "bo").glob("*/*/business_overview.html")).read_text(encoding="utf-8")
     assert "Corporate Structure &amp; Senior Management (M3-v2)" in page
     assert "SIMULATED EDUCATIONAL EXAMPLE" in page
+    # The structure is drawn as the corporate-structure diagram, not the plain-text tree.
+    assert 'class="structure-diagram"><img src="data:image/svg+xml;base64,' in page
+    assert "└──" not in page
+
+
+def test_memo_falls_back_to_the_text_tree_when_the_structure_cannot_be_drawn():
+    import json
+    from pathlib import Path
+
+    from app.services.bo.m3_rebuild.structure import convert_structure
+    from app.services.bo.reporting import _m3_structure_image
+
+    artifact = convert_structure(json.loads(
+        Path("examples/m3_rebuild/hca_input.json").read_text(encoding="utf-8")))
+    memo = {"module_conclusions": {"M3": {"m3_rebuild": {"structure": {
+        "status": "complete", "artifact": artifact}}}}}
+    image = _m3_structure_image(memo)
+    assert image["src"].startswith("data:image/svg+xml;base64,")
+    assert (image["width"], image["height"]) == (500, 375)  # 1440x1080 canvas at 4:3
+    del artifact["visual_spec"]
+    assert _m3_structure_image(memo) is None
+    memo["module_conclusions"]["M3"]["m3_rebuild"]["structure"]["status"] = "incomplete"
+    assert _m3_structure_image(memo) is None
 
 
 def test_corporate_structure_json_is_found_by_its_declared_type(root):

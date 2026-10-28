@@ -8,6 +8,7 @@
   .track { position: relative; height: 8px; border-radius: 4px; background: #e3e8ee; overflow: hidden; margin: 8px 0; }
   .track .bar { position: absolute; top: 0; left: -40%; width: 40%; height: 100%; border-radius: 4px; background: #2f6fb0; animation: slide 1.4s ease-in-out infinite; }
   .track.done .bar { animation: none; left: 0; width: 100%; background: #2f6b45; } .track.failed .bar { animation: none; left: 0; width: 100%; background: #9a3324; }
+  .track.stopped .bar { animation: none; left: 0; width: 100%; background: #8a94a0; }
   @keyframes slide { from { left: -40%; } to { left: 100%; } }
   @media (prefers-reduced-motion: reduce) { .track .bar { animation: none; left: 0; width: 100%; opacity: .5; } }
   .buttons { margin-top: 16px; } @media (max-width: 650px) { .sections { grid-template-columns: 1fr; } }
@@ -16,7 +17,7 @@
 {% macro usd(v) %}{% if v is none %}unavailable{% else %}US${{ '{:,.1f}'.format(v) }}M{% endif %}{% endmacro %}
 {% macro st(v) %}<span class="{{ 'ok' if v in ['completed', 'finished'] else 'bad' if v in ['failed'] else 'warn' }}">{{ (v or '—')|replace('_', ' ') }}</span>{% endmacro %}
 <header><span class="badge">Business Overview + Financial Overview</span><h1>Run BO and FO together</h1>
-<p class="subtle">Get a 10-K in once, by downloading it from SEC EDGAR or uploading its files, and both sections read the same folder in <code>edgar_filings/</code>: the Business Overview reads its <code>bundle.json</code> (file roles, hashes and availability), and the Financial Overview reads its Inline XBRL. Both then run at the same time under one case id.</p>
+<p class="subtle">Get a 10-K in once, by downloading it from SEC EDGAR or uploading its files, and both sections read the same folder in <code>edgar_filings/</code>: the Business Overview reads its <code>bundle.json</code> (file roles, hashes and availability), and the Financial Overview reads its Inline XBRL. Both then run at the same time under one case id, or the Business Overview can be run by itself.</p>
 <div class="actions"><a href="/">All cases</a><a href="/bo">Business Overview runs</a><a href="/fo">Financial Overview runs</a></div></header>
 <main>
 {% if error %}<section><p class="notice" role="alert"><strong>{{ error }}</strong></p></section>{% endif %}
@@ -24,17 +25,19 @@
 {% if job %}<section id="job" data-job="{{ job.job_id }}" data-status="{{ job.status }}"><h2>Run <code>{{ job.job_id }}</code>: {{ job.folder }}</h2>
 <p>Case <strong id="job-case">{{ job.case_id }}</strong> · started {{ job.started_at }} · <span id="job-status">{{ st(job.status) }}</span></p>
 <p class="notice" id="job-error"{% if not job.error %} hidden{% endif %}>{{ job.error or '' }}</p>
+<form method="post" action="/run/jobs/{{ job.job_id }}/stop" id="job-stop"{% if job.status != 'running' %} hidden{% endif %}><button type="submit"{% if job.stop_requested %} disabled{% endif %}>{{ 'Stopping…' if job.stop_requested else 'Stop the run' }}</button> <small class="subtle">Stops each section before its next step and records nothing for a section that hasn't finished. A model call already under way finishes first, which can take a minute or two.</small></form>
 <div class="sections">
-{% for key, label in [('bo', 'Business Overview'), ('fo', 'Financial Overview')] %}{% set s = job.sections[key] %}
+{% for key, label in [('bo', 'Business Overview'), ('fo', 'Financial Overview')] if not (key == 'fo' and job.bo_only) %}{% set s = job.sections[key] %}
 <div class="section-card" id="section-{{ key }}"><strong>{{ label }}</strong> <span class="state">{{ st(s.status) }}</span>
-<div class="track{% if s.status == 'completed' %} done{% elif s.status == 'failed' %} failed{% endif %}" aria-hidden="true"><div class="bar"></div></div>
+<div class="track{% if s.status == 'completed' %} done{% elif s.status == 'failed' %} failed{% elif s.status in ['stopped', 'skipped'] %} stopped{% endif %}" aria-hidden="true"><div class="bar"></div></div>
 <div class="step subtle">{{ s.step }}</div>
 <p class="cost subtle">Model cost: <span class="cost-text">{{ job.cost[key].text if job.cost else "—" }}</span></p>
 {% set r = job.result[key] if job.result else none %}
 <p class="error bad"{% if not (r and r.status == 'failed') %} hidden{% endif %}>{{ r.error if r and r.status == 'failed' else '' }}</p>
+<p class="reason subtle"{% if not (r and r.status == 'stopped') %} hidden{% endif %}>{{ r.reason if r and r.status == 'stopped' else '' }}</p>
 <p class="open"{% if not (r and r.status == 'completed') %} hidden{% endif %}>{% if r and r.status == 'completed' %}{% if key == 'bo' %}<a href="/cases/{{ job.case_id }}/bo.html?analysis_run_id={{ r.summary.analysis_run_id }}">Open the Business Overview</a>{% else %}<a href="/cases/{{ job.case_id }}/fo.html?run_id={{ r.summary.run_id }}">Open the Financial Overview</a>{% endif %}{% endif %}</p></div>
 {% endfor %}
-{% set s = job.sections.rms %}{% set r = job.result.rms if job.result else none %}
+{% if not job.bo_only %}{% set s = job.sections.rms %}{% set r = job.result.rms if job.result else none %}
 <div class="section-card" id="section-rms"><strong>Risk Mitigation &amp; Structuring</strong> <span class="state">{{ st(s.status) }}</span>
 <div class="step subtle">{{ s.step }}</div>
 <p class="error bad"{% if not (r and r.status == 'failed') %} hidden{% endif %}>{{ r.error if r and r.status == 'failed' else '' }}</p>
@@ -52,27 +55,28 @@
 </tbody></table></div></details>{% endif %}
 <ul class="rms-gates">{% for g in x.gates %}<li>{{ g }}</li>{% endfor %}</ul>
 <p class="subtle rms-output"><code>{{ x.output }}</code></p>{% endif %}</div>
-<p class="open"{% if not (r and r.status == 'completed') %} hidden{% endif %}><a class="credit-link" href="/cases/{{ job.case_id }}/credit.html{% if job.result and job.result.fo.summary %}?fo_run={{ job.result.fo.summary.run_id }}&amp;bo_run={{ job.result.bo.summary.analysis_run_id }}{% endif %}">Open the credit view (BO + FO + RMS, with review)</a></p></div>
+<p class="open"{% if not (r and r.status == 'completed') %} hidden{% endif %}><a class="credit-link" href="/cases/{{ job.case_id }}/credit.html{% if job.result and job.result.fo.summary %}?fo_run={{ job.result.fo.summary.run_id }}&amp;bo_run={{ job.result.bo.summary.analysis_run_id }}{% endif %}">Open the credit view (BO + FO + RMS, with review)</a></p></div>{% endif %}
 </div>
 <p id="job-cost"><strong>Model cost for this run:</strong> <span id="job-cost-text">{{ job.cost.total.text if job.cost else "—" }}</span><br><small class="subtle">Estimated from provider-reported tokens and the prices in <code>LLM_PRICES</code> (.env), not a provider invoice. Updates while the run is under way.</small></p>
 <p class="subtle">Live runs make model calls (billed) and usually take several minutes; the Business Overview takes longest. The Financial Overview's result is copied into the database once the Business Overview has finished writing. Keep this page open, or come back to it: the run continues in the server.</p>
 </section>{% endif %}
 
-<section id="start"><h2>Run both sections</h2>
+<section id="start"><h2>Run the sections</h2>
 {% if not (bo_ok and fo_ok) %}<p class="notice">{% if not bo_ok %}<strong>Business Overview provider not configured:</strong> {{ bo_reason }}<br>{% endif %}{% if not fo_ok %}<strong>Pre-check Agent not configured:</strong> {{ fo_reason }}{% endif %}</p>{% endif %}
 {% set runnable = filings|selectattr('runnable')|list %}
 {% if runnable %}
 <form method="post" action="/run/start" id="start-form">
 <div class="form-grid">
 <div><label for="folder">Filing folder</label><select id="folder" name="folder" required>{% for f in runnable %}<option value="{{ f.name }}"{% if f.name == selected_folder %} selected{% endif %}>{{ f.name }} ({{ f.files }} files)</option>{% endfor %}</select></div>
+<div><label for="sections">Sections</label><select id="sections" name="sections"><option value="both"{% if selected_sections != 'bo' %} selected{% endif %}>Business Overview + Financial Overview</option><option value="bo"{% if selected_sections == 'bo' %} selected{% endif %}>Business Overview only</option></select><small>Business Overview only skips the Financial Overview and Risk Mitigation &amp; Structuring.</small></div>
 <div><label for="case_id">Case id <small>(optional)</small></label><input id="case_id" name="case_id" placeholder="default: TICKER_FY<year>" value="{{ values.case_id or '' }}" pattern="[A-Za-z0-9_.-]+"></div>
-<div>{% if fo_ok %}<label for="model">Model (BO and FO)</label><select id="model" name="model">{% for m in models %}<option value="{{ m }}"{% if m == selected_model %} selected{% endif %}>{{ m }}</option>{% endfor %}</select><small>Runs every Business Overview agent and the Financial Overview's Pre-check Agent.</small>{% if models_note %}<small>{{ models_note }}</small>{% endif %}{% else %}<span class="subtle">Model (BO and FO)</span><br><strong class="bad">not configured</strong>{% endif %}</div>
+<div>{% if fo_ok or bo_ok %}<label for="model">Model (BO and FO)</label><select id="model" name="model">{% for m in models %}<option value="{{ m }}"{% if m == selected_model %} selected{% endif %}>{{ m }}</option>{% endfor %}</select><small>Runs every Business Overview agent and the Financial Overview's Pre-check Agent.</small>{% if models_note %}<small>{{ models_note }}</small>{% endif %}{% else %}<span class="subtle">Model (BO and FO)</span><br><strong class="bad">not configured</strong>{% endif %}</div>
 <div><label for="m3_version">Business Overview Module 3</label><select id="m3_version" name="m3_version">{% for v, label in m3_versions.items() %}<option value="{{ v }}"{% if v == selected_m3_version %} selected{% endif %}>{{ label }}</option>{% endfor %}</select><small>M3-v2 reads the executive officers from the folder's 10-K, and the corporate structure from <code>m3_corporate_structure.json</code> in the same folder when it is there (otherwise that part is recorded as not attempted).</small></div>
 <div><label for="cutoff">BO evidence cut-off <small>(optional)</small></label><input id="cutoff" name="cutoff" placeholder="e.g. 2026-03-31T00:00:00Z" value="{{ values.cutoff or '' }}"><small>Blank admits every file in the folder (the latest file availability).</small></div>
 <div><label for="requested_amount_m">Requested loan, US$ millions <small>(optional)</small></label><input id="requested_amount_m" name="requested_amount_m" type="number" min="0.1" step="0.1" placeholder="e.g. 2000" value="{{ values.requested_amount_m or '' }}"><small>Risk Mitigation &amp; Structuring runs after both sections complete. Blank skips it.</small></div>
 <div><label for="tenor_years">Requested tenor, years <small>(optional)</small></label><input id="tenor_years" name="tenor_years" type="number" min="1" step="1" placeholder="default 5" value="{{ values.tenor_years or '' }}"></div>
 </div>
-<div class="buttons"><button class="primary-button" type="submit"{% if not (bo_ok and fo_ok) %} disabled{% endif %}>Run Business Overview + Financial Overview</button></div>
+<div class="buttons"><button class="primary-button" id="start-button" type="submit"{% if not bo_ok %} disabled{% endif %}>Run Business Overview + Financial Overview</button></div>
 </form>
 {% else %}<p>No folder in <code>edgar_filings/</code> can be read by both sections yet. Download or upload a 10-K below.</p>{% endif %}
 {% set unprepared = filings|rejectattr('has_manifest')|list %}
@@ -126,25 +130,45 @@
 </main>
 <script>
 (function () {
+  var form = document.getElementById("start-form");
+  if (!form) return;
+  var pick = form.querySelector("#sections"), button = form.querySelector("#start-button");
+  var foOk = {{ 'true' if fo_ok else 'false' }}, boOk = {{ 'true' if bo_ok else 'false' }};
+  function sync() {
+    var boOnly = pick.value === "bo";
+    button.textContent = boOnly ? "Run Business Overview only" : "Run Business Overview + Financial Overview";
+    button.disabled = !boOk || (!boOnly && !foOk);
+    ["requested_amount_m", "tenor_years"].forEach(function (name) { form.querySelector("#" + name).disabled = boOnly; });
+  }
+  pick.addEventListener("change", sync);
+  sync();
+})();
+(function () {
   var box = document.getElementById("job");
   if (!box || box.dataset.status !== "running") return;
   var id = box.dataset.job;
   var labels = {completed: "ok", finished: "ok", failed: "bad"};
+  var stopForm = document.getElementById("job-stop");
   function state(el, v) { el.textContent = (v || "—").replace(/_/g, " "); el.className = labels[v] || "warn"; }
   function render(job) {
     state(document.getElementById("job-status"), job.status);
     document.getElementById("job-case").textContent = job.case_id || "";
     if (job.error) { var e = document.getElementById("job-error"); e.textContent = job.error; e.hidden = false; }
+    if (job.status !== "running") stopForm.hidden = true;
+    else if (job.stop_requested) { var b = stopForm.querySelector("button"); b.disabled = true; b.textContent = "Stopping…"; }
     ["bo", "fo"].forEach(function (key) {
       var s = job.sections[key], card = document.getElementById("section-" + key);
+      if (!card) return;
       var tag = document.createElement("span"); state(tag, s.status);
       var holder = card.querySelector(".state"); holder.textContent = ""; holder.appendChild(tag);
       card.querySelector(".step").textContent = s.step;
       if (job.cost) card.querySelector(".cost-text").textContent = job.cost[key].text;
       var track = card.querySelector(".track");
-      track.className = "track" + (s.status === "completed" ? " done" : s.status === "failed" ? " failed" : "");
+      track.className = "track" + (s.status === "completed" ? " done" : s.status === "failed" ? " failed"
+        : s.status === "stopped" || s.status === "skipped" ? " stopped" : "");
       var r = job.result && job.result[key];
       if (r && r.status === "failed") { var err = card.querySelector(".error"); err.textContent = r.error; err.hidden = false; }
+      if (r && r.status === "stopped") { var why = card.querySelector(".reason"); why.textContent = r.reason; why.hidden = false; }
       if (r && r.status === "completed") {
         var open = card.querySelector(".open"), a = document.createElement("a");
         a.href = key === "bo"

@@ -35,6 +35,8 @@
   .tag.pass { border-color: #2f6b45; color: #2f6b45; }
   .num { text-align: right; white-space: nowrap; }
   .tablewrap { overflow-x: auto; }
+  .structure-diagram { text-align: center; margin: .6rem 0; page-break-inside: avoid; }
+  .structure-diagram img { max-width: 100%; height: auto; }
 </style>
 </head>
 <body>
@@ -53,6 +55,7 @@
   {{ f.text }}{{ cites(f) }}
   {% if f.mechanism %}<div class="small">Credit mechanism: {{ f.mechanism }}</div>{% endif %}
   {% for q in f.qualifications or [] %}<div class="qual">Qualification: {{ q }}</div>{% endfor %}
+  {% for q in f.quotes or [] %}<div class="small">Filing: &ldquo;{{ q }}&rdquo;</div>{% endfor %}
 </div>
 {% endmacro %}
 {% macro list_or_none(items, none_text='None recorded.') %}
@@ -83,14 +86,16 @@
 <h4>Information gaps</h4>
 {{ list_or_none(m.information_gaps) }}
 {% endmacro %}
-{% macro m3_v2_panel(m) %}
+{% macro m3_v2_panel(m, diagram=none) %}
 <h4>Corporate structure <span class="tag">{{ m.structure.status|replace('_', ' ') }}</span></h4>
 {% if m.structure.status == 'complete' %}
 <p class="small">{{ m.structure.company }}: {{ m.structure.entities }} entities in the submitted structure.</p>
 {% if m.structure.disclaimer %}<p class="qual">{{ m.structure.disclaimer }}</p>{% endif %}
-{% if m.structure.tree %}<pre class="small">{{ m.structure.tree }}</pre>{% endif %}
+{% if diagram %}<div class="structure-diagram"><img src="{{ diagram.src }}" width="{{ diagram.width }}" height="{{ diagram.height }}" alt="Corporate structure diagram"></div>
+{% elif m.structure.tree %}<pre class="small">{{ m.structure.tree }}</pre>{% endif %}
 {% else %}<p class="notice">{{ m.structure.error or 'No corporate-structure input was supplied.' }}</p>{% endif %}
 <h4>Senior management <span class="tag">{{ m.management.status|replace('_', ' ') }}</span></h4>
+{% if m.management.source %}<p class="small">Source: {{ m.management.source }}</p>{% endif %}
 {% if m.management.overall %}<p><span class="tag {{ m.management.outcome }}">{{ m.management.outcome }}</span> {{ m.management.overall }}</p>{% endif %}
 {% for o in m.management.observations %}
 <div class="claim"><span class="tag {{ o.direction }}">{{ o.direction }}</span><span class="tag">{{ o.category|replace('_', ' ') }}</span><br>
@@ -133,6 +138,11 @@
 <div class="tablewrap"><table><tr><th>Other obligations</th><th>Borrower</th><th class="num">Drawn $M</th><th class="num">Limit $M</th><th>Terms</th><th>Maturity</th><th>Tier</th></tr>
 {% for n in m.d1.non_note_obligations_schedule %}<tr><td>{{ n.obligation_facility }}</td><td>{{ n.legal_borrower }}</td><td class="num">{{ n.principal_drawn_m|money }}</td><td class="num">{{ n.available_facility_limit_m|money }}</td><td>{{ n.interest_rate_terms }}</td><td>{{ n.maturity }}</td><td>{{ n.priority_ranking_tier|replace('_', ' ') }}</td></tr>{% endfor %}
 </table></div>{% endif %}
+{% if m.d1.reconciling_items %}
+<div class="tablewrap"><table><tr><th>Reconciling item</th><th class="num">$M</th><th>As the filing states it</th></tr>
+{% for r in m.d1.reconciling_items %}<tr><td>{{ r.label }}</td><td class="num">{{ r.amount_m|money }}</td><td>&ldquo;{{ r.quote }}&rdquo;</td></tr>{% endfor %}
+</table></div>
+<p class="small">Lines between the instruments and total indebtedness. Validator 8 counts each only when its quote appears verbatim in the filing and states its amount.</p>{% endif %}
 {% endif %}
 {% if m.d2 %}
 <h4>Refinancing and maturity</h4>
@@ -170,7 +180,7 @@
 <h3>{{ mod.code }} governed module output <span class="tag {{ mod.status }}">{{ mod.status }}</span></h3>
 {% if mod.failed_or_missing_agents %}<p class="small">Specialists not validated: {{ mod.failed_or_missing_agents|join(', ') }}.</p>{% endif %}
 {% if mod.unresolved_coverage_checks %}<p class="small">Unresolved coverage checks: {{ mod.unresolved_coverage_checks|join(', ') }}.</p>{% endif %}
-{% if mod.m3_v2 %}{{ m3_v2_panel(mod.m3_v2) }}{% elif mod.m3 %}{{ m3_panel(mod.m3) }}{% elif mod.code == 'M3' %}<p class="notice">The validated M3 corporate-structure and management assessment is unavailable for this run.</p>{% endif %}
+{% if mod.m3_v2 %}{{ m3_v2_panel(mod.m3_v2, m3_structure_image) }}{% elif mod.m3 %}{{ m3_panel(mod.m3) }}{% elif mod.code == 'M3' %}<p class="notice">The validated M3 corporate-structure and management assessment is unavailable for this run.</p>{% endif %}
 {% if mod.m4 %}{{ m4_panel(mod.m4) }}{% endif %}
 {% if mod.further_findings %}
 <h4>Further governed specialist findings</h4>
@@ -214,7 +224,11 @@
 <h2>{{ s.title }}</h2>
 {% for c in s.claims %}{{ claim(c) }}{% endfor %}
 {% if s.headline_refs %}<p class="notice">Headline finding{{ 's' if s.headline_refs|length > 1 }} set out under Key Credit Strengths and Vulnerabilities: {% for r in s.headline_refs %}<a href="#claim-{{ r.claim_id }}">{{ r.title }}</a>{{ '; ' if not loop.last }}{% endfor %}.</p>{% endif %}
-{% if s.notice %}<p class="notice">{{ s.notice }}</p>{% endif %}
+{% if s.further_findings %}
+<h3>Further validated findings</h3>
+<p class="small">Accepted, material findings from this section's specialist that the narrative above does not rest on.</p>
+{% for f in s.further_findings %}{{ finding(f) }}{% endfor %}
+{% elif s.notice %}<p class="notice">{{ s.notice }}</p>{% endif %}
 {% if s.module %}{{ module_panel(s.module) }}{% endif %}
 {% endfor %}
 

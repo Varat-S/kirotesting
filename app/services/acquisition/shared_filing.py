@@ -46,6 +46,8 @@ COMPANY = "company.json"
 # Optional M3-v2 corporate-structure onboarding JSON kept with the filing; not SEC evidence.
 M3_STRUCTURE = "m3_corporate_structure.json"
 PROXY_DIR = "proxy"
+# Saved beside a proxy statement: its form, accession, filing date and primary document.
+PROXY_META = "filing.json"
 # Files that can belong to a filing bundle; ``company.json`` is identity, not evidence.
 SEC_SUFFIXES = (".htm", ".html", ".xhtml", ".xsd", ".xml")
 MAX_TOTAL_BYTES = 128 * 1024 * 1024
@@ -213,6 +215,10 @@ def import_filing(sources, *, accession: str | None = None, filing_date: date | 
         granularity = filing.availability_granularity
         base_url = (f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
                     f"{filing.accession.replace('-', '')}")
+    # A folder's proxy/ is a separate accession (as fetch_filing writes it); a .zip or upload has none.
+    proxy_files = [] if isinstance(sources, dict) else [
+        f for p in paths if p.is_dir() and (p / PROXY_DIR).is_dir()
+        for f in _proxy_files(p / PROXY_DIR, client, cik, filing)]
     try:
         bundle = SecFilingBundle(
             cik=cik, ticker=ticker, accession=filing.accession, form=form,
@@ -224,7 +230,7 @@ def import_filing(sources, *, accession: str | None = None, filing_date: date | 
                 accession=filing.accession, cik=cik, form=form,
                 filing_date=filing.filing_date, report_date=report_date,
                 accepted_at=filing.accepted_at,
-            ) for n, data in sorted(files.items())])
+            ) for n, data in sorted(files.items())] + proxy_files)
     except ValueError as exc:
         raise SharedFilingError(f"The files do not form a valid filing bundle: {exc}") from exc
 
@@ -430,6 +436,53 @@ def _official_filing(client, cik, form, report_date, primary, accession, filing_
             f"SEC EDGAR's primary document for {filing.accession} is {filing.primary_document}, "
             f"but the files given have {primary}.")
     return filing
+
+
+def _proxy_files(folder: Path, client, cik: str, filing) -> list[SecFilingFile]:
+    """The DEF 14A in a folder's ``proxy/``, with its own accession and availability.
+
+    SEC EDGAR identifies it when a client is given (by the ``filing.json`` accession beside it, else
+    the proxy that would be fetched with this 10-K); offline, ``filing.json`` declares it. A proxy
+    that cannot be identified is an error rather than silently left out of the bundle.
+    """
+    data = {p.name: _read(p) for p in sorted(folder.iterdir())
+            if p.is_file() and p.suffix.lower() in SEC_SUFFIXES}
+    if not data:
+        return []
+    _checked(data)
+    meta = {}
+    if (folder / PROXY_META).is_file():
+        try:
+            meta = json.loads((folder / PROXY_META).read_text(encoding="utf-8"))
+        except ValueError as exc:
+            raise SharedFilingError(f"{PROXY_DIR}/{PROXY_META} is not valid JSON.") from exc
+    if client is not None:
+        filings = client.list_filings(cik)
+        proxy = (next((f for f in filings if f.accession == meta["accession"]), None)
+                 if meta.get("accession") else client.proxy_for(filings, filing))
+        granularity = proxy.availability_granularity if proxy else None
+        base_url = (f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
+                    f"{proxy.accession.replace('-', '')}") if proxy else None
+    else:
+        try:
+            proxy = SecFiling(cik, str(meta["form"]), str(meta["accession"]),
+                              date.fromisoformat(str(meta["filing_date"])), None, str(meta["primary_document"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise SharedFilingError(
+                f"{PROXY_DIR}/ needs a {PROXY_META} with form, accession, filing_date and primary_document "
+                "(or set SEC_USER_AGENT so SEC EDGAR identifies the proxy statement).") from exc
+        granularity, base_url = "declared", None
+    if proxy is None or proxy.form != "DEF 14A":
+        raise SharedFilingError(f"SEC EDGAR lists no DEF 14A proxy statement matching {PROXY_DIR}/.")
+    if proxy.primary_document not in data:
+        raise SharedFilingError(f"{PROXY_DIR}/ does not contain the proxy statement {proxy.primary_document}.")
+    return [SecFilingFile(
+        filename=n, role=file_role(n, proxy.primary_document, proxy=True), content=content,
+        available_at=proxy.available_at, availability_granularity=granularity,
+        source_url=f"{base_url}/{n}" if base_url else None,
+        accession=proxy.accession, cik=cik, form=proxy.form,
+        filing_date=proxy.filing_date, report_date=proxy.report_date, accepted_at=proxy.accepted_at,
+    ) for n, content in sorted(data.items())]
 
 
 def _write_new(bundle: SecFilingBundle, name: str, identity: dict) -> SharedFiling:

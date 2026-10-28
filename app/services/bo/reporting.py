@@ -18,6 +18,7 @@ Same rule as the main memo generator: JSON is the source of truth and the HTML
 
 from __future__ import annotations
 
+import base64
 import uuid
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.services.bo.m3_rebuild.narrative import management_claims
+from app.services.bo.m3_rebuild.structure import render_svg
 from app.services.bo.m3_version import is_m3_v2_block
 
 from app.core.hashing import canonical_json, content_hash
@@ -93,6 +95,60 @@ def _shown(item: dict[str, Any]) -> bool:
             and item.get("materiality", "medium") in _SHOWN_MATERIALITY)
 
 
+def _further_findings(findings, used, cite, citable) -> list[dict[str, Any]]:
+    """Accepted, material findings the narrative does not rest on, as the memo lists them.
+    Evidence that cannot be cited is shown by its filing quote instead."""
+    out = []
+    for f in findings:
+        if f["hypothesis_id"] in used or not _shown(f):
+            continue
+        item = {"hypothesis_id": f["hypothesis_id"], "text": f["claim"],
+                "mechanism": f.get("credit_mechanism"),
+                "direction": f["direction"], "materiality": f["materiality"],
+                "attributed": f["admissibility"] == "attributed",
+                "citations": cite(f.get("supporting_evidence_ids") or [])}
+        quotes = [q["quote"] for q in f.get("evidence_quotes") or []
+                  if q.get("quote") and not citable(q.get("evidence_id"))]
+        if quotes:
+            item["quotes"] = quotes
+        out.append(item)
+    return out
+
+
+def _m1_sections_with_further_findings(memo: dict[str, Any]) -> dict[str, Any]:
+    """Memos recorded before M1 sections listed their further findings: derive them at render
+    time from the recorded M1 conclusion, citing the memo's existing source numbers."""
+    m1 = (memo.get("module_conclusions") or {}).get("M1")
+    sections = memo.get("sections") or []
+    if not m1 or all("further_findings" in s for s in sections if s.get("code", "").startswith("M1")):
+        return memo
+    used: set[str] = set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            used.update(node.get("hypothesis_ids") or [])
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk({k: v for k, v in memo.items() if k != "module_conclusions"})
+    numbers = {s["evidence_id"]: s["n"] for s in memo.get("sources") or [] if "evidence_id" in s}
+
+    def cite(ids):
+        return sorted({numbers[e] for e in ids if e in numbers})
+
+    out = []
+    for section in sections:
+        if section.get("code", "").startswith("M1") and "further_findings" not in section:
+            section = {**section, "further_findings": _further_findings(
+                [f for f in m1.get("findings") or [] if f.get("section") == section["code"]],
+                used, cite, numbers.__contains__)}
+        out.append(section)
+    return {**memo, "sections": out}
+
+
 def _m3_v2_view(module: dict[str, Any]) -> dict[str, Any]:
     """M3-v2's two components as the memo shows them: the corporate structure's status and
     simulation notice, and the management assessment's reviewed observations with their quotes."""
@@ -104,6 +160,10 @@ def _m3_v2_view(module: dict[str, Any]) -> dict[str, Any]:
     assessment = management.get("artifact") or {}
     quotes = {c["citation_id"]: c["quote"] for c in assessment.get("citations") or []}
     overall = assessment.get("overall_assessment") or {}
+    source_path = str((assessment.get("source") or {}).get("path") or "")
+    source = ("DEF 14A proxy statement (incorporated by reference in the 10-K)"
+              if source_path.startswith("sec-proxy:")
+              else "Form 10-K" if source_path else None)
     return {
         "structure": {
             "status": structure.get("status"), "error": structure.get("error"),
@@ -114,6 +174,7 @@ def _m3_v2_view(module: dict[str, Any]) -> dict[str, Any]:
         },
         "management": {
             "status": management.get("status"), "error": management.get("error"),
+            "source": source,
             "overall": overall.get("policy"), "outcome": overall.get("outcome"),
             "profiles": [
                 {"name": p.get("name"), "position": p.get("position"),
@@ -235,8 +296,32 @@ def _env() -> Environment:
     return env
 
 
+_DIAGRAM_WIDTH_PT = 500  # printable A4 width; xhtml2pdf needs absolute image sizes
+
+
+def _m3_structure_image(memo: dict[str, Any]) -> dict[str, Any] | None:
+    """The M3-v2 corporate-structure diagram as an embeddable SVG image, drawn at render
+    time from the artifact the memo already holds (so the memo JSON is unchanged). ``None``
+    when there is no complete structure or it cannot be drawn; the memo then shows the text tree."""
+    m3 = (memo.get("module_conclusions") or {}).get("M3") or {}
+    structure = (m3.get("m3_rebuild") or {}).get("structure") or {}
+    artifact = structure.get("artifact")
+    if structure.get("status") != "complete" or not artifact:
+        return None
+    try:
+        svg = render_svg(artifact)
+        canvas = artifact["visual_spec"]["canvas"]
+        ratio = canvas["height_px"] / canvas["width_px"]
+    except (ValueError, KeyError, TypeError, ZeroDivisionError):
+        return None
+    return {"src": "data:image/svg+xml;base64," + base64.b64encode(svg.encode("utf-8")).decode("ascii"),
+            "width": _DIAGRAM_WIDTH_PT, "height": round(_DIAGRAM_WIDTH_PT * ratio)}
+
+
 def render_memo_html(memo: dict[str, Any]) -> str:
-    return _env().get_template("bo_memo.html.j2").render(memo=memo)
+    return _env().get_template("bo_memo.html.j2").render(
+        memo=_m1_sections_with_further_findings(memo),
+        m3_structure_image=_m3_structure_image(memo))
 
 
 def render_audit_html(audit: dict[str, Any]) -> str:
@@ -463,18 +548,22 @@ class BoReportBuilder:
                     "failed_or_missing_agents": module["failed_or_missing_agents"],
                     "unresolved_coverage_checks": module["unresolved_coverage_checks"],
                     "missing_information": module["missing_information"],
-                    "further_findings": [
-                        {"hypothesis_id": f["hypothesis_id"], "text": f["claim"],
-                         "mechanism": f.get("credit_mechanism"),
-                         "direction": f["direction"], "materiality": f["materiality"],
-                         "attributed": f["admissibility"] == "attributed",
-                         "citations": cite(f.get("supporting_evidence_ids") or [])}
-                        for f in module["findings"]
-                        if f["hypothesis_id"] not in used_in_claims and _shown(f)],
+                    "further_findings": _further_findings(
+                        module["findings"], used_in_claims, cite, sources.__contains__),
                     "m3": (_m3_view(module.get("m3_assessment"), cite)
                            if section["code"] == "M3" else None),
                     "m4": _m4_view(module, cite) if section["code"] == "M4" else None,
                 }
+            # M1 spans six specialist sections; each lists its own findings the narrative skipped.
+            m1 = run.module_conclusions.get("M1")
+            for section in sections:
+                if m1 is None or not section["code"].startswith("M1"):
+                    continue
+                section["further_findings"] = _further_findings(
+                    [f for f in m1["findings"] if f.get("section") == section["code"]],
+                    used_in_claims, cite, sources.__contains__)
+                if section["further_findings"]:
+                    section["notice"] = None
 
         # M3-v2 has no M3 specialist in the roster, so its section is added from the rebuild's block.
         m3_v2 = run.module_conclusions.get("M3")

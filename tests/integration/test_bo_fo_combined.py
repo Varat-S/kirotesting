@@ -165,6 +165,50 @@ def test_import_prepares_a_folder_already_in_edgar_filings_in_place(root, loose)
         shared_filing.import_filing([target], accession=ACCESSION, filing_date=FILED)
 
 
+PROXY = "nvda-20260512.htm"
+PROXY_FILING = SecFiling("1045810", "DEF 14A", "0001045810-26-000036", date(2026, 5, 12), None, PROXY)
+
+
+def _with_proxy(loose, root, meta=True):
+    target = root / "NVDA 10-K FY2026"
+    shutil.copytree(loose, target)
+    (target / "proxy").mkdir()
+    shutil.copy(NVDA / "proxy" / PROXY, target / "proxy" / PROXY)
+    if meta:
+        (target / "proxy" / "filing.json").write_text(json.dumps({
+            "form": "DEF 14A", "accession": PROXY_FILING.accession, "filing_date": "2026-05-12",
+            "primary_document": PROXY}), encoding="utf-8")
+    return target
+
+
+def test_import_registers_the_proxy_folder_as_its_own_accession(root, loose):
+    target = _with_proxy(loose, root)
+    filing = shared_filing.import_filing([target], accession=ACCESSION, filing_date=FILED)
+    proxy = next(f for f in shared_filing.load_bundle(filing.name).files if f.role == "proxy")
+    assert (proxy.filename, proxy.accession, proxy.form) == (PROXY, PROXY_FILING.accession, "DEF 14A")
+    assert proxy.availability_granularity == "declared"
+    assert proxy.available_at.isoformat() == "2026-05-13T04:00:00+00:00"  # end of the US Eastern filing day
+    manifest = json.loads((target / "bundle.json").read_text(encoding="utf-8"))
+    assert {f["path"] for f in manifest["files"] if f["role"] == "proxy"} == {f"proxy/{PROXY}"}
+
+
+def test_import_identifies_the_proxy_on_edgar_or_refuses_to_guess(root, loose):
+    class WithProxy(FakeSec):
+        def list_filings(self, cik):
+            return [*super().list_filings(cik), PROXY_FILING]
+
+        def proxy_for(self, filings, filing):
+            return PROXY_FILING
+
+    target = _with_proxy(loose, root, meta=False)
+    with pytest.raises(shared_filing.SharedFilingError, match="filing.json"):
+        shared_filing.import_filing([target], accession=ACCESSION, filing_date=FILED)
+    filing = shared_filing.import_filing([target], client=WithProxy())
+    proxy = next(f for f in shared_filing.load_bundle(filing.name).files if f.role == "proxy")
+    assert proxy.accession == PROXY_FILING.accession
+    assert proxy.source_url == f"https://www.sec.gov/Archives/edgar/data/1045810/000104581026000036/{PROXY}"
+
+
 def test_import_refuses_what_is_not_a_10k(root, tmp_path):
     with pytest.raises(shared_filing.SharedFilingError, match="No .htm/.xsd/.xml"):
         shared_filing.import_filing({"notes.txt": b"hello"})
@@ -278,6 +322,38 @@ def test_one_section_failing_leaves_the_other(shared, tmp_path, monkeypatch):
     assert out["fo"]["status"] == "completed" and _count(db, "financial_overview_runs") == 1
 
 
+def test_the_bo_runs_by_itself(shared, tmp_path):
+    db = _database(tmp_path)
+    out = bo_fo.run_bo_fo(database=db, folder=shared, bo_backend=None, fo_backend=None, fo_mode="live",
+                          output_root=tmp_path / "out", rms_request=RmsRequest(500), bo_only=True)
+    assert out["bo"]["status"] == "completed", out
+    assert out["fo"] == {"status": "skipped", "reason": "Business Overview only run."}
+    assert out["rms"] == {"status": "skipped", "reason": "Needs both sections; this run was Business Overview only."}
+    assert _count(db, "financial_overview_runs") == 0 and _count(db, "agentic_analysis_runs") == 2
+
+
+def test_a_stopped_run_records_nothing(shared, tmp_path):
+    db = _database(tmp_path)
+    stop = threading.Event()
+    seen = []
+
+    def progress(section, message):
+        seen.append((section, message))
+        if (section, message) == ("bo", "orchestrator"):
+            stop.set()  # the analyst presses Stop while the BO synthesis is under way
+
+    out = bo_fo.run_bo_fo(database=db, folder=shared, bo_backend=None, fo_backend=agent(), fo_mode="scripted",
+                          output_root=tmp_path / "out", rms_request=RmsRequest(500), on_progress=progress, stop=stop)
+    assert out["bo"]["status"] == "stopped"
+    assert out["bo"]["reason"].startswith("Stopped by the analyst before ")
+    assert out["bo"]["reason"].endswith("; nothing was recorded.")
+    assert out["fo"]["status"] in ("completed", "stopped")  # the FO may have finished first
+    assert out["rms"] == {"status": "skipped", "reason": "The run was stopped."}
+    assert ("bo", "routing the evidence") in seen and ("bo", "stopped") in seen
+    assert _count(db, "agentic_analysis_runs") == 0  # the BO's transaction was rolled back
+    assert not (tmp_path / "out" / "rms").exists()
+
+
 def test_the_fo_copy_waits_for_the_other_writer(shared, tmp_path):
     """A held write lock (the BO mid-run) delays the FO's copy; it lands once the lock is released."""
     db = _database(tmp_path)
@@ -383,6 +459,54 @@ def test_browser_upload_then_run_both(client, loose):
     assert job["result"]["rms"]["summary"]["capacity"] is None and 'class="rms-capacity"' not in page
     assert f"/cases/NVDA_FY2026/fo.html?run_id={job['result']['fo']['summary']['run_id']}" in page
     assert client.get(f"/cases/NVDA_FY2026/fo.html?run_id={job['result']['fo']['summary']['run_id']}").status_code == 200
+
+
+def test_browser_runs_the_bo_by_itself(client, shared, monkeypatch):
+    monkeypatch.setattr(precheck, "live_backend", lambda model=None: pytest.fail("the FO backend was built"))
+    assert 'value="bo"' in client.get("/run").text
+    started = client.post("/run/start", data={"folder": FOLDER, "sections": "bo", "requested_amount_m": "500"},
+                          follow_redirects=False)
+    assert started.status_code == 303
+    job_id = started.headers["location"].split("job=")[1]
+    for _ in range(600):
+        job = client.get(f"/run/jobs/{job_id}").json()
+        if job["status"] != "running":
+            break
+        time.sleep(0.5)
+    assert job["status"] == "finished" and job["bo_only"] is True, job
+    assert (job["sections"]["bo"]["status"], job["sections"]["fo"]["status"], job["sections"]["rms"]["status"]) == (
+        "completed", "skipped", "skipped")
+    page = client.get(f"/run?job={job_id}").text
+    assert f"bo.html?analysis_run_id={job['result']['bo']['summary']['analysis_run_id']}" in page
+    assert 'id="section-fo"' not in page and 'id="section-rms"' not in page
+
+
+def test_browser_stops_a_run(client, shared, monkeypatch):
+    def waits_for_stop(*, stop, on_progress, folder, case_id, **kwargs):
+        on_progress("bo", "primary specialists")
+        assert stop.wait(30)
+        on_progress("bo", "stopped")
+        return {"case_id": case_id, "folder": folder, "cutoff": "",
+                "bo": {"status": "stopped", "reason": "Stopped by the analyst before resilience; nothing was recorded."},
+                "fo": {"status": "skipped", "reason": "Business Overview only run."},
+                "rms": {"status": "skipped", "reason": "The run was stopped."}}
+
+    monkeypatch.setattr(bo_fo, "run_bo_fo", waits_for_stop)
+    started = client.post("/run/start", data={"folder": FOLDER, "sections": "bo"}, follow_redirects=False)
+    job_id = started.headers["location"].split("job=")[1]
+    assert 'id="job-stop"' in client.get(f"/run?job={job_id}").text
+    stopped = client.post(f"/run/jobs/{job_id}/stop", follow_redirects=False)
+    assert stopped.status_code == 303 and stopped.headers["location"] == f"/run?job={job_id}"
+    for _ in range(100):
+        job = client.get(f"/run/jobs/{job_id}").json()
+        if job["status"] != "running":
+            break
+        time.sleep(0.1)
+    assert job["status"] == "stopped" and job["stop_requested"] is True
+    assert job["sections"]["bo"]["status"] == "stopped"
+    page = client.get(f"/run?job={job_id}").text
+    assert "Stopped by the analyst before resilience" in page
+    assert client.post("/run/jobs/nope/stop").status_code == 404
 
 
 def test_the_run_page_shows_how_the_debt_capacity_was_worked_out():

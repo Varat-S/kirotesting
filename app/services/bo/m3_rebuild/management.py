@@ -164,7 +164,7 @@ def aggregate(observations):
 
 def missing_management(sources):
     observations = [{"executive": None, "rule": "source_unavailable", "direction": "unavailable", "category": "information_gap",
-        "text": "No usable executive section in the selected 10-K; a qualitative credit assessment is unavailable.", "citations": []}]
+        "text": "No usable executive section in the selected 10-K or its linked proxy statement; a qualitative credit assessment is unavailable.", "citations": []}]
     result = {"schema_version": "m3-management-assessment-1.0", "artifact_type": "senior_management_assessment",
         "company": sources.company, "filing_period": sources.filing_period,
         "source": {"path": sources.source_path, "sha256": sources.sha256,

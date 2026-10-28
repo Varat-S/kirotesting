@@ -67,6 +67,20 @@ class CreditRatingVerdict(str, Enum):
     WEAK = "weak"
 
 
+class ReconcilingItemKind(str, Enum):
+    """The only kinds of line a filing may show between its debt instruments and its total debt.
+
+    Each moves the carrying amount away from the instruments' principal. There is
+    deliberately no "other" or "rounding" kind: a gap that is not one of these is
+    an extraction error for Validator 8 to report, not something to explain away.
+    """
+
+    ISSUANCE_COSTS_AND_DISCOUNTS = "debt_issuance_costs_and_discounts"
+    UNAMORTIZED_PREMIUM = "unamortized_premium"
+    FAIR_VALUE_HEDGE_ADJUSTMENT = "fair_value_hedge_adjustment"
+    PURCHASE_ACCOUNTING_ADJUSTMENT = "purchase_accounting_adjustment"
+
+
 class LoanPlacementTier(str, Enum):
     """Where a prospective bank loan would rank under each assumption."""
 
@@ -166,6 +180,29 @@ class CreditorPriorityFramework(BaseModel):
     )
 
 
+class ReconcilingItem(BaseModel):
+    """A line the filing shows between the sum of its debt instruments and its total debt.
+
+    E.g. HCA FY2025 Note 8: "Debt issuance costs and discounts (436)" between the
+    instruments' principal and Total debt. ``amount_m`` is signed so that the
+    instruments plus every reconciling item equal the reported total (costs and
+    discounts are negative, premiums positive). Validator 8 counts an item only
+    when ``quote`` appears verbatim in the filing passages and contains the amount.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: ReconcilingItemKind
+    label: str = Field(description="The line's label as the filing states it")
+    amount_m: float = Field(
+        description="Signed amount ($M): negative reduces the total, positive increases it"
+    )
+    quote: str = Field(
+        description="Verbatim text from the filing that states this line and its amount"
+    )
+    evidence_id: str = Field(description="The fact_id of the filing passage quoted")
+
+
 class Deliverable1(BaseModel):
     """Deliverable 1 -- Existing Debt & Creditor Priority Map."""
 
@@ -177,6 +214,8 @@ class Deliverable1(BaseModel):
         default_factory=list
     )
     creditor_priority_framework: CreditorPriorityFramework
+    # Lines between the instruments' principal and the reported total (Validator 8, check 6).
+    reconciling_items: list[ReconcilingItem] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -383,3 +422,18 @@ class Module4Output(BaseModel):
 
 
 MODULE4_JSON_SCHEMA = Module4Output.model_json_schema()
+
+
+class ReconciliationFollowUp(BaseModel):
+    """The answer to the one follow-up call made when Validator 8's reconciliation leaves a gap."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reconciling_items: list[ReconcilingItem] = Field(default_factory=list)
+    unexplained: str | None = Field(
+        default=None,
+        description="Why the gap, or part of it, is not shown by any line in the filing",
+    )
+
+
+MODULE4_RECONCILIATION_JSON_SCHEMA = ReconciliationFollowUp.model_json_schema()

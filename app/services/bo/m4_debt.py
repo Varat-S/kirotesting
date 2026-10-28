@@ -75,6 +75,8 @@ class M4DebtResult:
     model_id: Optional[str] = None
     model_invoked: Optional[bool] = None
     validator_issues: list[str] = None                # type: ignore[assignment]
+    # The one reconciliation follow-up call, when Validator 8 found a gap.
+    reconciliation_followup: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if self.evidence_ids is None:
@@ -97,6 +99,7 @@ class M4DebtResult:
             "evidence_ids": self.evidence_ids,
             "reason": self.reason,
             "model_invoked": self.model_invoked,
+            "reconciliation_followup": self.reconciliation_followup,
         }
 
 
@@ -243,4 +246,5 @@ def run_debt_specialist(
         model_id=getattr(result.run, "model_id", None),
         model_invoked=True,
         validator_issues=issues,
+        reconciliation_followup=result.reconciliation_followup,
     )

@@ -92,6 +92,34 @@ def iter_claims(parsed: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     return claims
 
 
+def drop_uncited_claims(parsed: dict[str, Any]) -> list[dict[str, str]]:
+    """Remove a listed claim that cites no hypothesis at all (in place).
+
+    A strength, weakness, driver or risk with empty ``hypothesis_ids`` has no
+    validated basis, typically a restatement of a debt-specialist or Module 3
+    conclusion the orchestrator cannot cite. Dropping it asserts nothing new,
+    so it is done here rather than rejecting the whole conclusion. A claim that
+    cites unknown or inadmissible hypotheses is left for validation to reject,
+    and so is an uncited overall assessment. Returns one adjustment per claim.
+    """
+    changes = []
+    for key in CLAIM_LISTS:
+        kept = []
+        for claim in parsed.get(key) or []:
+            if (isinstance(claim, dict) and claim.get("category") != "limitation"
+                    and not claim.get("hypothesis_ids")):
+                changes.append({
+                    "claim_id": claim.get("claim_id", "?"),
+                    "note": (f"Claim {claim.get('title') or claim.get('text', '')[:80]!r} "
+                             f"dropped from {key}: it cites no validated hypothesis."),
+                })
+            else:
+                kept.append(claim)
+        if key in parsed and isinstance(parsed[key], list):
+            parsed[key] = kept
+    return changes
+
+
 def downgrade_overstated_claim_types(
     parsed: dict[str, Any], hypotheses: dict[str, HypothesisRecord],
 ) -> list[dict[str, str]]:
@@ -119,6 +147,36 @@ def downgrade_overstated_claim_types(
             "claim_id": claim.get("claim_id", "?"),
             "note": (f"Claim type {stated} lowered to {new}: it rests only on "
                      f"{sorted(k.value for k in kinds)} hypotheses."),
+        })
+    return changes
+
+
+NARRATIVE_ONLY_UNCERTAINTY = (
+    "Rests on the company's own narrative disclosure; not independently verified.")
+
+
+def fill_missing_qualifications(
+    parsed: dict[str, Any], hypotheses: dict[str, HypothesisRecord],
+) -> list[dict[str, str]]:
+    """State the uncertainty a claim resting only on qualified narrative left blank (in place).
+
+    Such a claim must say what is uncertain about it. Adding the standard
+    qualification only weakens the claim, so it is done here rather than
+    rejecting the whole conclusion. Returns one adjustment per change.
+    """
+    changes = []
+    for _, claim in iter_claims(parsed):
+        if (claim.get("uncertainty") or "").strip():
+            continue
+        used = [hypotheses[h] for h in claim.get("hypothesis_ids") or []
+                if h in hypotheses and hypotheses[h].usable]
+        if not used or {h.admissibility for h in used} != {Admissibility.QUALIFIED_NARRATIVE}:
+            continue
+        claim["uncertainty"] = NARRATIVE_ONLY_UNCERTAINTY
+        changes.append({
+            "claim_id": claim.get("claim_id", "?"),
+            "note": ("Standard uncertainty added: the claim rests only on qualified "
+                     "narrative hypotheses and stated none."),
         })
     return changes
 
