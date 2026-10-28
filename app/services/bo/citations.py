@@ -105,7 +105,7 @@ def repair_citations(parsed: dict[str, Any], admitted: set[str], *,
     re-attributed to the admitted passage that contains it verbatim, if exactly
     one does. A substantive parameter left with no citation inherits the
     admitted evidence of its own hypotheses, or becomes ``unavailable``; one
-    that cited nothing at all is left for the validator to reject.
+    that cited nothing at all is also withheld instead of rejecting the agent.
     """
     from app.services.bo.hypotheses import quote_in_passage
 
@@ -172,14 +172,12 @@ def repair_citations(parsed: dict[str, Any], admitted: set[str], *,
         note(owner, f"Re-attributed a quote to admitted evidence {corrected[:12]}...")
         return {**quote, "evidence_id": corrected}
 
-    cited = {i for i, p in enumerate(out.get("parameters") or [])
-             if isinstance(p, dict) and p.get("evidence_ids")}
     walk(out, "(answer)")
 
     support = {h.get("hypothesis_id"): h.get("supporting_evidence_ids") or []
                for h in out.get("hypotheses") or [] if isinstance(h, dict)}
     for i, item in enumerate(out.get("parameters") or []):
-        if i not in cited or item.get("evidence_ids"):
+        if item.get("evidence_ids"):
             continue
         if item.get("status", "ok") not in _SUBSTANTIVE:
             continue
@@ -192,5 +190,5 @@ def repair_citations(parsed: dict[str, Any], admitted: set[str], *,
                       "own hypotheses.")
         else:
             item["status"] = "unavailable"
-            note(pid, "No admitted citation remained; status set to unavailable.")
+            note(pid, "No admitted citation supports this value; status set to unavailable.")
     return out, adjustments

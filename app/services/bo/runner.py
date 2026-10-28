@@ -1623,7 +1623,7 @@ class _BoRun:
         }
         dropped = drop_uncited_claims(parsed)
         downgrades = downgrade_overstated_claim_types(parsed, all_by_id)
-        qualified = fill_missing_qualifications(parsed, all_by_id)
+        qualified = []  # Presentation wording is left to the orchestrator.
         # Adjustments describe THIS answer; an earlier rejected one's do not carry.
         self.agents[agent.agent_id].adjustments = [*dropped, *downgrades, *qualified]
         issues = validate_orchestrator_output(

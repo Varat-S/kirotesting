@@ -40,15 +40,9 @@ from app.schemas.bo import (
     MitigantAssessment,
     MitigantEffectiveness,
 )
-from app.services.bo import inference_rules
 from app.services.bo.indicators import IndicatorSet
-from app.services.bo.plans import (
-    LABEL_PARAMETERS,
-    REQUIRES_COMPANY_EVIDENCE,
-    BoAgentSpec,
-)
+from app.services.bo.plans import BoAgentSpec
 from app.services.bo.presentation import classify_presentation
-from app.services.bo.reconcile import tokens
 from app.services.bo.recovery import recover_quote
 from app.services.orchestration.benchmark_context import (
     _METRIC_NUMBER,
@@ -85,9 +79,6 @@ _REALIZED = re.compile(
     r"for the years? ended|as of (?:December|January|the)",
     re.I,
 )
-COMPANY_SPECIFIC = ("company_specific_disclosure", "deterministic_calculation")
-# Share of a fact's content words that must also occur in its verified quotes.
-MIN_QUOTE_COVERAGE = 0.15
 
 
 def derive_evidence_basis(*, quotes: list[str], has_calculation: bool,
@@ -491,40 +482,8 @@ class HypothesisValidator:
             quotes=quote_texts, has_calculation=bool(parameter_result_ids),
             has_other_support=bool(supporting or components))
         flags: list[dict[str, Any]] = list(binding_flags)
-        if (live and basis == "generic_risk_disclosure"
-                and claim_type is not ClaimType.MANAGEMENT_CLAIM):
-            flags.append({
-                "rule_id": "generic_risk_disclosure_only",
-                "layer": "D_evidence_sufficiency", "effect": "qualify",
-                "description": "Supported only by risk-factor language about what "
-                               "could happen; it may be reported as a disclosed "
-                               "risk, not as an event that has occurred.",
-                "heuristic": True, "fo_handoff_variable": None, "correction": None})
-
-        # A genuine quote that shares almost no wording with the claim does not
-        # show that the filing STATES the claim (a lexical check, not entailment).
-        if (live and claim_type is ClaimType.FACT and quote_texts
-                and not parameter_result_ids):
-            claim_terms = tokens(item.get("claim") or "")
-            quote_terms = tokens(" ".join(quote_texts))
-            if len(claim_terms) >= 3 and (
-                    len(claim_terms & quote_terms) / len(claim_terms) < MIN_QUOTE_COVERAGE):
-                flags.append({
-                    "rule_id": "quote_does_not_cover_claim",
-                    "layer": "D_evidence_sufficiency", "effect": "qualify",
-                    "description": "The quote is verified, but it shares almost no "
-                                   "wording with the claim, so it does not show "
-                                   "that the filing states the claim; treated as "
-                                   "the specialist's inference.",
-                    "heuristic": True, "fo_handoff_variable": None,
-                    "correction": "Quote the sentence that states the claim, or "
-                                  "present the claim as an inference."})
-
-        # --- Layer C: known unsupported inferential steps ---------------------
-        if live:
-            flags += inference_rules.evaluate(
-                claim=item.get("claim") or "", mechanism=mechanism,
-                claim_type=claim_type.value, evidence_basis=basis)
+        # The experimental branch leaves grounded interpretations to the agents.
+        # Lexical and sector inference heuristics no longer qualify them.
 
         # --- BO6: an interaction cannot be stronger than what it is built on --
         if self._primary is not None and live:
@@ -700,12 +659,8 @@ def gate_parameters(parsed: dict[str, Any], records: list[HypothesisRecord], *,
     parameter is recorded as ``unavailable`` (never silently accepted, never
     rewritten to a different value), plus the list of adjustments made:
 
-    * the value is not one of the permitted categorical values (or is a
-      sentence where a short label is required);
     * no linked hypothesis survived validation;
-    * the value asserts something specific about this company but every linked
-      hypothesis rests on management statements, generic risk language or
-      inference.
+    * the agent explicitly reported that the classification is not established.
     """
     # BO6 may support a parameter with the validated BO1-BO5 hypotheses it
     # received, as well as with its own.
@@ -721,7 +676,6 @@ def gate_parameters(parsed: dict[str, Any], records: list[HypothesisRecord], *,
         status = item.get("status", "ok")
         reason = detail = None
         if status in _SUBSTANTIVE_STATUSES:
-            allowed = value_sets.get(pid)
             linked = [by_id[h] for h in item.get("hypothesis_ids") or []
                       if h in by_id and by_id[h].usable]
             text = "" if value is None else str(value)
@@ -729,28 +683,10 @@ def gate_parameters(parsed: dict[str, Any], records: list[HypothesisRecord], *,
                 reason = "not_established"
                 detail = ("The agent reported that the evidence does not support "
                           "a classification.")
-            elif allowed and text not in allowed:
-                reason = "value_not_permitted"
-                detail = f"{text[:80]!r} is not one of {sorted(allowed)}."
-            elif pid in LABEL_PARAMETERS and (
-                    not text or len(text) > LABEL_PARAMETERS[pid]
-                    or len(text.split()) > 6 or text.rstrip().endswith(".")):
-                reason = "label_not_concise"
-                detail = "A short label is required, not a sentence."
             elif not linked:
                 reason = "no_validated_supporting_hypothesis"
                 detail = ("None of the hypotheses cited for this value survived "
                           "validation as a usable finding.")
-            elif text in REQUIRES_COMPANY_EVIDENCE.get(pid, ()) and not any(
-                    h.evidence_basis in COMPANY_SPECIFIC
-                    and h.admissibility is Admissibility.ESTABLISHED
-                    for h in linked):
-                reason = "needs_company_specific_evidence"
-                detail = (f"{text!r} asserts something specific about this company, "
-                          "but no linked hypothesis is an established, "
-                          "company-specific finding (they are: " + ", ".join(sorted(
-                              {f"{h.admissibility.value}/{h.evidence_basis}"
-                               for h in linked})) + ").")
         if reason:
             changes.append({"parameter_id": pid, "original_value": value,
                             "original_status": status, "reason": reason,

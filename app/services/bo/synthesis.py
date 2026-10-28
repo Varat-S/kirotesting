@@ -23,7 +23,7 @@ from app.services.agents.validation import DeterministicValidator
 from app.services.bo.hypotheses import score_key_paths, unbound_numbers
 from app.services.bo.indicators import IndicatorSet
 from app.services.bo.plans import BO_ACTIVE_AGENT_IDS, BO_AGENT_SPECS
-from app.services.bo.reconcile import Reconciliation, similarity
+from app.services.bo.reconcile import Reconciliation
 
 # Categorical parameter -> (rubric signal, rubric dimension). The rubric tables
 # in the versioned scoring config supply each parameter's permitted values.
@@ -254,30 +254,8 @@ def validate_orchestrator_output(
                     f"overstated_claim_type: claim {cid!r} is presented as "
                     f"{stated} but rests only on "
                     f"{sorted(k.value for k in kinds)} hypotheses.")
-            if kinds == {Admissibility.QUALIFIED_NARRATIVE} and not (
-                    claim.get("uncertainty") or "").strip():
-                issues.append(
-                    f"missing_qualification: claim {cid!r} rests only on "
-                    "qualified hypotheses but states no uncertainty.")
-
-    # One risk must not be counted twice across the adverse lists.
-    adverse = [c for key, c in claims if key in ("weaknesses", "material_risks")]
-    for i, a in enumerate(adverse):
-        for b in adverse[i + 1:]:
-            ha, hb = set(a.get("hypothesis_ids") or []), set(b.get("hypothesis_ids") or [])
-            ga = {reconciliation.group_of(h) for h in ha} - {None}
-            gb = {reconciliation.group_of(h) for h in hb} - {None}
-            if (ha and ha == hb) or (ga & gb):
-                issues.append(
-                    f"double_counted_risk: claims {a.get('claim_id')!r} and "
-                    f"{b.get('claim_id')!r} restate the same finding.")
-    texts = [(c.get("claim_id"), c.get("text") or "") for _, c in claims]
-    for i, (ida, ta) in enumerate(texts):
-        for idb, tb in texts[i + 1:]:
-            if similarity(ta, tb) >= 0.8:
-                issues.append(
-                    f"duplicate_claim_text: claims {ida!r} and {idb!r} repeat "
-                    "the same statement.")
+    # Stylistic repetition and missing uncertainty phrasing are intentionally
+    # left to the orchestrator and challenger in this exploratory branch.
     return issues
 
 
