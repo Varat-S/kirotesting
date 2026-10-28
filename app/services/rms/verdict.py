@@ -22,14 +22,17 @@ from .capacity import debt_capacity, existing_debt_service, level
 from .inputs import RmsRequest, load_bo, load_fo
 from .mitigants import mitigants
 from .policy import (
-    AMORTISATION, BUSINESS_BAND_NOTCH, DEBT_MISMATCH_TOLERANCE, DEFAULT_INTEREST_RATE, DEFAULT_TENOR_YEARS,
-    DOWNSIDE_DSCR_MIN, DOWNSIDE_SHOCK, DSCR_COVENANT, LEVERAGE_COVENANT_HEADROOM, LEVERAGE_MULTIPLE,
+    AGGRESSIVE_DISTRIBUTIONS_TO_DEBT, AMORTISATION, BUSINESS_BAND_NOTCH, DEBT_MISMATCH_TOLERANCE,
+    DEFAULT_INTEREST_RATE, DEFAULT_TENOR_YEARS, DOWNSIDE_DSCR_MIN, DOWNSIDE_SHOCK, DSCR_COVENANT,
+    FINANCIAL_POLICY_COVENANT_HEADROOM, LEVERAGE_COVENANT_HEADROOM, LEVERAGE_MULTIPLE, LIQUIDITY_MISMATCH_TOLERANCE,
     M4_VERDICT_NOTCH, MAX_LTV, RMS_POLICY_VERSION, SECURED_LEVELS, SEVERITY_FLOOR, SEVERITY_MEASURES,
     SEVERITY_TRIGGER, SUBORDINATION_DRAG_SECURED, TENOR_CAP_YEARS, UTILISATION_EDGES, VERDICT_MATRIX,
 )
 
-RMS_SCHEMA_VERSION = "rms-1.1"  # 1.1: fo_decisions; capacity "level" is the adjusted grade's
+RMS_SCHEMA_VERSION = "rms-1.2"  # 1.2: cross_checks, terms financial_policy; 1.1: fo_decisions, adjusted level
+LEGAL_SUFFIXES = ("inc", "llc", "corp", "corporation", "co", "ltd", "plc", "lp", "company")
 APPROVALS = ("approve", "approve_with_conditions", "approve_with_conditions_secured")
+CAPACITY_ONLY = "capacity_only"  # the verdict of a debt capacity report: no amount was requested
 
 
 def adjusted_grade(fo, bo):
@@ -56,7 +59,64 @@ def adjusted_grade(fo, bo):
             "rating": credit_rating(score), "level": level(score)}
 
 
-def gates(fo, bo, capacity):
+def _entity(name):
+    """A legal name compared without case, punctuation or a trailing legal suffix."""
+    words = "".join(c if c.isalnum() or c.isspace() else " " for c in name.lower()).split()
+    while words and words[-1] in LEGAL_SUFFIXES:
+        words.pop()
+    return " ".join(words)
+
+
+def _gap(a, b):
+    return abs(a - b) / max(a, b) if max(a, b) > 0 else 0.0
+
+
+def cross_checks(fo, bo):
+    """[{check, outcome, detail}] comparing the figures FO, M3 and M4 each give; outcome is match, mismatch or
+    unavailable. A mismatch refers the case (``gates``), except a borrower mismatch on a simulated M3 structure,
+    which is a limitation."""
+    out = []
+    structure = bo.m3_structure
+    if structure is None or not structure.borrower or not bo.m4_legal_borrower:
+        out.append({"check": "borrower", "outcome": "unavailable",
+                    "detail": "M3 structure borrower or M4 legal borrower unavailable"})
+    else:
+        same = _entity(structure.borrower) == _entity(bo.m4_legal_borrower)
+        out.append({"check": "borrower", "outcome": "match" if same else "mismatch",
+                    "simulated": structure.simulated,
+                    "detail": f"M3 borrower {structure.borrower}"
+                              f"{' (simulated structure)' if structure.simulated else ''}; "
+                              f"M4 legal borrower {bo.m4_legal_borrower}"})
+    if fo.revolver_m is None or bo.m4_revolver_available_m is None:
+        out.append({"check": "revolver", "outcome": "unavailable",
+                    "detail": "FO undrawn revolver or M4 revolver availability unavailable"})
+    else:
+        gross = bo.m4_revolver_available_m
+        net = None if not bo.m4_cp_outstanding_m else gross - bo.m4_cp_outstanding_m
+        bases = [("gross", gross), *([("net of commercial paper", net)] if net is not None else [])]
+        basis, m4 = min(bases, key=lambda b: _gap(fo.revolver_m, b[1]))
+        gap = _gap(fo.revolver_m, m4)
+        out.append({"check": "revolver", "outcome": "match" if gap <= LIQUIDITY_MISMATCH_TOLERANCE else "mismatch",
+                    "detail": f"FO undrawn revolver ${fo.revolver_m:,.0f}M; M4 revolver available ${m4:,.0f}M "
+                              f"({basis}): {gap:.0%} apart"})
+    return out
+
+
+def financial_policy(bo):
+    """The aggressive-financial-policy signal (debt-funded distributions of at least a quarter of M4 total
+    indebtedness over three years), or None."""
+    if not bo.distributions_debt_funded or not bo.distributions_3y_m or not bo.m4_total_debt_m:
+        return None
+    share = bo.distributions_3y_m / bo.m4_total_debt_m
+    if share < AGGRESSIVE_DISTRIBUTIONS_TO_DEBT:
+        return None
+    return {"signal": "aggressive", "distributions_3y_m": bo.distributions_3y_m,
+            "distributions_to_debt": round(share, 3),
+            "reason": f"M4 D3: debt-funded distributions ${bo.distributions_3y_m:,.0f}M over 3 years, "
+                      f"{share:.0%} of total indebtedness"}
+
+
+def gates(fo, bo, capacity, checks=()):
     """[{gate_id, outcome, reason}] for each hard gate that holds; outcome is decline or refer."""
     out = []
 
@@ -87,6 +147,13 @@ def gates(fo, bo, capacity):
         hold("RMS-G10", "refer", "The Business Overview handoff was rejected by its reviewer")
     if capacity is not None and capacity["derived_capacity_m"] is None:
         hold("RMS-G08", "refer", "Debt capacity unavailable: " + ", ".join(capacity["unavailable"]))
+    for check in checks:
+        if check["outcome"] != "mismatch":
+            continue
+        if check["check"] == "borrower" and not check.get("simulated"):
+            hold("RMS-G11", "refer", f"Borrower differs between M3 and M4: {check['detail']}")
+        elif check["check"] == "revolver":
+            hold("RMS-G12", "refer", f"Revolver liquidity differs between FO and M4: {check['detail']}")
     return out
 
 
@@ -94,9 +161,13 @@ def utilisation_band(utilisation):
     return next((i for i, edge in enumerate(UTILISATION_EDGES) if utilisation <= edge), len(UTILISATION_EDGES))
 
 
-def _covenants(fo, grade_level, amount):
+def _covenants(fo, grade_level, amount, policy=None):
+    """The financial covenants. An aggressive financial policy turns a low grade's incurrence test into a
+    maintenance leverage covenant."""
     pro_forma = None if not fo.ebitdar_m else (fo.adj_debt_m + amount) / fo.ebitdar_m
     headroom = LEVERAGE_COVENANT_HEADROOM[grade_level]
+    if headroom is None and policy is not None:
+        headroom = FINANCIAL_POLICY_COVENANT_HEADROOM
     if headroom is None or pro_forma is None:
         out = [{"covenant": "debt_incurrence", "test": "pro forma Debt / EBITDAR for new debt",
                 "max": LEVERAGE_MULTIPLE[grade_level]}]
@@ -114,7 +185,13 @@ def structure_terms(fo, bo, grade, *, amount, tenor_years, interest_rate, secure
     secured = (secured_requested or grade["level"] in SECURED_LEVELS or bo.m4_placement == "secured_tier_1"
                or (drag is not None and drag > SUBORDINATION_DRAG_SECURED))
     kind, share, sweep = AMORTISATION[grade["level"]]
-    covenants, pro_forma = _covenants(fo, grade["level"], amount)
+    policy = financial_policy(bo)
+    covenants, pro_forma = _covenants(fo, grade["level"], amount, policy)
+    structure = bo.m3_structure
+    guarantees = "the same upstream guarantors as the existing senior notes (per M4 Deliverable 1)"
+    if structure is not None and structure.guarantors:
+        guarantees = (f"upstream guarantees from {', '.join(structure.guarantors)} "
+                      f"(M3 structure{', simulated: confirm against the notes indenture' if structure.simulated else ''})")
     return {
         "amount_m": amount,
         "rank": "secured_tier_1" if secured else (bo.m4_placement or "senior_unsecured_tier_2"),
@@ -122,9 +199,10 @@ def structure_terms(fo, bo, grade, *, amount, tenor_years, interest_rate, secure
         "tenor_years": tenor_years,
         "interest_rate": interest_rate,
         "amortisation": {"type": kind, "amortised_share": share, "excess_cash_sweep": sweep},
-        "guarantees": "the same upstream guarantors as the existing senior notes (per M4 Deliverable 1)",
+        "guarantees": guarantees,
         "pro_forma_leverage": pro_forma,
         "financial_covenants": covenants,
+        "financial_policy": policy,
     }
 
 
@@ -157,15 +235,46 @@ def feasibility(fo, bo, terms, protections, grade_level, *, collateral_value_m, 
             "stress": detail["stress"], "ltv": detail.get("ltv")}
 
 
-def _limitations(bo):
+def _limitations(bo, checks=()):
     out = ["The FO rating methodology is provisional; RMS thresholds are illustrative, not bank policy.",
            "FO and BO do not share a verified evidence snapshot; overlapping figures are compared, not merged."]
     if bo.handoff_review_status == "pending":
         out.append("The Business Overview handoff is still pending human review.")
-    if bo.business_band is None:
-        out.append("BO business risk band unavailable: no business-band notch or haircut applied.")
-    if not bo.m3_findings:
-        out.append("No negative M3 structural finding counted (none found, or the M3 assessment is unavailable).")
+    if not bo.validators_enforced:
+        out.append("The Business Overview ran with its validators off: its findings are an ungoverned draft, "
+                   "not validated against the filing.")
+    if bo.handoff_present and bo.business_band is None:
+        out.append("BO business risk band unavailable (the handoff carries none): no business-band notch applied.")
+    if bo.m3_source is None:
+        out.append("M3 unavailable: no structural haircut, ring-fencing or guarantor terms from M3.")
+    elif bo.m3_source == "rebuild":
+        out.append("M3 rebuild carries typed artifacts, not scored structural findings: no M3 capacity haircut.")
+        structure = bo.m3_structure
+        if structure is None:
+            out.append("M3 corporate structure unavailable or not validated: guarantor terms from M4 only.")
+        elif structure.simulated:
+            out.append("The M3 corporate structure is a simulated example: its guarantors and minority holdings "
+                       "shape the terms but must be confirmed against the legal documents.")
+    elif not bo.m3_findings:
+        out.append("No negative M3 structural finding counted: the M3 assessment found none.")
+    management = bo.m3_management
+    if management is not None:
+        out.append(f"M3 management assessment {management['status']}: {management['admitted']} of "
+                   f"{management['expected']} executive profiles admitted, overall {management['outcome']} "
+                   f"(model signal {management['signal']}); recorded, not used in the grade.")
+    for check in checks:
+        if check["check"] == "borrower" and check["outcome"] == "mismatch" and check.get("simulated"):
+            out.append(f"Borrower differs between M3 and M4 ({check['detail']}): name the borrowing entity "
+                       "before documentation.")
+    if bo.m4_ladder_aggregated:
+        out.append("M4 lists the senior notes as one aggregate line: no M4 maturity ladder, so the maturity-wall "
+                   "test rests on FO alone.")
+    if bo.fo_questions:
+        out.append(f"{len(bo.fo_questions)} BO question(s) for FO are unanswered: "
+                   + "; ".join(q for _, _, q in bo.fo_questions if q))
+    out.extend(f"BO open question: {q}" for q in bo.open_questions)
+    if bo.evidence_limitations:
+        out.append("BO evidence gaps: " + "; ".join(bo.evidence_limitations))
     return out
 
 
@@ -180,6 +289,7 @@ class RmsResult:
     grade: dict | None
     capacity: dict | None
     gates: list = field(default_factory=list)
+    cross_checks: list = field(default_factory=list)
     terms: dict | None = None
     mitigants: list = field(default_factory=list)
     feasibility: dict | None = None
@@ -193,13 +303,33 @@ class RmsResult:
         return asdict(self)
 
 
-def assess(request: RmsRequest, fo_payload: dict, *, handoff: dict | None = None, m4_analysis: dict | None = None,
-           fo_review: dict | None = None, fo_overrides: list | None = None,
+def capacity_report(result, fo, bo, grade, *, tenor, rate, collateral_value_m, analysis_run_id):
+    """Fill ``result`` as a debt capacity report (no requested amount): verdict ``capacity_only``, no approval or
+    utilisation, and indicative terms, mitigants and a structuring-engine check at the derived capacity. The gates
+    are recorded (they say what would stop a loan) but decide nothing."""
+    result.verdict = CAPACITY_ONLY
+    derived = result.capacity["derived_capacity_m"] if result.capacity else None
+    if grade is None or not derived or derived <= 0:
+        return result
+    amount = math.floor(derived * 10) / 10
+    result.terms = structure_terms(fo, bo, grade, amount=amount, tenor_years=tenor, interest_rate=rate,
+                                   secured_requested=False)
+    result.terms.update(provisional=True, basis="derived capacity")
+    result.mitigants = mitigants(fo, bo, secured=result.terms["secured"])
+    result.feasibility = feasibility(fo, bo, result.terms, result.mitigants, grade["level"],
+                                     collateral_value_m=collateral_value_m, analysis_run_id=analysis_run_id)
+    return result
+
+
+def assess(request: RmsRequest | None, fo_payload: dict, *, handoff: dict | None = None,
+           m4_analysis: dict | None = None, fo_review: dict | None = None, fo_overrides: list | None = None,
            analysis_run_id: str = "rms") -> RmsResult:
     """The RMS verdict for ``request`` from an FO payload and the BO handoff and/or Module 4 output.
     ``fo_review`` and ``fo_overrides`` are the analyst's decisions on an escalated FO run (``review.json`` and
     ``overrides.json``, or the database rows): their scores replace the engine's and the gate on open FO
-    escalations clears once every one is decided."""
+    escalations clears once every one is decided. Without a requested amount (or without a request) the result
+    is a debt capacity report (``capacity_report``)."""
+    request = request or RmsRequest()
     fo, bo = load_fo(fo_payload, fo_review, fo_overrides), load_bo(handoff, m4_analysis)
     grade = adjusted_grade(fo, bo)
     rate = request.interest_rate if request.interest_rate is not None else DEFAULT_INTEREST_RATE
@@ -208,10 +338,15 @@ def assess(request: RmsRequest, fo_payload: dict, *, handoff: dict | None = None
         tenor = min(tenor, TENOR_CAP_YEARS[grade["level"]])
     capacity = (debt_capacity(fo, bo, grade_level=grade["level"], tenor_years=tenor, interest_rate=rate)
                 if grade is not None else None)
-    held = gates(fo, bo, capacity)
+    checks = cross_checks(fo, bo)
+    held = gates(fo, bo, capacity, checks)
     result = RmsResult(entity_name=fo.entity_name, period_end=fo.period_end, request=asdict(request),
                        verdict="refer", approved_amount_m=None, utilisation=None, grade=grade, capacity=capacity,
-                       gates=held, fo_decisions=list(fo.analyst_decisions), limitations=_limitations(bo))
+                       gates=held, cross_checks=checks, fo_decisions=list(fo.analyst_decisions),
+                       limitations=_limitations(bo, checks))
+    if request.requested_amount_m is None:
+        return capacity_report(result, fo, bo, grade, tenor=tenor, rate=rate,
+                               collateral_value_m=request.collateral_value_m, analysis_run_id=analysis_run_id)
     derived = capacity["derived_capacity_m"] if capacity else None
     # No capacity at all is the worst utilisation band; it is recorded as None (JSON has no infinity).
     utilisation = None if derived is None else request.requested_amount_m / derived if derived > 0 else math.inf

@@ -105,6 +105,7 @@ def _further_findings(findings, used, cite, citable) -> list[dict[str, Any]]:
         item = {"hypothesis_id": f["hypothesis_id"], "text": f["claim"],
                 "mechanism": f.get("credit_mechanism"),
                 "claim_type": f.get("claim_type"),
+                "interpretation": f.get("interpretation") or {},
                 "direction": f["direction"], "materiality": f["materiality"],
                 "attributed": f["admissibility"] == "attributed",
                 "citations": cite(f.get("supporting_evidence_ids") or [])}
@@ -355,6 +356,7 @@ class BoReportBuilder:
             # Effective Module 4 debt-specialist flag for this run (requested AND
             # v3 roster). Recorded so the summary/registry report the real value.
             "m4_debt_specialist_enabled": bool(getattr(run, "enable_m4_debt", False)),
+            "validators_enforced": run.enforce_validators,
         }
         recorder = StageRecorder(self.session, run.case_id, run.snapshot_version)
         recorder.record(f"bo_memo:{run.analysis_run_id}", memo)
@@ -447,6 +449,7 @@ class BoReportBuilder:
             "scope": "business_overview_only",
             "execution_mode": mode,
             "execution_label": MODE_TEXT[mode],
+            "validators_enforced": run.enforce_validators,
             "agent_registry_version": run.registry.version,
             "agent_registry_hash": run.registry.registry_hash(),
             "started_at": run.started_at.isoformat(),
@@ -1009,6 +1012,7 @@ class BoReportBuilder:
                 "audit_stage": f"bo_audit:{run.analysis_run_id}",
             },
             execution_mode=mode,
+            validators_enforced=run.enforce_validators,
             agent_registry_version=run.registry.version,
             agent_registry_hash=run.registry.registry_hash(),
             prompt_hashes={n: p.content_hash for n, p in sorted(run.prompts.items())},

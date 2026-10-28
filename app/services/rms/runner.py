@@ -57,7 +57,8 @@ def write_record(result, *, run_id: str, case_id: str, sources: dict, output_roo
 def assess_case(session, case_id: str, *, output_root, request: RmsRequest | None = None,
                 fo_run_id: str | None = None, bo_run_id: str | None = None) -> dict:
     """Assess ``case_id`` from its recorded runs (by default its latest FO run and latest BO handoff) and return
-    the summary. Without ``request``, the case's latest assessment's request is reused."""
+    the summary. Without ``request``, the case's latest assessment's request is reused; a case with none gets a
+    debt capacity report (no requested amount)."""
     fo_row = (session.get(FinancialOverviewRunRow, fo_run_id) if fo_run_id else
               session.query(FinancialOverviewRunRow).filter_by(case_id=case_id)
               .order_by(FinancialOverviewRunRow.started_at.desc()).first())
@@ -71,9 +72,7 @@ def assess_case(session, case_id: str, *, output_root, request: RmsRequest | Non
         raise RmsRunError(f"No Business Overview handoff for run {bo_run_id!r} in case {case_id!r}.")
     if request is None:
         earlier = records(output_root, case_id)
-        if not earlier:
-            raise RmsRunError(f"Case {case_id!r} has no earlier RMS assessment to reuse: give a requested amount.")
-        request = RmsRequest(**earlier[-1]["request"])
+        request = RmsRequest(**earlier[-1]["request"]) if earlier else RmsRequest()
     review = review_view(review_for(session, fo_row.run_id))
     overrides = overrides_for(session, fo_row.run_id)
     run_id = new_run_id()

@@ -12,8 +12,10 @@ the business band), so those BO judgements reach capacity through the grade alon
 straight-line amortiser (1 / tenor of principal + interest): conservative, and the same as the structuring
 engine's, so a loan sized here also passes its leverage and DSCR checks. Existing debt service is FO's DSCR
 debt service, or interest only when the maturities count as refinanced (FO's refinancing test scores 3 or
-better and M4 records no refinancing distress). Large hospital operators roll their bonds, so counting every
-maturity as repaid from cash would size them at zero.
+better and M4 records no refinancing distress). M4's refinancing record can veto that (refinancing left under
+6 months before maturity, or a spread more than 150bp wider) or, when it is strong on every count, extend it to
+an FO score of 4. Large hospital operators roll their bonds, so counting every maturity as repaid from cash would
+size them at zero.
 
 The BO haircut then comes off, capped at 40%: only the structural facts that cut what a lender can reach (M3
 findings on guarantor coverage, cash-flow access or JV leakage; unproven mitigants). Refinancing distress isn't
@@ -25,7 +27,9 @@ from __future__ import annotations
 
 from .policy import (
     DOWNSIDE_DSCR_MIN, DOWNSIDE_SHOCK, DSCR_MIN, HAIRCUT_CAP, LEVELS, LEVERAGE_MULTIPLE, M3_FINDING_HAIRCUT,
-    M3_FINDINGS_COUNTED, ROLLOVER_MAX_REFINANCING_SCORE, UNPROVEN_MITIGANT_HAIRCUT,
+    M3_FINDINGS_COUNTED, ROLLOVER_CONFIRMED_MAX_REFINANCING_SCORE, ROLLOVER_MAX_REFINANCING_SCORE,
+    ROLLOVER_MAX_SPREAD_DELTA_BPS, ROLLOVER_MIN_LEAD_TIME_MONTHS, ROLLOVER_STRONG_LEAD_TIME_MONTHS,
+    ROLLOVER_STRONG_SPREAD_DELTA_BPS, UNPROVEN_MITIGANT_HAIRCUT,
 )
 
 
@@ -34,11 +38,35 @@ def level(score):
     return next(name for name, top in LEVELS if score <= top)
 
 
+def rollover_decision(fo, bo):
+    """(whether existing maturities count as refinanced, why). FO's refinancing test at 3 or better and no M4
+    refinancing distress; M4's lead time and spread delta can veto it, and a strong M4 record on every count
+    (lead time, spread, maturity extension) extends it to an FO score of 4."""
+    score = fo.refinancing_score
+    if score is None:
+        return False, "no FO refinancing score"
+    if bo.distress_events != 0:
+        return False, ("M4 records refinancing distress" if bo.distress_events
+                       else "M4 refinancing distress record unavailable")
+    lead, spread, extension = (bo.refinancing_lead_time_months, bo.refinancing_spread_delta_bps,
+                               bo.maturity_extension_years)
+    if lead is not None and lead < ROLLOVER_MIN_LEAD_TIME_MONTHS:
+        return False, f"M4 refinancing lead time {lead:g} months (under {ROLLOVER_MIN_LEAD_TIME_MONTHS})"
+    if spread is not None and spread > ROLLOVER_MAX_SPREAD_DELTA_BPS:
+        return False, f"M4 refinancing spread delta +{spread:g}bp (over {ROLLOVER_MAX_SPREAD_DELTA_BPS}bp)"
+    strong = (None not in (lead, spread, extension) and lead >= ROLLOVER_STRONG_LEAD_TIME_MONTHS
+              and spread <= ROLLOVER_STRONG_SPREAD_DELTA_BPS and extension > 0)
+    m4 = (f"M4 lead time {lead:g} months, spread +{spread:g}bp, maturity extension {extension:g} years"
+          if None not in (lead, spread, extension) else "M4 refinancing metrics incomplete")
+    if score <= ROLLOVER_MAX_REFINANCING_SCORE:
+        return True, f"FO refinancing score {score:g}; {m4}"
+    if strong and score <= ROLLOVER_CONFIRMED_MAX_REFINANCING_SCORE:
+        return True, f"FO refinancing score {score:g}, confirmed by a strong M4 record: {m4}"
+    return False, f"FO refinancing score {score:g}; {m4}"
+
+
 def rollover(fo, bo):
-    """Whether existing maturities count as refinanced: FO's refinancing test at 3 or better and no M4
-    refinancing distress event."""
-    return (fo.refinancing_score is not None and fo.refinancing_score <= ROLLOVER_MAX_REFINANCING_SCORE
-            and bo.distress_events == 0)
+    return rollover_decision(fo, bo)[0]
 
 
 def existing_debt_service(fo, bo):
@@ -94,7 +122,7 @@ def debt_capacity(fo, bo, *, grade_level, tenor_years, interest_rate):
                         "downside_shock": DOWNSIDE_SHOCK, "downside_dscr_min": DOWNSIDE_DSCR_MIN,
                         "tenor_years": tenor_years, "interest_rate": interest_rate,
                         "existing_debt_service_m": existing, "existing_debt_service_basis": existing_basis,
-                        "rollover": rollover(fo, bo)},
+                        "rollover": rollover(fo, bo), "rollover_basis": rollover_decision(fo, bo)[1]},
         "tests_m": tests,
         "unavailable": unavailable,
         "binding_test": binding,

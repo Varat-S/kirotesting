@@ -31,10 +31,26 @@ _V2_QUERIES: dict[str, RetrievalQuery] = {
 
 
 def _reuse(prefix: str, query_id: str, *, purpose: str | None = None) -> RetrievalQuery:
-    """A v2 query under a v3 id (terms unchanged)."""
+    """A v2 query under a v3 id. Terms are unchanged except that "payer" also
+    matches the "payor" spelling many filers use (v2 stays as recorded)."""
     source = _V2_QUERIES[query_id]
     return replace(source, query_id=f"{prefix}.{query_id.split('.', 1)[1]}",
-                   purpose=purpose or source.purpose)
+                   purpose=purpose or source.purpose,
+                   terms=tuple(t.replace("payer", "pay[eo]r") for t in source.terms))
+
+
+# Results-discussion language: what changed against the prior period and what
+# drove it. Gives the specialist explained, period-on-period evidence rather
+# than only business description and risk factors.
+_RESULTS_TERMS = (
+    r"compared to the (?:same period|prior year|year ended)",
+    r"primarily (?:due|attributable) to", r"driven (?:primarily )?by",
+    r"same[- ](?:store|facility) basis",
+)
+
+
+def _results(query_id: str, *extra: str) -> RetrievalQuery:
+    return _q(query_id, "support", *_RESULTS_TERMS, *extra, k=3)
 
 
 M1_REVENUE_QUALITY = BoAgentSpec(
@@ -46,10 +62,11 @@ M1_REVENUE_QUALITY = BoAgentSpec(
            r"pricing terms?", r"Medicare benchmark", r"contract renewals?"),
         _q("m1s1.price_limits", "contradict", r"price transparency",
            r"reimbursement (?:cuts?|reductions?)", r"site-neutral",
-           r"payer consolidation", r"pricing pressure"),
+           r"pay[eo]r consolidation", r"pricing pressure"),
         _q("m1s1.realised_price", "support", r"net revenue per",
            r"revenue per (?:admission|visit|unit)", r"commercial rates?",
            r"implicit price concessions"),
+        _results("m1s1.results", r"revenues? per", r"pricing", r"rate increases?"),
     ),
     indicator_groups=("payer", "realisation", "growth"),
     dimension="revenue_quality_demand_defensiveness", validator_id="validator_1",
@@ -64,10 +81,12 @@ M1_CUSTOMER_STICKINESS = BoAgentSpec(
         _reuse("m1s2", "bo1.demand_fragility"),
         _q("m1s2.volume_trends", "support", r"admissions?", r"visits?",
            r"procedures?", r"surgeries", r"transactions?", r"shipments?"),
-        _q("m1s2.volume_mix", "contradict", r"uninsured", r"payer mix",
+        _q("m1s2.volume_mix", "contradict", r"uninsured", r"pay[eo]r mix",
            r"disenrollment", r"disenrolment", r"elective", r"outpatient"),
         _q("m1s2.capacity", "mitigant_challenge", r"occupancy", r"length of stay",
            r"staffing (?:shortage|constraint)", r"capacity constraints?"),
+        _results("m1s2.results", r"(?:net )?(?:operating )?revenues? (?:increased|decreased)",
+                 r"volumes? (?:increased|decreased)"),
     ),
     indicator_groups=("growth", "segment", "payer", "workforce"),
     dimension="customer_stickiness_concentration", validator_id="validator_2",
@@ -103,6 +122,8 @@ M1_OPERATING_MODEL = BoAgentSpec(
         _reuse("m1s4", "bo4.initiative_limits"),
         _reuse("m1s4", "bo4.procurement"),
         _reuse("m1s4", "bo2.suppliers"),
+        _results("m1s4.results", r"as a percentage of (?:net )?(?:operating )?revenues?",
+                 r"(?:salaries|supplies|labou?r costs?)\b.{0,60}(?:increased|decreased)"),
     ),
     indicator_groups=("workforce", "margin"),
     dimension="operating_model_cost_resilience", validator_id="validator_4",

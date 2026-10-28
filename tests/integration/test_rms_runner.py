@@ -63,8 +63,10 @@ def test_a_decision_on_a_run_rms_never_assessed_changes_nothing(db_session, tmp_
 
 def test_without_a_request_the_latest_one_is_reused(db_session, tmp_path):
     seed(db_session)
-    with pytest.raises(RmsRunError, match="give a requested amount"):
-        assess_case(db_session, CASE, output_root=tmp_path)
+    # Nothing to reuse: a debt capacity report.
+    first = assess_case(db_session, CASE, output_root=tmp_path)
+    assert first["verdict"] == "capacity_only" and first["requested_amount_m"] is None
+    assert first["derived_capacity_m"] is not None
     assess_case(db_session, CASE, output_root=tmp_path, request=RmsRequest(1500, tenor_years=3))
     again = assess_case(db_session, CASE, output_root=tmp_path)
     assert again["requested_amount_m"] == 1500
@@ -91,5 +93,10 @@ def test_cli_run_rms_then_fo_override_reassesses(tmp_path, capsys, monkeypatch):
           "--reviewer", "A. Analyst", "--reason", "Covenant breach cured"])
     out = json.loads(capsys.readouterr().out)
     assert out["run_status"] == "completed" and out["rms"]["verdict"] == "approve"
-    with pytest.raises(ValueError, match="need --amount"):
-        main([*common, "run-rms", CASE, "--tenor", "5"])
+    with pytest.raises(ValueError, match="can't be used together"):
+        main([*common, "run-rms", CASE, "--capacity-only", "--amount", "2000"])
+    # --capacity-only drops the earlier request's amount; terms alone do too.
+    for extra in (["--capacity-only"], ["--tenor", "5"]):
+        main([*common, "run-rms", CASE, *extra])
+        out = json.loads(capsys.readouterr().out)
+        assert out["verdict"] == "capacity_only" and out["requested_amount_m"] is None

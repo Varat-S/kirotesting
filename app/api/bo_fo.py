@@ -167,10 +167,12 @@ def start_run(
     tenor_years: str = Form(default=""),
     m3_version: str = Form(default=DEFAULT_M3_VERSION),
     sections: str = Form(default="both"),
+    # The form sends a hidden "off" before the checkbox's "on"; the last value wins.
+    bo_validators: str = Form(default="on"),
 ):
     values = {"case_id": case_id, "model": model, "cutoff": cutoff,
               "requested_amount_m": requested_amount_m, "tenor_years": tenor_years,
-              "m3_version": m3_version, "sections": sections}
+              "m3_version": m3_version, "sections": sections, "bo_validators": bo_validators}
     bo_only = sections == "bo"
     settings = get_settings()
     try:
@@ -178,10 +180,13 @@ def start_run(
         parsed_cutoff = datetime.fromisoformat(cutoff.replace("Z", "+00:00")) if cutoff.strip() else None
         if sections not in ("both", "bo"):
             raise ValueError(f"Unknown sections {sections!r}.")
-        # RMS needs the FO, so a Business Overview only run ignores a loan request.
-        rms_request = (RmsRequest(float(requested_amount_m), tenor_years=int(tenor_years) if tenor_years.strip()
-                                  else None)
-                       if requested_amount_m.strip() and not bo_only else None)
+        if bo_validators not in ("on", "off"):
+            raise ValueError(f"Unknown BO validators setting {bo_validators!r}.")
+        # RMS needs the FO, so a Business Overview only run ignores a loan request. A blank amount gives a debt
+        # capacity report.
+        rms_request = (RmsRequest(float(requested_amount_m) if requested_amount_m.strip() else None,
+                                  tenor_years=int(tenor_years) if tenor_years.strip() else None)
+                       if not bo_only else None)
         settled = bo_fo.plan(folder, case_id.strip() or None, parsed_cutoff)
         # The picked model runs both sections: every BO tier and the FO's Pre-check Agent.
         m3_version = check_m3_version(m3_version)
@@ -195,7 +200,8 @@ def start_run(
         database=database, folder=folder, case_id=settled["case_id"], cutoff=settled["cutoff"],
         bo_backend=bo_backend, fo_backend=fo_backend, fo_mode="live",
         m3_version=m3_version, m3_backend=m3_backend,
-        output_root=settings.output_dir, data_root=settings.data_dir, rms_request=rms_request, bo_only=bo_only)
+        output_root=settings.output_dir, data_root=settings.data_dir, rms_request=rms_request, bo_only=bo_only,
+        bo_validators=bo_validators == "on")
     return RedirectResponse(f"/run?job={quote(job_id)}", status_code=303)
 
 

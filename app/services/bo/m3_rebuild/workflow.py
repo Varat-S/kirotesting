@@ -27,7 +27,8 @@ def diagnostics():
 def run_rebuild(output_dir, *, case_id, structure_input=None, filing_pdf=None,
                 company=None, filing_period=None, extraction=None, extractor=None,
                 filing_sources=None, structure_provenance=None,
-                evidence_context=None, filing_packet=None, reviewer=None):
+                evidence_context=None, filing_packet=None, reviewer=None,
+                enforce_validators=True):
     """No live extractor is constructed implicitly. Never overwrite an existing run.
 
     Inputs can be paths or decoded corporate documents / saved extraction objects.
@@ -104,7 +105,8 @@ def run_rebuild(output_dir, *, case_id, structure_input=None, filing_pdf=None,
                     diag["schema_validation"] = "passed"
                     write_json(directory / "management_validated_extraction.json", raw)
                     stage = "evidence_validation"
-                    artifact = assess_management(raw, sources, reviewer=reviewer)
+                    artifact = assess_management(raw, sources, reviewer=reviewer,
+                                                 enforce=enforce_validators)
                     write_json(directory/'management_claim_validation.json',artifact['validation'])
                     if hasattr(extractor,'record_validation'):
                         extractor.record_validation(artifact)
@@ -146,7 +148,7 @@ def run_rebuild(output_dir, *, case_id, structure_input=None, filing_pdf=None,
 
 
 def run_rebuild_from_packet(output_dir, *, case_id, packet, extraction=None,
-                            extractor=None, reviewer=None):
+                            extractor=None, reviewer=None, enforce_validators=True):
     """Run both components solely from one admitted, routed evidence packet."""
     from app.schemas.agentic import EvidencePacket
     from app.services.agents.router import EvidenceRouter
@@ -222,6 +224,7 @@ def run_rebuild_from_packet(output_dir, *, case_id, packet, extraction=None,
         structure_provenance=structure_provenance,
         evidence_context=evidence_context,
         reviewer=reviewer,
+        enforce_validators=enforce_validators,
     )
 
 

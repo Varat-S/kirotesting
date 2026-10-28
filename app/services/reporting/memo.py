@@ -469,6 +469,12 @@ def detect_pdf_backend() -> str | None:
     tests skip gracefully (per M8 guidance; no system dependency is forced).
     """
     import importlib.util
+    import os
+
+    # Windows has no system Pango/GTK; WeasyPrint finds the MSYS2 copy only via this variable.
+    msys = r"C:\msys64\mingw64\bin"
+    if os.name == "nt" and os.path.isdir(msys):
+        os.environ.setdefault("WEASYPRINT_DLL_DIRECTORIES", msys)
 
     for name in ("weasyprint", "xhtml2pdf"):
         if importlib.util.find_spec(name) is not None:
@@ -494,9 +500,12 @@ def _render_pdf_with(backend: str, html: str) -> bytes:
         return weasyprint.HTML(string=html).write_pdf()
     if backend == "xhtml2pdf":  # pragma: no cover - exercised only when installed
         import io
+        import re
 
         from xhtml2pdf import pisa
 
+        # xhtml2pdf does not implement these; drop them to avoid warning noise.
+        html = re.sub(r"\b(?:border-collapse|overflow-x)\s*:[^;}]*;?", "", html)
         buffer = io.BytesIO()
         pisa.CreatePDF(src=html, dest=buffer)
         return buffer.getvalue()

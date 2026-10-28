@@ -134,6 +134,7 @@ def run_m3(
     live_config: dict[str, Any] | None = None,
     management_window_years: int = 3,
     required_assessment_version: str | None = None,
+    enforce_validators: bool = True,
 ) -> M3StandaloneResult:
     """Run ONLY Module 3 (specialist + Validator 7) and build the governed JSON.
 
@@ -240,8 +241,10 @@ def run_m3(
     prep = attach_case_evidence(prep)
     # Explicit request contract, independent of backend type, preserves legacy
     # API replays. The live standalone CLI requests 1.2 explicitly.
-    prep = replace(prep, required_m3_version=required_assessment_version)
+    prep = replace(prep, required_m3_version=required_assessment_version,
+                   enforce_validators=enforce_validators)
     model_configuration["required_assessment_version"] = required_assessment_version
+    model_configuration["validators_enforced"] = enforce_validators
     structural_facts = prep.structural_facts
     model_configuration["packet_hash"] = prep.packet.packet_hash
     row = RunRow(

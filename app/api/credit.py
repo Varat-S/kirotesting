@@ -109,7 +109,7 @@ def credit_assess(
     case_id: str,
     fo_run: str = Form(...),
     bo_run: str = Form(default=""),
-    requested_amount_m: str = Form(...),
+    requested_amount_m: str = Form(default=""),  # blank: a debt capacity report
     tenor_years: str = Form(default=""),
     interest_rate: str = Form(default=""),
     collateral_value_m: str = Form(default=""),
@@ -118,7 +118,7 @@ def credit_assess(
     bo_run = bo_run or None
     try:
         request = RmsRequest(
-            float(requested_amount_m),
+            float(requested_amount_m) if requested_amount_m.strip() else None,
             tenor_years=int(tenor_years) if tenor_years.strip() else None,
             interest_rate=float(interest_rate) if interest_rate.strip() else None,
             collateral_value_m=float(collateral_value_m) if collateral_value_m.strip() else None)

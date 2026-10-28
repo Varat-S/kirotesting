@@ -100,7 +100,10 @@ class ClaimValidator:
         return claim
 
 
-def assess_claims(payload,sources,reviewer=None):
+def assess_claims(payload,sources,reviewer=None,enforce=True):
+    # enforce=False (validators off): Validator 7 still reviews when it can, but a
+    # judgment it would withhold or rewrite keeps the specialist's own text as a
+    # qualified observation. Evidence claims and identity checks stay as they are.
     from .management import date_interval, date_supported, natural_date, DATE_TEXT, review_window, recency, prior_role_date_pairs, compact_citations
     from .employers import internal_employer
 
@@ -309,6 +312,15 @@ def assess_claims(payload,sources,reviewer=None):
             outcome='qualified';reason+='; original basis/text changed and is explicitly qualified'
         if re.search(r'\btenure\b.{0,45}\b(?:proves?|establishes?|demonstrates?)\b.{0,25}\bcompeten',decision['reviewed_text'] if decision else judgment['explanation'],re.I):
             outcome='unsupported';reason='Tenure alone cannot establish competence'
+        # The specialist's own surviving facts are its basis; without one, or without
+        # an admitted executive identity, there is nothing to cite and it stays withheld.
+        own=[r for r in judgment['remaining_fact_ids'] if r in accepted]
+        advisory=(not enforce and outcome!='accepted' and bool(own)
+                  and (not judgment['executive'] or key(judgment['executive']) in profile_map))
+        if advisory:
+            refs=own
+            reason=f'Validators off: Validator 7 outcome {outcome} ({reason}) not applied; the specialist\'s judgment stands'
+            outcome='qualified'
         result={'judgment_id':judgment['judgment_id'],'outcome':outcome,'reason':reason,
                 'original_text':judgment['explanation'],'original_fact_ids':judgment['supporting_fact_ids'],
                 'removed_fact_ids':judgment['rejected_fact_ids'],'supporting_claim_ids':refs,
@@ -316,13 +328,14 @@ def assess_claims(payload,sources,reviewer=None):
         judgment_results.append(result)
         if outcome!='unsupported':
             observations.append({'observation_id':judgment['judgment_id'],'executive':judgment['executive'] or None,
-                'rule':('explicit_review_correction' if any(
+                'rule':('unenforced_model_judgment' if advisory
+                    else 'explicit_review_correction' if any(
                     change['judgment_id']==judgment['judgment_id']
                     for change in review.get('explicit_corrections',{}).get('changes',[]))
                     else 'validator_7_review'),'direction':directions[judgment['signal']],
                 'signal':judgment['signal'],'category':judgment['category'],
-                'text':decision['reviewed_text'],'supporting_fact_ids':refs,
-                'uncertainties':judgment['uncertainties']+decision['limitations'],
+                'text':judgment['explanation'] if advisory else decision['reviewed_text'],'supporting_fact_ids':refs,
+                'uncertainties':judgment['uncertainties']+(decision['limitations'] if decision else []),
                 'review_outcome':outcome,'review_reason':reason,
                 'citations':[c for ref in refs for c in accepted[ref]['citations']]})
     surviving={o['observation_id'] for o in observations}

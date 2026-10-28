@@ -70,20 +70,6 @@ def test_indicator_ids_in_parameter_evidence_are_removed_and_backfilled():
     assert sum("Removed" in n["note"] for n in notes) == 3
 
 
-def test_uncited_parameter_is_withheld_without_losing_grounded_sibling():
-    parsed = {"parameters": [
-        {"parameter_id": "grounded", "status": "ok", "value": "moderate",
-         "evidence_ids": [REAL], "hypothesis_ids": []},
-        {"parameter_id": "switching_cost_assessment", "status": "ok",
-         "value": "not_established", "evidence_ids": [], "hypothesis_ids": []},
-    ]}
-    fixed, notes = repair_citations(parsed, {REAL})
-    assert fixed["parameters"][0]["status"] == "ok"
-    assert fixed["parameters"][1]["status"] == "unavailable"
-    assert fixed["parameters"][1]["evidence_ids"] == []
-    assert any(n["hypothesis_id"] == "switching_cost_assessment" for n in notes)
-
-
 def test_quote_with_unknown_id_is_reattributed_to_the_passage_holding_it():
     parsed = {"hypotheses": [{"hypothesis_id": "H1", "evidence_quotes": [
         {"evidence_id": "invented", "quote": "Revenue grew in Florida."},

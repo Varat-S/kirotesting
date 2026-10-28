@@ -66,6 +66,28 @@ def test_external_recruitment_needs_affirmative_evidence():
     assert r['overall_assessment']['outcome']=='negative'
 
 
+def test_validators_off_keeps_unreviewed_judgments_as_qualified_observations():
+    p,s=synthetic()
+    assert _assess_management(p,s)['observations']==[]  # no Validator 7 review: nothing survives
+    r=_assess_management(p,s,enforce=False);validate_management(r)
+    assert len(r['observations'])==len(p['judgments'])
+    for observation,judgment in zip(r['observations'],p['judgments']):
+        assert observation['rule']=='unenforced_model_judgment' and observation['review_outcome']=='qualified'
+        assert observation['text']==judgment['explanation'] and observation['citation_ids']
+        assert 'Validators off' in observation['review_reason']
+
+
+def test_validators_off_keeps_a_judgment_validator_7_withholds():
+    p,s=synthetic();p['judgments'][0]['explanation']='Long tenure proves management competence.'
+    held=assess_management(p,s)
+    kept=_assess_management(p,s,reviewer=FixtureReviewer(),enforce=False);validate_management(kept)
+    jid=p['judgments'][0]['judgment_id']
+    assert jid not in {o['observation_id'] for o in held['observations']}
+    observation=next(o for o in kept['observations'] if o['observation_id']==jid)
+    assert observation['text']=='Long tenure proves management competence.'
+    assert 'Tenure alone cannot establish competence' in observation['review_reason']
+
+
 def test_omitted_history_does_not_prove_external():
     p,s=synthetic(internal=False);r=assess_management(p,s)
     assert r['profiles'][0]['succession']=='unavailable'

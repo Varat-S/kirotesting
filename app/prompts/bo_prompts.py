@@ -284,6 +284,21 @@ _BO_PARAMETER: dict[str, Any] = {
     "additionalProperties": True,
 }
 
+# The analyst's reading of one finding: why it matters, how large it is, which
+# way it is moving and what would change the view. Optional in the canonical
+# contract (recorded responses without it stay valid); strict provider schemas
+# promote it to required, so live specialists always fill it.
+_INTERPRETATION: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "implication": _NULLABLE_STR,
+        "magnitude": _NULLABLE_STR,
+        "trend": _NULLABLE_STR,
+        "watch_trigger": _NULLABLE_STR,
+    },
+    "additionalProperties": True,
+}
+
 _HYPOTHESIS: dict[str, Any] = {
     "type": "object",
     "required": ["hypothesis_id", "claim", "claim_type", "direction", "disposition"],
@@ -296,6 +311,7 @@ _HYPOTHESIS: dict[str, Any] = {
         "confidence": {"type": "string", "enum": CONFIDENCES},
         "materiality": {"type": "string", "enum": ["low", "medium", "high"]},
         "credit_mechanism": _NULLABLE_STR,
+        "interpretation": _INTERPRETATION,
         "supporting_evidence_ids": _STR_LIST,
         "contradicting_evidence_ids": _STR_LIST,
         "evidence_quotes": {
@@ -407,7 +423,7 @@ _M3_HYPOTHESIS: dict[str, Any] = {
         key: value for key, value in _HYPOTHESIS["properties"].items()
         if key not in {
             "mitigant", "fo_handoff", "transmission_mechanism",
-            "component_hypothesis_ids", "interaction_kind",
+            "component_hypothesis_ids", "interaction_kind", "interpretation",
         }
     },
 }
@@ -540,6 +556,23 @@ SHARED_RULES = (
     "reference ONLY an 'indicators' entry, by its parameter_result_id and with "
     "the exact value shown there; a figure that comes from the filing text "
     "belongs in evidence_quotes, never in quoted_values.\n"
+    "- Quantify. When a hypothesis describes a level, share, concentration, "
+    "intensity or change and an 'indicators' entry measures it, bind that entry "
+    "and state its value in the claim instead of words such as 'significant', "
+    "'substantial' or 'large'. Where the evidence gives figures for more than "
+    "one period (MD&A comparisons, multi-year tables), say which way the figure "
+    "moved and quote both periods.\n"
+    "- Interpret, do not only restate. A hypothesis that repeats one sentence of "
+    "the filing is not an analysis. For every hypothesis fill 'interpretation': "
+    "'implication' = why it matters for this business's revenue, margin or "
+    "resilience, and through what mechanism; 'magnitude' = how large it is, "
+    "using only a bound indicator or a figure in a verbatim quote; 'trend' = "
+    "the direction across periods the evidence covers; 'watch_trigger' = the "
+    "observable development that would change your view. Use null for a field "
+    "the evidence cannot support rather than guessing. Numbers in "
+    "'interpretation' follow the same rule as numbers in the claim. Prefer "
+    "explanatory passages (results discussions that say what drove a change) "
+    "over risk-factor language when both are available.\n"
     "- disposition and direction are independent: reject a favourable hypothesis "
     "that the evidence contradicts and add a separate corrected hypothesis that "
     "names it in corrects_hypothesis_id. Low confidence is not high risk.\n"
@@ -1164,6 +1197,15 @@ _ORCHESTRATOR_TEMPLATE = (
     "are listed; do not silently omit a finding. Strengths and weaknesses "
     "may additionally highlight the most important claims.\n"
     "- Separate known exposures from speculative future effects.\n"
+    "- Analyse, do not list. Each key_driver, material_risk, strength and "
+    "weakness says what the finding is, why it matters for the business (use "
+    "the hypotheses' 'interpretation': implication, magnitude, trend, "
+    "watch_trigger), how large it is and which way it is moving where the "
+    "evidence shows it. Draw together related hypotheses from different "
+    "sections into one explained claim rather than repeating each.\n"
+    "- Where a claim describes a level, share or change that an entry in "
+    "'indicators' measures, state the value and bind it in quoted_values; do "
+    "not write 'substantial' or 'significant' in its place.\n"
     "- Every claim carries claim_id, section, claim_type, hypothesis_ids and "
     "the evidence_ids of those hypotheses. Use only hypotheses whose "
     "admissibility is 'established', 'attributed' or 'qualified_narrative'. "

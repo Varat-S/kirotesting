@@ -110,11 +110,15 @@ class Module4Specialist:
         validator: DebtStructureValidator | None = None,
         escalation_engine: EscalationEngine | None = None,
         case_id: str | None = None,
+        enforce_validator: bool = True,
     ) -> None:
         self._client = client
         self._validator = validator or DebtStructureValidator()
         self._escalation = escalation_engine
         self._case_id = case_id
+        # False (advisory): Validator 8 still reports, but its failure neither
+        # triggers the reconciliation follow-up nor raises an escalation.
+        self._enforce = enforce_validator
 
     def run(
         self,
@@ -148,10 +152,10 @@ class Module4Specialist:
         passages = inputs.filing_passages()
         report = self._validator.validate(output, filing_passages=passages)
         followup = None
-        if not report.check(CHECK_RECONCILIATION).passed and passages:
+        if self._enforce and not report.check(CHECK_RECONCILIATION).passed and passages:
             output, report, followup = self._reconcile(
                 inputs, output, report, case_version=case_version, key=key)
-        escalation_id = self._handle_validator_failure(report)
+        escalation_id = self._handle_validator_failure(report) if self._enforce else None
         return Module4Result(
             output=output,
             validator8=report,

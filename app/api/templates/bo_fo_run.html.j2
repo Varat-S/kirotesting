@@ -23,7 +23,7 @@
 {% if error %}<section><p class="notice" role="alert"><strong>{{ error }}</strong></p></section>{% endif %}
 
 {% if job %}<section id="job" data-job="{{ job.job_id }}" data-status="{{ job.status }}"><h2>Run <code>{{ job.job_id }}</code>: {{ job.folder }}</h2>
-<p>Case <strong id="job-case">{{ job.case_id }}</strong> · started {{ job.started_at }} · <span id="job-status">{{ st(job.status) }}</span></p>
+<p>Case <strong id="job-case">{{ job.case_id }}</strong> · started {{ job.started_at }} · <span id="job-status">{{ st(job.status) }}</span>{% if job.bo_validators is sameas false %} · <strong class="bad">BO validators off</strong> (ungoverned draft){% endif %}</p>
 <p class="notice" id="job-error"{% if not job.error %} hidden{% endif %}>{{ job.error or '' }}</p>
 <form method="post" action="/run/jobs/{{ job.job_id }}/stop" id="job-stop"{% if job.status != 'running' %} hidden{% endif %}><button type="submit"{% if job.stop_requested %} disabled{% endif %}>{{ 'Stopping…' if job.stop_requested else 'Stop the run' }}</button> <small class="subtle">Stops each section before its next step and records nothing for a section that hasn't finished. A model call already under way finishes first, which can take a minute or two.</small></form>
 <div class="sections">
@@ -42,7 +42,7 @@
 <div class="step subtle">{{ s.step }}</div>
 <p class="error bad"{% if not (r and r.status == 'failed') %} hidden{% endif %}>{{ r.error if r and r.status == 'failed' else '' }}</p>
 <div class="rms"{% if not (r and r.status == 'completed') %} hidden{% endif %}>{% if r and r.status == 'completed' %}{% set x = r.summary %}
-<p><strong class="rms-verdict">{{ x.verdict|replace('_', ' ') }}</strong> <span class="rms-amounts">{% if x.approved_amount_m is not none %}US${{ '{:,.1f}'.format(x.approved_amount_m) }}M approved of {% endif %}US${{ '{:,.1f}'.format(x.requested_amount_m) }}M requested</span></p>
+<p><strong class="rms-verdict">{{ x.verdict|replace('_', ' ') }}</strong> <span class="rms-amounts">{% if x.requested_amount_m is none %}debt capacity report (no requested amount){% else %}{% if x.approved_amount_m is not none %}US${{ '{:,.1f}'.format(x.approved_amount_m) }}M approved of {% endif %}US${{ '{:,.1f}'.format(x.requested_amount_m) }}M requested{% endif %}</span></p>
 <p class="subtle rms-detail">Grade {{ x.rating or '—' }} ({{ x.level or '—' }}) · derived capacity {% if x.derived_capacity_m is not none %}US${{ '{:,.1f}'.format(x.derived_capacity_m) }}M{% else %}unavailable{% endif %} · needs human review</p>
 {% if x.capacity %}{% set c = x.capacity %}{% set i = c.inputs_m %}
 <details class="rms-capacity" open><summary>Debt capacity: {{ usd(c.derived_capacity_m) }}</summary>
@@ -72,8 +72,9 @@
 <div><label for="case_id">Case id <small>(optional)</small></label><input id="case_id" name="case_id" placeholder="default: TICKER_FY<year>" value="{{ values.case_id or '' }}" pattern="[A-Za-z0-9_.-]+"></div>
 <div>{% if fo_ok or bo_ok %}<label for="model">Model (BO and FO)</label><select id="model" name="model">{% for m in models %}<option value="{{ m }}"{% if m == selected_model %} selected{% endif %}>{{ m }}</option>{% endfor %}</select><small>Runs every Business Overview agent and the Financial Overview's Pre-check Agent.</small>{% if models_note %}<small>{{ models_note }}</small>{% endif %}{% else %}<span class="subtle">Model (BO and FO)</span><br><strong class="bad">not configured</strong>{% endif %}</div>
 <div><label for="m3_version">Business Overview Module 3</label><select id="m3_version" name="m3_version">{% for v, label in m3_versions.items() %}<option value="{{ v }}"{% if v == selected_m3_version %} selected{% endif %}>{{ label }}</option>{% endfor %}</select><small>M3-v2 reads the executive officers from the folder's 10-K, and the corporate structure from <code>m3_corporate_structure.json</code> in the same folder when it is there (otherwise that part is recorded as not attempted).</small></div>
+<div><span class="subtle">Business Overview validators</span><input type="hidden" name="bo_validators" value="off"><label style="font-weight:normal"><input type="checkbox" id="bo_validators" name="bo_validators" value="on" style="width:auto"{% if values.bo_validators != 'off' %} checked{% endif %}> Validators on</label><small>Untick to let the agents draft the memo freely: Validators 1&ndash;8 and the synthesis checks still run, but their findings are only recorded, not applied. The memo is marked as an ungoverned draft and always needs human review.</small></div>
 <div><label for="cutoff">BO evidence cut-off <small>(optional)</small></label><input id="cutoff" name="cutoff" placeholder="e.g. 2026-03-31T00:00:00Z" value="{{ values.cutoff or '' }}"><small>Blank admits every file in the folder (the latest file availability).</small></div>
-<div><label for="requested_amount_m">Requested loan, US$ millions <small>(optional)</small></label><input id="requested_amount_m" name="requested_amount_m" type="number" min="0.1" step="0.1" placeholder="e.g. 2000" value="{{ values.requested_amount_m or '' }}"><small>Risk Mitigation &amp; Structuring runs after both sections complete. Blank skips it.</small></div>
+<div><label for="requested_amount_m">Requested loan, US$ millions <small>(optional)</small></label><input id="requested_amount_m" name="requested_amount_m" type="number" min="0.1" step="0.1" placeholder="e.g. 2000" value="{{ values.requested_amount_m or '' }}"><small>Risk Mitigation &amp; Structuring runs after both sections complete. Blank gives a debt capacity report with no verdict.</small></div>
 <div><label for="tenor_years">Requested tenor, years <small>(optional)</small></label><input id="tenor_years" name="tenor_years" type="number" min="1" step="1" placeholder="default 5" value="{{ values.tenor_years or '' }}"></div>
 </div>
 <div class="buttons"><button class="primary-button" id="start-button" type="submit"{% if not bo_ok %} disabled{% endif %}>Run Business Overview + Financial Overview</button></div>
@@ -229,8 +230,8 @@
     var head = document.createElement("p"), verdict = document.createElement("strong");
     verdict.textContent = x.verdict.replace(/_/g, " ");
     head.appendChild(verdict);
-    head.appendChild(document.createTextNode(" " + (x.approved_amount_m !== null ? money(x.approved_amount_m) + " approved of " : "")
-      + money(x.requested_amount_m) + " requested"));
+    head.appendChild(document.createTextNode(" " + (x.requested_amount_m === null ? "debt capacity report (no requested amount)"
+      : (x.approved_amount_m !== null ? money(x.approved_amount_m) + " approved of " : "") + money(x.requested_amount_m) + " requested")));
     var detail = document.createElement("p"); detail.className = "subtle";
     detail.textContent = "Grade " + (x.rating || "—") + " (" + (x.level || "—") + ") · derived capacity "
       + (x.derived_capacity_m !== null ? money(x.derived_capacity_m) : "unavailable") + " · needs human review";

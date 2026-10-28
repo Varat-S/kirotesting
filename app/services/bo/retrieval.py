@@ -18,6 +18,7 @@ from typing import Any
 from app.core.hashing import content_hash
 from app.schemas.bo import RetrievalAttempt
 from app.services.bo.plans import PURPOSES, BoAgentSpec, RetrievalQuery
+from app.services.extraction.sec.narrative import BUSINESS_RESULTS_TOPIC
 
 # Phrases that read as instructions to a model. A passage containing one is
 # still evidence, but it is flagged so reviewers can see it; nothing in the
@@ -34,13 +35,29 @@ _INSTRUCTION_LIKE = re.compile(
 TABLE_CELL_RATIO = 40  # more than one cell separator per 40 characters
 TABLE_PENALTY = 150
 
+# Results discussion (MD&A) explains what drove a change, where business
+# description and risk factors only say what exists or could happen. Each plan
+# query keeps its own top passages and additionally takes its best-matching
+# results passage when that did not make the cut (added, never displacing).
+_RESULTS_SECTION = re.compile(r"^Item 7\b(?!A)", re.I)
+
+
+def _supplementary(passage: dict[str, Any]) -> bool:
+    """Admitted only as business/results text (no other candidate topic).
+
+    Such passages are added to what a query finds, at most one per query, and
+    fill the budget last: they never displace a passage the query would have
+    found without them.
+    """
+    return passage.get("candidate_topics") == [BUSINESS_RESULTS_TOPIC]
+
 
 @dataclass(frozen=True)
 class RetrievalBudget:
     """Configurable evidence budget (no unbounded search, no whole-filing dump)."""
 
-    max_passages_per_agent: int = 16
-    max_chars_per_agent: int = 36_000
+    max_passages_per_agent: int = 24
+    max_chars_per_agent: int = 54_000
     max_followup_rounds: int = 1
     max_followup_requests: int = 3
     max_followup_terms: int = 6
@@ -97,6 +114,10 @@ def _compile(terms) -> list[tuple[str, re.Pattern]]:
     return compiled
 
 
+def _is_table(text: str) -> bool:
+    return text.count("|") * TABLE_CELL_RATIO > len(text)
+
+
 def _search(passages, terms, limit):
     """Rank passages by distinct terms matched, then total hits, then id."""
     compiled = _compile(terms)
@@ -109,11 +130,31 @@ def _search(passages, terms, limit):
             score = len(matched) * 100 + min(sum(hits.values()), 99)
             # A flattened financial table matches generic words by accident;
             # rank it below prose that matches the same number of terms.
-            if text.count("|") * TABLE_CELL_RATIO > len(text):
+            if _is_table(text):
                 score -= TABLE_PENALTY
             ranked.append((score, passage, matched))
     ranked.sort(key=lambda r: (-r[0], *_position(r[1])))
-    return ranked[:limit]
+    return ranked if limit is None else ranked[:limit]
+
+
+def _select(ranked, limit, *, results_passage: bool):
+    """The top ``limit`` of the passages admitted under a candidate topic, plus
+    the best supplementary passage and (``results_passage``) the best
+    results-discussion prose passage when none was chosen yet."""
+    chosen = [r for r in ranked if not _supplementary(r[1])][:limit]
+    extra = next((r for r in ranked if _supplementary(r[1])), None)
+    if extra:
+        chosen.append(extra)
+    if results_passage and not any(
+            _RESULTS_SECTION.match(str(p.get("section") or "")) for _, p, _ in chosen):
+        ids = {p["evidence_id"] for _, p, _ in chosen}
+        extra = next((r for r in ranked
+                      if r[1]["evidence_id"] not in ids
+                      and _RESULTS_SECTION.match(str(r[1].get("section") or ""))
+                      and not _is_table(r[1].get("text") or "")), None)
+        if extra:
+            chosen.append(extra)
+    return chosen
 
 
 def _position(passage: dict[str, Any]) -> tuple:
@@ -218,7 +259,10 @@ class BoEvidenceRetriever:
 
     def _execute(self, query, passages, result, selected, *, agent_id,
                  analysis_run_id, origin, round_index, hypothesis_id=None):
-        ranked = _search(passages, query.terms, query.max_passages)
+        # Coverage checks and agent follow-ups ask a targeted question; only
+        # plan queries take the extra results-discussion passage.
+        ranked = _select(_search(passages, query.terms, None), query.max_passages,
+                         results_passage=origin == "plan")
         references = []
         for score, passage, matched in ranked:
             entry = selected.setdefault(passage["evidence_id"], dict(passage))
@@ -248,10 +292,12 @@ class BoEvidenceRetriever:
         )
 
     def _within_budget(self, selected: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-        """Keep passages serving the most purposes first, inside the budget."""
+        """Keep passages serving the most purposes first, inside the budget;
+        supplementary passages only fill what is left."""
         ordered = sorted(
             selected.values(),
-            key=lambda p: (-len(p.get("retrieved_for", [])), *_position(p)),
+            key=lambda p: (_supplementary(p), -len(p.get("retrieved_for", [])),
+                           *_position(p)),
         )
         kept, chars = [], 0
         for passage in ordered:

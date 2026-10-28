@@ -271,7 +271,12 @@ def test_both_sections_run_concurrently_into_one_database(shared, tmp_path):
     assert _count(db, "model_runs") >= 5  # the FO's agent calls came across from its staging database
     assert not list((tmp_path / "data" / "staging").iterdir())
     assert ("fo", "completed") in seen and ("bo", "completed") in seen
-    assert out["rms"] == {"status": "skipped", "reason": "No requested loan amount was given."}
+    # No requested amount: RMS still sizes the debt capacity, with no verdict.
+    assert out["rms"]["status"] == "completed", out["rms"]
+    summary = out["rms"]["summary"]
+    assert summary["verdict"] == "capacity_only" and summary["requested_amount_m"] is None
+    assert summary["approved_amount_m"] is None and summary["utilisation"] is None
+    assert ("rms", "sizing the debt capacity (no requested amount)") in seen
 
 
 def test_rms_runs_after_both_sections_complete(shared, tmp_path):
@@ -332,6 +337,35 @@ def test_the_bo_runs_by_itself(shared, tmp_path):
     assert _count(db, "financial_overview_runs") == 0 and _count(db, "agentic_analysis_runs") == 2
 
 
+def test_bo_validators_off_marks_an_ungoverned_draft_and_rms_notes_it(shared, tmp_path):
+    db = _database(tmp_path)
+    out = bo_fo.run_bo_fo(database=db, folder=shared, bo_backend=None, fo_backend=agent(), fo_mode="scripted",
+                          output_root=tmp_path / "out", rms_request=RmsRequest(500, tenor_years=3),
+                          bo_validators=False)
+    assert out["bo"]["status"] == "completed", out
+    summary = out["bo"]["summary"]
+    assert summary["validators_enforced"] is False
+    assert summary["conclusion_status"] == "human_review_required"
+    handoff = json.loads(Path(summary["handoff_path"]).read_text(encoding="utf-8"))
+    assert handoff["validators_enforced"] is False
+    folder = Path(summary["handoff_path"]).parent
+    memo = json.loads((folder / "business_overview.json").read_text(encoding="utf-8"))
+    assert memo["run"]["validators_enforced"] is False
+    assert "Validators off: an ungoverned draft" in (folder / "business_overview.html").read_text(encoding="utf-8")
+    assert out["rms"]["status"] == "completed", out["rms"]
+    record = json.loads(Path(out["rms"]["summary"]["output"]).read_text(encoding="utf-8"))
+    assert record["sources"]["bo_validators_enforced"] is False
+    assert any("validators off" in note for note in record["limitations"])
+
+
+def test_bo_validators_are_on_by_default(shared, tmp_path):
+    out = bo_fo.run_bo_fo(database=_database(tmp_path), folder=shared, bo_backend=None, fo_backend=None,
+                          fo_mode="live", output_root=tmp_path / "out", bo_only=True)
+    assert out["bo"]["summary"]["validators_enforced"] is True
+    handoff = json.loads(Path(out["bo"]["summary"]["handoff_path"]).read_text(encoding="utf-8"))
+    assert handoff["validators_enforced"] is True
+
+
 def test_a_stopped_run_records_nothing(shared, tmp_path):
     db = _database(tmp_path)
     stop = threading.Event()
@@ -390,8 +424,6 @@ def test_cli_run_bo_fo(shared, tmp_path, capsys, monkeypatch):
     script = tmp_path / "agent.json"
     script.write_text(json.dumps(responses()), encoding="utf-8")
     monkeypatch.setattr(cli, "_live_backend", lambda: None)  # the BO's offline backend stands in for --live
-    with pytest.raises(ValueError, match="need --amount"):
-        main([*common, "run-bo-fo", "--filing", shared, "--live", "--fo-responses", str(script), "--tenor", "5"])
     main([*common, "run-bo-fo", "NVDA_BOTH", "--filing", shared, "--live", "--fo-responses", str(script),
           "--amount", "750", "--tenor", "4"])
     out = json.loads(capsys.readouterr().out)
@@ -479,6 +511,28 @@ def test_browser_runs_the_bo_by_itself(client, shared, monkeypatch):
     page = client.get(f"/run?job={job_id}").text
     assert f"bo.html?analysis_run_id={job['result']['bo']['summary']['analysis_run_id']}" in page
     assert 'id="section-fo"' not in page and 'id="section-rms"' not in page
+
+
+def test_browser_bo_validators_checkbox(client, shared, monkeypatch):
+    form = client.get("/run").text
+    assert 'name="bo_validators" value="off"' in form
+    assert 'id="bo_validators" name="bo_validators" value="on" style="width:auto" checked' in form
+    seen = {}
+
+    def records(**kwargs):
+        seen.update(kwargs)
+        return "job1"
+
+    monkeypatch.setattr(bo_fo.jobs, "start", records)
+    # A ticked box sends the hidden "off" then "on"; an unticked one sends only "off".
+    client.post("/run/start", data={"folder": FOLDER, "sections": "bo", "bo_validators": ["off", "on"]},
+                follow_redirects=False)
+    assert seen["bo_validators"] is True
+    client.post("/run/start", data={"folder": FOLDER, "sections": "bo", "bo_validators": "off"},
+                follow_redirects=False)
+    assert seen["bo_validators"] is False
+    client.post("/run/start", data={"folder": FOLDER, "sections": "bo"}, follow_redirects=False)
+    assert seen["bo_validators"] is True  # a caller that doesn't send the field keeps them on
 
 
 def test_browser_stops_a_run(client, shared, monkeypatch):

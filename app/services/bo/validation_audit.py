@@ -79,6 +79,7 @@ def validate_specialist_output(
     analysis_run_id: str, agent_run_id: str, prompt_id: str | None = None,
     primary: dict[str, HypothesisRecord] | None = None,
     apply_presentation_policy: bool = True, materiality_basis: str | None = None,
+    enforce: bool = True,
 ) -> SpecialistValidation:
     """Deterministic validation of one specialist output (no persistence)."""
     outcome = DeterministicValidator.for_agent(
@@ -90,7 +91,7 @@ def validate_specialist_output(
         spec, passages={e: t for e, t in passage_text.items() if e in allowed},
         indicators=indicators, primary_hypotheses=primary, corpus=corpus,
         apply_presentation_policy=apply_presentation_policy,
-        materiality_basis=materiality_basis)
+        materiality_basis=materiality_basis, enforce=enforce)
     validation = validator.validate(parsed, analysis_run_id=analysis_run_id,
                                     agent_run_id=agent_run_id)
     issues += validation.issues

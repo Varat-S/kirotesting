@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from app.services.fo.scoring import COMPOSITE_CORE, COMPOSITE_FLOOR, COMPOSITE_FLOOR_TRIGGER
 
-RMS_POLICY_VERSION = "rms-policy-1.1"  # 1.1: each BO signal counted once; sizing at the adjusted grade
+RMS_POLICY_VERSION = "rms-policy-1.2"  # 1.2: M3 rebuild, structured distributions, financial policy, M4 rollover
+# evidence, liquidity and borrower cross-checks; 1.1: each BO signal counted once; sizing at the adjusted grade
 
 # Risk levels on the FO 1-10 scale (highest score in each level). FO's "Very low" folds into "low".
 LEVELS = (("low", 3.5), ("moderate", 5.0), ("elevated", 7.5), ("high", 10.0))
@@ -31,6 +32,13 @@ DOWNSIDE_DSCR_MIN = 1.0
 # Existing maturities count as refinanced (only interest stays in the existing debt service) when FO's
 # refinancing test scores this or better and M4 records no refinancing distress.
 ROLLOVER_MAX_REFINANCING_SCORE = 3
+# M4 Deliverable 2's refinancing record can veto the rollover (refinancing left late, or at a widening spread)
+# or, when it is strong on every count, extend it one FO score further.
+ROLLOVER_MIN_LEAD_TIME_MONTHS = 6
+ROLLOVER_MAX_SPREAD_DELTA_BPS = 150
+ROLLOVER_STRONG_LEAD_TIME_MONTHS = 9
+ROLLOVER_STRONG_SPREAD_DELTA_BPS = 50
+ROLLOVER_CONFIRMED_MAX_REFINANCING_SCORE = 4
 # Sizing terms when the request doesn't give them. The new loan is always sized as straight-line amortising
 # over its tenor (first-year principal + interest), whatever its final amortisation: the conservative case,
 # and the same debt service the structuring engine's feasibility check uses.
@@ -56,6 +64,16 @@ M3_DIMENSIONS = ("guarantor_coverage", "cash_flow_access", "minority_or_jv")
 DEBT_MISMATCH_TOLERANCE = 0.10
 # BO handoff escalations (unresolved challenger findings) at these severities refer the case.
 BLOCKING_BO_SEVERITIES = ("high", "material")
+# FO's undrawn revolver and M4's revolver availability (limit less drawn, read either gross or net of the
+# commercial paper it backstops) further apart than this refer the case.
+LIQUIDITY_MISMATCH_TOLERANCE = 0.10
+
+# --- Financial policy -----------------------------------------------------------------------------------------
+# Debt-funded shareholder distributions (M4 Deliverable 3) of at least this share of M4 total indebtedness over
+# three years make an aggressive financial policy: a maintenance leverage covenant replaces an incurrence test.
+# It changes the terms, not the grade (the M4 verdict already carries it).
+AGGRESSIVE_DISTRIBUTIONS_TO_DEBT = 0.25
+FINANCIAL_POLICY_COVENANT_HEADROOM = 1.25
 
 # --- Verdict matrix -----------------------------------------------------------------------------------------
 # Utilisation (requested / derived capacity) band edges: <= 0.75, <= 1.0, <= 1.25, above.

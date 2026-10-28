@@ -40,9 +40,15 @@ from app.schemas.bo import (
     MitigantAssessment,
     MitigantEffectiveness,
 )
+from app.services.bo import inference_rules
 from app.services.bo.indicators import IndicatorSet
-from app.services.bo.plans import BoAgentSpec
+from app.services.bo.plans import (
+    LABEL_PARAMETERS,
+    REQUIRES_COMPANY_EVIDENCE,
+    BoAgentSpec,
+)
 from app.services.bo.presentation import classify_presentation
+from app.services.bo.reconcile import tokens
 from app.services.bo.recovery import recover_quote
 from app.services.orchestration.benchmark_context import (
     _METRIC_NUMBER,
@@ -77,6 +83,18 @@ _REALIZED = re.compile(
     r"increased|decreased|declined|grew|completed|acquired|recorded|derived|"
     r"received|operated?|owns?|owned|are currently|is currently|currently)\b|"
     r"for the years? ended|as of (?:December|January|the)",
+    re.I,
+)
+COMPANY_SPECIFIC = ("company_specific_disclosure", "deterministic_calculation")
+# Share of a fact's content words that must also occur in its verified quotes.
+MIN_QUOTE_COVERAGE = 0.15
+
+INTERPRETATION_FIELDS = ("implication", "magnitude", "trend", "watch_trigger")
+# Words that describe a size or a change without stating it.
+_MAGNITUDE_WORDS = re.compile(
+    r"\b(?:significant(?:ly)?|substantial(?:ly)?|large|majority|concentrat\w*|"
+    r"share|portion|proportion|intensi\w*|margins?|grow(?:th|s|n)?|grew|"
+    r"increas\w*|decreas\w*|declin\w*|rose|fell)\b",
     re.I,
 )
 
@@ -170,7 +188,7 @@ def unbound_numbers(text: str, quoted_values: list[float], quotes: list[str]) ->
 
 # Identifies the validation logic on every record it produces. Bump when a
 # check changes what is accepted, held back or rejected.
-HYPOTHESIS_VALIDATOR_VERSION = "bo-hypothesis-validator-2.1.0"
+HYPOTHESIS_VALIDATOR_VERSION = "bo-hypothesis-validator-2.2.0"
 _V2_VALIDATOR_IDS = {"BO1": "validator_1", "BO2": "validator_2", "BO3": "validator_3",
                      "BO4": "validator_4", "BO5": "validator_5", "BO6": "agent6_governance"}
 
@@ -208,8 +226,13 @@ class HypothesisValidator:
         corpus: list[dict[str, Any]] | None = None,
         apply_presentation_policy: bool = False,
         materiality_basis: str | None = None,
+        enforce: bool = True,
     ) -> None:
         self._spec = spec
+        # Advisory (``enforce=False``): every check still runs and is noted, but
+        # the model's own claim type, disposition and materiality stand and its
+        # quotes are kept. Only what a record cannot be built without stays hard.
+        self._enforce = enforce
         # v3: step 11 class comes from the deterministic policy, not the model.
         # v2 keeps its recorded behaviour (model label, demoted if audit-only).
         self._presentation_policy = apply_presentation_policy
@@ -220,6 +243,10 @@ class HypothesisValidator:
         self._passages = dict(passages)  # admitted evidence_id -> passage text
         self._indicators = indicators
         self._known = indicators.known_values()
+        # The indicators this specialist was given (its groups, usable values).
+        self._agent_indicator_ids = sorted(
+            t.parameter_result_id for t in indicators.traces
+            if t.group in spec.indicator_groups and t.parameter_result_id in self._known)
         self._primary = primary_hypotheses
         # The admitted filing in document order; enables quote recovery.
         self._corpus = corpus or []
@@ -230,9 +257,13 @@ class HypothesisValidator:
                  agent_run_id: str) -> HypothesisValidation:
         out = HypothesisValidation()
         for path in score_key_paths(parsed):
-            out.issues.append(
-                f"official_score_assignment: {path!r} is not permitted; scores "
-                "are deterministic.")
+            message = (f"official_score_assignment: {path!r} is not permitted; scores "
+                       "are deterministic.")
+            if self._enforce:
+                out.issues.append(message)
+            else:
+                out.adjustments.append({"hypothesis_id": "(output)",
+                                        "note": "Advisory: " + message + " Ignored."})
         items = [h for h in parsed.get("hypotheses") or [] if isinstance(h, dict)]
         ids = [h.get("hypothesis_id") for h in items]
         pattern = re.compile(rf"^{self._spec.code}-H\d{{1,4}}$")
@@ -248,6 +279,13 @@ class HypothesisValidator:
             record = self._one(item, dispositions, out, analysis_run_id, agent_run_id)
             if record is not None:
                 out.records.append(record)
+        bound = {p for r in out.records for p in r.parameter_result_ids}
+        unused = [i for i in self._agent_indicator_ids if i not in bound]
+        if out.records and unused:
+            out.adjustments.append({
+                "hypothesis_id": "(output)",
+                "note": ("Indicators supplied but bound by no hypothesis: "
+                         + ", ".join(unused) + ".")})
         if out.issues:
             out.records = []  # no partial retention
         return out
@@ -270,8 +308,13 @@ class HypothesisValidator:
             materiality = Materiality(item.get("materiality") or "medium")
             display = DisplayPriority(item.get("display_priority") or "on_demand")
         except (KeyError, ValueError) as exc:
-            out.issues.append(f"Hypothesis {hid!r} has an invalid enum value: {exc}.")
+            message = f"Hypothesis {hid!r} has an invalid enum value: {exc}."
+            if self._enforce:
+                out.issues.append(message)
+            else:
+                adjust(f"Advisory: {message} The hypothesis cannot be recorded and was skipped.")
             return None
+        stated = (claim_type, disposition, materiality)
 
         supporting = list(dict.fromkeys(item.get("supporting_evidence_ids") or []))
         contradicting = list(dict.fromkeys(item.get("contradicting_evidence_ids") or []))
@@ -279,11 +322,20 @@ class HypothesisValidator:
         mitigant_raw = item.get("mitigant") if isinstance(item.get("mitigant"), dict) else None
         outcome_ids = list((mitigant_raw or {}).get("outcome_evidence_ids") or [])
 
-        for eid in {*supporting, *contradicting, *outcome_ids,
-                    *(q.get("evidence_id") for q in quotes)}:
-            if eid not in self._passages:
-                out.issues.append(
-                    f"Hypothesis {hid!r} cites unknown/unadmitted evidence {eid!r}.")
+        unknown = sorted({str(e) for e in (*supporting, *contradicting, *outcome_ids,
+                                           *(q.get("evidence_id") for q in quotes))
+                          if e not in self._passages})
+        if unknown and self._enforce:
+            out.issues.extend(f"Hypothesis {hid!r} cites unknown/unadmitted evidence {eid!r}."
+                              for eid in unknown)
+        elif unknown:
+            # A citation must resolve to an admitted passage to be shown at all.
+            adjust("Advisory: dropped citations of unknown/unadmitted evidence "
+                   + ", ".join(unknown) + ".")
+            supporting = [e for e in supporting if e in self._passages]
+            contradicting = [e for e in contradicting if e in self._passages]
+            outcome_ids = [e for e in outcome_ids if e in self._passages]
+            quotes = [q for q in quotes if q.get("evidence_id") in self._passages]
 
         # --- quoted calculations: exact value, unit, period, denominator -----
         # A defective binding (invented id, different value, wrong unit, period
@@ -328,6 +380,7 @@ class HypothesisValidator:
 
         # --- verbatim quotes, with one bounded recovery attempt each ----------
         verified_quotes = []
+        discarded_quotes = []
         recovery_records = []
         for quote in quotes:
             eid, text = quote.get("evidence_id"), quote.get("quote") or ""
@@ -357,6 +410,7 @@ class HypothesisValidator:
                     "The source wording replaces the model's quote; the claim is "
                     "unchanged.")
             else:
+                discarded_quotes.append({"evidence_id": eid, "quote": normalise(text)})
                 adjust(f"A quote attributed to {eid[:12]} was not found verbatim in "
                        "that passage and was discarded"
                        + ("; one recovery attempt over the admitted filing found "
@@ -456,6 +510,48 @@ class HypothesisValidator:
                    "deterministic result nor a verbatim quote; marked unverified.")
             disposition, live = Disposition.UNVERIFIED, False
 
+        # The interpretation is commentary on the finding, so an unbound number
+        # there removes that field only; the finding itself is unaffected.
+        interpretation: dict[str, str] = {}
+        raw_interpretation = item.get("interpretation")
+        for key in INTERPRETATION_FIELDS:
+            text = ((raw_interpretation or {}).get(key) if isinstance(
+                raw_interpretation, dict) else None)
+            text = text.strip() if isinstance(text, str) else ""
+            if not text:
+                continue
+            loose = unbound_numbers(text, [*quoted_numbers, *inherited_numbers],
+                                    [*quote_texts, *inherited_quotes])
+            if loose:
+                unbound = (f"number(s) {', '.join(sorted(set(loose)))} are bound to "
+                           "neither a deterministic result nor a verbatim quote")
+                if self._enforce:
+                    adjust(f"Interpretation {key} dropped: {unbound}.")
+                    continue
+                adjust(f"Advisory: interpretation {key} kept although {unbound}.")
+            interpretation[key] = text
+
+        # A size or change described in words while a measuring indicator was
+        # supplied: noted for review, never a downgrade (lexical heuristic).
+        # Interactions inherit their components' figures, and a "could" risk
+        # statement describes no actual size, so neither is flagged.
+        claim = item.get("claim") or ""
+        if (live and self._primary is None and not parameter_result_ids
+                and self._agent_indicator_ids and _MAGNITUDE_WORDS.search(claim)
+                and not _HYPOTHETICAL.search(claim)
+                and not _METRIC_NUMBER.search(claim)):
+            flags_pending = [{
+                "rule_id": "unquantified_magnitude",
+                "layer": "B_numerical_integrity", "effect": "note",
+                "description": "The claim describes a size or change in words, "
+                               "binds no indicator and states no figure, although "
+                               "indicators were supplied to this specialist.",
+                "heuristic": True, "fo_handoff_variable": None,
+                "correction": "Bind the indicator that measures it, or quote the "
+                              "figure the filing gives."}]
+        else:
+            flags_pending = []
+
         if disposition is Disposition.SUPPORTED and contradicting:
             adjust("Counter-evidence is cited, so the hypothesis is qualified "
                    "rather than supported.")
@@ -481,9 +577,41 @@ class HypothesisValidator:
         basis = derive_evidence_basis(
             quotes=quote_texts, has_calculation=bool(parameter_result_ids),
             has_other_support=bool(supporting or components))
-        flags: list[dict[str, Any]] = list(binding_flags)
-        # The experimental branch leaves grounded interpretations to the agents.
-        # Lexical and sector inference heuristics no longer qualify them.
+        flags: list[dict[str, Any]] = [*binding_flags, *flags_pending]
+        if (live and basis == "generic_risk_disclosure"
+                and claim_type is not ClaimType.MANAGEMENT_CLAIM):
+            flags.append({
+                "rule_id": "generic_risk_disclosure_only",
+                "layer": "D_evidence_sufficiency", "effect": "qualify",
+                "description": "Supported only by risk-factor language about what "
+                               "could happen; it may be reported as a disclosed "
+                               "risk, not as an event that has occurred.",
+                "heuristic": True, "fo_handoff_variable": None, "correction": None})
+
+        # A genuine quote that shares almost no wording with the claim does not
+        # show that the filing STATES the claim (a lexical check, not entailment).
+        if (live and claim_type is ClaimType.FACT and quote_texts
+                and not parameter_result_ids):
+            claim_terms = tokens(item.get("claim") or "")
+            quote_terms = tokens(" ".join(quote_texts))
+            if len(claim_terms) >= 3 and (
+                    len(claim_terms & quote_terms) / len(claim_terms) < MIN_QUOTE_COVERAGE):
+                flags.append({
+                    "rule_id": "quote_does_not_cover_claim",
+                    "layer": "D_evidence_sufficiency", "effect": "qualify",
+                    "description": "The quote is verified, but it shares almost no "
+                                   "wording with the claim, so it does not show "
+                                   "that the filing states the claim; treated as "
+                                   "the specialist's inference.",
+                    "heuristic": True, "fo_handoff_variable": None,
+                    "correction": "Quote the sentence that states the claim, or "
+                                  "present the claim as an inference."})
+
+        # --- Layer C: known unsupported inferential steps ---------------------
+        if live:
+            flags += inference_rules.evaluate(
+                claim=item.get("claim") or "", mechanism=mechanism,
+                claim_type=claim_type.value, evidence_basis=basis)
 
         # --- BO6: an interaction cannot be stronger than what it is built on --
         if self._primary is not None and live:
@@ -573,11 +701,27 @@ class HypothesisValidator:
                     "correction": "Cite a passage that reports the measured result "
                                   "of the mitigant, or call it unproven."})
             valid_outcomes = measured
+            if not self._enforce:
+                try:
+                    effectiveness = MitigantEffectiveness(
+                        mitigant_raw.get("effectiveness") or "unproven")
+                except ValueError:
+                    pass
+                existence = mitigant_raw.get("existence") or "unverified"
+                valid_outcomes = outcome_ids
             mitigant = MitigantAssessment(
                 capability=str(mitigant_raw.get("capability") or ""),
                 existence=existence, effectiveness=effectiveness,
                 outcome_evidence_ids=valid_outcomes)
 
+        if not self._enforce:
+            if (claim_type, disposition, materiality) != stated:
+                adjust("Advisory: validators are off, so the model's claim type "
+                       f"({stated[0].value}), disposition ({stated[1].value}) and "
+                       f"materiality ({stated[2].value}) stand.")
+            claim_type, disposition, materiality = stated
+            # Quotes not found verbatim stay with the claim (each was noted above).
+            verified_quotes += [q for q in discarded_quotes if q["quote"]]
         admissibility = derive_admissibility(claim_type, disposition)
         presentation_basis: dict[str, Any] = {}
         if self._presentation_policy:
@@ -618,6 +762,7 @@ class HypothesisValidator:
             confidence=confidence,
             materiality=materiality,
             credit_mechanism=item.get("credit_mechanism"),
+            interpretation=interpretation,
             missing_information=list(item.get("missing_information") or []),
             display_priority=display,
             review_required=review,
@@ -640,7 +785,7 @@ class HypothesisValidator:
             transmission_mechanism=mechanism,
             fo_handoffs=fo_handoffs,
             validator_id=self.validator_id,
-            validator_version=HYPOTHESIS_VALIDATOR_VERSION,
+            validator_version=HYPOTHESIS_VALIDATOR_VERSION + ("" if self._enforce else "+advisory"),
             presentation_basis=presentation_basis,
             recovery=recovery_records,
         )
@@ -659,8 +804,12 @@ def gate_parameters(parsed: dict[str, Any], records: list[HypothesisRecord], *,
     parameter is recorded as ``unavailable`` (never silently accepted, never
     rewritten to a different value), plus the list of adjustments made:
 
+    * the value is not one of the permitted categorical values (or is a
+      sentence where a short label is required);
     * no linked hypothesis survived validation;
-    * the agent explicitly reported that the classification is not established.
+    * the value asserts something specific about this company but every linked
+      hypothesis rests on management statements, generic risk language or
+      inference.
     """
     # BO6 may support a parameter with the validated BO1-BO5 hypotheses it
     # received, as well as with its own.
@@ -676,6 +825,7 @@ def gate_parameters(parsed: dict[str, Any], records: list[HypothesisRecord], *,
         status = item.get("status", "ok")
         reason = detail = None
         if status in _SUBSTANTIVE_STATUSES:
+            allowed = value_sets.get(pid)
             linked = [by_id[h] for h in item.get("hypothesis_ids") or []
                       if h in by_id and by_id[h].usable]
             text = "" if value is None else str(value)
@@ -683,10 +833,28 @@ def gate_parameters(parsed: dict[str, Any], records: list[HypothesisRecord], *,
                 reason = "not_established"
                 detail = ("The agent reported that the evidence does not support "
                           "a classification.")
+            elif allowed and text not in allowed:
+                reason = "value_not_permitted"
+                detail = f"{text[:80]!r} is not one of {sorted(allowed)}."
+            elif pid in LABEL_PARAMETERS and (
+                    not text or len(text) > LABEL_PARAMETERS[pid]
+                    or len(text.split()) > 6 or text.rstrip().endswith(".")):
+                reason = "label_not_concise"
+                detail = "A short label is required, not a sentence."
             elif not linked:
                 reason = "no_validated_supporting_hypothesis"
                 detail = ("None of the hypotheses cited for this value survived "
                           "validation as a usable finding.")
+            elif text in REQUIRES_COMPANY_EVIDENCE.get(pid, ()) and not any(
+                    h.evidence_basis in COMPANY_SPECIFIC
+                    and h.admissibility is Admissibility.ESTABLISHED
+                    for h in linked):
+                reason = "needs_company_specific_evidence"
+                detail = (f"{text!r} asserts something specific about this company, "
+                          "but no linked hypothesis is an established, "
+                          "company-specific finding (they are: " + ", ".join(sorted(
+                              {f"{h.admissibility.value}/{h.evidence_basis}"
+                               for h in linked})) + ").")
         if reason:
             changes.append({"parameter_id": pid, "original_value": value,
                             "original_status": status, "reason": reason,
