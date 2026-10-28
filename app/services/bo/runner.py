@@ -108,6 +108,7 @@ from app.services.bo.synthesis import (
     drop_uncited_claims,
     fill_missing_qualifications,
     hypothesis_view,
+    include_all_validated_findings,
     iter_claims,
     parameter_value_sets,
     validate_challenger_output,
@@ -1622,10 +1623,12 @@ class _BoRun:
             *(p.parameter_result_id for p in self._business_parameters()),
         }
         dropped = drop_uncited_claims(parsed)
+        included = (include_all_validated_findings(parsed, all_by_id)
+                    if self.roster_version == "v3" else [])
         downgrades = downgrade_overstated_claim_types(parsed, all_by_id)
         qualified = []  # Presentation wording is left to the orchestrator.
         # Adjustments describe THIS answer; an earlier rejected one's do not carry.
-        self.agents[agent.agent_id].adjustments = [*dropped, *downgrades, *qualified]
+        self.agents[agent.agent_id].adjustments = [*dropped, *included, *downgrades, *qualified]
         issues = validate_orchestrator_output(
             parsed, hypotheses=all_by_id, reconciliation=self.reconciliation,
             indicators=self.indicators, accepted_parameter_ids=accepted_ids)

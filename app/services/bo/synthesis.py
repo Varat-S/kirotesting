@@ -92,6 +92,64 @@ def iter_claims(parsed: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
     return claims
 
 
+def include_all_validated_findings(
+    parsed: dict[str, Any], hypotheses: dict[str, HypothesisRecord],
+) -> list[dict[str, str]]:
+    """Keep every usable specialist finding in its own main memo section.
+
+    The model is instructed to cover all of them. For an omission, copy the
+    validated finding and its existing provenance into a per-section claim.
+    This adds no new analytical assertion and never promotes audit-only work.
+    """
+    covered = {
+        hid
+        for key in ("key_drivers", "material_risks")
+        for claim in parsed.get(key) or []
+        if isinstance(claim, dict)
+        for hid in claim.get("hypothesis_ids") or []
+        if hid in hypotheses and claim.get("section") == hypotheses[hid].section
+    }
+    existing_ids = {claim.get("claim_id") for _, claim in iter_claims(parsed)}
+    additions: list[dict[str, str]] = []
+    for hid, finding in sorted(hypotheses.items()):
+        if not finding.usable or hid in covered:
+            continue
+        components = [hypotheses[cid] for cid in finding.component_hypothesis_ids
+                      if cid in hypotheses and hypotheses[cid].usable]
+        basis = [finding, *components]
+        evidence_ids = sorted({eid for item in basis for eid in item.evidence_ids()})
+        parameter_ids = sorted({pid for item in basis
+                                for pid in item.parameter_result_ids})
+        target = "material_risks" if finding.direction.value == "negative" else "key_drivers"
+        claim_id = f"COV-{hid}"
+        suffix = 2
+        while claim_id in existing_ids:
+            claim_id = f"COV-{hid}-{suffix}"
+            suffix += 1
+        existing_ids.add(claim_id)
+        parsed.setdefault(target, []).append({
+            "claim_id": claim_id,
+            "category": "risk" if target == "material_risks" else "driver",
+            "text": finding.claim,
+            "section": finding.section,
+            "claim_type": finding.claim_type.value,
+            "hypothesis_ids": [hid, *(item.hypothesis_id for item in components)],
+            "parameter_result_ids": parameter_ids,
+            "evidence_ids": evidence_ids,
+            "materiality": finding.materiality.value,
+            "uncertainty": (
+                "This finding is qualified; see its validated evidence and limitations."
+                if finding.admissibility is Admissibility.QUALIFIED_NARRATIVE else None),
+            "quoted_values": [q for item in basis for q in item.quoted_values],
+        })
+        additions.append({
+            "claim_id": claim_id,
+            "hypothesis_id": hid,
+            "note": "Included a validated specialist finding omitted from the model synthesis.",
+        })
+    return additions
+
+
 def drop_uncited_claims(parsed: dict[str, Any]) -> list[dict[str, str]]:
     """Remove a listed claim that cites no hypothesis at all (in place).
 
