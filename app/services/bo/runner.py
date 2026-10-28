@@ -243,8 +243,14 @@ class BusinessOverviewRunner:
         m3_extraction=None, m3_extractor=None, m3_backend=None, m3_reviewer_backend=None,
         m3_review_corrections=None,
         check_stop=None,
+        enforce_validators: bool = True,
     ) -> None:
         settings = get_settings()
+        # False runs every BO validator in advisory mode: Validators 1-6, Validator 7
+        # (M3), Validator 8 (M4 debt) and the orchestrator's synthesis checks still
+        # run and are recorded, but nothing is demoted, rejected or escalated on
+        # their account. The run always ends human_review_required.
+        self.enforce_validators = bool(enforce_validators)
         # Called before each step with its name; raises to stop the run. Nothing is
         # committed by the runner, so a stopped run leaves the database untouched. A
         # model call already in flight can't be interrupted: the stop waits for it.
@@ -410,6 +416,7 @@ class _BoRun:
                  escalations, rejected_sources) -> None:
         self.runner = runner
         self.session = runner.session
+        self.enforce_validators = runner.enforce_validators
         self.case_id = case_id
         self.evidence = evidence
         self.metrics = metrics
@@ -799,6 +806,7 @@ class _BoRun:
         run_rebuild_from_packet(
             folder, case_id=self.case_id, packet=packet,
             extractor=specialist, reviewer=reviewer,
+            enforce_validators=self.enforce_validators,
         )
         self.rebuild_block = synthesis_block(
             folder / "m3_rebuild_manifest.json", case_id=self.case_id
@@ -1051,7 +1059,8 @@ class _BoRun:
                 live_config={"max_retries": 1},
                 required_assessment_version=(
                     None if scripted or self.runner.m3_responses is not None
-                    else "bo-m3-corporate-assessment-1.2"))
+                    else "bo-m3-corporate-assessment-1.2"),
+                enforce_validators=self.enforce_validators)
         except Exception as exc:  # recorded like a failed DAG task, never raised
             outcome.status = "failed"
             outcome.detail = f"Standalone Module 3 (run_m3) failed: {type(exc).__name__}: {exc}"
@@ -1109,6 +1118,7 @@ class _BoRun:
             # validated assessment; otherwise the debt specialist relies on
             # admitted source evidence and records unresolved identity questions.
             verified_m3_relationships=self._verified_m3_relationships(),
+            enforce_validator=self.enforce_validators,
         )
 
     def _verified_m3_relationships(self) -> list[dict] | None:
@@ -1216,7 +1226,12 @@ class _BoRun:
         m4["m4_debt_assessment"] = block
         m4["m4_debt_status"] = result.status
         # A debt result that is not validated must not leave M4 "complete".
-        if result.status != "validated":
+        if result.status == "advisory":
+            m4["missing_information"] = sorted({
+                *m4["missing_information"],
+                "Module 4 debt-structure Validator 8 failed but was not enforced "
+                "(validators off): " + "; ".join(result.validator_issues)})
+        elif result.status != "validated":
             m4["status"] = "incomplete"
             note = {
                 "unavailable": "Module 4 debt-structure assessment is unavailable "
@@ -1380,6 +1395,7 @@ class _BoRun:
                 {h.hypothesis_id: h for h in self._usable(self.m1_primary_ids)}
                 if agent.agent_id == self.resilience_agent_id else None),
             corpus=self.corpus,
+            enforce=self.enforce_validators,
         ).validate(parsed, analysis_run_id=self.analysis_run_id, agent_run_id=run_id)
         validation.adjustments[:0] = citation_notes
         issues += validation.issues
@@ -1667,19 +1683,37 @@ class _BoRun:
                             "orchestrator repair attempt."),
                     } for claim_id in canonicalized_claims)
         conclusion = None
+        advisory_issues: list[str] = []
+        if issues and not self.enforce_validators:
+            # Validators off: the synthesis stands; its issues are only recorded.
+            advisory_issues, issues = issues, []
         if not issues:
-            conclusion = build_topic_conclusion(
-                Topic.BUSINESS, parsed, analysis_run_id=self.analysis_run_id,
-                orchestrator_run_id=run_id, score_reference=None)
+            try:
+                conclusion = build_topic_conclusion(
+                    Topic.BUSINESS, parsed, analysis_run_id=self.analysis_run_id,
+                    orchestrator_run_id=run_id, score_reference=None)
+            except Exception:
+                if not advisory_issues:
+                    raise
+                # Too malformed to form a conclusion at all: rejected as usual.
+                issues, advisory_issues = advisory_issues, []
+        if conclusion is not None:
             try:
                 validate_conclusion_provenance(
                     conclusion, accepted_parameter_ids=accepted_ids)
             except ConclusionProvenanceError as exc:
-                issues.append(f"provenance: {exc}")
-                conclusion = None
+                if self.enforce_validators:
+                    issues.append(f"provenance: {exc}")
+                    conclusion = None
+                else:
+                    advisory_issues.append(f"provenance: {exc}")
+        self.agents[agent.agent_id].adjustments.extend(
+            {"claim_id": "(synthesis)", "note": f"Advisory (validators off): {issue}"}
+            for issue in advisory_issues)
         self.orchestrator_history.append({
             "round": self.round_index, "agent_run_id": run_id,
-            "status": "accepted" if conclusion is not None else "rejected",
+            "status": ("rejected" if conclusion is None
+                       else "accepted_unvalidated" if advisory_issues else "accepted"),
             "issues": list(issues),
             "claims": len(iter_claims(parsed)),
             "hypotheses_available": len(by_id),
@@ -1687,6 +1721,7 @@ class _BoRun:
             "claim_type_downgrades": [d["claim_id"] for d in downgrades],
             "dropped_uncited_claims": [d["claim_id"] for d in dropped],
             "added_qualifications": [d["claim_id"] for d in qualified],
+            **({"advisory_issues": advisory_issues} if advisory_issues else {}),
         })
         if conclusion is None:
             self._reject(agent.agent_id, run_id, issues)
@@ -1872,6 +1907,9 @@ class _BoRun:
         if (self.roster_version == "v3"
                 and any(module["status"] != "complete"
                         for module in self.module_conclusions.values())):
+            self.conclusion_status = "human_review_required"
+        if not self.enforce_validators:
+            # An ungoverned draft is never accepted without a reviewer.
             self.conclusion_status = "human_review_required"
 
         if self.conclusion is not None:

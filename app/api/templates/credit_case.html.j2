@@ -39,20 +39,20 @@
 {% if r %}{% set kind = 'approve' if r.verdict.startswith('approve') or r.verdict == 'counter_offer' else r.verdict %}
 <div class="card verdict {{ kind }}">
 <p class="big">{{ st(r.verdict) }}{% if r.approved_amount_m is not none %} · {{ usd(r.approved_amount_m) }}{% if r.approved_amount_m != r.requested_amount_m %} (counter-offer){% endif %}{% endif %}</p>
-<p>Requested {{ usd(r.requested_amount_m) }} · derived debt capacity {{ usd(r.derived_capacity_m) }}{% if r.utilisation is not none %} · utilisation {{ '{:.0%}'.format(r.utilisation) }}{% endif %} · grade {{ r.rating or '—' }} ({{ r.level or '—' }}) · needs human review</p>
+<p>{% if r.requested_amount_m is none %}Debt capacity report: no requested amount, no verdict{% else %}Requested {{ usd(r.requested_amount_m) }}{% endif %} · derived debt capacity {{ usd(r.derived_capacity_m) }}{% if r.utilisation is not none %} · utilisation {{ '{:.0%}'.format(r.utilisation) }}{% endif %} · grade {{ r.rating or '—' }} ({{ r.level or '—' }}) · needs human review</p>
 {% if rms.stale %}<div class="notice" id="stale"><strong>Out of date:</strong> {{ rms.stale|join('; ') }}. <form method="post" action="/cases/{{ view.case_id }}/credit/assess" style="display:inline">
 <input type="hidden" name="fo_run" value="{{ fo_run }}"><input type="hidden" name="bo_run" value="{{ bo_run }}">
-<input type="hidden" name="requested_amount_m" value="{{ rms.request.requested_amount_m }}"><input type="hidden" name="tenor_years" value="{{ rms.request.tenor_years }}">
+<input type="hidden" name="requested_amount_m" value="{{ rms.request.requested_amount_m if rms.request.requested_amount_m is not none else '' }}"><input type="hidden" name="tenor_years" value="{{ rms.request.tenor_years }}">
 <input type="hidden" name="interest_rate" value="{{ rms.request.interest_rate }}"><input type="hidden" name="collateral_value_m" value="{{ rms.request.collateral_value_m if rms.request.collateral_value_m is not none else '' }}">
 <button type="submit">Re-assess now</button></form></div>{% endif %}
 {% if r.gates %}<p><strong>Gates holding:</strong></p><ul>{% for g in r.gates %}<li>{{ g }}</li>{% endfor %}</ul>{% endif %}
 <p class="subtle">Assessment <code>{{ r.run_id }}</code>{% if r.supersedes %} (supersedes <code>{{ r.supersedes }}</code>){% endif %} · <code>{{ r.output }}</code></p>
 </div>
-{% else %}<p>No assessment of these runs yet. Enter the requested loan below.</p>{% endif %}
+{% else %}<p>No assessment of these runs yet. Enter the requested loan below, or leave it blank for a debt capacity report.</p>{% endif %}
 {% if fo %}
 <form method="post" action="/cases/{{ view.case_id }}/credit/assess" class="grid" style="margin-top:14px" id="assess-form">
 <input type="hidden" name="fo_run" value="{{ fo_run }}"><input type="hidden" name="bo_run" value="{{ bo_run }}">
-<div><label for="requested_amount_m">Requested loan, US$ millions</label><input id="requested_amount_m" name="requested_amount_m" type="number" min="0.1" step="0.1" required value="{{ rms.request.requested_amount_m if rms.request.requested_amount_m is not none else '' }}"></div>
+<div><label for="requested_amount_m">Requested loan, US$ millions <small>(blank: debt capacity only)</small></label><input id="requested_amount_m" name="requested_amount_m" type="number" min="0.1" step="0.1" value="{{ rms.request.requested_amount_m if rms.request.requested_amount_m is not none else '' }}"></div>
 <div><label for="tenor_years">Tenor, years</label><input id="tenor_years" name="tenor_years" type="number" min="1" step="1" value="{{ rms.request.tenor_years }}"></div>
 <div><label for="interest_rate">Interest rate</label><input id="interest_rate" name="interest_rate" type="number" min="0" step="0.0005" value="{{ rms.request.interest_rate }}"></div>
 <div><label for="collateral_value_m">Collateral value, US$ millions <small>(secured only)</small></label><input id="collateral_value_m" name="collateral_value_m" type="number" min="0" step="0.1" value="{{ rms.request.collateral_value_m if rms.request.collateral_value_m is not none else '' }}"></div>

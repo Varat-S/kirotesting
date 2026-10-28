@@ -64,7 +64,7 @@ _DEBT_FACT_CUES = (
 class M4DebtResult:
     """The governed outcome of the orchestrated debt specialist."""
 
-    status: str                       # validated | qualified | rejected | failed | unavailable | error
+    status: str                       # validated | qualified | advisory | rejected | failed | unavailable | error
     assessment: Optional[dict[str, Any]] = None       # parsed Module4Output (json)
     validator_report: Optional[dict[str, Any]] = None  # DebtStructureValidatorReport (json)
     validated: bool = False
@@ -188,12 +188,15 @@ def run_debt_specialist(
     escalation_engine=None,
     verified_m3_relationships: Optional[list[dict]] = None,
     key: str = "m4_debt",
+    enforce_validator: bool = True,
 ) -> M4DebtResult:
     """Run the orchestrated debt specialist and return a governed result.
 
     Never raises on a governance outcome: schema rejection -> ``rejected``;
     Validator-8 failure -> ``failed`` (+ mandatory escalation); missing essential
-    evidence -> ``unavailable``. A clean run is ``validated``.
+    evidence -> ``unavailable``. A clean run is ``validated``. With
+    ``enforce_validator=False`` a Validator-8 failure is ``advisory`` instead:
+    reported, with no escalation and no reconciliation follow-up.
     """
     inputs = build_debt_inputs(
         evidence, verified_m3_relationships=verified_m3_relationships)
@@ -210,7 +213,8 @@ def run_debt_specialist(
         )
 
     specialist = Module4Specialist(
-        client, escalation_engine=escalation_engine, case_id=case_id)
+        client, escalation_engine=escalation_engine, case_id=case_id,
+        enforce_validator=enforce_validator)
     try:
         result = specialist.run(inputs, case_version=snapshot_version, key=key)
     except Module4RejectedError as exc:
@@ -234,7 +238,8 @@ def run_debt_specialist(
         "checks": [asdict(c) for c in result.validator8.checks],
     }
     issues = [f"[{c.check_id}] {c.detail}" for c in result.validator8.failures]
-    status = "validated" if result.validated else "failed"
+    status = ("validated" if result.validated
+              else "failed" if enforce_validator else "advisory")
     return M4DebtResult(
         status=status,
         assessment=result.output.model_dump(mode="json"),

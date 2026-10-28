@@ -58,12 +58,12 @@ def _script_with_debt(debt_output=None):
     return script
 
 
-def _run(db_session, tmp_path, *, script=None, enable=True):
+def _run(db_session, tmp_path, *, script=None, enable=True, enforce=True):
     backend = ScriptedBoBackend(script or _script_with_debt())
     runner = BusinessOverviewRunner(
         db_session, backend=backend, bo_roster="v3",
         data_root=tmp_path / "data", output_root=tmp_path / "out",
-        enable_m4_debt_specialist=enable)
+        enable_m4_debt_specialist=enable, enforce_validators=enforce)
     result = runner.run_prepared(
         h.CASE, _debt_evidence(), h.metrics(), write_outputs=True)
     return result, backend
@@ -122,6 +122,38 @@ def test_debt_validator_failure_escalates_and_forces_human_review(db_session, tm
     assert result.conclusion_status == "human_review_required"
     # The mandatory escalation remains unresolved and visible downstream.
     assert result.handoff["module_conclusions"]["M4"]["m4_debt_status"] == "failed"
+
+
+def test_validators_off_reports_validator8_without_escalating(db_session, tmp_path):
+    broken = copy.deepcopy(hca_module4_output())
+    broken["deliverable_1"]["senior_notes_schedule"][0]["principal_amount_m"] += 5000.0
+    result, backend = _run(db_session, tmp_path,
+                           script=_script_with_debt(debt_output=broken), enforce=False)
+
+    m4 = result.memo["module_conclusions"]["M4"]
+    debt = m4["m4_debt_assessment"]
+    assert debt["status"] == "advisory"
+    assert debt["validated"] is False and debt["validator_report"]["passed"] is False
+    assert debt["validator_issues"] and debt["escalation_id"] is None
+    assert debt["reconciliation_followup"] is None  # no validator-driven follow-up call
+    assert debt["assessment"]["deliverable_1"]["senior_notes_schedule"]
+    assert m4["status"] == "complete"
+    assert any("not enforced" in note for note in m4["missing_information"])
+    # An ungoverned draft is always left for a reviewer, and says so everywhere.
+    assert result.conclusion_status == "human_review_required"
+    assert result.memo["run"]["validators_enforced"] is False
+    assert result.audit["run"]["validators_enforced"] is False
+    assert result.handoff["validators_enforced"] is False
+
+
+def test_validators_off_still_drafts_the_full_memo(db_session, tmp_path):
+    result, _ = _run(db_session, tmp_path, enforce=False)
+    assert result.memo["sections"] and result.handoff["business_topic_conclusion_id"]
+    assert result.audit["orchestrator"]["history"][-1]["status"] in (
+        "accepted", "accepted_unvalidated")
+    engine = [h for h in result.audit["hypotheses"]["records"]
+              if h["validator_version"].startswith("bo-hypothesis-validator")]
+    assert engine and all(h["validator_version"].endswith("+advisory") for h in engine)
 
 
 def test_debt_unavailable_when_no_admitted_debt_evidence(db_session, tmp_path):

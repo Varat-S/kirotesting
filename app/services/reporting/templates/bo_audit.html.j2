@@ -28,6 +28,7 @@
 <h1>Business Overview &mdash; Explainability and Audit Report</h1>
 <div class="muted">{{ audit.case.borrower or '' }} &middot; case {{ audit.case.case_id }} &middot; run <span class="mono">{{ audit.run.analysis_run_id }}</span> &middot; {{ audit.document }} {{ audit.version }}</div>
 {% if audit.run.execution_mode == 'offline_simulation' %}<div class="banner sim">{{ audit.run.execution_label }}</div>{% else %}<div class="banner">{{ audit.run.execution_label }}</div>{% endif %}
+{% if audit.run.validators_enforced is sameas false %}<div class="banner sim">Validators off: every BO validator ran in advisory mode. Its findings are recorded as adjustments and notes, not applied.</div>{% endif %}
 <div class="banner">{{ audit.notice }} Conclusion status: {{ st(audit.conclusion_status) }}.</div>
 <nav>{% for n, t in [(1,'Sources'),(2,'Snapshot'),(3,'Registry'),(4,'Agents'),(5,'Execution'),(6,'Prompts'),(7,'Evidence packets'),(8,'Hypotheses'),(10,'Retrieval'),(12,'Calculations'),(13,'Reconciliation'),(14,'BO6'),(15,'Orchestrator'),(16,'Challenger'),(17,'Rerun'),(18,'Missing'),(20,'Conclusion')] %}<a href="#s{{ n }}">{{ n }}. {{ t }}</a>{% endfor %}</nav>
 

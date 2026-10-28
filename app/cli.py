@@ -151,6 +151,9 @@ def main(argv=None):
                         help="Business Overview Module 3: v1 (default) the corporate-management "
              "specialist + Validator 7; v2 the rebuild (structure conversion + management "
              "continuity from the package's module3 sources)")
+    bo_run.add_argument("--no-validators", action="store_true",
+                        help="Run the BO validators in advisory mode: findings are recorded, not "
+                             "applied (an ungoverned draft, always left for human review)")
     bo_spec = commands.add_parser(
         "run-bo-specialists",
         help="Run the BO specialists and validators only; write the demo reports",
@@ -312,10 +315,13 @@ def main(argv=None):
     )
     run_rms.add_argument("case_id")
     run_rms.add_argument("--amount", type=float,
-                         help="Requested loan, US$ millions (default: the case's latest RMS assessment's request)")
-    run_rms.add_argument("--tenor", type=int, help="With --amount: requested tenor in years (default 5)")
-    run_rms.add_argument("--rate", type=float, help="With --amount: interest rate, e.g. 0.065 (default 6.5%%)")
-    run_rms.add_argument("--collateral-value", type=float, help="With --amount: collateral value, US$ millions")
+                         help="Requested loan, US$ millions (default: the case's latest RMS assessment's request, "
+                              "or a debt capacity report when there is none)")
+    run_rms.add_argument("--capacity-only", action="store_true",
+                         help="A debt capacity report: no requested amount, no verdict")
+    run_rms.add_argument("--tenor", type=int, help="Requested tenor in years (default 5)")
+    run_rms.add_argument("--rate", type=float, help="Interest rate, e.g. 0.065 (default 6.5%%)")
+    run_rms.add_argument("--collateral-value", type=float, help="Collateral value, US$ millions")
     run_rms.add_argument("--fo-run", help="FO run id (default: the case's latest)")
     run_rms.add_argument("--bo-run", help="BO analysis run id (default: the case's latest handoff)")
     filing_fetch = commands.add_parser(
@@ -369,15 +375,18 @@ def main(argv=None):
     both.add_argument("--pdf", action="store_true")
     both.add_argument("--amount", type=float,
                       help="Requested loan, US$ millions: Risk Mitigation & Structuring runs once both sections "
-                           "complete")
+                           "complete (without it, a debt capacity report)")
     both.add_argument("--m3-version", choices=M3_VERSIONS, default=DEFAULT_M3_VERSION,
                       help="Business Overview Module 3: v1 (default) the corporate-management "
              "specialist + Validator 7; v2 the rebuild (structure conversion + management "
              "continuity from the package's module3 sources)")
-    both.add_argument("--tenor", type=int, help="With --amount: requested tenor in years (default 5)")
-    both.add_argument("--rate", type=float, help="With --amount: interest rate, e.g. 0.065 (default 6.5%%)")
+    both.add_argument("--no-validators", action="store_true",
+                      help="Run the BO validators in advisory mode: findings are recorded, not "
+                           "applied (an ungoverned draft, always left for human review)")
+    both.add_argument("--tenor", type=int, help="Requested tenor in years (default 5)")
+    both.add_argument("--rate", type=float, help="Interest rate, e.g. 0.065 (default 6.5%%)")
     both.add_argument("--collateral-value", type=float,
-                      help="With --amount: collateral value, US$ millions (a secured loan's LTV test)")
+                      help="Collateral value, US$ millions (a secured loan's LTV test)")
     approve = commands.add_parser(
         "approve", help="Record your explicit approval of the exact draft content"
     )
@@ -465,11 +474,13 @@ def main(argv=None):
                 from app.services.rms import RmsRequest
                 from app.services.rms.runner import assess_case
 
-                if args.amount is None and (args.tenor or args.rate is not None or args.collateral_value is not None):
-                    raise ValueError("--tenor, --rate and --collateral-value need --amount.")
+                if args.capacity_only and args.amount is not None:
+                    raise ValueError("--capacity-only and --amount can't be used together.")
+                terms_given = args.tenor or args.rate is not None or args.collateral_value is not None
+                # No amount and no terms reuses the latest request; --capacity-only or terms alone size capacity.
                 request = (RmsRequest(args.amount, tenor_years=args.tenor, interest_rate=args.rate,
                                       collateral_value_m=args.collateral_value)
-                           if args.amount is not None else None)
+                           if args.amount is not None or args.capacity_only or terms_given else None)
                 print(json.dumps(assess_case(session, args.case_id, output_root=args.output, request=request,
                                              fo_run_id=args.fo_run, bo_run_id=args.bo_run), indent=2))
                 return
@@ -715,11 +726,9 @@ def _run_bo_fo(session, database, args):
     from app.services.fo import precheck
     from app.services.rms import RmsRequest
 
-    if args.amount is None and (args.tenor or args.rate is not None or args.collateral_value is not None):
-        raise ValueError("--tenor, --rate and --collateral-value need --amount.")
-    rms_request = (RmsRequest(args.amount, tenor_years=args.tenor, interest_rate=args.rate,
-                              collateral_value_m=args.collateral_value)
-                   if args.amount is not None else None)
+    # Without --amount RMS gives a debt capacity report, sized at --tenor / --rate when given.
+    rms_request = RmsRequest(args.amount, tenor_years=args.tenor, interest_rate=args.rate,
+                             collateral_value_m=args.collateral_value)
     if args.ticker:
         if bool(args.fy) == bool(args.accession):
             raise ValueError("--ticker requires exactly one of --fy or --accession.")
@@ -757,7 +766,8 @@ def _run_bo_fo(session, database, args):
         database=database, folder=folder, case_id=args.case_id, cutoff=args.cutoff,
         bo_backend=bo_backend, fo_backend=fo_backend, fo_mode=fo_mode,
         m3_version=args.m3_version, m3_backend=m3_backend,
-        output_root=args.output, produce_pdf=args.pdf, rms_request=rms_request, on_progress=show)
+        output_root=args.output, produce_pdf=args.pdf, rms_request=rms_request, on_progress=show,
+        bo_validators=not getattr(args, "no_validators", False))
     for section in ("bo", "fo", "rms"):
         if outcome[section]["status"] == "failed":
             print(outcome[section].pop("traceback"), file=sys.stderr)
@@ -1024,6 +1034,7 @@ def _run_bo_case(session, database, args):
         m3_corporate_structure=(
             json.loads(corporate_structure_path.read_text(encoding="utf-8"))
             if corporate_structure_path else None),
+        enforce_validators=not getattr(args, "no_validators", False),
     ).run_case(
         args.case_id, package=package, produce_pdf=args.pdf, manifest=manifest,
     )
@@ -1044,6 +1055,7 @@ def _run_bo_case(session, database, args):
         # different architecture than the one that produced it.
         "bo_roster": BO_ROSTER,
         "m3_version": m3_version,
+        "validators_enforced": bool(result.record.get("validators_enforced", True)),
         "agent_registry_version": (result.audit or {}).get("registry", {}).get("version"),
         # Whether the Module 4 debt specialist took effect, from the recorded run metadata.
         "m4_debt_specialist_enabled": bool(result.record.get("m4_debt_specialist_enabled", True)),

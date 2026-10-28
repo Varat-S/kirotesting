@@ -22,10 +22,10 @@ A run can be stopped (``stop``, set from the browser by :meth:`Jobs.stop`): each
 step and ends ``stopped``, recording nothing, and RMS is skipped. A model call already in flight can't be
 interrupted, so the stop takes effect when it returns. A section that already finished keeps its result.
 
-With a loan request, Risk Mitigation & Structuring (:mod:`app.services.rms`) runs once both threads have
-finished, and only when both sections completed: it reads the BO's ``handoff.json`` and the FO's
-``financial_overview.json`` and writes ``<output>/rms/<case>/<run>/rms.json``. It is deterministic (no model)
-and writes nothing to the database.
+Risk Mitigation & Structuring (:mod:`app.services.rms`) runs once both threads have finished, and only when
+both sections completed: it reads the BO's ``handoff.json`` and the FO's ``financial_overview.json`` and writes
+``<output>/rms/<case>/<run>/rms.json``. With a loan request it gives a verdict; without one, a debt capacity
+report. It is deterministic (no model) and writes nothing to the database.
 """
 
 from __future__ import annotations
@@ -152,17 +152,18 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
               produce_pdf: bool = False, m3_version: str | None = None, m3_backend=None,
               rms_request: rms.RmsRequest | None = None, on_progress=None,
               lock_wait: float = LOCK_WAIT_SECONDS, bo_only: bool = False,
-              stop: threading.Event | None = None) -> dict:
+              stop: threading.Event | None = None, bo_validators: bool = True) -> dict:
     """Run both sections at once; returns ``{"case_id", "folder", "cutoff", "bo": {...}, "fo": {...},
     "rms": {...}}``.
 
     Each section's entry has ``status`` ``completed`` or ``failed`` and either its ``summary`` or its
     ``error``. ``m3_version`` picks the BO's Module 3 (``v1`` default, ``v2`` the rebuild, whose management
-    specialist and reviewer use ``m3_backend``). ``rms`` is ``completed``, ``failed`` or ``skipped`` (no request, or a section didn't complete),
+    specialist and reviewer use ``m3_backend``). ``rms`` is ``completed`` (a verdict, or a debt capacity report without ``rms_request``), ``failed`` or ``skipped`` (a section didn't complete),
     with its ``summary``, ``error`` or ``reason``. ``on_progress(section, message)`` is called from the worker
     threads as they advance, and for ``rms`` once both have finished. ``bo_only`` runs the BO by itself: the FO
     (and so RMS) is ``skipped`` and ``fo_backend`` is not used. Setting ``stop`` ends each unfinished section
-    ``stopped`` at its next step.
+    ``stopped`` at its next step. ``bo_validators=False`` runs the BO validators in advisory mode (an ungoverned
+    draft, always left for human review; RMS notes it).
     """
     database = Path(database).resolve()
     data_root = Path(data_root) if data_root is not None else database.parent
@@ -194,13 +195,13 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
                     session, backend=bo_backend, data_root=data_root, output_root=output_root,
                     bo_roster=BO_ROSTER, enable_m4_debt_specialist=True,
                     m3_version=m3_version, m3_backend=m3_backend, m3_reviewer_backend=m3_backend,
-                    check_stop=checker("bo"),
+                    check_stop=checker("bo"), enforce_validators=bo_validators,
                 ).run_case(case_id, package=package, produce_pdf=produce_pdf)
                 say("bo", "recording the Business Overview")
                 session.commit()
         finally:
             engine.dispose()
-        return bo_summary(result, m3_version=check_m3_version(m3_version))
+        return bo_summary(result, m3_version=check_m3_version(m3_version), validators=bo_validators)
 
     def fo():
         staging = data_root / "staging" / f"fo-{uuid.uuid4().hex[:16]}.db"
@@ -251,7 +252,7 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
                 say(section, "failed")
     if stop is not None and stop.is_set():
         outcome["rms"] = {"status": "skipped", "reason": "The run was stopped."}
-        if rms_request is not None:
+        if not bo_only:
             say("rms", "skipped")
     else:
         outcome["rms"] = run_rms(outcome, rms_request, output_root, say)
@@ -259,9 +260,9 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
 
 
 def run_rms(outcome: dict, request: rms.RmsRequest | None, output_root, say) -> dict:
-    """Risk Mitigation & Structuring over the two sections' recorded outputs, once both have completed."""
-    if request is None:
-        return {"status": "skipped", "reason": "No requested loan amount was given."}
+    """Risk Mitigation & Structuring over the two sections' recorded outputs, once both have completed. Without a
+    request (or a requested amount) it is a debt capacity report."""
+    request = request or rms.RmsRequest()
     if outcome["fo"]["status"] == "skipped":
         say("rms", "skipped")
         return {"status": "skipped", "reason": "Needs both sections; this run was Business Overview only."}
@@ -271,7 +272,8 @@ def run_rms(outcome: dict, request: rms.RmsRequest | None, output_root, say) -> 
         return {"status": "skipped",
                 "reason": f"Needs both sections completed; the {' and '.join(unfinished)} did not complete."}
     try:
-        say("rms", "assessing the loan request")
+        say("rms", "assessing the loan request" if request.requested_amount_m is not None
+            else "sizing the debt capacity (no requested amount)")
         fo_path = Path(outcome["fo"]["summary"]["outputs"]["financial_overview.json"])
         handoff_path = outcome["bo"]["summary"].get("handoff_path")
         handoff = json.loads(Path(handoff_path).read_text(encoding="utf-8")) if handoff_path else None
@@ -283,6 +285,7 @@ def run_rms(outcome: dict, request: rms.RmsRequest | None, output_root, say) -> 
             sources={"bo_analysis_run_id": outcome["bo"]["summary"]["analysis_run_id"],
                      "bo_handoff_id": (handoff or {}).get("handoff_id"),
                      "bo_review_status": (handoff or {}).get("human_review_status"),
+                     "bo_validators_enforced": (handoff or {}).get("validators_enforced", True),
                      "fo_run_id": outcome["fo"]["summary"]["run_id"],
                      "fo_content_hash": outcome["fo"]["summary"]["content_hash"],
                      "fo_decisions": {"review": None, "overrides": []},  # a new run has no decisions yet
@@ -305,7 +308,7 @@ class StagingKept(RuntimeError):
         self.staging = staging
 
 
-def bo_summary(result, *, m3_version: str = DEFAULT_M3_VERSION) -> dict:
+def bo_summary(result, *, m3_version: str = DEFAULT_M3_VERSION, validators: bool = True) -> dict:
     return {
         "case_id": result.case_id,
         "analysis_run_id": result.analysis_run_id,
@@ -313,6 +316,7 @@ def bo_summary(result, *, m3_version: str = DEFAULT_M3_VERSION) -> dict:
         "execution_mode": result.execution_mode,
         "bo_roster": BO_ROSTER,
         "m3_version": m3_version,
+        "validators_enforced": validators,
         "conclusion_status": result.conclusion_status,
         "human_review_status": "pending",
         "handoff_id": (result.handoff or {}).get("handoff_id"),
@@ -413,17 +417,16 @@ class Jobs:
         job_id = uuid.uuid4().hex[:12]
         now = datetime.now(timezone.utc).isoformat()
         bo_only = kwargs.get("bo_only", False)
-        rms_waits = bool(kwargs.get("rms_request")) and not bo_only
+        rms_waits = not bo_only  # without a requested amount RMS still sizes the debt capacity
         job = {"job_id": job_id, "status": "running", "started_at": now, "finished_at": None,
                "folder": kwargs["folder"], "case_id": kwargs.get("case_id"), "bo_only": bo_only,
-               "stop_requested": False,
+               "bo_validators": kwargs.get("bo_validators", True), "stop_requested": False,
                "sections": {"bo": {"status": "running", "step": "starting", "steps": []},
                             "fo": ({"status": "skipped", "step": "not run (Business Overview only)", "steps": []}
                                    if bo_only else {"status": "running", "step": "starting", "steps": []}),
                             "rms": {"status": "waiting" if rms_waits else "skipped",
                                     "step": "waits for both sections" if rms_waits
-                                    else "not run (Business Overview only)" if bo_only
-                                    else "no requested loan amount", "steps": []}},
+                                    else "not run (Business Overview only)", "steps": []}},
                "result": None, "error": None}
         with self._lock:
             self._jobs[job_id] = job

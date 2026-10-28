@@ -307,12 +307,25 @@ def parse_roster(pages):
 
 
 HONORIFIC = r"(?:Mr|Ms|Mrs|Dr)\."
-PROXY_SECTION = re.compile(r"^Executive\s+Officers\s*$", re.I | re.M)
-# An all-capitals line ("GENERAL INFORMATION") opens the next proxy section.
-PROXY_BOUNDARY = re.compile(r"^[A-Z][A-Z0-9 &,'’/-]{3,}$", re.M)
+PROXY_SECTION = re.compile(
+    r"^(?:Information\s+About\s+)?(?:Our\s+)?Executive\s+Officers\s*$", re.I | re.M)
+# An all-capitals line ("GENERAL INFORMATION", "PROPOSAL 1 — ELECTION OF DIRECTORS")
+# opens the next proxy section.
+PROXY_BOUNDARY = re.compile(r"^[A-Z][A-Z0-9 &,'’/—–-]{3,}$", re.M)
+# ``Name | Age | Position`` on one line, or its cells stacked one per line.
+PROXY_ROSTER_HEADER = re.compile(
+    r"^Name\b(?:[^\n]*\bAge\b[^\n]*|[ \t]*\n[ \t]*Age[ \t]*\n[ \t]*Position\b[^\n]*"
+    r"(?:\n[ \t]*Since\b[^\n]*)?)$", re.M | re.I)
+# A director biography may state "Director since 2025" between name and honorific.
 _BIO_HEADING = re.compile(
     r"^([A-Z][A-Za-z.'’ -]{1,60}(?:,\s*[A-Z][A-Za-z.]{1,10})?)(?:\s*[—–][^\n]*)?\n"
+    r"(?P<since>Director\s+since\b[^\n]*\n)?"
     + HONORIFIC + r"\s+([A-Z][\w'’-]+)", re.M)
+# ``Jason K. Johnson serves as …``: a full name opening the biography's first sentence.
+_NAME_WORD = r"(?:[A-Z][A-Za-z'’-]*[a-z][A-Za-z'’-]*|[A-Z]\.)"
+_BIO_SENTENCE = re.compile(
+    rf"^(?!(?:Mr|Ms|Mrs|Dr|The|Our|This|Each)\b)({_NAME_WORD}(?:[ \t]+{_NAME_WORD}){{1,4}}"
+    r"(?:,[ \t]*(?:Jr|Sr|II|III|IV)\.?)?)[ \t]+(?:serves|has[ \t]+served)[ \t]+as\b", re.M)
 
 
 def name_key(value):
@@ -325,14 +338,23 @@ def surname(name):
     return words[-1].rstrip(".") if words else ""
 
 
-def proxy_bio_starts(text):
-    """(offset, name) of each ``Name[—Title]`` heading followed by ``Mr./Ms./Dr. Surname``.
+def _bio_matches(text):
+    """(offset, name, is_director_biography) of each biography start in ``text``."""
+    headings = [(m.start(), m[1].strip(), bool(m["since"])) for m in _BIO_HEADING.finditer(text)
+                if surname(m[1]).casefold() == m[3].casefold()]
+    sentences = [(m.start(), m[1].strip(), False) for m in _BIO_SENTENCE.finditer(text)]
+    return sorted(headings + sentences)
 
-    Requiring the honorific line to repeat the heading's surname keeps table rows,
-    committee lists and prose from being read as biography headings.
+
+def proxy_bio_starts(text):
+    """(offset, name) of each biography start in a proxy.
+
+    A start is a ``Name[—Title]`` heading followed (optionally after a "Director since"
+    line) by ``Mr./Ms./Dr. Surname``, or a line opening ``Full Name serves as`` /
+    ``has served as``. Requiring the honorific line to repeat the heading's surname keeps
+    table rows, committee lists and prose from being read as biography headings.
     """
-    return [(m.start(), m[1].strip()) for m in _BIO_HEADING.finditer(text)
-            if surname(m[1]).casefold() == m[2].casefold()]
+    return [(p, n) for p, n, _ in _bio_matches(text)]
 
 
 def proxy_boundaries(text):
@@ -348,8 +370,9 @@ def sources_from_proxy(texts, locations, company, filing_period, source_path="sy
     The section runs from an "Executive Officers" heading over contiguous passages to
     the next all-capitals heading. A rostered officer whose biography is not in that
     section (typically a CEO who is also a director) is reconciled to a unique
-    ``Name`` / ``Mr. Surname`` biography elsewhere in the proxy, which is added as its
-    own passages. Nothing is joined across non-contiguous passages.
+    biography elsewhere in the proxy, preferring the "Director since" director-nominee
+    biography over a summary grid, which is added as its own passages. Nothing is
+    joined across non-contiguous passages.
     """
     def contiguous(i):
         return i + 1 < len(texts) and locations[i] + len(texts[i]) == locations[i + 1]
@@ -370,7 +393,7 @@ def sources_from_proxy(texts, locations, company, filing_period, source_path="sy
             if boundary:
                 section = section[:boundary.start()]
                 units = [(u, o) for u, o in units if o < len(section)]
-            quality = 2 * bool(re.search(r"^Name\b[^\n]*\bAge\b", section, re.M | re.I))
+            quality = 2 * bool(PROXY_ROSTER_HEADER.search(section))
             quality += bool(proxy_bio_starts(section))
             candidates.append((quality, i, units, section))
     pages, section_ids, roster, limitations = {}, [], [], []
@@ -390,17 +413,22 @@ def sources_from_proxy(texts, locations, company, filing_period, source_path="sy
         for row in roster:
             if name_key(row["name"]) in in_section:
                 continue
-            found = set()
+            found = {}
             for u in range(len(texts)):
                 if u in selected:
                     continue
                 text = texts[u] + (texts[u + 1] if contiguous(u) else "")
-                found |= {u for p, n in proxy_bio_starts(text)
-                          if p < len(texts[u]) and name_key(n) == name_key(row["name"])}
+                for p, n, director in _bio_matches(text):
+                    if p < len(texts[u]) and name_key(n) == name_key(row["name"]):
+                        found[u] = found.get(u, False) or director
+            if len(found) > 1:
+                # A director summary grid repeats the name; the full director-nominee
+                # biography is the one stating "Director since".
+                found = {u: d for u, d in found.items() if d}
             if len(found) != 1:
                 issues.append("No reconciled biography for roster member: " + row["name"])
                 continue
-            u = found.pop()
+            u = next(iter(found))
             start = next(p for p, n in proxy_bio_starts(texts[u] + (texts[u + 1] if contiguous(u) else ""))
                          if name_key(n) == name_key(row["name"]))
             run, text = [u], texts[u]
@@ -428,7 +456,7 @@ def parse_proxy_roster(section, issues):
     Cells are split on table pipes and line breaks, so a row wrapped over lines still
     parses; any cell not consumed as name, age, position or "since" date is reported.
     """
-    header = re.search(r"^Name\b[^\n]*\bAge\b[^\n]*$", section, re.M | re.I)
+    header = PROXY_ROSTER_HEADER.search(section)
     if not header:
         return []
     body = section[header.end():]

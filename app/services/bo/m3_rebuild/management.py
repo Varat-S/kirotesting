@@ -149,9 +149,9 @@ def compact_citations(result):
     return result
 
 
-def assess_management(payload, sources, reviewer=None):
+def assess_management(payload, sources, reviewer=None, enforce=True):
     from .claims import assess_claims
-    return assess_claims(payload, sources, reviewer=reviewer)
+    return assess_claims(payload, sources, reviewer=reviewer, enforce=enforce)
 
 def aggregate(observations):
     actual = {o["direction"] for o in observations if o["category"] != "information_gap"}

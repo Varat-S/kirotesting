@@ -245,6 +245,8 @@ class AcceptedBusinessOverview(BaseModel):
     reviewer: str | None = None
     reviewed_at: datetime | None = None
     execution_mode: str = "offline_simulation"  # offline_simulation | live_model
+    # False: the BO ran with its validators in advisory mode (an ungoverned draft).
+    validators_enforced: bool = True
     agent_registry_version: str
     agent_registry_hash: str
     prompt_hashes: dict[str, str] = Field(default_factory=dict)

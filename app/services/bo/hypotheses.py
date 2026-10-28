@@ -217,8 +217,13 @@ class HypothesisValidator:
         corpus: list[dict[str, Any]] | None = None,
         apply_presentation_policy: bool = False,
         materiality_basis: str | None = None,
+        enforce: bool = True,
     ) -> None:
         self._spec = spec
+        # Advisory (``enforce=False``): every check still runs and is noted, but
+        # the model's own claim type, disposition and materiality stand and its
+        # quotes are kept. Only what a record cannot be built without stays hard.
+        self._enforce = enforce
         # v3: step 11 class comes from the deterministic policy, not the model.
         # v2 keeps its recorded behaviour (model label, demoted if audit-only).
         self._presentation_policy = apply_presentation_policy
@@ -239,9 +244,13 @@ class HypothesisValidator:
                  agent_run_id: str) -> HypothesisValidation:
         out = HypothesisValidation()
         for path in score_key_paths(parsed):
-            out.issues.append(
-                f"official_score_assignment: {path!r} is not permitted; scores "
-                "are deterministic.")
+            message = (f"official_score_assignment: {path!r} is not permitted; scores "
+                       "are deterministic.")
+            if self._enforce:
+                out.issues.append(message)
+            else:
+                out.adjustments.append({"hypothesis_id": "(output)",
+                                        "note": "Advisory: " + message + " Ignored."})
         items = [h for h in parsed.get("hypotheses") or [] if isinstance(h, dict)]
         ids = [h.get("hypothesis_id") for h in items]
         pattern = re.compile(rf"^{self._spec.code}-H\d{{1,4}}$")
@@ -279,8 +288,13 @@ class HypothesisValidator:
             materiality = Materiality(item.get("materiality") or "medium")
             display = DisplayPriority(item.get("display_priority") or "on_demand")
         except (KeyError, ValueError) as exc:
-            out.issues.append(f"Hypothesis {hid!r} has an invalid enum value: {exc}.")
+            message = f"Hypothesis {hid!r} has an invalid enum value: {exc}."
+            if self._enforce:
+                out.issues.append(message)
+            else:
+                adjust(f"Advisory: {message} The hypothesis cannot be recorded and was skipped.")
             return None
+        stated = (claim_type, disposition, materiality)
 
         supporting = list(dict.fromkeys(item.get("supporting_evidence_ids") or []))
         contradicting = list(dict.fromkeys(item.get("contradicting_evidence_ids") or []))
@@ -288,11 +302,20 @@ class HypothesisValidator:
         mitigant_raw = item.get("mitigant") if isinstance(item.get("mitigant"), dict) else None
         outcome_ids = list((mitigant_raw or {}).get("outcome_evidence_ids") or [])
 
-        for eid in {*supporting, *contradicting, *outcome_ids,
-                    *(q.get("evidence_id") for q in quotes)}:
-            if eid not in self._passages:
-                out.issues.append(
-                    f"Hypothesis {hid!r} cites unknown/unadmitted evidence {eid!r}.")
+        unknown = sorted({str(e) for e in (*supporting, *contradicting, *outcome_ids,
+                                           *(q.get("evidence_id") for q in quotes))
+                          if e not in self._passages})
+        if unknown and self._enforce:
+            out.issues.extend(f"Hypothesis {hid!r} cites unknown/unadmitted evidence {eid!r}."
+                              for eid in unknown)
+        elif unknown:
+            # A citation must resolve to an admitted passage to be shown at all.
+            adjust("Advisory: dropped citations of unknown/unadmitted evidence "
+                   + ", ".join(unknown) + ".")
+            supporting = [e for e in supporting if e in self._passages]
+            contradicting = [e for e in contradicting if e in self._passages]
+            outcome_ids = [e for e in outcome_ids if e in self._passages]
+            quotes = [q for q in quotes if q.get("evidence_id") in self._passages]
 
         # --- quoted calculations: exact value, unit, period, denominator -----
         # A defective binding (invented id, different value, wrong unit, period
@@ -337,6 +360,7 @@ class HypothesisValidator:
 
         # --- verbatim quotes, with one bounded recovery attempt each ----------
         verified_quotes = []
+        discarded_quotes = []
         recovery_records = []
         for quote in quotes:
             eid, text = quote.get("evidence_id"), quote.get("quote") or ""
@@ -366,6 +390,7 @@ class HypothesisValidator:
                     "The source wording replaces the model's quote; the claim is "
                     "unchanged.")
             else:
+                discarded_quotes.append({"evidence_id": eid, "quote": normalise(text)})
                 adjust(f"A quote attributed to {eid[:12]} was not found verbatim in "
                        "that passage and was discarded"
                        + ("; one recovery attempt over the admitted filing found "
@@ -614,11 +639,27 @@ class HypothesisValidator:
                     "correction": "Cite a passage that reports the measured result "
                                   "of the mitigant, or call it unproven."})
             valid_outcomes = measured
+            if not self._enforce:
+                try:
+                    effectiveness = MitigantEffectiveness(
+                        mitigant_raw.get("effectiveness") or "unproven")
+                except ValueError:
+                    pass
+                existence = mitigant_raw.get("existence") or "unverified"
+                valid_outcomes = outcome_ids
             mitigant = MitigantAssessment(
                 capability=str(mitigant_raw.get("capability") or ""),
                 existence=existence, effectiveness=effectiveness,
                 outcome_evidence_ids=valid_outcomes)
 
+        if not self._enforce:
+            if (claim_type, disposition, materiality) != stated:
+                adjust("Advisory: validators are off, so the model's claim type "
+                       f"({stated[0].value}), disposition ({stated[1].value}) and "
+                       f"materiality ({stated[2].value}) stand.")
+            claim_type, disposition, materiality = stated
+            # Quotes not found verbatim stay with the claim (each was noted above).
+            verified_quotes += [q for q in discarded_quotes if q["quote"]]
         admissibility = derive_admissibility(claim_type, disposition)
         presentation_basis: dict[str, Any] = {}
         if self._presentation_policy:
@@ -681,7 +722,7 @@ class HypothesisValidator:
             transmission_mechanism=mechanism,
             fo_handoffs=fo_handoffs,
             validator_id=self.validator_id,
-            validator_version=HYPOTHESIS_VALIDATOR_VERSION,
+            validator_version=HYPOTHESIS_VALIDATOR_VERSION + ("" if self._enforce else "+advisory"),
             presentation_basis=presentation_basis,
             recovery=recovery_records,
         )

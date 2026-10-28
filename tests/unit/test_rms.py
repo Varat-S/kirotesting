@@ -140,11 +140,14 @@ def test_hca_terms_and_mitigants_at_a_low_grade():
     assert t["rank"] == "senior_unsecured_tier_2" and not t["secured"] and not t["provisional"]
     assert t["tenor_years"] == 7  # capped for a low grade
     assert t["amortisation"]["type"] == "bullet"
-    assert t["financial_covenants"] == [{"covenant": "debt_incurrence", "test": "pro forma Debt / EBITDAR for new debt",
-                                         "max": 4.5}]
     assert t["pro_forma_leverage"] == pytest.approx((48697 + 2000) / 16119, abs=0.005)
-    # M4 D3 says buybacks were partly debt-funded; FO RCF T4 found NCI distributions.
-    assert [m["rule_id"] for m in r.mitigants] == ["RMS-M05", "RMS-M12"]
+    # M4 D3: $21,950M of buybacks and dividends over 3 years, partly debt-funded (47% of total debt), so the low
+    # grade's incurrence test becomes a maintenance leverage covenant.
+    assert t["financial_policy"]["signal"] == "aggressive" and t["financial_policy"]["distributions_3y_m"] == 21950
+    assert t["financial_covenants"] == [{"covenant": "max_leverage", "test": "Debt / EBITDAR (lease-adjusted), quarterly",
+                                         "max": pytest.approx((48697 + 2000) / 16119 * 1.25, abs=0.01)}]
+    # Debt-funded buybacks; FO RCF T4 found NCI distributions; the revolver backstops $2,207M of CP.
+    assert [m["rule_id"] for m in r.mitigants] == ["RMS-M05", "RMS-M12", "RMS-M18"]
 
 
 def test_a_weak_m4_verdict_reaches_capacity_through_the_grade_only():
@@ -306,13 +309,204 @@ def test_a_medium_bo_challenge_does_not_block():
     assert assess(RmsRequest(2000), FO, handoff=h).verdict == "approve"
 
 
-@pytest.mark.parametrize("bad", [0, -5, None])
-def test_the_request_needs_a_positive_amount(bad):
+@pytest.mark.parametrize("bad", [0, -5])
+def test_a_requested_amount_must_be_positive(bad):
     with pytest.raises(ValueError):
         RmsRequest(bad)
 
 
+@pytest.mark.parametrize("request_", [None, RmsRequest(), RmsRequest(tenor_years=10)])
+def test_without_a_requested_amount_rms_reports_the_debt_capacity(request_):
+    r = assess(request_, FO, m4_analysis=M4)
+    assert r.verdict == "capacity_only" and r.approved_amount_m is None and r.utilisation is None
+    assert r.request["requested_amount_m"] is None and r.gates == []
+    assert r.capacity["derived_capacity_m"] == pytest.approx(HCA_CAPACITY)
+    # Indicative terms at the capacity (rounded down), checked by the structuring engine.
+    t = r.terms
+    assert t["amount_m"] == 10371.4 and t["provisional"] and t["basis"] == "derived capacity"
+    assert t["tenor_years"] == (7 if request_ and request_.tenor_years == 10 else 5)
+    assert r.mitigants and r.feasibility["feasible"] is True
+
+
+def test_a_capacity_report_records_the_gates_but_decides_nothing():
+    r = assess(RmsRequest(), fo_with(going_concern="fail"), m4_analysis=M4)
+    assert r.verdict == "capacity_only" and "RMS-G01" in _gate_ids(r)
+    no_capacity = assess(RmsRequest(), FO, handoff=handoff(m4_with(overall_credit_rating_verdict="adequate"), band=4))
+    assert no_capacity.verdict == "capacity_only" and no_capacity.capacity["derived_capacity_m"] == 0
+    assert no_capacity.terms is None and no_capacity.feasibility is None
+
+
 def test_the_result_serialises_with_its_versions():
     out = json.loads(json.dumps(assess(RmsRequest(2000), FO, m4_analysis=M4).to_dict()))
-    assert out["schema_version"] == "rms-1.1" and out["policy_version"] == "rms-policy-1.1"
+    assert out["schema_version"] == "rms-1.2" and out["policy_version"] == "rms-policy-1.2"
     assert out["verdict"] == "approve" and out["request"]["requested_amount_m"] == 2000
+
+
+# --- The M3 rebuild, structured M4 signals, cross-checks and limitations ----------------------------------------
+
+def m3_rebuild(*, simulated=True, borrower="HCA Inc."):
+    """An M3 rebuild conclusion: a borrower with two guarantor OpCos, an 80% non-guarantor OpCo and a 35% JV
+    beneath a 90% shared-services company; and a partial management assessment."""
+    nodes = [("top", "HCA Healthcare, Inc.", "Parent Co", False), ("b", borrower, "Borrower", False),
+             ("g1", "Hospital East LLC", "OpCo", True), ("g2", "Hospital West LLC", "OpCo", True),
+             ("asc", "Surgery Network LLC", "OpCo", False), ("ss", "Shared Services LLC", "OpCo", False),
+             ("jv", "JV Investments", "JV", False)]
+    links = [("top", "b", 100), ("b", "g1", 100), ("b", "g2", 100), ("g1", "asc", 80), ("b", "ss", 90),
+             ("ss", "jv", 35)]
+    return {"m3_rebuild": {
+        "structure": {"status": "complete", "validation_status": "passed", "artifact": {
+            "provenance": {"assumption_status": "simulated" if simulated else "verified",
+                           "data_status": "simulated_educational_example" if simulated else "filed"},
+            "companies": {"HCA": {
+                "nodes": [{"id": i, "display_name": n, "role": r, "is_guarantor": g} for i, n, r, g in nodes],
+                "ownership_links": [{"parent_id": p, "child_id": c, "ownership_percent": pct}
+                                    for p, c, pct in links]}}}},
+        "management": {"status": "partial", "artifact": {
+            "coverage": {"admitted": 0, "expected": 7}, "overall_assessment": {"outcome": "unavailable"},
+            "model_assessment": {"signal": "credit_positive"}}}}}
+
+
+def rebuild_handoff(m4=M4, **kwargs):
+    h = handoff(m4)
+    h["module_conclusions"]["M3"] = m3_rebuild(**kwargs)
+    return h
+
+
+def test_the_m3_rebuild_is_read_from_the_borrower_down():
+    bo = load_bo(rebuild_handoff())
+    s = bo.m3_structure
+    assert bo.m3_source == "rebuild" and bo.m3_findings == () and s.simulated and s.borrower == "HCA Inc."
+    assert s.guarantors == ("Hospital East LLC", "Hospital West LLC")
+    assert set(s.non_guarantor_opcos) == {"Surgery Network LLC", "Shared Services LLC"}
+    # Ownership is effective: the JV is 35% of a 90% subsidiary.
+    assert set(s.partly_owned) == {("Surgery Network LLC", 80.0), ("Shared Services LLC", 90.0),
+                                   ("JV Investments", 31.5)}
+    assert bo.m3_management == {"status": "partial", "admitted": 0, "expected": 7, "outcome": "unavailable",
+                                "signal": "credit_positive"}
+
+
+def test_the_m3_rebuild_shapes_the_terms_but_not_the_capacity():
+    r = assess(RmsRequest(2000), FO, handoff=rebuild_handoff())
+    assert r.capacity["haircuts"] == [] and r.grade["score"] == 3.3  # management is recorded, not scored
+    by_id = {m["rule_id"]: m for m in r.mitigants}
+    assert "JV Investments (31.5%)" in by_id["RMS-M12"]["mitigant"]
+    assert "non-guarantors: " in by_id["RMS-M13"]["mitigant"] and "simulated" in by_id["RMS-M13"]["trigger"]
+    assert r.terms["guarantees"].startswith("upstream guarantees from Hospital East LLC, Hospital West LLC")
+    assert any("0 of 7 executive profiles admitted" in x for x in r.limitations)
+    assert any("not scored structural findings" in x for x in r.limitations)
+
+
+def test_a_borrower_mismatch_refers_only_on_a_verified_structure():
+    simulated = assess(RmsRequest(2000), FO, handoff=rebuild_handoff(borrower="HCA Healthcare Holdings, Inc."))
+    assert simulated.verdict == "approve" and "RMS-G11" not in _gate_ids(simulated)
+    assert any(x.startswith("Borrower differs between M3 and M4") for x in simulated.limitations)
+    verified = assess(RmsRequest(2000), FO, handoff=rebuild_handoff(simulated=False, borrower="HCA Holdings LLC"))
+    assert verified.verdict == "refer" and "RMS-G11" in _gate_ids(verified)
+    # Case, punctuation and a legal suffix don't make a mismatch.
+    same = assess(RmsRequest(2000), FO, handoff=rebuild_handoff(simulated=False, borrower="HCA, Inc"))
+    assert next(c for c in same.cross_checks if c["check"] == "borrower")["outcome"] == "match"
+
+
+def _d3_distributions(funding, impact, basis=None):
+    m4 = copy.deepcopy(M4)
+    m4["deliverable_3"]["debt_utilisation_matrix"]["shareholder_distributions_vs_leverage_balance"] = "Buybacks."
+    for row in m4["deliverable_3"]["capital_deployment_reconciliation"]:
+        if row["capital_allocation_stream"] == "Share repurchases":
+            row.update(primary_funding_source=funding, leverage_impact=impact)
+            if basis:
+                row["funding_basis"] = basis
+    return m4
+
+
+def test_debt_funded_distributions_are_read_from_the_reconciliation_rows():
+    # The live wording, with no "debt-funded" anywhere.
+    live = _d3_distributions("Operating cash flow and debt issuance proceeds",
+                             "Aggressively debt-supported shareholder returns")
+    assert load_bo(m4_analysis=live).distributions_debt_funded
+    assert "RMS-M05" in {m["rule_id"] for m in assess(RmsRequest(2000), FO, m4_analysis=live).mitigants}
+    # A declared funding basis wins over the text.
+    internal = _d3_distributions("Operating cash flow and debt issuance proceeds", "", basis="internal")
+    r = assess(RmsRequest(2000), FO, m4_analysis=internal)
+    assert not load_bo(m4_analysis=internal).distributions_debt_funded
+    assert "RMS-M05" not in {m["rule_id"] for m in r.mitigants} and r.terms["financial_policy"] is None
+    assert r.terms["financial_covenants"][0]["covenant"] == "debt_incurrence"
+
+
+def test_small_debt_funded_distributions_keep_the_incurrence_test():
+    m4 = copy.deepcopy(M4)
+    for row in m4["deliverable_3"]["capital_deployment_reconciliation"]:
+        if row["capital_allocation_stream"] in ("Share repurchases", "Dividends"):
+            row["cumulative_amount_3y_m"] = 2000.0  # 4,000 of 46,492: under a quarter
+    r = assess(RmsRequest(2000), FO, m4_analysis=m4)
+    assert "RMS-M05" in {m["rule_id"] for m in r.mitigants} and r.terms["financial_policy"] is None
+    assert r.terms["financial_covenants"][0]["covenant"] == "debt_incurrence"
+
+
+def test_each_material_risk_gets_one_category_title_first():
+    h = handoff(vulnerabilities=[
+        {"claim_id": "risk-01", "title": "Government Healthcare Program Dependency",
+         "text": "Revenues from Medicare and Medicaid."},
+        {"claim_id": "risk-02", "title": "Geographic Concentration",
+         "text": "Florida and Texas facilities, exposed to regulatory changes and weather events."},
+        {"claim_id": "risk-03", "title": "Intensifying Payer Power and Narrow Networks",
+         "text": "Private payer consolidation and price transparency requirements."},
+        {"claim_id": "risk-04", "title": "Staffing", "text": "Nurse shortages.", "risk_category": "litigation"},
+    ])
+    by_id = {m["rule_id"]: m for m in assess(RmsRequest(2000), FO, handoff=h).mitigants}
+    assert by_id["RMS-M14"]["trigger"].startswith("BO material risk(s) risk-01:")
+    assert by_id["RMS-M16"]["trigger"].startswith("BO material risk(s) risk-02:")
+    assert by_id["RMS-M17"]["trigger"].startswith("BO material risk(s) risk-03:")
+    assert by_id["RMS-M14"]["heuristic"] is True
+    assert by_id["RMS-M15"]["trigger"].startswith("BO material risk(s) risk-04:")
+    assert by_id["RMS-M15"]["heuristic"] is False  # declared by the BO
+
+
+def _refinancing(fo_score=None, **metrics):
+    fo = copy.deepcopy(FO)
+    if fo_score is not None:
+        next(m for m in fo["metrics"] if m["key"] == "liquidity")["columns"][0]["refinancing_score"] = fo_score
+    m4 = copy.deepcopy(M4)
+    m4["deliverable_2"]["metrics"].update(metrics)
+    return fo, m4
+
+
+@pytest.mark.parametrize("fo_score, metrics, rolls", [
+    (None, {}, True),  # FO 3; M4 11 months, +25bp, 7.5 years
+    (None, {"weighted_avg_refinancing_lead_time_months": 3.0}, False),  # refinanced too late: vetoed
+    (None, {"refinancing_cost_spread_delta_bps": 200.0}, False),  # at a widening spread: vetoed
+    (4, {}, True),  # one FO score worse, confirmed by a strong M4 record
+    (4, {"refinancing_cost_spread_delta_bps": 75.0}, False),  # M4 not strong enough to confirm
+    (5, {}, False),
+])
+def test_m4_refinancing_evidence_vetoes_or_confirms_the_rollover(fo_score, metrics, rolls):
+    fo, m4 = _refinancing(fo_score, **metrics)
+    a = assess(RmsRequest(2000), fo, m4_analysis=m4).capacity["assumptions"]
+    assert a["rollover"] is rolls and a["rollover_basis"]
+
+
+def test_the_revolver_is_cross_checked_gross_or_net_of_commercial_paper():
+    # The sample's $8,000M revolver less $2,207M CP is FO's $5,779M (net basis).
+    r = assess(RmsRequest(2000), FO, m4_analysis=M4)
+    check = next(c for c in r.cross_checks if c["check"] == "revolver")
+    assert check["outcome"] == "match" and "net of commercial paper" in check["detail"]
+    m4 = copy.deepcopy(M4)
+    next(o for o in m4["deliverable_1"]["non_note_obligations_schedule"]
+         if "revolving" in o["obligation_facility"])["available_facility_limit_m"] = 15000.0
+    r = assess(RmsRequest(2000), FO, m4_analysis=m4)
+    assert r.verdict == "refer" and "RMS-G12" in _gate_ids(r)
+
+
+def test_the_bo_questions_and_an_aggregated_ladder_become_conditions_and_limitations():
+    m4 = copy.deepcopy(M4)
+    m4["deliverable_1"]["senior_notes_schedule"] = m4["deliverable_1"]["senior_notes_schedule"][:1]
+    h = handoff(m4)
+    h.update(fo_handoffs=[{"hypothesis_id": "M4-H003", "variable": "free_cash_flow",
+                           "question": "Does FCF leave headroom?"}],
+             open_questions=["What are the supplier concentrations?"], evidence_limitations=["Supplier breakdown"])
+    r = assess(RmsRequest(2000), FO, handoff=h)
+    m19 = next(m for m in r.mitigants if m["rule_id"] == "RMS-M19")
+    assert m19["category"] == "condition_precedent" and "Does FCF leave headroom?" in m19["mitigant"]
+    assert any("one aggregate line" in x for x in r.limitations)
+    assert "BO open question: What are the supplier concentrations?" in r.limitations
+    assert "BO evidence gaps: Supplier breakdown" in r.limitations
+    assert any("business risk band unavailable" in x for x in r.limitations)

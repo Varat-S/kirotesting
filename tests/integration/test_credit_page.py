@@ -203,3 +203,11 @@ def test_a_bad_decision_shows_the_error_and_changes_nothing(client):
                       data={"fo_run": FO_RUN, "bo_run": BO_RUN, "requested_amount_m": "0"})
     assert bad.status_code == 400 and "Not assessed:" in bad.text
     assert records(client.output_root, CASE) == []
+
+
+def test_a_blank_amount_gives_a_debt_capacity_report(client):
+    page = post(client, f"/cases/{CASE}/credit/assess", {"fo_run": FO_RUN, "bo_run": BO_RUN, "requested_amount_m": ""})
+    assert "Assessed: capacity only." in page and "Debt capacity report: no requested amount, no verdict" in page
+    assert "None" not in page.split('name="requested_amount_m"')[1][:40]  # the re-assess fields stay blank
+    [record] = records(client.output_root, CASE)
+    assert record["verdict"] == "capacity_only" and record["request"]["requested_amount_m"] is None

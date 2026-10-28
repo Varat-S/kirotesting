@@ -147,6 +147,53 @@ def test_bio_heading_must_repeat_the_surname():
     assert proxy_bio_starts(text) == [(text.index("Alex Sample"), "Alex Sample")]
 
 
+def test_bio_sentence_needs_a_full_name():
+    text = ("Jason K. Johnson serves as our Chief Financial Officer.\n"
+            "Mr. Johnson serves as treasurer.\nThe Company serves as sponsor.\nHe has served as CFO.\n"
+            "Riley Test has served as Controller since 2020.")
+    assert [n for _, n in proxy_bio_starts(text)] == ["Jason K. Johnson", "Riley Test"]
+
+
+# Another real layout (fictional names): a "Information About Our Executive Officers"
+# heading, a table with stacked header cells, "Name serves as" biographies, a pointer
+# for the CEO, and a CEO biography both in a summary grid and among director nominees.
+SUMMARY_GRID = (
+    "Name/Experience/Occupation\nDirector\nSince\n"
+    "Alex Sample\nMr. Sample is our Chief Executive Officer.\n2025\n"
+)
+NOMINEES = (
+    "Jordan Board\nDirector since 2019\nMs. Board is an independent director.\n"
+    "Alex Sample\nDirector since 2025\n"
+    "Mr. Sample has served as our Chief Executive Officer since December 2025.\n"
+)
+STACKED_OFFICERS = (
+    "36\nINFORMATION ABOUT OUR EXECUTIVE OFFICERS\n"
+    "Each of our executive officers holds an identical position with our subsidiaries:\n"
+    "Name\nAge\nPosition\n"
+    "Alex Sample\n60\nChief Executive Officer\n"
+    "Riley Test\n51\nExecutive Vice President and Chief Financial Officer\n"
+    "Alex Sample — The principal occupation and employment experience of Mr. Sample during the "
+    "last five years is set forth on page 27 of this Proxy Statement.\n"
+    "Riley Test serves as our Executive Vice President and Chief Financial Officer since 2024.\n"
+    "38\nPROPOSAL 1 — ELECTION OF DIRECTORS\n"
+    # Read as an unrostered officer biography if the section ran past the heading.
+    "Jordan Board serves as an independent director.\n"
+)
+
+
+def test_stacked_proxy_layout_is_discovered():
+    texts = [(0, SUMMARY_GRID), (4000, NOMINEES), (9000, STACKED_OFFICERS)]
+    found = sources_from_evidence_packet(proxy_packet(texts=texts))
+    assert [(r["name"], r["position"]) for r in found.expected_roster] == [
+        ("Alex Sample", "Chief Executive Officer"),
+        ("Riley Test", "Executive Vice President and Chief Financial Officer")]
+    assert found.coverage_verifiable, found.limitations
+    pages = [found.pages[s] for s in found.section_ids]
+    # The CEO is reconciled to the director-nominee biography, not the summary grid.
+    assert any("Mr. Sample has served" in p for p in pages)
+    assert not any("Mr. Sample is our" in p for p in pages)
+
+
 def test_linked_proxy_matches_cik_and_filing_window():
     tenk = {"parser": "inline_xbrl", "cik": "1", "filing_date": "2026-02-20"}
 

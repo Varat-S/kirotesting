@@ -197,6 +197,7 @@
   Analysis run {{ memo.run.analysis_run_id }} &middot; registry {{ memo.run.agent_registry_version }} &middot; scope: Business Overview only
 </div>
 {% if memo.run.execution_mode == 'offline_simulation' %}<div class="banner sim">{{ memo.run.execution_label }}</div>{% endif %}
+{% if memo.run.validators_enforced is sameas false %}<div class="banner block">Validators off: an ungoverned draft. The BO validators ran in advisory mode, so findings they would have qualified, held back or rejected appear as the agents wrote them. Their notes are in the audit report.</div>{% endif %}
 <div class="banner{% if memo.status.conclusion_status in ['human_review_required', 'unavailable'] %} block{% endif %}">
   Status: {{ memo.status.conclusion_status|replace('_', ' ') }}. {{ memo.status.text }}
   Human review: {{ memo.status.human_review_status }}.

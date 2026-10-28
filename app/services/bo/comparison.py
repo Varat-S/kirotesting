@@ -106,6 +106,8 @@ class PreparedSpecialist:
     management_window_years: int = 3
     management_source_metadata: dict[str, Any] = field(default_factory=dict)
     required_m3_version: str | None = None
+    # False runs the hypothesis validator in advisory mode (see HypothesisValidator).
+    enforce_validators: bool = True
 
     def fingerprint(self) -> str:
         return content_hash({
@@ -440,7 +442,8 @@ def run_single_pass(session: Session, prep: PreparedSpecialist,
             prep.spec, prep.agent, prep.packet, parsed, indicators=prep.indicators,
             passage_text=prep.passage_text, corpus=prep.corpus, value_sets=prep.value_sets,
             analysis_run_id=prep.analysis_run_id, agent_run_id=run_id,
-            prompt_id=prompts.latest(prep.spec.agent_id).prompt_id)
+            prompt_id=prompts.latest(prep.spec.agent_id).prompt_id,
+            enforce=prep.enforce_validators)
         validation.adjustments[:0] = citation_notes
         return validation
 

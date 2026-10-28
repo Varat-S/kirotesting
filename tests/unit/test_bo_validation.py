@@ -25,10 +25,11 @@ def _indicators():
     return build_indicators(evidence_snapshot(), metrics(), analysis_run_id="AR")
 
 
-def _validate(code, hypotheses, *, indicators=None, primary=None, parameters=()):
+def _validate(code, hypotheses, *, indicators=None, primary=None, parameters=(),
+              enforce=True):
     validator = HypothesisValidator(
         BO_SPEC_BY_CODE[code], passages=TEXT, indicators=indicators or _indicators(),
-        primary_hypotheses=primary)
+        primary_hypotheses=primary, enforce=enforce)
     return validator.validate(
         {"parameters": list(parameters), "hypotheses": hypotheses},
         analysis_run_id="AR", agent_run_id="RUN")
@@ -160,6 +161,64 @@ def test_score_like_fields_reject_the_output():
 def test_malformed_and_duplicate_hypothesis_ids_are_rejected():
     assert not _validate("BO1", [_h("BO2-H001")]).valid
     assert not _validate("BO1", [_h("BO1-H001"), _h("BO1-H001")]).valid
+
+
+# -- C2. validators off (advisory) ----------------------------------------------
+
+
+def test_advisory_keeps_a_fabricated_quote_and_the_models_disposition_with_a_note():
+    out = _validate("BO1", [_h("BO1-H001", evidence_quotes=[
+        {"evidence_id": "ev_season", "quote": "Our revenues are never seasonal"}])],
+                    enforce=False)
+    record = out.records[0]
+    assert out.valid
+    assert record.disposition is Disposition.SUPPORTED and record.usable
+    assert record.evidence_quotes == [{"evidence_id": "ev_season",
+                                       "quote": "Our revenues are never seasonal"}]
+    assert any("not found verbatim" in n for n in record.validation_notes)
+    assert any(n.startswith("Advisory: validators are off") for n in record.validation_notes)
+    assert record.validator_version.endswith("+advisory")
+
+
+def test_advisory_keeps_the_models_claim_type_for_a_belief_quote():
+    out = _validate("BO4", [_h(
+        "BO4-H001", claim="The nursing college improves recruitment and retention.",
+        direction="positive", supporting_evidence_ids=["ev_labor"],
+        evidence_quotes=[{"evidence_id": "ev_labor",
+                          "quote": "which we believe will improve recruitment and "
+                                   "retention"}])], enforce=False)
+    record = out.records[0]
+    assert record.claim_type is ClaimType.FACT
+    assert record.admissibility is Admissibility.ESTABLISHED
+    assert any("management belief" in n for n in record.validation_notes)
+
+
+def test_advisory_drops_unknown_evidence_instead_of_rejecting_the_output():
+    out = _validate("BO1", [_h("BO1-H001"),
+                            _h("BO1-H002", supporting_evidence_ids=["ev_season", "ev_missing"])],
+                    enforce=False)
+    assert out.valid and len(out.records) == 2
+    assert out.records[1].supporting_evidence_ids == ["ev_season"]
+    assert any("ev_missing" in a["note"] for a in out.adjustments)
+
+
+def test_advisory_ignores_score_fields_but_still_rejects_malformed_ids():
+    assert _validate("BO1", [_h("BO1-H001", risk_score=1)], enforce=False).valid
+    assert not _validate("BO1", [_h("BO2-H001")], enforce=False).valid
+    assert not _validate("BO1", [_h("BO1-H001"), _h("BO1-H001")], enforce=False).valid
+
+
+def test_advisory_keeps_the_models_mitigant_effectiveness():
+    out = _validate("BO4", [_h(
+        "BO4-H001", claim="The nursing college expands the training pipeline.",
+        direction="positive", supporting_evidence_ids=["ev_labor"],
+        evidence_quotes=[{"evidence_id": "ev_labor",
+                          "quote": "We operate a College of Nursing to expand our "
+                                   "training pipeline"}],
+        mitigant={"capability": "Nursing college", "existence": "verified",
+                  "effectiveness": "demonstrated", "outcome_evidence_ids": []})],
+                    enforce=False)
+    assert out.records[0].mitigant.effectiveness.value == "demonstrated"
 
 
 # -- D. hypothesis logic ---------------------------------------------------------
