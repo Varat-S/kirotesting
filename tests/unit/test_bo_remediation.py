@@ -23,7 +23,7 @@ from app.services.bo.plans import (
     PARAMETER_VALUE_SETS,
 )
 from app.services.bo.recovery import recover_quote, tolerant_match
-from app.services.bo.retrieval import BoEvidenceRetriever
+from app.services.bo.retrieval import BoEvidenceRetriever, RetrievalBudget
 from app.services.bo.sectors import HEALTHCARE, detect_sector, load_case_checks
 from tests.bo_helpers import evidence_snapshot, metrics
 
@@ -627,3 +627,109 @@ def test_a_verified_quote_does_not_make_an_unrelated_claim_an_established_fact()
         "BO1-H001", "Emergency room visits increased 1.6% during 2025.", "p_er",
         PASSAGES["p_er"])]).records[0]
     assert _flags(covered) == [] and covered.admissibility is Admissibility.ESTABLISHED
+
+
+# -- interpretation, quantification and results evidence ------------------------
+
+
+def test_interpretation_is_kept_and_an_unbound_number_drops_only_that_field():
+    record = _validate("BO1", [_h(
+        "BO1-H001", "Medicare accounted for 20% of revenues in 2025.", "p_payer",
+        PASSAGES["p_payer"], interpretation={
+            "implication": "Government rate setting moves a fifth of revenue.",
+            "magnitude": "Medicare was 20% of revenues in 2025.",
+            "trend": "Expected to reach 35% by 2027.",
+            "watch_trigger": None})]).records[0]
+    assert record.usable and record.disposition is Disposition.SUPPORTED
+    assert record.interpretation == {
+        "implication": "Government rate setting moves a fifth of revenue.",
+        "magnitude": "Medicare was 20% of revenues in 2025."}
+    assert any("Interpretation trend dropped" in n for n in record.validation_notes)
+
+
+def test_a_size_in_words_with_indicators_supplied_is_noted_not_downgraded():
+    record = _validate("BO1", [_h(
+        "BO1-H001", "Medicare accounted for a significant share of our revenues.",
+        "p_payer", PASSAGES["p_payer"])]).records[0]
+    assert "unquantified_magnitude" in _flags(record)
+    flag = next(f for f in record.review_flags if f["rule_id"] == "unquantified_magnitude")
+    assert flag["effect"] == "note" and flag["heuristic"]
+    assert record.disposition is Disposition.SUPPORTED and record.usable
+    hypothetical = _validate("BO1", [_h(
+        "BO1-H001", "Medicare rate cuts could reduce our revenues.", "p_payer",
+        PASSAGES["p_payer"], claim_type="inference")]).records[0]
+    assert "unquantified_magnitude" not in _flags(hypothetical)
+
+
+def test_indicators_no_hypothesis_binds_are_reported():
+    out = _validate("BO1", [_h(
+        "BO1-H001", "Medicare accounted for 20% of revenues in 2025.", "p_payer",
+        PASSAGES["p_payer"])])
+    assert any(a["hypothesis_id"] == "(output)" and "bound by no hypothesis" in a["note"]
+               for a in out.adjustments)
+
+
+def test_plan_query_adds_a_results_passage_without_displacing_its_top_matches():
+    from app.services.bo.plans import BoAgentSpec, RetrievalQuery
+
+    corpus = [
+        {"evidence_id": "e_desc", "section": "Item 1", "location": 1,
+         "text": "Our revenue comes from hospital services; revenue grew and admissions grew."},
+        {"evidence_id": "e_mdna", "section": "Item 7", "location": 2,
+         "text": "Revenue increased compared to the prior year, primarily due to volume."},
+    ]
+    spec = BoAgentSpec("BO1", "x", "t", (), (
+        RetrievalQuery("x.q", "support", (r"revenue", r"grew", r"admissions"), 1),))
+    result = BoEvidenceRetriever().run_plan(spec, corpus, analysis_run_id="AR")
+    assert [r["evidence_id"] for r in result.attempts[0].results] == ["e_desc", "e_mdna"]
+    assert set(result.evidence_ids) == {"e_desc", "e_mdna"}
+
+
+def test_payor_spelling_and_adjusted_admissions_are_covered():
+    import re
+
+    from app.services.bo.roster_v3 import V3_SPEC_BY_CODE
+
+    payor = "The following table presents the percentages of net operating revenues by payor source."
+    unit = "On a same-store basis, net operating revenues per adjusted admission increased 4.0%."
+    terms = {c.check_id: c.terms for c in HEALTHCARE.checklist}
+    assert any(re.search(t, payor, re.I) for t in terms["hc.payer_mix"])
+    assert any(re.search(t, unit, re.I) for t in terms["hc.unit_revenue_vs_pricing"])
+    m1s2 = next(q for q in V3_SPEC_BY_CODE["M1S2"].plan
+                if q.query_id == "m1s2.customer_payer_mix")
+    assert any(re.search(t, "Revenues from our largest payors", re.I) for t in m1s2.terms)
+    # v2 stays as recorded.
+    assert any(t == r"payers?" for q in BO_SPEC_BY_CODE["BO2"].plan for t in q.terms)
+
+
+def test_supplementary_passages_are_added_and_never_displace():
+    from app.services.bo.plans import BoAgentSpec, RetrievalQuery
+
+    corpus = [
+        {"evidence_id": "e_old", "section": "Item 1", "location": 1,
+         "candidate_topics": ["customer_concentration"],
+         "text": "Revenue from customers is concentrated."},
+        {"evidence_id": "e_new", "section": "Item 1", "location": 2,
+         "candidate_topics": ["business_results"],
+         "text": "Revenue from customers grew; revenue from customers rose."},
+    ]
+    spec = BoAgentSpec("BO1", "x", "t", (), (
+        RetrievalQuery("x.q", "support", (r"revenue", r"customers", r"grew"), 1),))
+    result = BoEvidenceRetriever().run_plan(spec, corpus, analysis_run_id="AR")
+    assert [r["evidence_id"] for r in result.attempts[0].results] == ["e_old", "e_new"]
+    tight = BoEvidenceRetriever(RetrievalBudget(max_passages_per_agent=1))
+    assert tight.run_plan(spec, corpus, analysis_run_id="AR").evidence_ids == ["e_old"]
+
+
+def test_with_validators_off_the_interpretation_is_kept_and_noted():
+    validator = HypothesisValidator(
+        BO_SPEC_BY_CODE["BO1"], passages=PASSAGES,
+        indicators=build_indicators(evidence_snapshot(), metrics(), analysis_run_id="AR"),
+        corpus=CORPUS, enforce=False)
+    record = validator.validate({"parameters": [], "hypotheses": [_h(
+        "BO1-H001", "Medicare accounted for a significant share of revenues.", "p_payer",
+        PASSAGES["p_payer"], interpretation={"trend": "Expected to reach 35% by 2027."})]},
+        analysis_run_id="AR", agent_run_id="RUN").records[0]
+    assert record.interpretation == {"trend": "Expected to reach 35% by 2027."}
+    assert any(n.startswith("Advisory: interpretation trend kept") for n in record.validation_notes)
+    assert "unquantified_magnitude" in _flags(record)

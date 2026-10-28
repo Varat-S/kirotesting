@@ -37,6 +37,15 @@
   .tablewrap { overflow-x: auto; }
   .structure-diagram { text-align: center; margin: .6rem 0; page-break-inside: avoid; }
   .structure-diagram img { max-width: 100%; height: auto; }
+  @page { size: A4; margin: 16mm 14mm; }
+  @media print {
+    body { max-width: none; margin: 0; padding: 0; font-size: 10.5pt; }
+    table { font-size: 8pt; }
+    th, td { overflow-wrap: break-word; padding: .25rem .35rem; }
+    .num { white-space: normal; }
+    tr { break-inside: avoid; }
+    h2, h3, h4 { break-after: avoid; }
+  }
 </style>
 </head>
 <body>
@@ -54,6 +63,11 @@
   <span class="tag {{ f.direction }}">{{ f.direction }}</span><span class="tag">{{ f.materiality }} materiality</span>{% if f.attributed %}<span class="tag">management claim</span>{% endif %}{% if f.disposition == 'qualified' %}<span class="tag mixed">qualified</span>{% endif %}<br>
   {{ f.text }}{{ cites(f) }}
   {% if f.mechanism %}<div class="small">Credit mechanism: {{ f.mechanism }}</div>{% endif %}
+  {% set i = f.interpretation or {} %}
+  {% if i.implication %}<div class="small">Why it matters: {{ i.implication }}</div>{% endif %}
+  {% if i.magnitude %}<div class="small">Magnitude: {{ i.magnitude }}</div>{% endif %}
+  {% if i.trend %}<div class="small">Trend: {{ i.trend }}</div>{% endif %}
+  {% if i.watch_trigger %}<div class="small">Watch: {{ i.watch_trigger }}</div>{% endif %}
   {% for q in f.qualifications or [] %}<div class="qual">Qualification: {{ q }}</div>{% endfor %}
   {% for q in f.quotes or [] %}<div class="small">Filing: &ldquo;{{ q }}&rdquo;</div>{% endfor %}
 </div>

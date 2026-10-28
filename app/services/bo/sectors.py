@@ -78,16 +78,18 @@ def _check(check_id, agents, question, *terms, finding=(), k=2):
 HEALTHCARE = SectorProfile(
     sector_id="healthcare_provider",
     # Language of an operator of care facilities, not of a supplier to them.
-    detection_pattern=(r"\bour hospitals\b|equivalent admissions|inpatient admissions|"
-                       r"payer mix|uncompensated care|patient days"),
+    detection_pattern=(r"\bour hospitals\b|(?:equivalent|adjusted) admissions|"
+                       r"inpatient admissions|pay[eo]r mix|uncompensated care|patient days"),
     min_matching_passages=4,
     checklist=(
         _check("hc.payer_mix", ("BO2",),
                "What is the payer mix, by payer CATEGORY, and on what basis "
                "(revenues or admissions) and for which period is each share "
                "stated? A category share is not a share of one counterparty.",
-               r"managed care and insurers", r"percentages of our (?:inpatient )?(?:revenues|admissions)",
-               r"payer mix", finding=(r"Medicare|Medicaid|managed care|payer",)),
+               r"managed care and insurers",
+               r"percentages of (?:our )?(?:net operating |inpatient )?(?:revenues|admissions)",
+               r"by pay[eo]r (?:source|category)", r"pay[eo]r mix",
+               finding=(r"Medicare|Medicaid|managed care|pay[eo]r",)),
         _check("hc.contract_rates_vs_volumes", ("BO1", "BO2"),
                "Do payer agreements fix reimbursement RATES, and does anything in "
                "the evidence commit a payer to patient VOLUMES or revenue? State "
@@ -101,8 +103,9 @@ HEALTHCARE = SectorProfile(
                "What changed revenue per unit of volume (for example revenue per "
                "equivalent admission), and can price be separated from payer mix, "
                "case mix or service mix on the evidence?",
-               r"revenues? per equivalent admission", r"equivalent admissions",
-               r"same facility", finding=(r"revenue per equivalent admission|per unit",)),
+               r"revenues? per (?:equivalent|adjusted) admission",
+               r"(?:equivalent|adjusted) admissions", r"same[- ](?:facility|store)",
+               finding=(r"revenues? per (?:equivalent|adjusted) admission|per unit",)),
         _check("hc.revenue_realisation", ("BO2",),
                "What does the evidence say about collectability: uninsured and "
                "self-pay exposure, and accounting estimates such as implicit price "

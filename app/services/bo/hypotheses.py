@@ -89,6 +89,15 @@ COMPANY_SPECIFIC = ("company_specific_disclosure", "deterministic_calculation")
 # Share of a fact's content words that must also occur in its verified quotes.
 MIN_QUOTE_COVERAGE = 0.15
 
+INTERPRETATION_FIELDS = ("implication", "magnitude", "trend", "watch_trigger")
+# Words that describe a size or a change without stating it.
+_MAGNITUDE_WORDS = re.compile(
+    r"\b(?:significant(?:ly)?|substantial(?:ly)?|large|majority|concentrat\w*|"
+    r"share|portion|proportion|intensi\w*|margins?|grow(?:th|s|n)?|grew|"
+    r"increas\w*|decreas\w*|declin\w*|rose|fell)\b",
+    re.I,
+)
+
 
 def derive_evidence_basis(*, quotes: list[str], has_calculation: bool,
                           has_other_support: bool) -> str:
@@ -179,7 +188,7 @@ def unbound_numbers(text: str, quoted_values: list[float], quotes: list[str]) ->
 
 # Identifies the validation logic on every record it produces. Bump when a
 # check changes what is accepted, held back or rejected.
-HYPOTHESIS_VALIDATOR_VERSION = "bo-hypothesis-validator-2.1.0"
+HYPOTHESIS_VALIDATOR_VERSION = "bo-hypothesis-validator-2.2.0"
 _V2_VALIDATOR_IDS = {"BO1": "validator_1", "BO2": "validator_2", "BO3": "validator_3",
                      "BO4": "validator_4", "BO5": "validator_5", "BO6": "agent6_governance"}
 
@@ -234,6 +243,10 @@ class HypothesisValidator:
         self._passages = dict(passages)  # admitted evidence_id -> passage text
         self._indicators = indicators
         self._known = indicators.known_values()
+        # The indicators this specialist was given (its groups, usable values).
+        self._agent_indicator_ids = sorted(
+            t.parameter_result_id for t in indicators.traces
+            if t.group in spec.indicator_groups and t.parameter_result_id in self._known)
         self._primary = primary_hypotheses
         # The admitted filing in document order; enables quote recovery.
         self._corpus = corpus or []
@@ -266,6 +279,13 @@ class HypothesisValidator:
             record = self._one(item, dispositions, out, analysis_run_id, agent_run_id)
             if record is not None:
                 out.records.append(record)
+        bound = {p for r in out.records for p in r.parameter_result_ids}
+        unused = [i for i in self._agent_indicator_ids if i not in bound]
+        if out.records and unused:
+            out.adjustments.append({
+                "hypothesis_id": "(output)",
+                "note": ("Indicators supplied but bound by no hypothesis: "
+                         + ", ".join(unused) + ".")})
         if out.issues:
             out.records = []  # no partial retention
         return out
@@ -490,6 +510,48 @@ class HypothesisValidator:
                    "deterministic result nor a verbatim quote; marked unverified.")
             disposition, live = Disposition.UNVERIFIED, False
 
+        # The interpretation is commentary on the finding, so an unbound number
+        # there removes that field only; the finding itself is unaffected.
+        interpretation: dict[str, str] = {}
+        raw_interpretation = item.get("interpretation")
+        for key in INTERPRETATION_FIELDS:
+            text = ((raw_interpretation or {}).get(key) if isinstance(
+                raw_interpretation, dict) else None)
+            text = text.strip() if isinstance(text, str) else ""
+            if not text:
+                continue
+            loose = unbound_numbers(text, [*quoted_numbers, *inherited_numbers],
+                                    [*quote_texts, *inherited_quotes])
+            if loose:
+                unbound = (f"number(s) {', '.join(sorted(set(loose)))} are bound to "
+                           "neither a deterministic result nor a verbatim quote")
+                if self._enforce:
+                    adjust(f"Interpretation {key} dropped: {unbound}.")
+                    continue
+                adjust(f"Advisory: interpretation {key} kept although {unbound}.")
+            interpretation[key] = text
+
+        # A size or change described in words while a measuring indicator was
+        # supplied: noted for review, never a downgrade (lexical heuristic).
+        # Interactions inherit their components' figures, and a "could" risk
+        # statement describes no actual size, so neither is flagged.
+        claim = item.get("claim") or ""
+        if (live and self._primary is None and not parameter_result_ids
+                and self._agent_indicator_ids and _MAGNITUDE_WORDS.search(claim)
+                and not _HYPOTHETICAL.search(claim)
+                and not _METRIC_NUMBER.search(claim)):
+            flags_pending = [{
+                "rule_id": "unquantified_magnitude",
+                "layer": "B_numerical_integrity", "effect": "note",
+                "description": "The claim describes a size or change in words, "
+                               "binds no indicator and states no figure, although "
+                               "indicators were supplied to this specialist.",
+                "heuristic": True, "fo_handoff_variable": None,
+                "correction": "Bind the indicator that measures it, or quote the "
+                              "figure the filing gives."}]
+        else:
+            flags_pending = []
+
         if disposition is Disposition.SUPPORTED and contradicting:
             adjust("Counter-evidence is cited, so the hypothesis is qualified "
                    "rather than supported.")
@@ -515,7 +577,7 @@ class HypothesisValidator:
         basis = derive_evidence_basis(
             quotes=quote_texts, has_calculation=bool(parameter_result_ids),
             has_other_support=bool(supporting or components))
-        flags: list[dict[str, Any]] = list(binding_flags)
+        flags: list[dict[str, Any]] = [*binding_flags, *flags_pending]
         if (live and basis == "generic_risk_disclosure"
                 and claim_type is not ClaimType.MANAGEMENT_CLAIM):
             flags.append({
@@ -700,6 +762,7 @@ class HypothesisValidator:
             confidence=confidence,
             materiality=materiality,
             credit_mechanism=item.get("credit_mechanism"),
+            interpretation=interpretation,
             missing_information=list(item.get("missing_information") or []),
             display_priority=display,
             review_required=review,

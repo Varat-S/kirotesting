@@ -88,3 +88,21 @@ def test_paragraph_form_exhibit_21_preserves_named_legal_entities():
         ("Example Surgery Center, LLC", "ALABAMA"),
         ("Example Alaska, L.P.", "ALASKA"),
     ]
+
+
+def test_results_discussion_is_admitted_without_changing_existing_passages():
+    results = ("Net operating revenues per adjusted admission increased 4.0% compared "
+               "to the prior year, primarily due to rate increases. ")
+    text = ("Item 1. Business\nWe depend on third-party suppliers.\n"
+            "Item 7. Management's Discussion and Analysis\n" + results * 30)
+    evidence = narrative_evidence(text, document_id="PRIMARY", accession=ACCESSION)
+    by_section = {p["section"]: p for p in evidence}
+    assert by_section["Item 7"]["candidate_topics"] == ["business_results"]
+    assert by_section["Item 1"]["candidate_topics"] == ["supplier_concentration"]
+    # A passage admitted under a topic keeps its topics and evidence id.
+    alone = narrative_evidence("Item 1. Business\nWe depend on third-party suppliers.\n",
+                               document_id="PRIMARY", accession=ACCESSION)
+    assert alone[0]["evidence_id"] == by_section["Item 1"]["evidence_id"]
+    # The proxy is not widened.
+    assert narrative_evidence(results, document_id="P", accession=ACCESSION,
+                              kind="DEF 14A") == []

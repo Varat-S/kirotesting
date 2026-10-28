@@ -97,6 +97,8 @@ is not admitted, a score/band/rating field, a malformed or duplicate hypothesis 
 | BO6: no mechanism / invalid component | unverified |
 | BO6: weaker components | capped certainty and materiality |
 | Parameter value not permitted, unsupported, or needing company-specific evidence | recorded `unavailable` with a reason |
+| `interpretation` field (implication, magnitude, trend, watch_trigger) with an unbound number | that field dropped; the finding is unaffected |
+| Size or change in words, no indicator bound and no figure, while indicators were supplied | note only, flag `unquantified_magnitude` (no downgrade) |
 
 `admissibility` is what downstream may use: `established`, `attributed`
 (management claim), `qualified_narrative`, `audit_only`. `HypothesisRecord.usable`

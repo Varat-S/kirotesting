@@ -16,6 +16,15 @@ TOPICS = {
     "succession": r"succession",
 }
 
+# Business description and results discussion (what changed and why). A 10-K
+# chunk matching none of TOPICS is still admitted under this topic: the
+# Business Overview needs it. Only a fallback, so chunks admitted under TOPICS
+# keep their topics and therefore their evidence ids.
+BUSINESS_RESULTS_TOPIC = "business_results"
+BUSINESS_RESULTS = (r"revenues?|admissions|volumes?|compared to|increased|decreased|"
+                    r"primarily (?:due|attributable) to|compet|pric(?:e|es|ing)|margins?|"
+                    r"segments?")
+
 
 def split_items(text):
     matches = list(
@@ -40,13 +49,15 @@ def split_items(text):
     return list(items.values())
 
 
-def find_excerpts(text, *, max_length=2000):
+def find_excerpts(text, *, max_length=2000, business_results=False):
     excerpts = []
     for start in range(0, len(text), max_length):
         part = text[start : start + max_length]
         topics = [
             topic for topic, pattern in TOPICS.items() if re.search(pattern, part, re.I)
         ]
+        if not topics and business_results and re.search(BUSINESS_RESULTS, part, re.I):
+            topics = [BUSINESS_RESULTS_TOPIC]
         if topics:
             excerpts.append(
                 {"text": part, "location": start, "candidate_topics": topics}
@@ -60,7 +71,7 @@ def narrative_evidence(text, *, document_id, accession, kind="10-K"):
         passages = [{"section": kind, "heading": kind, "text": text, "location": 0}]
     results = []
     for passage in passages:
-        chunks = find_excerpts(passage["text"])
+        chunks = find_excerpts(passage["text"], business_results=kind == "10-K")
         if kind == "Exhibit 21":
             chunks = [
                 {"text": passage["text"][start:start + 2000], "location": start,

@@ -112,6 +112,10 @@ class HypothesisRecord(BaseModel):
     confidence: Confidence = Confidence.MEDIUM
     materiality: Materiality = Materiality.MEDIUM
     credit_mechanism: str | None = None
+    # The specialist's reading of the finding (implication, magnitude, trend,
+    # watch_trigger). Always the model's inference; a field carrying a number
+    # bound to neither an indicator nor a verified quote is dropped.
+    interpretation: dict[str, str] = Field(default_factory=dict)
     missing_information: list[str] = Field(default_factory=list)
     display_priority: DisplayPriority = DisplayPriority.ON_DEMAND
     review_required: bool = False

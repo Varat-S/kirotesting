@@ -70,6 +70,7 @@ def hypothesis_view(h: HypothesisRecord) -> dict[str, Any]:
         "confidence": h.confidence.value,
         "materiality": h.materiality.value,
         "credit_mechanism": h.credit_mechanism,
+        "interpretation": h.interpretation,
         "supporting_evidence_ids": h.supporting_evidence_ids,
         "contradicting_evidence_ids": h.contradicting_evidence_ids,
         "evidence_quotes": h.evidence_quotes,

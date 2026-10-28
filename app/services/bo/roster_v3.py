@@ -31,19 +31,37 @@ _V2_QUERIES: dict[str, RetrievalQuery] = {
 
 
 def _reuse(prefix: str, query_id: str, *, purpose: str | None = None) -> RetrievalQuery:
-    """A v2 query under a v3 id (terms unchanged)."""
+    """A v2 query under a v3 id. Terms are unchanged except that "payer" also
+    matches the "payor" spelling many filers use (v2 stays as recorded)."""
     source = _V2_QUERIES[query_id]
     return replace(source, query_id=f"{prefix}.{query_id.split('.', 1)[1]}",
-                   purpose=purpose or source.purpose)
+                   purpose=purpose or source.purpose,
+                   terms=tuple(t.replace("payer", "pay[eo]r") for t in source.terms))
+
+
+# Results-discussion language: what changed against the prior period and what
+# drove it. Gives the specialist explained, period-on-period evidence rather
+# than only business description and risk factors.
+_RESULTS_TERMS = (
+    r"compared to the (?:same period|prior year|year ended)",
+    r"primarily (?:due|attributable) to", r"driven (?:primarily )?by",
+    r"same[- ](?:store|facility) basis",
+)
+
+
+def _results(query_id: str, *extra: str) -> RetrievalQuery:
+    return _q(query_id, "support", *_RESULTS_TERMS, *extra, k=3)
 
 
 M1_REVENUE_QUALITY = BoAgentSpec(
     "M1S1", "m1_revenue_quality", "Revenue Quality & Demand Defensiveness",
     ("business_model_classification", "revenue_recurrence_assessment",
      "demand_defensiveness_assessment", "cyclicality_seasonality_assessment"),
-    tuple(_reuse("m1s1", q) for q in (
+    (*(_reuse("m1s1", q) for q in (
         "bo1.revenue_model", "bo1.demand_resilience", "bo1.demand_fragility",
         "bo1.stabilisers", "bo1.stabiliser_limits")),
+     _results("m1s1.results", r"(?:net )?(?:operating )?revenues? (?:increased|decreased)",
+              r"volumes? (?:increased|decreased)")),
     indicator_groups=("growth", "segment", "payer", "capital"),
     dimension="revenue_quality_demand_defensiveness", validator_id="validator_1",
 )
@@ -61,7 +79,7 @@ M1_CUSTOMER_STICKINESS = BoAgentSpec(
         _q("m1s2.stickiness_limits", "contradict", r"shift\w* (?:to|away)",
            r"alternative (?:sites?|providers?)", r"lose\w* (?:a )?(?:significant|major)",
            r"exclu\w* from (?:networks?|plans?)"),
-        _q("m1s2.offsets", "mitigant", r"diversif\w* (?:payer|customer)",
+        _q("m1s2.offsets", "mitigant", r"diversif\w* (?:pay[eo]r|customer)",
            r"long-term (?:contracts?|agreements?)", r"multi-?year"),
         _q("m1s2.offset_limits", "mitigant_challenge", r"concentrat",
            r"significant portion", r"depend\w* (?:up)?on"),
@@ -86,6 +104,7 @@ M1_PRICING_POWER = BoAgentSpec(
         _q("m1s3.realisation_offsets", "mitigant", r"supplemental payments?",
            r"collection (?:efforts|procedures)", r"eligibility"),
         _reuse("m1s3", "bo3.defence_limits"),
+        _results("m1s3.results", r"revenues? per", r"pricing", r"rate increases?"),
     ),
     indicator_groups=("payer", "realisation", "growth"),
     dimension="pricing_power_revenue_realisation", validator_id="validator_3",
@@ -102,6 +121,8 @@ M1_OPERATING_MODEL = BoAgentSpec(
         _reuse("m1s4", "bo4.initiative_limits"),
         _reuse("m1s4", "bo4.procurement"),
         _reuse("m1s4", "bo2.suppliers"),
+        _results("m1s4.results", r"as a percentage of (?:net )?(?:operating )?revenues?",
+                 r"(?:salaries|supplies|labou?r costs?)\b.{0,60}(?:increased|decreased)"),
     ),
     indicator_groups=("workforce", "margin"),
     dimension="operating_model_cost_resilience", validator_id="validator_4",

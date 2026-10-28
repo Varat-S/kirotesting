@@ -354,7 +354,10 @@ def get_bo_artifact_pdf(
             status_code=501,
             detail="No PDF backend is installed; run `pip install xhtml2pdf` and restart.")
     try:
-        pdf = _render_pdf_with(backend, _with_pdf_font(render(payload)))
+        html = render(payload)
+        if backend != "weasyprint":  # WeasyPrint resolves the page's own fonts
+            html = _with_pdf_font(html)
+        pdf = _render_pdf_with(backend, html)
     except PdfBackendUnavailableError as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc
     name = "business_overview" if kind == "memo" else "audit_report"
