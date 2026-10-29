@@ -240,6 +240,7 @@ class BusinessOverviewRunner:
         m3_extraction=None, m3_extractor=None, m3_backend=None, m3_reviewer_backend=None,
         m3_review_corrections=None,
         check_stop=None,
+        on_work=None,
         enforce_validators: bool = True,
     ) -> None:
         settings = get_settings()
@@ -252,6 +253,10 @@ class BusinessOverviewRunner:
         # committed by the runner, so a stopped run leaves the database untouched. A
         # model call already in flight can't be interrupted: the stop waits for it.
         self.check_stop = check_stop or (lambda step: None)
+        # Called with (units done, units planned) as the run advances. A unit is one
+        # agent's model call or one deterministic step; the plan grows when a
+        # follow-up, repair or remediation stage is added.
+        self.on_work = on_work or (lambda done, total: None)
         # Sector profile: "auto" detects it from the admitted evidence, None
         # disables it, or pass a SectorProfile. ``coverage_checks`` are extra
         # case-specific coverage tests supplied with the case.
@@ -354,6 +359,7 @@ class BusinessOverviewRunner:
 
         result = BoReportBuilder(self.session, output_root=self.output_root).finish(
             run, write_outputs=write_outputs, produce_pdf=produce_pdf)
+        run.work(1)
         if manifest is not None:
             result.evaluation = evaluate_run(
                 manifest, memo=result.memo, audit=result.audit, evidence=evidence)
@@ -536,10 +542,12 @@ class _BoRun:
         self.m4_debt_result = None  # type: ignore[assignment]
         self.started_at = datetime.now(timezone.utc)
         self.completed_at: datetime | None = None
+        self.work_done, self.work_total = 0, 0
 
     # -- orchestration of phases ---------------------------------------------
 
     def execute(self) -> None:
+        self._plan_work(orchestrated=True)
         self._open_run()
         self._foundation()
         self._stage("primary_specialists", set(self.primary_agent_ids))
@@ -568,8 +576,32 @@ class _BoRun:
         self._challenge_phase()
         self._finalize()
 
+    # Stages counted in the work plan up front; any other stage adds its agents when it starts.
+    PLANNED_STAGES = frozenset({"primary_specialists", "resilience", "orchestrator", "challenger"})
+
+    def _plan_work(self, *, orchestrated: bool) -> None:
+        """The units the run expects: routing, Module 3, each primary specialist,
+        resilience and, for a full run, Module 4, orchestrator, challenger and writing."""
+        total = 1 + self._m3_units() + len(self.primary_agent_ids) + 1
+        if orchestrated:
+            total += (1 if self.enable_m4_debt else 0) + 1 + 1 + 1
+        self.work_done, self.work_total = 0, total
+        self.work()
+
+    def _m3_units(self) -> int:
+        if self.roster_version != "v3":
+            return 0
+        return 1 + (1 if self.runner.m3_reviewer_backend is not None else 0)
+
+    def work(self, done: int = 0, *, extra: int = 0) -> None:
+        """Add ``extra`` units to the plan, count ``done`` units finished, and report."""
+        self.work_total += extra
+        self.work_done = min(self.work_done + done, self.work_total)
+        self.runner.on_work(self.work_done, self.work_total)
+
     def execute_specialists(self) -> None:
         self.scope = "business_overview_specialists_only"
+        self._plan_work(orchestrated=False)
         self._open_run()
         self._foundation()
         self._stage("primary_specialists", set(self.primary_agent_ids))
@@ -642,9 +674,11 @@ class _BoRun:
                         analysis_run_id=self.analysis_run_id))
             self._record_attempts(self.retrieval[agent_id].attempts)
             self._seal_packet(agent_id, routed)
+        self.work(1)
         if self.roster_version == "v3":
             self.runner.check_stop("the Module 3 management assessment")
             self._build_m3_packet(router, router_inputs)
+            self.work(self._m3_units())
 
     def _build_m3_packet(self, router, router_inputs) -> None:
         """Module 3: route, persist and consume M3 inputs from canonical evidence only."""
@@ -835,6 +869,8 @@ class _BoRun:
 
     def _stage(self, name: str, only: set[str], *, force: bool = False) -> None:
         self.runner.check_stop(name.replace("_", " "))
+        start = self.work_done
+        self.work(extra=0 if name in self.PLANNED_STAGES else len(only))
         executor = DagExecutor(
             self.session, self.registry, self.runtime,
             max_concurrency=self.runner.max_concurrency,
@@ -861,6 +897,9 @@ class _BoRun:
             "peak_concurrency": executor.peak_concurrency,
             "cache_hits": executor.cache_hits,
         })
+        # Agents that failed or were skipped are done too; _on_result counted only those that returned.
+        self.work_done = start
+        self.work(len(only))
 
     def _latest_run_id(self, agent_id: str) -> str | None:
         row = self.session.execute(
@@ -1022,6 +1061,7 @@ class _BoRun:
             escalation_engine=self.escalation,
             enforce_validator=self.enforce_validators,
         )
+        self.work(1)
 
     def _build_module_conclusions(self) -> dict[str, dict[str, Any]]:
         """Deterministic governed views consumed by cross-module synthesis."""
@@ -1216,6 +1256,7 @@ class _BoRun:
     # -- result handling ------------------------------------------------------
 
     def _on_result(self, agent, parsed, context) -> None:
+        self.work(1)
         run_id = context.run_ids[agent.agent_id]
         self.agents[agent.agent_id].run_ids.append(run_id)
         if agent.agent_id in self.spec_by_agent:

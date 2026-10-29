@@ -259,9 +259,10 @@ def shared(root):
 
 def test_both_sections_run_concurrently_into_one_database(shared, tmp_path):
     db = _database(tmp_path)
-    seen = []
+    seen, work = [], {"bo": [], "fo": []}
     out = bo_fo.run_bo_fo(database=db, folder=shared, bo_backend=None, fo_backend=agent(), fo_mode="scripted",
-                          output_root=tmp_path / "out", on_progress=lambda s, m: seen.append((s, m)))
+                          output_root=tmp_path / "out", on_progress=lambda s, m: seen.append((s, m)),
+                          on_work=lambda s, d, t: work[s].append((d, t)))
     assert out["case_id"] == "NVDA_FY2026"
     assert out["bo"]["status"] == "completed" and out["fo"]["status"] == "completed", out
     assert out["bo"]["summary"]["case_id"] == out["fo"]["summary"]["case_id"] == "NVDA_FY2026"
@@ -271,6 +272,11 @@ def test_both_sections_run_concurrently_into_one_database(shared, tmp_path):
     assert _count(db, "model_runs") >= 5  # the FO's agent calls came across from its staging database
     assert not list((tmp_path / "data" / "staging").iterdir())
     assert ("fo", "completed") in seen and ("bo", "completed") in seen
+    # Each section's progress only moves forward, never past its plan, and ends with everything done.
+    for section, reports in work.items():
+        assert reports[0][0] == 0 and reports[-1][0] == reports[-1][1] > 0, (section, reports)
+        assert all(d <= t for d, t in reports), (section, reports)
+        assert [d for d, _ in reports] == sorted(d for d, _ in reports), (section, reports)
     # No requested amount: RMS still sizes the debt capacity, with no verdict.
     assert out["rms"]["status"] == "completed", out["rms"]
     summary = out["rms"]["summary"]

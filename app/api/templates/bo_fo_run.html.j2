@@ -9,12 +9,14 @@
   .track .bar { position: absolute; top: 0; left: -40%; width: 40%; height: 100%; border-radius: 4px; background: #2f6fb0; animation: slide 1.4s ease-in-out infinite; }
   .track.done .bar { animation: none; left: 0; width: 100%; background: #2f6b45; } .track.failed .bar { animation: none; left: 0; width: 100%; background: #9a3324; }
   .track.stopped .bar { animation: none; left: 0; width: 100%; background: #8a94a0; }
+  .track.measured .bar { animation: none; left: 0; opacity: 1; transition: width .4s ease; }
   @keyframes slide { from { left: -40%; } to { left: 100%; } }
-  @media (prefers-reduced-motion: reduce) { .track .bar { animation: none; left: 0; width: 100%; opacity: .5; } }
+  @media (prefers-reduced-motion: reduce) { .track .bar { animation: none; left: 0; width: 100%; opacity: .5; } .track.measured .bar { opacity: 1; transition: none; } }
   .buttons { margin-top: 16px; } @media (max-width: 650px) { .sections { grid-template-columns: 1fr; } }
 </style></head>
 <body>
 {% macro usd(v) %}{% if v is none %}unavailable{% else %}US${{ '{:,.1f}'.format(v) }}M{% endif %}{% endmacro %}
+{% macro work(s) %}{% if s.status == 'running' and s.work and s.work.total %}{{ (100 * s.work.done / s.work.total)|round|int }}{% endif %}{% endmacro %}
 {% macro st(v) %}<span class="{{ 'ok' if v in ['completed', 'finished'] else 'bad' if v in ['failed'] else 'warn' }}">{{ (v or '—')|replace('_', ' ') }}</span>{% endmacro %}
 <header><span class="badge">Business Overview + Financial Overview</span><h1>Run BO and FO together</h1>
 <p class="subtle">Get a 10-K in once, by downloading it from SEC EDGAR or uploading its files, and both sections read the same folder in <code>edgar_filings/</code>: the Business Overview reads its <code>bundle.json</code> (file roles, hashes and availability), and the Financial Overview reads its Inline XBRL. Both then run at the same time under one case id, or the Business Overview can be run by itself.</p>
@@ -29,8 +31,9 @@
 <div class="sections">
 {% for key, label in [('bo', 'Business Overview'), ('fo', 'Financial Overview')] if not (key == 'fo' and job.bo_only) %}{% set s = job.sections[key] %}
 <div class="section-card" id="section-{{ key }}"><strong>{{ label }}</strong> <span class="state">{{ st(s.status) }}</span>
-<div class="track{% if s.status == 'completed' %} done{% elif s.status == 'failed' %} failed{% elif s.status in ['stopped', 'skipped'] %} stopped{% endif %}" aria-hidden="true"><div class="bar"></div></div>
+{% set pct = work(s) %}<div class="track{% if s.status == 'completed' %} done{% elif s.status == 'failed' %} failed{% elif s.status in ['stopped', 'skipped'] %} stopped{% elif pct %} measured{% endif %}" aria-hidden="true"><div class="bar"{% if pct %} style="width:{{ pct }}%"{% endif %}></div></div>
 <div class="step subtle">{{ s.step }}</div>
+<div class="work subtle">{% if pct %}{{ pct }}% ({{ s.work.done }} of {{ s.work.total }} done){% endif %}</div>
 <p class="cost subtle">Model cost: <span class="cost-text">{{ job.cost[key].text if job.cost else "—" }}</span></p>
 {% set r = job.result[key] if job.result else none %}
 <p class="error bad"{% if not (r and r.status == 'failed') %} hidden{% endif %}>{{ r.error if r and r.status == 'failed' else '' }}</p>
@@ -58,7 +61,7 @@
 <p class="open"{% if not (r and r.status == 'completed') %} hidden{% endif %}><a class="credit-link" href="/cases/{{ job.case_id }}/credit.html{% if job.result and job.result.fo.summary %}?fo_run={{ job.result.fo.summary.run_id }}&amp;bo_run={{ job.result.bo.summary.analysis_run_id }}{% endif %}">Open the credit view (BO + FO + RMS, with review)</a></p></div>{% endif %}
 </div>
 <p id="job-cost"><strong>Model cost for this run:</strong> <span id="job-cost-text">{{ job.cost.total.text if job.cost else "—" }}</span><br><small class="subtle">Estimated from provider-reported tokens and the prices in <code>LLM_PRICES</code> (.env), not a provider invoice. Updates while the run is under way.</small></p>
-<p class="subtle">Live runs make model calls (billed) and usually take several minutes; the Business Overview takes longest. The Financial Overview's result is copied into the database once the Business Overview has finished writing. Keep this page open, or come back to it: the run continues in the server.</p>
+<p class="subtle">Live runs make model calls (billed) and usually take several minutes; the Business Overview takes longest. Each bar counts its section's work done: for the Business Overview, each agent's model call and each step between them (its total grows if a follow-up or a challenger rerun is added); for the Financial Overview, each step. The Financial Overview's result is copied into the database once the Business Overview has finished writing. Keep this page open, or come back to it: the run continues in the server.</p>
 </section>{% endif %}
 
 <section id="start"><h2>Run the sections</h2>
@@ -163,9 +166,12 @@
       var holder = card.querySelector(".state"); holder.textContent = ""; holder.appendChild(tag);
       card.querySelector(".step").textContent = s.step;
       if (job.cost) card.querySelector(".cost-text").textContent = job.cost[key].text;
-      var track = card.querySelector(".track");
+      var track = card.querySelector(".track"), w = s.work;
+      var pct = s.status === "running" && w && w.total ? Math.round(100 * w.done / w.total) : null;
       track.className = "track" + (s.status === "completed" ? " done" : s.status === "failed" ? " failed"
-        : s.status === "stopped" || s.status === "skipped" ? " stopped" : "");
+        : s.status === "stopped" || s.status === "skipped" ? " stopped" : pct !== null ? " measured" : "");
+      track.querySelector(".bar").style.width = pct !== null ? pct + "%" : "";
+      card.querySelector(".work").textContent = pct !== null ? pct + "% (" + w.done + " of " + w.total + " done)" : "";
       var r = job.result && job.result[key];
       if (r && r.status === "failed") { var err = card.querySelector(".error"); err.textContent = r.error; err.hidden = false; }
       if (r && r.status === "stopped") { var why = card.querySelector(".reason"); why.textContent = r.reason; why.hidden = false; }

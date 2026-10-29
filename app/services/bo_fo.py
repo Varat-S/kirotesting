@@ -149,7 +149,7 @@ def plan(folder: str, case_id: str | None = None, cutoff: datetime | None = None
 def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: str,
               output_root, data_root=None, case_id: str | None = None, cutoff: datetime | None = None,
               produce_pdf: bool = False, m3_backend=None,
-              rms_request: rms.RmsRequest | None = None, on_progress=None,
+              rms_request: rms.RmsRequest | None = None, on_progress=None, on_work=None,
               lock_wait: float = LOCK_WAIT_SECONDS, bo_only: bool = False,
               stop: threading.Event | None = None, bo_validators: bool = True) -> dict:
     """Run both sections at once; returns ``{"case_id", "folder", "cutoff", "bo": {...}, "fo": {...},
@@ -158,7 +158,8 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
     Each section's entry has ``status`` ``completed`` or ``failed`` and either its ``summary`` or its
     ``error``. The BO's Module 3 management specialist and reviewer use ``m3_backend``. ``rms`` is ``completed`` (a verdict, or a debt capacity report without ``rms_request``), ``failed`` or ``skipped`` (a section didn't complete),
     with its ``summary``, ``error`` or ``reason``. ``on_progress(section, message)`` is called from the worker
-    threads as they advance, and for ``rms`` once both have finished. ``bo_only`` runs the BO by itself: the FO
+    threads as they advance, and for ``rms`` once both have finished; ``on_work(section, done, total)`` with the
+    units of work each section has done and plans (``total`` can grow while a section runs). ``bo_only`` runs the BO by itself: the FO
     (and so RMS) is ``skipped`` and ``fo_backend`` is not used. Setting ``stop`` ends each unfinished section
     ``stopped`` at its next step. ``bo_validators=False`` runs the BO validators in advisory mode (an ungoverned
     draft, always left for human review; RMS notes it).
@@ -168,6 +169,7 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
     settled = plan(folder, case_id, cutoff)
     case_id = settled["case_id"]
     say = on_progress or (lambda section, message: None)
+    tally = on_work or (lambda section, done, total: None)
 
     def checker(section):
         def check(step):
@@ -192,7 +194,8 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
                     session, backend=bo_backend, data_root=data_root, output_root=output_root,
                     bo_roster=BO_ROSTER, enable_m4_debt_specialist=True,
                     m3_backend=m3_backend, m3_reviewer_backend=m3_backend,
-                    check_stop=checker("bo"), enforce_validators=bo_validators,
+                    check_stop=checker("bo"), on_work=lambda d, t: tally("bo", d, t),
+                    enforce_validators=bo_validators,
                 ).run_case(case_id, package=package, produce_pdf=produce_pdf)
                 say("bo", "recording the Business Overview")
                 session.commit()
@@ -210,7 +213,7 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
             with factory() as session:
                 result = FinancialOverviewRunner(
                     session, output_root=output_root, agent_backend=fo_backend, agent_mode=fo_mode,
-                    check_stop=checker("fo"),
+                    check_stop=checker("fo"), on_work=lambda d, t: tally("fo", d, t),
                 ).run_filing(folder, case_id)
                 session.commit()
         except BaseException:
@@ -424,6 +427,8 @@ class Jobs:
                                     "step": "waits for both sections" if rms_waits
                                     else "not run (Business Overview only)", "steps": []}},
                "result": None, "error": None}
+        for state in job["sections"].values():
+            state["work"] = None  # {"done", "total"} once the section reports its units of work
         with self._lock:
             self._jobs[job_id] = job
             self._meters[job_id] = {"bo": usage.meter_of(kwargs.get("bo_backend")),
@@ -445,9 +450,13 @@ class Jobs:
                     state["steps"].append(message)
                     state["step"] = message
 
+        def tally(section, done, total):
+            with self._lock:
+                job["sections"][section]["work"] = {"done": done, "total": total}
+
         def work():
             try:
-                result = run_bo_fo(on_progress=progress, stop=stop, **kwargs)
+                result = run_bo_fo(on_progress=progress, on_work=tally, stop=stop, **kwargs)
                 with self._lock:
                     job.update(result=result, case_id=result["case_id"],
                                status="stopped" if stop.is_set() else "finished")

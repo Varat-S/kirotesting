@@ -108,7 +108,8 @@ def run_financial_overview(
     try:
         result = FinancialOverviewRunner(session, output_root=get_settings().output_dir,
                                          agent_backend=backend, agent_mode="live",
-                                         check_stop=fo_cancel.checker(run_token)).run_filing(
+                                         check_stop=fo_cancel.checker(run_token),
+                                         on_work=lambda d, t: fo_cancel.set_work(run_token, d, t)).run_filing(
             folder, case_id.strip() or None)
     except fo_cancel.FoRunCancelled as exc:
         return _page(session, stopped=str(exc), **again)

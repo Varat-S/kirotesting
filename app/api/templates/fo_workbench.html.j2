@@ -11,8 +11,9 @@
   .fo-progress[hidden] { display: none; }
   .fo-progress .track { position: relative; height: 8px; border-radius: 4px; background: #e3e8ee; overflow: hidden; margin: 8px 0; }
   .fo-progress .bar { position: absolute; top: 0; left: -40%; width: 40%; height: 100%; border-radius: 4px; background: #2f6fb0; animation: fo-slide 1.4s ease-in-out infinite; }
+  .fo-progress .track.measured .bar { animation: none; left: 0; opacity: 1; transition: width .4s ease; }
   @keyframes fo-slide { from { left: -40%; } to { left: 100%; } }
-  @media (prefers-reduced-motion: reduce) { .fo-progress .bar { animation: none; left: 0; width: 100%; opacity: .5; } }
+  @media (prefers-reduced-motion: reduce) { .fo-progress .bar { animation: none; left: 0; width: 100%; opacity: .5; } .fo-progress .track.measured .bar { opacity: 1; transition: none; } }
 </style></head>
 <body>
 {% macro st(v) %}<span class="{{ 'ok' if v in ['completed', 'accepted', 'continued', 'pass', 'compliant', 'routine', 'overridden', 'none', 'no_adjustment', 'Engine score', 'Overridden by analyst', 'not_applicable', 'billed_revenue'] else 'bad' if v in ['failed', 'rejected', 'stopped', 'fail', 'escalated', 'breach', 'unresolved'] else 'warn' }}">{{ (v or '—')|replace('_', ' ') }}</span>{% endmacro %}
@@ -36,8 +37,8 @@
 <div><button class="primary-button" id="fo-run-button" type="submit"{% if not agent_ok %} disabled{% endif %}>Run</button></div>
 </form>
 <div class="fo-progress" id="fo-progress" role="status" aria-live="polite" hidden>
-<strong>Running the Financial Overview…</strong> <span class="subtle" id="fo-progress-time">0 s</span>
-<div class="track" aria-hidden="true"><div class="bar"></div></div>
+<strong>Running the Financial Overview…</strong> <span class="subtle" id="fo-progress-pct"></span> <span class="subtle" id="fo-progress-time">0 s</span>
+<div class="track" id="fo-progress-track" aria-hidden="true"><div class="bar"></div></div>
 <div id="fo-progress-step"><strong>Starting…</strong></div>
 <details id="fo-progress-done-box" hidden><summary>Steps done (<span id="fo-progress-count">0</span>)</summary><ol id="fo-progress-done"></ol></details>
 <span class="subtle" id="fo-progress-detail">Reading the filing, then the Pre-check Agent (up to four model calls on <code id="fo-progress-model"></code>), then the measures. This usually takes 10–30 seconds; keep this page open.</span>
@@ -62,6 +63,12 @@
     p.done.forEach(function (d) { var li = document.createElement("li"); li.textContent = d; list.appendChild(li); });
     document.getElementById("fo-progress-count").textContent = p.done.length;
     document.getElementById("fo-progress-done-box").hidden = p.done.length === 0;
+    if (p.work && p.work.total) {
+      var pct = Math.round(100 * p.work.done / p.work.total), track = document.getElementById("fo-progress-track");
+      track.className = "track measured";
+      track.querySelector(".bar").style.width = pct + "%";
+      document.getElementById("fo-progress-pct").textContent = pct + "% (" + p.work.done + " of " + p.work.total + " steps) ·";
+    }
   }
   form.addEventListener("submit", function () {
     var button = document.getElementById("fo-run-button"), model = document.getElementById("model");
@@ -93,6 +100,10 @@
     if (timer) clearInterval(timer);
     if (poll) clearInterval(poll);
     box.hidden = true;
+    var track = document.getElementById("fo-progress-track");
+    track.className = "track";
+    track.querySelector(".bar").style.width = "";
+    document.getElementById("fo-progress-pct").textContent = "";
     var button = document.getElementById("fo-run-button");
     if (button && button.textContent === "Running…") { button.disabled = false; button.textContent = "Run"; }
     stop.disabled = false;

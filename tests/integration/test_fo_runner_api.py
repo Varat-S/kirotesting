@@ -768,19 +768,23 @@ def test_the_stop_button_stops_a_browser_run(client, db_session):
 def test_the_run_reports_its_steps_and_a_failure_names_its_step(client, db_session, monkeypatch):
     from app.services.fo import cancel, runner as fo_runner
 
-    steps = []
-    FinancialOverviewRunner(db_session, agent_backend=agent(), agent_mode="scripted",
-                            check_stop=steps.append).run_filing(FOLDER, "NVDA_STEPS")
+    steps, work = [], []
+    FinancialOverviewRunner(db_session, agent_backend=agent(), agent_mode="scripted", check_stop=steps.append,
+                            on_work=lambda d, t: work.append((d, t))).run_filing(FOLDER, "NVDA_STEPS")
     assert steps[:6] == ["reading the filing", "the going-concern pre-check", "the covenants pre-check",
                          "the acquisitions pre-check", "the prepaid pre-check", "scoring the measures"]
     assert "the ICR trigger T1 check" in steps and "the RCF/Debt trigger T2 check" in steps
     assert steps[-1] == "recording the run and writing its files"
+    # The progress bar: one report as each step starts, out of every step in the run, then one when it is done.
+    assert work == [(n, len(steps)) for n in range(len(steps) + 1)]
     # The registry the page polls: the step under way, its number, the steps done.
-    assert cancel.progress("tok-progress-1") == {"step": None, "number": 0, "done": [], "elapsed": 0}
+    assert cancel.progress("tok-progress-1") == {"step": None, "number": 0, "done": [], "work": None, "elapsed": 0}
     cancel.set_step("tok-progress-1", "reading the filing")
     cancel.set_step("tok-progress-1", "the going-concern pre-check")
+    cancel.set_work("tok-progress-1", 1, 27)
     got = client.get("/fo/run/progress", params={"run_token": "tok-progress-1"}).json()
     assert (got["step"], got["number"], got["done"]) == ("the going-concern pre-check", 2, ["reading the filing"])
+    assert got["work"] == {"done": 1, "total": 27}
     cancel.clear("tok-progress-1")
     # A fault in a trigger is reported with its step, not as an unreadable filing.
     monkeypatch.setattr(precheck, "live_backend", lambda: agent())

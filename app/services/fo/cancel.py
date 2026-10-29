@@ -22,7 +22,7 @@ TOKEN = re.compile(r"[A-Za-z0-9_-]{8,64}")
 KEEP_SECONDS = 3600
 
 _stops: dict[str, float] = {}
-_progress: dict[str, dict] = {}  # token -> {"started": t, "steps": [{"step": str, "at": t}]}
+_progress: dict[str, dict] = {}  # token -> {"started": t, "steps": [{"step": str, "at": t}], "work": {...}}
 _lock = threading.Lock()
 
 
@@ -72,15 +72,24 @@ def set_step(token: str | None, step: str) -> None:
         _progress.setdefault(token, {"started": now, "steps": []})["steps"].append({"step": step, "at": now})
 
 
+def set_work(token: str | None, done: int, total: int) -> None:
+    """Record how many of the run's steps are done, of how many (the runner's ``on_work``)."""
+    with _lock:
+        p = _progress.get(token or "")
+        if p is not None:
+            p["work"] = {"done": done, "total": total}
+
+
 def progress(token: str | None) -> dict:
     """Where the run with this token is: the step under way (``None`` before the first), its number, the steps
-    done and the seconds since the run started."""
+    done, ``work`` (steps done and in the run, for the progress bar; ``None`` before the first) and the seconds
+    since the run started."""
     with _lock:
         p = _progress.get(token or "")
         if not p:
-            return {"step": None, "number": 0, "done": [], "elapsed": 0}
+            return {"step": None, "number": 0, "done": [], "work": None, "elapsed": 0}
         steps = [s["step"] for s in p["steps"]]
-        return {"step": steps[-1], "number": len(steps), "done": steps[:-1],
+        return {"step": steps[-1], "number": len(steps), "done": steps[:-1], "work": p.get("work"),
                 "elapsed": round(time.time() - p["started"])}
 
 

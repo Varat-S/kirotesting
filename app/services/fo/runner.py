@@ -78,6 +78,8 @@ ENGINE_VERSION = "fo-engine-1.27.0"
 AWAITING_REVIEW = "awaiting_review"
 NOT_SCORED = "Not scored: going-concern fail"
 LIQUIDITY_NAME = "Liquidity and debt maturity"
+# Steps in build(): reading the filing, the four pre-checks, scoring and the twenty trigger checks.
+BUILD_STEPS = 1 + 4 + 1 + 20
 
 
 def gate_for(gc_status: str, covenant_status: str = "compliant", acquisitions: dict | None = None,
@@ -631,27 +633,35 @@ class FinancialOverviewRunner:
     ``precheck_transcript.json`` (exactly what it was sent and returned)."""
 
     def __init__(self, session: Session, *, output_root: str | Path | None = None,
-                 agent_backend=None, agent_mode: str = "live", check_stop=None) -> None:
+                 agent_backend=None, agent_mode: str = "live", check_stop=None, on_work=None) -> None:
         self.session = session
         self.output_root = Path(output_root) if output_root is not None else None
         self.agent_backend = agent_backend
         self.agent_mode = agent_mode if agent_backend is not None else "none"
         # Called between steps with the next step's name; raises to stop the run (``cancel.checker``).
         self.check_stop = check_stop or (lambda step: None)
+        # Called with (steps done, steps in the run) as each step starts, and once more when the run is done.
+        self.on_work = on_work or (lambda done, total: None)
+        self._done, self._total = 0, BUILD_STEPS
+
+    def _step(self, step: str) -> None:
+        self.check_stop(step)
+        self.on_work(self._done, self._total)
+        self._done += 1
 
     def build(self, folder: str, case_id: str | None = None) -> dict:
         """The scored overview for one filing folder (not recorded; the agent's model run is logged)."""
-        self.check_stop("reading the filing")
+        self._step("reading the filing")
         data, info = loader.load(folder)
         industry = classify_industry(data)
         checks = {}
         for check, run in (("going_concern", going_concern_precheck), ("covenants", covenant_precheck),
                            ("acquisitions", acquisitions_precheck), ("prepaid", prepaid_precheck)):
-            self.check_stop(f"the {check.replace('_', '-')} pre-check")
+            self._step(f"the {check.replace('_', '-')} pre-check")
             checks[check] = run(data, session=self.session, backend=self.agent_backend, mode=self.agent_mode,
                                 case_id=case_id)
         gc, cov, ad, pp = (checks[k] for k in ("going_concern", "covenants", "acquisitions", "prepaid"))
-        self.check_stop("scoring the measures")
+        self._step("scoring the measures")
         settings = scoring_settings({}, industry["industry_group"])
         base = build_financial_overview(data)
         dealt = apply_deal_adjustments(base, ad)
@@ -688,7 +698,7 @@ class FinancialOverviewRunner:
                                     (LIQUIDITY_T1_ID, liquidity_t1_trigger, apply_liquidity_t1),
                                     (LIQUIDITY_T2_ID, liquidity_t2_trigger, apply_liquidity_t2),
                                     (LIQUIDITY_T3_ID, liquidity_t3_trigger, apply_liquidity_t3)):
-            self.check_stop(f"the {CHECK_LABELS[key]} check")
+            self._step(f"the {CHECK_LABELS[key]} check")
             triggers[key] = trigger(data, metrics, gate, session=self.session, backend=self.agent_backend,
                                     mode=self.agent_mode, case_id=case_id,
                                     **({"t1": triggers.get(RCF_T1_ID)} if key == RCF_T2_ID else
@@ -773,13 +783,14 @@ class FinancialOverviewRunner:
 
     def run_filing(self, folder: str, case_id: str | None = None) -> FoRunResult:
         started = utcnow()
+        self._done, self._total = 0, (0 if case_id else 1) + BUILD_STEPS + 1
         if case_id:
             validate_case_id(case_id)
         else:
-            self.check_stop("reading the filing's cover page")
+            self._step("reading the filing's cover page")
             case_id = default_case_id(loader.load(folder)[0]["meta"], folder)
         payload = self.build(folder, case_id)
-        self.check_stop("recording the run and writing its files")
+        self._step("recording the run and writing its files")
         digest = content_hash(payload)
         run_id = f"fo-{uuid.uuid4().hex[:16]}"
         status, review = run_state(payload)
@@ -809,6 +820,7 @@ class FinancialOverviewRunner:
             paths = self.write_outputs(case_id, run_id, payload, {
                 "case_id": case_id, "run_id": run_id, "started_at": started.isoformat(), "content_hash": digest,
                 "run_status": status})
+        self.on_work(self._total, self._total)
         return FoRunResult(run_id, case_id, payload, digest, paths)
 
 

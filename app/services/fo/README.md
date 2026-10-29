@@ -37,7 +37,9 @@ stopped". A model call already in flight finishes first, and its `model_runs` ro
 memory, so this works in a single-process server. On the CLI, Ctrl+C stops a run.
 
 **Which step a run is on.** The same calls record each step as it starts. While a run is under way the progress panel
-polls `GET /fo/run/progress?run_token=…` every second and shows "Step N: …" with the steps done. When a run fails, the
+polls `GET /fo/run/progress?run_token=…` every second and shows "Step N: …" with the steps done, and its bar fills
+by the steps done out of the run's total (the runner's `on_work(done, total)`; the step list is fixed, so the total is
+known from the start). When a run fails, the
 page says which step it failed in ("Run failed during step 14: the ICR trigger T1 check") and lists the steps completed
 before it; an unexpected fault in a later step is reported as such, not as an unreadable filing (that message is kept
 for errors while reading the filing). On the CLI, `run-fo-case` prints each step to stderr (`[fo] step N: …`).
