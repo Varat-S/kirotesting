@@ -23,7 +23,7 @@ def mutate(payload, packet):
 
 
 def execute(session, path, package, corrections=None):
-    result=BusinessOverviewRunner(session,backend=ScriptedBoBackend(_script()),bo_roster='v3', m3_version='v2',
+    result=BusinessOverviewRunner(session,backend=ScriptedBoBackend(_script()),bo_roster='v3',
         data_root=path/'data',output_root=path/'out',m3_backend=ResponseBackend(mutate),
         m3_reviewer_backend=MixedReview(),m3_review_corrections=corrections).run_case(
         'CORRECT_M3',package=package,write_outputs=False)

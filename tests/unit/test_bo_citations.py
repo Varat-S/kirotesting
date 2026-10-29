@@ -15,10 +15,12 @@ from app.services.bo.citations import (
     repair_citations,
     unalias_answer,
 )
-from app.services.bo.comparison import run_single_pass
+import pytest
+
+from app.services.bo.comparison import prepare_specialist, run_single_pass
+from app.services.bo.roster_v3 import V3_SPEC_BY_CODE
 from app.services.llm.client import LLMBackend, LLMRawResult, LLMRequest
-from tests.integration.test_bo_m3_live_readiness import _live_valid_response
-from tests.unit.test_bo_comparison_failure_detail import m3_prep  # noqa: F401  (fixture)
+from tests import bo_helpers as h
 
 REAL = "28bfd61854487ea96e0b110a7458dd90ced656cd047d6f875675ae53f0979738"
 OTHER = "019827f37cce4816b8cae0e6a19f1b0a040a5d310ccef7ab5419e127cee981b9"
@@ -97,17 +99,32 @@ class _AliasEcho(LLMBackend):
     def generate(self, request: LLMRequest) -> LLMRawResult:
         self.seen.append(request.inputs)
         shown = [p["evidence_id"] for p in request.inputs["evidence"]]
-        response = _live_valid_response()
         # Cite the first passage exactly as shown to the model.
-        response["hypotheses"][0]["supporting_evidence_ids"] = [shown[0]]
+        response = {
+            "parameters": [], "checklist_responses": [], "retrieval_requests": [],
+            "hypotheses": [{
+                "hypothesis_id": "M1S2-H001", "claim": "Admissions were stable.",
+                "claim_type": "inference", "direction": "neutral",
+                "disposition": "qualified", "confidence": "medium",
+                "materiality": "medium", "display_priority": "on_demand",
+                "supporting_evidence_ids": [shown[0]], "evidence_quotes": [],
+                "missing_information": [],
+            }],
+        }
         return LLMRawResult(raw_response=json.dumps(response), model_id=self.model_id)
 
 
-def test_model_sees_aliases_and_validation_sees_real_ids(db_session, m3_prep):
+@pytest.fixture()
+def prep(db_session):
+    return prepare_specialist(db_session, case_id=h.CASE, evidence=h.evidence_snapshot(),
+                              metrics=h.metrics(), spec=V3_SPEC_BY_CODE["M1S2"])
+
+
+def test_model_sees_aliases_and_validation_sees_real_ids(db_session, prep):
     backend = _AliasEcho()
-    arm = run_single_pass(db_session, m3_prep, backend=backend)
+    arm = run_single_pass(db_session, prep, backend=backend)
     sent = json.dumps(backend.seen[0])
-    assert not any(e in sent for e in m3_prep.packet.evidence_ids)
+    assert not any(e in sent for e in prep.packet.evidence_ids)
     assert backend.seen[0]["evidence"][0]["evidence_id"] == "E01"
-    first = list(dict.fromkeys(m3_prep.packet.evidence_ids))[0]
+    first = list(dict.fromkeys(prep.packet.evidence_ids))[0]
     assert arm.parsed["hypotheses"][0]["supporting_evidence_ids"] == [first]

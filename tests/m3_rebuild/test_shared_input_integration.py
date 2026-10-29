@@ -144,7 +144,7 @@ class OfflinePacketExtractor:
 
 def _run(db_session, tmp_path, package):
     return BusinessOverviewRunner(
-        db_session, backend=ScriptedBoBackend(_script()), bo_roster="v3", m3_version="v2",
+        db_session, backend=ScriptedBoBackend(_script()), bo_roster="v3",
         data_root=tmp_path / "data", output_root=tmp_path / "out",
         m3_extractor=OfflinePacketExtractor(),
         m3_reviewer_backend=FixtureReviewerBackend(),

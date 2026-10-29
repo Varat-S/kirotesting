@@ -78,32 +78,7 @@
 {% macro list_or_none(items, none_text='None recorded.') %}
 {% if items %}<ul>{% for i in items %}<li>{{ i }}</li>{% endfor %}</ul>{% else %}<p class="notice">{{ none_text }}</p>{% endif %}
 {% endmacro %}
-{% macro m3_panel(m) %}
-<h4>Borrower identification</h4>
-<p class="small">{{ m.borrower.status|replace('_', ' ') }}{% if m.borrower.legal_name %}: {{ m.borrower.legal_name }}{% endif %}{% if m.borrower.limitation %}. {{ m.borrower.limitation }}{% endif %}</p>
-<h4>Legal entities</h4>
-{% if m.legal_entities %}
-<div class="tablewrap"><table><tr><th>Entity</th><th>Jurisdiction</th><th>Classification</th><th>Verification</th></tr>
-{% for e in m.legal_entities %}<tr><td>{{ e.legal_name }}{{ cites(e) }}</td><td>{{ e.jurisdiction or '' }}</td><td>{{ (e.classification or '')|replace('_', ' ') }}</td><td>{{ e.verification_status }}</td></tr>{% endfor %}
-</table></div>{% else %}<p class="notice">No legal entities were validated.</p>{% endif %}
-{% if m.ownership %}
-<h4>Ownership</h4>
-<div class="tablewrap"><table><tr><th>Parent</th><th>Subsidiary</th><th>Ownership</th><th>Confirmation</th></tr>
-{% for r in m.ownership %}<tr><td>{{ r.parent }}</td><td>{{ r.subsidiary }}</td><td class="num">{% if r.ownership_percentage is not none %}{{ r.ownership_percentage }}%{% else %}n/a{% endif %}</td><td>{{ r.confirmation_status }}</td></tr>{% endfor %}
-</table></div>{% endif %}
-<h4>Structural credit findings</h4>
-{% for f in m.structural_findings %}{{ finding(f) }}{% else %}<p class="notice">No material structural finding was validated.</p>{% endfor %}
-<h4>Senior management</h4>
-{% for o in m.management %}
-<div class="claim"><span class="tag {{ o.direction }}">{{ o.direction }}</span><span class="tag">{{ o.dimension|replace('_', ' ') }}</span><span class="tag">{{ o.materiality }} materiality</span>{% if o.attributed %}<span class="tag">management claim</span>{% endif %}<br>
-<strong>{{ o.legal_name }}, {{ o.role }}.</strong> {{ o.text }}{{ cites(o) }}
-{% if o.mechanism %}<div class="small">Credit mechanism: {{ o.mechanism }}</div>{% endif %}</div>
-{% else %}<p class="notice">No material management observation was validated.</p>{% endfor %}
-{% if m.governance_findings %}<h4>Governance screening</h4>{% for f in m.governance_findings %}{{ finding(f) }}{% endfor %}{% endif %}
-<h4>Information gaps</h4>
-{{ list_or_none(m.information_gaps) }}
-{% endmacro %}
-{% macro m3_v2_panel(m, diagram=none) %}
+{% macro m3_panel(m, diagram=none) %}
 <h4>Corporate structure <span class="tag">{{ m.structure.status|replace('_', ' ') }}</span></h4>
 {% if m.structure.status == 'complete' %}
 <p class="small">{{ m.structure.company }}: {{ m.structure.entities }} entities in the submitted structure.</p>
@@ -197,7 +172,7 @@
 <h3>{{ mod.code }} governed module output <span class="tag {{ mod.status }}">{{ mod.status }}</span></h3>
 {% if mod.failed_or_missing_agents %}<p class="small">Specialists not validated: {{ mod.failed_or_missing_agents|join(', ') }}.</p>{% endif %}
 {% if mod.unresolved_coverage_checks %}<p class="small">Unresolved coverage checks: {{ mod.unresolved_coverage_checks|join(', ') }}.</p>{% endif %}
-{% if mod.m3_v2 %}{{ m3_v2_panel(mod.m3_v2, m3_structure_image) }}{% elif mod.m3 %}{{ m3_panel(mod.m3) }}{% elif mod.code == 'M3' %}<p class="notice">The validated M3 corporate-structure and management assessment is unavailable for this run.</p>{% endif %}
+{% if mod.m3 %}{{ m3_panel(mod.m3, m3_structure_image) }}{% elif mod.code == 'M3' %}<p class="notice">The validated M3 corporate-structure and management assessment is unavailable for this run.</p>{% endif %}
 {% if mod.m4 %}{{ m4_panel(mod.m4) }}{% endif %}
 {% if mod.further_findings %}
 <h4>Further governed specialist findings</h4>

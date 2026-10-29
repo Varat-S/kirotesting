@@ -9,10 +9,8 @@ import pytest
 
 from app.models.orm import AgentRunRow, EvidencePacketRow, RiskScoreRow
 from app.services.bo.offline import ScriptedBoBackend
-from app.services.bo.demo_report import build_m3_governed_export
-from app.services.bo.m3_replay import replay_recorded_m3_assessment
 from app.services.bo.roster_v3 import V3_PRIMARY_AGENT_IDS, V3_SPECS
-from app.services.bo.runner import BusinessOverviewRunner
+from app.services.bo.runner import M3_PACKET_AGENT_ID, BusinessOverviewRunner
 from tests import bo_helpers as h
 
 
@@ -52,10 +50,6 @@ def _script():
             "M2", "M2-H001", "The industry is extensively regulated and exposed to "
             "legislative reimbursement reductions.", "extensive regulation",
             "We are subject to extensive regulation", direction="negative")]},
-        "m3_corporate_management": {"parameters": [], "hypotheses": [_fact(
-            "M3", "M3-H001", "The board oversees governance and succession planning.",
-            "executive officers", "The board of directors oversees governance and "
-            "succession planning", direction="positive")]},
         "m4_strategy_capital": {"parameters": [], "hypotheses": [_fact(
             "M4", "M4-H001", "Three hospital acquisitions were completed and their "
             "integration remains ongoing.", "Capital expenditures were focused",
@@ -88,8 +82,8 @@ def _script():
             "and execution exposures.", ["M1S1-H001", "M1S4-H001", "M2-H001", "M4-H001"],
             materiality="high"),
         "strengths": [h.claim(
-            "v3_strength", "strength", "M3", "The board oversees governance and "
-            "succession planning.", ["M3-H001"], claim_type="fact")],
+            "v3_strength", "strength", "M1S1", "Managed-care agreements set "
+            "negotiated rates.", ["M1S1-H001"], claim_type="fact")],
         "weaknesses": [h.claim(
             "v3_weakness", "weakness", "M1S4", "Labour scarcity pressures the "
             "operating model.", ["M1S4-H001"], claim_type="fact", materiality="high")],
@@ -125,8 +119,10 @@ def test_all_four_modules_agent6_synthesis_challenge_and_report(db_session,
     assert set(V3_PRIMARY_AGENT_IDS) <= executed
     assert "m1_resilience_integration" in executed
     assert {"business_orchestrator", "business_challenge"} <= executed
-    assert all(m["status"] == "complete"
-               for m in result.memo["module_conclusions"].values())
+    modules = result.memo["module_conclusions"]
+    assert all(m["status"] == "complete" for code, m in modules.items() if code != "M3")
+    # Module 3 is its own workflow: with no declared sources it records why it did not run.
+    assert modules["M3"]["workflow"] == "m3-rebuild" and modules["M3"]["status"] == "incomplete"
     assert result.handoff["module_conclusions"].keys() == {"M1", "M2", "M3", "M4"}
     assert result.handoff["compound_business_risks"]
     assert result.handoff["canonical_references"]["analysis_run_id"] == \
@@ -136,13 +132,13 @@ def test_all_four_modules_agent6_synthesis_challenge_and_report(db_session,
     packets = db_session.query(EvidencePacketRow).filter_by(
         analysis_run_id=result.analysis_run_id).all()
     assert {packet.agent_id for packet in packets} == {
-        spec.agent_id for spec in V3_SPECS}
+        spec.agent_id for spec in V3_SPECS} | {M3_PACKET_AGENT_ID}
     # Agent 6 is resealed after its validated component evidence is admitted.
     assert len(packets) >= len(V3_SPECS)
     assert db_session.query(RiskScoreRow).filter_by(
         analysis_run_id=result.analysis_run_id).count() == 0
     assert result.output_paths["business_overview.json"].exists()
-    assert len(backend.requests) >= 11
+    assert len(backend.requests) >= 10
 
 
 def test_m1_sections_list_validated_findings_the_narrative_skipped(db_session, tmp_path):
@@ -161,11 +157,9 @@ def test_m1_sections_list_validated_findings_the_narrative_skipped(db_session, t
                             if f["section"] == s["code"] and f["hypothesis_id"] not in used]
                 for s in sections}
     assert further == expected
-    # The scripted M1S2 finding is never in the narrative, so it must not be lost.
-    assert further["M1S2"] == ["M1S2-H001"]
-    stickiness = next(s for s in sections if s["code"] == "M1S2")
-    assert stickiness["notice"] is None
-    assert stickiness["further_findings"][0]["citations"]
+    # No validated M1 finding is lost: each is in the narrative or under its own section.
+    listed = {h for ids in further.values() for h in ids}
+    assert {f["hypothesis_id"] for f in memo["module_conclusions"]["M1"]["findings"]} <= used | listed
     html = render_memo_html(memo)
     assert "Admissions were stable during the year" in html
     assert all(s["notice"] is None for s in sections if s["further_findings"])
@@ -177,62 +171,6 @@ def test_m1_sections_list_validated_findings_the_narrative_skipped(db_session, t
                for s in _m1_sections_with_further_findings(legacy)["sections"]
                if s["code"].startswith("M1")}
     assert derived == further
-
-
-def test_validated_m3_extension_flows_through_module_conclusion_and_handoff(
-        db_session, tmp_path):
-    script = _script()
-    evidence = {"$evidence": "executive officers"}
-    script["m3_corporate_management"]["m3_assessment"] = {
-        "schema_version": "bo-m3-corporate-assessment-1.0",
-        "borrower_identification": {
-            "status": "unavailable", "entity_id": None, "evidence_ids": [],
-            "limitation": "No proposed borrowing entity is identified.",
-        },
-        "legal_entities": [{
-            "entity_id": "reporting-parent", "legal_name": "Example Parent",
-            "jurisdiction": None, "classification": "reporting_parent",
-            "identity_type": "legal_entity",
-            "verification_status": "verified", "evidence_ids": [evidence],
-            "materiality_reason": "Reporting entity relevant to governance.",
-        }],
-        "ownership_relationships": [], "cash_flow_locations": [],
-        "cash_transfer_relationships": [], "structural_credit_findings": [],
-        "management_assessments": [{
-            "observation_id": "MO1", "management_id": "board",
-            "legal_name": "Board of Directors", "role": "Board", "effective_from": None,
-            "effective_to": None, "dimension": "competence",
-            "evidence_basis": "reported_experience", "attribution": "company_reported",
-            "assurance_scope": None, "assurance_date": None,
-            "hypothesis": "The board oversees succession planning.",
-            "credit_mechanism": "Succession oversight may reduce leadership continuity risk.",
-            "supporting_evidence_ids": [evidence], "contradicting_evidence_ids": [],
-            "supporting_evidence_investigated": True,
-            "contradictory_evidence_investigated": True,
-            "disposition": "qualified", "admissibility": "qualified_narrative",
-            "confidence": "medium", "materiality": "medium", "missing_information": [],
-        }],
-        "governance_screening": [],
-        "information_gaps": ["Management outcomes are not disclosed."],
-        "downstream_dependencies": [],
-    }
-    result, _ = _run(db_session, tmp_path, script=script)
-    module = result.handoff["module_conclusions"]["M3"]
-    assert module["m3_assessment_status"] == "validated"
-    assert module["m3_assessment"]["schema_version"] == \
-        "bo-m3-corporate-assessment-1.0"
-    assert module["m3_assessment"]["model_proposal"]["legal_entities"]
-    export = build_m3_governed_export({
-        "meta": {"case_id": h.CASE, "analysis_run_id": result.analysis_run_id},
-        "module_conclusions": result.handoff["module_conclusions"],
-        "agents": [{"code": "M3", "status": "validated",
-                    "agent_run_ids": ["attempt-1"]}],
-    })
-    assert export["governed_assessment"] == module["m3_assessment"]
-    assert export["authoritative_source"] == "module_conclusions.M3.m3_assessment"
-    replay = replay_recorded_m3_assessment(db_session, result.analysis_run_id)
-    assert replay["model_called"] is False
-    assert replay["governed_assessment"] == module["m3_assessment"]
 
 
 def test_incomplete_module_blocks_agent6_and_remains_visible(db_session, tmp_path):
@@ -336,3 +274,20 @@ def test_additional_sector_package_executes_without_fo(db_session, tmp_path):
     assert result.handoff["case_id"] == "COASTAL_AIR_BO"
     assert all(module["status"] == "incomplete"
                for module in result.handoff["module_conclusions"].values())
+
+
+def test_finding_inserted_for_section_coverage_is_not_a_double_count(db_session, tmp_path):
+    # Live HCA runs: the model lists a negative finding only under weaknesses,
+    # coverage copies it into its own section's material risks, and the
+    # synthesis must not then be rejected for double counting that copy.
+    script = _script()
+    script["orchestrate"]["weaknesses"].append(h.claim(
+        "v3_weak_reg", "weakness", "M2", "The industry is extensively regulated and "
+        "exposed to legislative reimbursement reductions.", ["M2-H001"],
+        claim_type="fact", materiality="high"))
+    result, backend = _run(db_session, tmp_path, script=script)
+    history = result.audit["orchestrator"]["history"]
+    assert [item["status"] for item in history] == ["accepted"], history
+    assert backend.calls("orchestrate") == 1
+    risks = {c["claim_id"]: c for c in result.audit["orchestrator"]["claims"]}
+    assert "COV-M2-H001" in risks and "v3_weak_reg" in risks

@@ -77,7 +77,7 @@
     <select id="caseSelect">
       <option value="">— select a case —</option>
       {% for c in cases %}
-        <option value="{{ c.case_id }}">{{ c.label }}{% if c.kind == 'demo_fixture' %} (fixture){% endif %}</option>
+        <option value="{{ c.case_id }}">{{ c.label }}</option>
       {% endfor %}
     </select>
   </label>

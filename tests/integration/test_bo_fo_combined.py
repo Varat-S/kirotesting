@@ -266,8 +266,8 @@ def test_both_sections_run_concurrently_into_one_database(shared, tmp_path):
     assert out["bo"]["status"] == "completed" and out["fo"]["status"] == "completed", out
     assert out["bo"]["summary"]["case_id"] == out["fo"]["summary"]["case_id"] == "NVDA_FY2026"
     assert out["cutoff"] == "2026-05-13T04:00:00+00:00"  # the latest file (the proxy): every file admitted
-    # The BO run plus its standalone Module 3 run.
-    assert _count(db, "financial_overview_runs") == 1 and _count(db, "agentic_analysis_runs") == 2
+    # Module 3 is part of the BO run, not a separate analysis run.
+    assert _count(db, "financial_overview_runs") == 1 and _count(db, "agentic_analysis_runs") == 1
     assert _count(db, "model_runs") >= 5  # the FO's agent calls came across from its staging database
     assert not list((tmp_path / "data" / "staging").iterdir())
     assert ("fo", "completed") in seen and ("bo", "completed") in seen
@@ -334,7 +334,7 @@ def test_the_bo_runs_by_itself(shared, tmp_path):
     assert out["bo"]["status"] == "completed", out
     assert out["fo"] == {"status": "skipped", "reason": "Business Overview only run."}
     assert out["rms"] == {"status": "skipped", "reason": "Needs both sections; this run was Business Overview only."}
-    assert _count(db, "financial_overview_runs") == 0 and _count(db, "agentic_analysis_runs") == 2
+    assert _count(db, "financial_overview_runs") == 0 and _count(db, "agentic_analysis_runs") == 1
 
 
 def test_bo_validators_off_marks_an_ungoverned_draft_and_rms_notes_it(shared, tmp_path):
@@ -424,6 +424,7 @@ def test_cli_run_bo_fo(shared, tmp_path, capsys, monkeypatch):
     script = tmp_path / "agent.json"
     script.write_text(json.dumps(responses()), encoding="utf-8")
     monkeypatch.setattr(cli, "_live_backend", lambda: None)  # the BO's offline backend stands in for --live
+    monkeypatch.setattr(bo_fo, "m3_live_backend", lambda model=None: None)
     main([*common, "run-bo-fo", "NVDA_BOTH", "--filing", shared, "--live", "--fo-responses", str(script),
           "--amount", "750", "--tenor", "4"])
     out = json.loads(capsys.readouterr().out)
@@ -459,6 +460,7 @@ def client(root, tmp_path, monkeypatch):
     monkeypatch.setattr(precheck, "agent_available", lambda: (True, None))
     monkeypatch.setattr(fo_models, "available_models", lambda force=False: (["test-model"], None))
     monkeypatch.setattr(bo_fo, "bo_live_backend", lambda model=None: None)
+    monkeypatch.setattr(bo_fo, "m3_live_backend", lambda model=None: None)
     with TestClient(create_app()) as test_client:
         yield test_client
     deps._session_factory.cache_clear()

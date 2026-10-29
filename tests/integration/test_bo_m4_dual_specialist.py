@@ -58,6 +58,15 @@ def _script_with_debt(debt_output=None):
     return script
 
 
+def _quoting_script(debt_output=None):
+    """``_script_with_debt`` whose strength cites a finding the v3 run produces."""
+    script = _script_with_debt(debt_output)
+    script["orchestrate"]["strengths"] = [h.claim(
+        "v3_strength", "strength", "M1S2", "Admissions were stable during the year.",
+        ["M1S2-H001"], claim_type="fact")]
+    return script
+
+
 def _run(db_session, tmp_path, *, script=None, enable=True, enforce=True):
     backend = ScriptedBoBackend(script or _script_with_debt())
     runner = BusinessOverviewRunner(
@@ -174,3 +183,28 @@ def test_debt_unavailable_when_no_admitted_debt_evidence(db_session, tmp_path):
     assert m4["m4_debt_assessment"]["model_invoked"] is False
     assert backend.calls("m4_debt") == 0
     assert m4["status"] == "incomplete"
+
+
+def test_synthesis_may_quote_validated_debt_assessment_figures(db_session, tmp_path):
+    script = _quoting_script()
+    script["orchestrate"]["weaknesses"].append(h.claim(
+        "v3_buybacks", "weakness", "M4", "Share repurchases of $19920.0 million over "
+        "three years against total indebtedness of $46492.0 million.", ["M4-H001"],
+        materiality="high"))
+    result, _ = _run(db_session, tmp_path, script=script)
+    history = result.audit["orchestrator"]["history"]
+    assert not any("unquoted_number" in issue
+                   for item in history for issue in item["issues"]), history
+    assert history[-1]["status"] == "accepted"
+
+
+def test_debt_figures_are_not_quotable_when_validator_8_fails(db_session, tmp_path):
+    broken = copy.deepcopy(hca_module4_output())
+    broken["deliverable_1"]["senior_notes_schedule"][0]["principal_amount_m"] += 5000.0
+    script = _quoting_script(broken)
+    script["orchestrate"]["weaknesses"].append(h.claim(
+        "v3_buybacks", "weakness", "M4", "Share repurchases totalled $19920.0 million "
+        "over three years.", ["M4-H001"], materiality="high"))
+    result, _ = _run(db_session, tmp_path, script=script)
+    issues = result.audit["orchestrator"]["history"][0]["issues"]
+    assert any("unquoted_number" in i and "v3_buybacks" in i for i in issues)

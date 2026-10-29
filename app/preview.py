@@ -64,8 +64,6 @@ def main(argv=None) -> None:
     parser.add_argument("--database", type=Path, default=Path("data/browser_demo.db"))
     parser.add_argument("--output", type=Path, default=Path("output/browser_demo"))
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--m3-output", type=Path,
-                        help="Read-only standalone Module 3 saved-output preview; never runs a model.")
     parser.add_argument(
         "--seed-default",
         action="store_true",
@@ -77,14 +75,6 @@ def main(argv=None) -> None:
         help="Create full, missing-data and conflicting-source synthetic drafts.",
     )
     args = parser.parse_args(argv)
-    if args.m3_output:
-        if args.seed_demo or args.seed_default:
-            parser.error("--m3-output cannot seed or execute a pipeline.")
-        from app.api.m3_preview import create_m3_preview_app
-        import uvicorn
-
-        uvicorn.run(create_m3_preview_app(args.m3_output), host="127.0.0.1", port=args.port)
-        return
     args.database.parent.mkdir(parents=True, exist_ok=True)
     if args.seed_demo:
         seed_demo(args.database, args.output)

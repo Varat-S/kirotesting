@@ -43,7 +43,7 @@ from app.services.fo import loader as fo_loader
 
 MANIFEST = "bundle.json"
 COMPANY = "company.json"
-# Optional M3-v2 corporate-structure onboarding JSON kept with the filing; not SEC evidence.
+# Optional Module 3 corporate-structure onboarding JSON kept with the filing; not SEC evidence.
 M3_STRUCTURE = "m3_corporate_structure.json"
 PROXY_DIR = "proxy"
 # Saved beside a proxy statement: its form, accession, filing date and primary document.
@@ -269,7 +269,7 @@ def load_bundle(name: str) -> SecFilingBundle:
 
 
 def m3_structure_path(name: str) -> Path | None:
-    """The folder's M3-v2 corporate-structure JSON: ``m3_corporate_structure.json``, or else the one JSON
+    """The folder's Module 3 corporate-structure JSON: ``m3_corporate_structure.json``, or else the one JSON
     file declaring ``"document_type": "corporate_structure_onboarding"``. Two such files are an error."""
     folder = fo_loader.resolve_folder(name)
     if (folder / M3_STRUCTURE).is_file():

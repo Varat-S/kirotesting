@@ -57,54 +57,6 @@ def test_v3_memo_says_when_the_debt_specialist_did_not_run(db_session, tmp_path)
     assert "Debt and creditor priority" not in html
 
 
-def test_v3_memo_renders_the_validated_m3_assessment(db_session, tmp_path):
-    script = v3_script()
-    evidence = {"$evidence": "executive officers"}
-    script["m3_corporate_management"]["m3_assessment"] = {
-        "schema_version": "bo-m3-corporate-assessment-1.0",
-        "borrower_identification": {
-            "status": "unavailable", "entity_id": None, "evidence_ids": [],
-            "limitation": "No proposed borrowing entity is identified.",
-        },
-        "legal_entities": [{
-            "entity_id": "reporting-parent", "legal_name": "Example Parent",
-            "jurisdiction": None, "classification": "reporting_parent",
-            "identity_type": "legal_entity",
-            "verification_status": "verified", "evidence_ids": [evidence],
-            "materiality_reason": "Reporting entity relevant to governance.",
-        }],
-        "ownership_relationships": [], "cash_flow_locations": [],
-        "cash_transfer_relationships": [], "structural_credit_findings": [],
-        "management_assessments": [{
-            "observation_id": "MO1", "management_id": "board",
-            "legal_name": "Board of Directors", "role": "Board", "effective_from": None,
-            "effective_to": None, "dimension": "competence",
-            "evidence_basis": "reported_experience", "attribution": "company_reported",
-            "assurance_scope": None, "assurance_date": None,
-            "hypothesis": "The board oversees succession planning.",
-            "credit_mechanism": "Succession oversight may reduce leadership continuity risk.",
-            "supporting_evidence_ids": [evidence], "contradicting_evidence_ids": [],
-            "supporting_evidence_investigated": True,
-            "contradictory_evidence_investigated": True,
-            "disposition": "qualified", "admissibility": "qualified_narrative",
-            "confidence": "medium", "materiality": "medium", "missing_information": [],
-        }],
-        "governance_screening": [],
-        "information_gaps": ["Management outcomes are not disclosed."],
-        "downstream_dependencies": [],
-    }
-    result, _ = run_v3(db_session, tmp_path, script=script)
-    m3 = _modules(result)["M3"]["m3"]
-
-    assert [e["legal_name"] for e in m3["legal_entities"]] == ["Example Parent"]
-    assert m3["management"][0]["legal_name"] == "Board of Directors"
-    assert "Management outcomes are not disclosed." in m3["information_gaps"]
-    html = _html(result)
-    assert "Example Parent" in html
-    assert "The board oversees succession planning." in html
-    assert "Management outcomes are not disclosed." in html
-
-
 def test_v2_memo_has_no_module_panels(db_session, tmp_path):
     result, _ = h.run(db_session, tmp_path)
 

@@ -23,55 +23,53 @@ from app.schemas.artifact_manifest import (
 from app.services.registry import build_manifest, build_pipeline_graph
 from app.services.registry.graph import PIPELINE_GRAPH_VERSION
 from app.services.registry.json_render import render_json_html, render_json_pdf
+from tests.registry_fixture import CASE, MANAGEMENT_ID, STRUCTURE_ID, write_fixture
 
-DEMO = Path("examples/bo_m3/structural_credit/demo_output/hca_simulated")
+
+@pytest.fixture(scope="module")
+def m3_root(tmp_path_factory) -> Path:
+    """A recorded Module 3 run (output/m3_rebuild/<case>/<run>) in a temporary output root."""
+    root = tmp_path_factory.mktemp("registry")
+    write_fixture(root)
+    return root
 
 
-def _manifest() -> ArtifactManifest:
-    return build_manifest(
-        "examples/bo_m3/structural_credit/demo_output",
-        "hca_simulated",
-        m3_dirs=[str(DEMO)],
-        repo_root=".",
-    )
+@pytest.fixture()
+def manifest(m3_root) -> ArtifactManifest:
+    return build_manifest(m3_root, CASE, repo_root=m3_root)
+
+
+def _payload(m3_root: Path, manifest: ArtifactManifest, artifact_id: str) -> dict:
+    entry = manifest.by_id(artifact_id)
+    return json.loads((m3_root / entry.file_location).read_text(encoding="utf-8"))
 
 
 # -- manifest generation & integrity -----------------------------------------
 
-def test_manifest_indexes_recorded_m3_artifacts():
-    m = _manifest()
-    assert m.manifest_version == ARTIFACT_MANIFEST_VERSION
-    ids = {a.artifact_id for a in m.artifacts}
-    assert {"m3.corporate_structure", "m3.analysis", "m3.validator_7",
-            "m3.evaluation", "m3.run_manifest"} <= ids
+def test_manifest_indexes_recorded_m3_artifacts(manifest):
+    assert manifest.manifest_version == ARTIFACT_MANIFEST_VERSION
+    ids = {a.artifact_id for a in manifest.artifacts}
+    assert {STRUCTURE_ID, MANAGEMENT_ID} <= ids
 
 
-def test_manifest_content_hash_matches_canonical_payload():
-    m = _manifest()
-    entry = m.by_id("m3.analysis")
+def test_manifest_content_hash_matches_canonical_payload(m3_root, manifest):
+    entry = manifest.by_id(MANAGEMENT_ID)
     assert entry is not None and entry.file_location
-    payload = json.loads(Path(entry.file_location).read_text(encoding="utf-8"))
-    assert entry.content_hash == content_hash(payload)
+    assert entry.content_hash == content_hash(_payload(m3_root, manifest, MANAGEMENT_ID))
 
 
-def test_manifest_does_not_rewrite_source_files():
-    before = (DEMO / "m3_analysis.json").read_bytes()
-    _manifest()
-    after = (DEMO / "m3_analysis.json").read_bytes()
-    assert before == after  # read-only indexing never mutates artifacts
+def test_manifest_does_not_rewrite_source_files(m3_root):
+    files = sorted(p for p in (m3_root / "m3_rebuild").rglob("*") if p.is_file())
+    before = {p: p.read_bytes() for p in files}
+    build_manifest(m3_root, CASE, repo_root=m3_root)
+    assert before == {p: p.read_bytes() for p in files}  # read-only indexing never mutates artifacts
 
 
-def test_status_taxonomy_distinguishes_validated_and_qualified():
-    m = _manifest()
-    struct = m.by_id("m3.corporate_structure")
-    analysis = m.by_id("m3.analysis")
-    # This fixture's run requires human review -> every M3 artifact is QUALIFIED,
-    # NOT silently promoted to validated from file existence. The structure file
-    # (no self-governing completion metadata) inherits the run's authoritative
-    # qualified status rather than defaulting to validated.
-    assert struct.status == ExecutionStatus.QUALIFIED
-    assert analysis.status == ExecutionStatus.QUALIFIED
-    assert analysis.human_review_status.value == "pending"
+def test_status_follows_the_recorded_completion_not_file_existence(m3_root, manifest):
+    for artifact_id in (STRUCTURE_ID, MANAGEMENT_ID):
+        entry = manifest.by_id(artifact_id)
+        complete = _payload(m3_root, manifest, artifact_id)["completion_status"] == "complete"
+        assert (entry.status == ExecutionStatus.VALIDATED) is complete
 
 
 # -- missing / failed artifact handling ---------------------------------------
@@ -141,8 +139,8 @@ def test_explicit_validated_is_honoured(tmp_path):
     assert m.by_id("bo.memo.runV").status == ExecutionStatus.VALIDATED
 
 
-def test_counts_by_status_and_successful_filter():
-    m = _manifest()
+def test_counts_by_status_and_successful_filter(manifest):
+    m = manifest
     counts = m.counts_by_status()
     assert sum(counts.values()) == len(m.artifacts)
     # qualified counts as successful-with-caveat; absent does not.
@@ -183,12 +181,15 @@ def test_graph_edges_are_left_to_right_by_layer():
             assert layer[edge["source"]] <= layer[edge["target"]]
 
 
-def test_graph_picks_up_recorded_status():
-    g = build_pipeline_graph(_manifest())
-    m3 = next(n for n in g["nodes"] if n["id"] == "agent.m3_corporate_management")
-    v7 = next(n for n in g["nodes"] if n["id"] == "validator.v7")
-    assert m3["status"] in {"validated", "qualified"}
-    assert v7["status"] in {"validated", "qualified"}
+def test_graph_picks_up_recorded_status(manifest):
+    g = build_pipeline_graph(manifest)
+    nodes = {n["id"]: n for n in g["nodes"]}
+    # Module 3 is not an agent: its two component outputs appear from the recorded run.
+    assert "agent.m3_corporate_management" not in nodes and "validator.v7" not in nodes
+    for artifact_id in (STRUCTURE_ID, MANAGEMENT_ID):
+        node = nodes["artifact." + artifact_id]
+        assert node["group"] == "M3"
+        assert node["status"] == manifest.by_id(artifact_id).status.value
 
 
 # -- generic JSON rendering & PDF export --------------------------------------
@@ -210,8 +211,8 @@ def test_render_json_html_escapes_injection():
     assert "&lt;script&gt;" in html
 
 
-def test_pdf_export_is_deterministic_and_valid():
-    payload = json.loads((DEMO / "m3_analysis.json").read_text(encoding="utf-8"))
+def test_pdf_export_is_deterministic_and_valid(m3_root, manifest):
+    payload = _payload(m3_root, manifest, MANAGEMENT_ID)
     a = render_json_pdf(payload, title="M3", subtitle="s")
     b = render_json_pdf(payload, title="M3", subtitle="s")
     assert a[:4] == b"%PDF"
@@ -224,9 +225,9 @@ def test_pdf_export_handles_wide_lists_without_overflow():
     assert pdf[:4] == b"%PDF"          # falls back to per-item sections
 
 
-def test_pdf_known_schema_vs_generic():
-    known = json.loads((DEMO / "m3_analysis.json").read_text(encoding="utf-8"))
-    assert known.get("schema_version") == "bo-m3-analysis-1.0"
+def test_pdf_known_schema_vs_generic(m3_root, manifest):
+    known = _payload(m3_root, manifest, MANAGEMENT_ID)
+    assert known.get("schema_version") == "m3-management-assessment-3.0"
     assert render_json_pdf(known, title="known")[:4] == b"%PDF"
     assert render_json_pdf({"anything": [1, 2, 3]}, title="generic")[:4] == b"%PDF"
 

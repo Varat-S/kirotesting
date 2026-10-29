@@ -146,8 +146,14 @@ def assess_claims(payload,sources,reviewer=None,enforce=True):
             if key(name) not in key(text): raise ValueError('Roster quotation does not identify this executive')
         row=expected.get(key(name),{})
         roster_sid=row.get('source_id',payload['roster_source_id'])
-        roster_line=next((line for line in sources.pages.get(roster_sid,'').splitlines()
-                          if key(name) in key(line) and re.search(r'\b\d{2,3}\b',line)),payload['roster_quote'])
+        lines=sources.pages.get(roster_sid,'').splitlines()
+        roster_line=next((line for line in lines
+                          if key(name) in key(line) and re.search(r'\b\d{2,3}\b',line)),None)
+        if roster_line is None:
+            # An SEC HTML table stacks name, age and position on separate lines.
+            roster_line=next(('\n'.join(lines[j:j+3]) for j,line in enumerate(lines)
+                              if key(line)==key(name) and j+1<len(lines)
+                              and re.fullmatch(r'\d{2,3}',lines[j+1].strip())),payload['roster_quote'])
         identity=validator.admit(prefix+':identity','identity',name,name,
             [{'source_id':roster_sid,'quote':roster_line}],identity_check)
         def position_check(text,claim):
@@ -350,7 +356,9 @@ def assess_claims(payload,sources,reviewer=None,enforce=True):
     # Evidence completeness is separate from qualitative scope: no seven-person
     # credit-judgment quota. The review reports disclosed/principal/team coverage.
     missing=[r['name'] for k,r in expected.items() if k not in profile_map]
-    complete=not failed and not missing and overall_valid and all(j['outcome']=='accepted' for j in judgment_results) and sources.coverage_verifiable
+    # Rejected evidence claims and qualified judgments are excluded individually
+    # (recorded above); only lost coverage or an unsupported judgment is partial.
+    complete=not missing and overall_valid and all(j['outcome']!='unsupported' for j in judgment_results) and sources.coverage_verifiable
     result={'schema_version':'m3-management-assessment-3.0','artifact_type':'senior_management_assessment',
         'company':sources.company,'filing_period':sources.filing_period,
         'source':{'path':sources.source_path,'sha256':sources.sha256,'section_ids':sources.section_ids,'physical_pages':sources.physical_pages},

@@ -11,8 +11,6 @@ payload (so the reports cannot drift from the data):
                                 every selected specialist
 * ``validation_audit.html``     every rejected, qualified, corrected,
                                 reclassified or unresolved hypothesis
-* ``m3_governed_assessment.*``  Validator 7's authoritative post-validation
-                                M3 object and a deterministic audit view
 * ``benchmark.html``            old-versus-new comparison, when a baseline is given
 
 The executive summary quotes each validated hypothesis as the agent wrote it and
@@ -31,10 +29,8 @@ from sqlalchemy import select
 from app.core.hashing import canonical_json
 from app.models.orm import AgentRunRow, RetrievalAttemptRow
 from app.prompts.bo_prompts import SHARED_RULES, specialist_block
-from app.services.bo.m3_version import is_m3_v2_block
 
 PAYLOAD_VERSION = "bo-specialists-run-1.0"
-M3_EXPORT_VERSION = "bo-m3-governed-export-1.0"
 DEBT_RULE = "operating_pressure_to_debt_capacity"
 
 
@@ -365,14 +361,13 @@ def render_executive_summary(payload: dict[str, Any]) -> str:
         return lambda h: h["section"] in codes
 
     codes = {a["code"] for a in payload["agents"]}
-    if "M3" in codes:  # specialist-only v3: provisional findings, no synthesis claim
+    if "M1A6" in codes:  # specialist-only v3: provisional findings, no synthesis claim
         sections = [
             ("Pricing power", "", pick(agent("M1S1"))),
             ("Demand defensiveness and customer stickiness", "", pick(agent("M1S2", "M1S3"))),
             ("Cost resilience and competitive positioning", "",
              pick(agent("M1S4", "M1S5"))),
             ("Industry context and disclosed risks", "", pick(agent("M2"))),
-            ("Corporate structure, management and governance", "", pick(agent("M3"))),
             ("Strategy and capital stewardship",
              "Intentions and ordinary investment activity are not presented as "
              "demonstrated credit resilience.", pick(agent("M4"))),
@@ -454,73 +449,6 @@ def render_executive_summary(payload: dict[str, Any]) -> str:
     body.append("<p class='muted'>This summary contains no borrower rating and no "
                 "debt-capacity conclusion; those are outside the Business Overview.</p>")
     return _page("Business Overview: executive summary", payload, body)
-
-
-def build_m3_governed_export(payload: dict[str, Any]) -> dict[str, Any]:
-    """Pure view of the runner-owned M3 assessment; never re-validates it."""
-    module = (payload.get("module_conclusions") or {}).get("M3") or {}
-    assessment = module.get("m3_assessment")
-    m3_agent = next((a for a in payload.get("agents", []) if a.get("code") == "M3"), None)
-    status = module.get("m3_assessment_status") or "unavailable"
-    reason = None
-    if assessment is None:
-        reason = ("No authoritative post-validation M3 assessment exists. "
-                  + " ".join(module.get("missing_information") or [])).strip()
-    return {
-        "document": "m3_governed_assessment",
-        "version": M3_EXPORT_VERSION,
-        "case_id": payload.get("meta", {}).get("case_id"),
-        "analysis_run_id": payload.get("meta", {}).get("analysis_run_id"),
-        "latest_accepted_specialist_attempt": (
-            m3_agent["agent_run_ids"][-1]
-            if m3_agent and m3_agent.get("status") == "validated"
-            and m3_agent.get("agent_run_ids") else None),
-        "assessment_status": status,
-        "unavailable_reason": reason,
-        "authoritative_source": "module_conclusions.M3.m3_assessment",
-        "governed_assessment": assessment,
-    }
-
-
-def render_m3_governed_assessment(export: dict[str, Any],
-                                  payload: dict[str, Any]) -> str:
-    assessment = export.get("governed_assessment")
-    if assessment is None:
-        body = ["<h2>Governed assessment</h2><p><strong>unavailable</strong></p>",
-                f"<p>{_e(export.get('unavailable_reason') or 'No validated M3 output exists.')}</p>"]
-        return _page("M3 governed assessment", payload, body)
-
-    excluded = {"model_proposal", "validation_issues", "rejected_items"}
-    governed = {k: v for k, v in assessment.items() if k not in excluded}
-    borrower = assessment.get("borrower_identification") or {}
-    unresolved = {
-        "borrower_limitation": borrower.get("limitation"),
-        "information_gaps": assessment.get("information_gaps") or [],
-        "downstream_dependencies": assessment.get("downstream_dependencies") or [],
-    }
-
-    def json_block(value: Any) -> str:
-        if value in (None, [], {}):
-            return "<p class='muted'>None / unavailable.</p>"
-        return "<pre>" + _e(json.dumps(value, indent=2, ensure_ascii=False)) + "</pre>"
-
-    body = [
-        "<p>This is a deterministic view of the runner's authoritative "
-        "<code>module_conclusions.M3.m3_assessment</code>. It is not reconstructed "
-        "from the transcript.</p>",
-        "<table><tr><th>Assessment schema</th><td>" + _e(assessment.get("schema_version"))
-        + "</td></tr><tr><th>Validator</th><td>" + _e(assessment.get("validator_id"))
-        + " / " + _e(assessment.get("validator_version"))
-        + "</td></tr><tr><th>Latest accepted attempt</th><td>"
-        + _e(export.get("latest_accepted_specialist_attempt") or "unavailable")
-        + "</td></tr></table>",
-        "<h2>1. Model proposal</h2>", json_block(assessment.get("model_proposal")),
-        "<h2>2. Validator findings</h2>", json_block(assessment.get("validation_issues")),
-        "<h2>3. Final governed content</h2>", json_block(governed),
-        "<h2>4. Excluded material</h2>", json_block(assessment.get("rejected_items")),
-        "<h2>5. Unresolved information</h2>", json_block(unresolved),
-    ]
-    return _page("M3 governed assessment", payload, body)
 
 
 # --------------------------------------------------------------------------- #
@@ -1157,14 +1085,6 @@ def write_reports(payload: dict[str, Any], folder: Path, *, benchmark: str | Non
         ("specialists_comparison.html", render_comparison(payload)),
         ("validation_audit.html", render_audit(payload)),
     ]
-    # The governed-assessment view is M3-v1's Validator 7 record; M3-v2 has none.
-    if not is_m3_v2_block((payload.get("module_conclusions") or {}).get("M3")):
-        m3_export = build_m3_governed_export(payload)
-        paths["m3_governed_assessment.json"] = folder / "m3_governed_assessment.json"
-        paths["m3_governed_assessment.json"].write_text(
-            canonical_json(m3_export) + "\n", encoding="utf-8", newline="\n")
-        pages.append(("m3_governed_assessment.html",
-                      render_m3_governed_assessment(m3_export, payload)))
     for name, content in pages:
         paths[name] = folder / name
         paths[name].write_text(content, encoding="utf-8", newline="\n")

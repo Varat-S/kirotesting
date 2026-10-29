@@ -13,8 +13,10 @@ Layer order (left -> right), matching Business Overview V6:
   0 raw_input        Raw documents & structured data (single node)
   1 evidence         Evidence admission
   2 snapshot         CanonicalEvidenceSnapshot
-  3 modules          Module/agent branches: M1 (6 agents incl. Agent 6), M2, M3,
-                     M4 (two specialists), and FO (branches here, alongside BO)
+  3 modules          Module/agent branches: M1 (6 agents incl. Agent 6), M2,
+                     M4 (two specialists), and FO (branches here, alongside BO).
+                     M3 is not an agent: its two component outputs are added
+                     from the recorded run (layer 4)
   4 validators       Per-module validators + module outputs
   5 synthesis_v1     Cross-module synthesis (orchestrator)
   6 challenger       Challenger
@@ -116,12 +118,6 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                        prefer_artifact_type="agent_output"))
     edge("canonical_snapshot", "agent.m2_industry", "declared_dependency")
 
-    # Module 3 (authoritative for corporate/entity relationships).
-    nodes.append(_node("agent.m3_corporate_management", "M3 Corporate Structure & Management", 3,
-                       kind="agent", group="M3", producer_agent="m3_corporate_management",
-                       artifact_id="m3.analysis", prefer_artifact_type="agent_output"))
-    edge("canonical_snapshot", "agent.m3_corporate_management", "declared_dependency")
-
     # Module 4: TWO internal specialists, one governed Module 4 output.
     nodes.append(_node("agent.m4_strategy_capital", "M4 Strategy & Capital Allocation", 3,
                        kind="agent", group="M4", producer_agent="m4_strategy_capital",
@@ -132,9 +128,6 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                        prefer_artifact_type="module_output"))
     edge("canonical_snapshot", "agent.m4_strategy_capital", "declared_dependency")
     edge("canonical_snapshot", "agent.m4_debt_structure", "declared_dependency")
-    # M4 may *consume* verified M3 entity relationships when available (never as fact).
-    edge("agent.m3_corporate_management", "agent.m4_debt_structure",
-         "optional_verified_entity_relationships")
 
     # Financial Overview branches from the canonical evidence / financial facts
     # layer, alongside BO. Deterministic measures + pre-check + triggers.
@@ -152,8 +145,6 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     # artifact entries the indexer extracts from the recorded memo/audit so each
     # node resolves to its own persisted validation record.
     validators = [
-        ("validator.v7", "Validator 7 (M3 numeric binding)", "validator_7",
-         "agent.m3_corporate_management"),
         ("validator.v8_strategy", "Validator 8 (M4 strategy/capital)", "validator_8",
          "agent.m4_strategy_capital"),
         ("validator.v8_debt", "Validator 8 (M4 debt-structure reconciliation)",
@@ -178,7 +169,6 @@ def _skeleton() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     for agent_id, _ in _M1_AGENTS:
         edge(f"agent.{agent_id}", "synthesis_v1", "declared_dependency")
     edge("agent.m2_industry", "synthesis_v1", "declared_dependency")
-    edge("validator.v7", "synthesis_v1", "declared_dependency")
     edge("validator.v8_strategy", "synthesis_v1", "declared_dependency")
     edge("validator.v8_debt", "synthesis_v1", "declared_dependency")
 
@@ -270,11 +260,11 @@ def build_pipeline_graph(
     """
     nodes, edges = _skeleton()
     if manifest is not None:
-        # M3-v2 runs add their two component outputs beside the M3-v1 specialist node.
+        # Module 3 runs add their two component outputs.
         for entry in manifest.artifacts:
             if entry.artifact_id.startswith("m3.rebuild."):
                 node_id = "artifact." + entry.artifact_id
-                nodes.append(_node(node_id, "M3-v2 " + (
+                nodes.append(_node(node_id, "M3 " + (
                     "Corporate conversion" if entry.producer_agent == "m3_structure_conversion"
                     else "Management continuity"),
                     4, kind="output", group="M3", artifact_id=entry.artifact_id))

@@ -67,7 +67,7 @@ def test_registry_auto_discovery_graph_and_viewer(tmp_path,selected_filing):
     assert len(rebuild_nodes)==2 and all(n['status']=='validated' for n in rebuild_nodes)
     ids={n['id'] for n in graph['nodes']}
     assert all(e['source'] in ids and e['target'] in ids for e in graph['edges'])
-    assert any(c.case_id=='case' for c in discover_cases(tmp_path,repo_root=tmp_path,include_demo=False))
+    assert any(c.case_id=='case' for c in discover_cases(tmp_path,repo_root=tmp_path))
     assert len(manifest_for_case('case',tmp_path,repo_root=tmp_path).artifacts)==2
     raw,_,_=load_artifact_bytes('case',manifest.artifacts[0].artifact_id,tmp_path,repo_root=tmp_path)
     assert json.loads(raw)['companies']['HCA']['nodes']
@@ -164,7 +164,7 @@ def test_normal_bo_rejects_prebuilt_manifest_side_path(db_session,tmp_path,selec
     d,_=run(tmp_path,selected_filing)
     with pytest.raises(ValueError,match='private inputs are unsupported'):
         BusinessOverviewRunner(
-            db_session,backend=ScriptedBoBackend(_script()),bo_roster='v3', m3_version='v2',
+            db_session,backend=ScriptedBoBackend(_script()),bo_roster='v3',
             data_root=tmp_path/'data',output_root=tmp_path/'out',
             m3_manifest=d/'m3_rebuild_manifest.json',
         )
@@ -174,7 +174,7 @@ def test_downstream_so_preserves_independent_contracts(tmp_path,selected_filing)
     from tests.integration.test_structural_overview_thin_slice import _handoff,_rehash
     from app.services.structural_overview.adapter import adapt_business_overview
     d,m=run(tmp_path,selected_filing)
-    handoff=_handoff('v2');handoff['borrower_name']='HCA Healthcare, Inc.';handoff['as_of_date']='2024-12-31'
+    handoff=_handoff(True);handoff['borrower_name']='HCA Healthcare, Inc.';handoff['as_of_date']='2024-12-31'
     handoff['module_conclusions']['M3']=synthesis_block(d/'m3_rebuild_manifest.json')
     assessment=adapt_business_overview(_rehash(handoff))
     assert assessment.m3_rebuild['structure']['artifact']['companies']
@@ -183,10 +183,10 @@ def test_downstream_so_preserves_independent_contracts(tmp_path,selected_filing)
     assert assessment.corporate_structure.source_status=='unavailable'
 
 
-def test_main_cli_selects_replacement_and_preserves_legacy_defaults(tmp_path,capsys):
+def test_main_cli_runs_the_m3_workflow(tmp_path,capsys):
     from app.cli import main
     with pytest.raises(SystemExit) as ex:
-        main(['run-m3-v2','case','--structure',str(Path(__file__).resolve().parents[2]/'examples/m3_rebuild/hca_input.json'),'--output',str(tmp_path)])
+        main(['run-m3','case','--structure',str(Path(__file__).resolve().parents[2]/'examples/m3_rebuild/hca_input.json'),'--output',str(tmp_path)])
     assert ex.value.code==0
     assert 'm3-rebuild' in capsys.readouterr().out
     assert list((tmp_path/'m3_rebuild'/'case').glob('*/m3_rebuild_manifest.json'))

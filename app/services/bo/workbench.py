@@ -11,6 +11,7 @@ shown is exactly what was produced.
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from typing import Any
 
@@ -18,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.orm import AcceptedBusinessOverviewRow, AgenticAnalysisRun
-from app.services.bo.m3_version import is_m3_v2_block
+from app.services.bo.m3_rebuild import is_m3_block
 from app.services.bo.runner import ANALYSIS_MODE
 from app.services.pipeline.artifacts import verified_artifacts
 
@@ -79,31 +80,61 @@ def bo_artifact(session: Session, analysis_run_id: str, kind: str) -> dict[str, 
     raise BoRunNotFoundError(f"No recorded {kind} for run {analysis_run_id!r}.")
 
 
-def _m3_v2_agents(module: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """M3-v2's two components run outside the agent DAG; list them with their recorded outcome."""
-    if not is_m3_v2_block(module):
+def _m3_agents(module: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Module 3's two components run outside the agent DAG; list them with their recorded outcome."""
+    if not is_m3_block(module):
         return []
     rows = []
     for kind, agent_id, role in (
-            ("structure", "m3_structure_conversion", "M3-v2 corporate structure (deterministic)"),
-            ("management", "m3_management_assessment", "M3-v2 management + Validator 7")):
+            ("structure", "m3_structure_conversion", "M3 corporate structure (deterministic)"),
+            ("management", "m3_management_assessment", "M3 management + Validator 7")):
         component = (module.get("m3_rebuild") or {}).get(kind) or {}
         status, validation = component.get("status"), component.get("validation_status")
         artifact = component.get("artifact") or {}
         decisions = ((artifact.get("validation") or {}).get("validator_7") or {}).get("decisions") or []
         outcomes = Counter(d.get("outcome") for d in decisions)
+        excluded = sum(c.get("outcome") == "unsupported"
+                       for c in (artifact.get("validation") or {}).get("claim_results") or [])
+        notes = (["Validator 7: " + ", ".join(f"{n} {o}" for o, n in sorted(outcomes.items()))]
+                 if outcomes else []) + ([f"{excluded} evidence claims excluded"] if excluded else [])
         rows.append({
             "agent_id": agent_id, "code": "M3", "role": role,
             "status": ("validated" if status == "complete" and validation == "passed"
                        else "partially_validated" if status == "partial" else status),
-            "detail": component.get("error") or (
-                "Validator 7: " + ", ".join(f"{n} {o}" for o, n in sorted(outcomes.items()))
-                if outcomes else None),
+            "detail": component.get("error") or ("; ".join(notes) or None),
             "runs": 0 if status == "not_attempted" else 1,
             "validation_issues": [l for l in artifact.get("limitations") or []
                                   if "unsupported" in l or "withheld" in l],
         })
     return rows
+
+
+def _m4_debt_agent(module: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """The M4 debt specialist runs outside the agent DAG; list its recorded outcome."""
+    if not module or module.get("m4_debt_status") in (None, "not_run"):
+        return []
+    block = module.get("m4_debt_assessment") or {}
+    return [{
+        "agent_id": block.get("agent_id") or "module4_debt_structure_specialist",
+        "code": "M4", "role": "M4 debt structure + Validator 8",
+        "status": module["m4_debt_status"],
+        "detail": block.get("reason"),
+        "runs": 1 if block.get("model_invoked") else 0,
+        "validation_issues": list(block.get("validator_issues") or []),
+    }]
+
+
+def _agent_order(agent: dict[str, Any]) -> tuple[int, int]:
+    """Module-number order; the orchestrator then the challenger sort last."""
+    agent_id = agent["agent_id"]
+    match = re.match(r"m(?:odule)?(\d+)_", agent_id)
+    if match:
+        return int(match.group(1)), 0
+    if "orchestrator" in agent_id:
+        return 98, 0
+    if "challenge" in agent_id:
+        return 99, 0
+    return 97, 0
 
 
 def bo_view(session: Session, analysis_run_id: str) -> dict[str, Any]:
@@ -147,12 +178,14 @@ def bo_view(session: Session, analysis_run_id: str) -> dict[str, Any]:
             "human_verified_facts": snapshot["human_verified_fact_count"],
             "retrieval_gaps": len(audit["retrieval"]["gaps"]),
         },
-        "agents": [
+        "agents": sorted([
             *({"agent_id": a["agent_id"], "code": a["code"], "role": a["role"],
                "status": a["status"], "detail": a["detail"], "runs": len(a["runs"]),
                "validation_issues": a["validation_issues"]}
               for a in audit["agents"]),
-            *_m3_v2_agents((handoff.payload.get("module_conclusions") or {}).get("M3"))],
+            *_m3_agents((handoff.payload.get("module_conclusions") or {}).get("M3")),
+            *_m4_debt_agent((handoff.payload.get("module_conclusions") or {}).get("M4"))],
+            key=_agent_order),
         "execution": audit["execution"],
         "hypothesis_statistics": audit["hypotheses"]["statistics"],
         "accepted_hypotheses": [

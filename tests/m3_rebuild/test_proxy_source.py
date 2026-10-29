@@ -1,4 +1,4 @@
-"""M3-v2 management from a linked DEF 14A when the 10-K incorporates Item 10 by reference.
+"""Module 3 management from a linked DEF 14A when the 10-K incorporates Item 10 by reference.
 
 The passages mirror a real proxy layout (fictional names): a pipe-delimited officer table
 with a wrapped row, ``Name—Title`` biography headings, a CEO-director biography in the
@@ -10,7 +10,7 @@ from app.core.hashing import content_hash
 from app.services.bo.m3_rebuild.claims import assess_claims
 from app.services.bo.m3_rebuild.contracts import validate_management
 from app.services.bo.m3_rebuild.sources import proxy_bio_starts, sources_from_evidence_packet
-from app.services.bo.reporting import _m3_v2_view
+from app.services.bo.reporting import _m3_view
 from app.services.bo.runner import _linked_proxy
 
 from .review_fixtures import FixtureReviewer
@@ -127,7 +127,7 @@ def test_proxy_quote_from_another_biography_is_rejected():
     result = assess_claims(payload, sources, reviewer=FixtureReviewer())
     fact = next(c for c in result["validation"]["claim_results"] if c["claim_id"] == "f1")
     assert fact["outcome"] == "unsupported"
-    assert result["completion_status"] == "partial"
+    assert result["completion_status"] == "complete"
 
 
 @pytest.mark.parametrize("form,report_date", [("DEFA14A", "2025-12-31"), ("DEF 14A", "2024-12-31")])
@@ -212,8 +212,8 @@ def test_linked_proxy_matches_cik_and_filing_window():
 def test_memo_names_the_management_source():
     def view(path):
         artifact = {"source": {"path": path}}
-        return _m3_v2_view({"m3_rebuild": {"management": {"artifact": artifact}}})["management"]["source"]
+        return _m3_view({"m3_rebuild": {"management": {"artifact": artifact}}})["management"]["source"]
 
     assert view("sec-proxy:abc").startswith("DEF 14A proxy statement")
     assert view("sec-inline-xbrl:abc") == "Form 10-K"
-    assert _m3_v2_view({"m3_rebuild": {}})["management"]["source"] is None
+    assert _m3_view({"m3_rebuild": {}})["management"]["source"] is None

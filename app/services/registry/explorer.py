@@ -2,18 +2,14 @@
 one into a manifest + dataflow graph, with artifact-access safety.
 
 This layer is deliberately filesystem-driven so the Explorer is demonstrable
-with real recorded artifacts even when no live DB run exists. It resolves two
-kinds of sources:
-
-* the configured ``output_dir`` (``<output>/bo/<case>`` and ``<output>/fo/<case>``),
-* registered M3 standalone demo directories under ``examples/bo_m3`` — these are
-  real, byte-stable recorded fixtures shipped in the repo, clearly labelled as
-  deterministic demo data (never presented as a live HCA run).
+with real recorded artifacts even when no live DB run exists. It resolves the
+configured ``output_dir`` (``<output>/bo/<case>``, ``<output>/fo/<case>`` and
+``<output>/m3_rebuild/<case>``).
 
 Artifact access is validated: an artifact id must resolve to a file *inside* the
 configured roots, and resolved paths are confirmed not to escape them (no
 traversal, no following into unrelated directories). Nothing outside the output
-root or the registered demo directories can be read through the Explorer, so
+root can be read through the Explorer, so
 credentials, ``.env`` and unrelated files are never exposed.
 """
 
@@ -35,34 +31,19 @@ class CaseSource:
 
     case_id: str
     label: str
-    kind: str                      # "live" | "demo_fixture"
+    kind: str                      # "live"
     output_root: Path
     repo_root: Path
     m3_dirs: tuple[Path, ...] = ()
     note: Optional[str] = None
 
 
-# Recorded, byte-stable M3 demo fixtures shipped in the repo. These are labelled
-# "deterministic fixture" everywhere in the UI, never a live run.
-_M3_DEMO_ROOT = Path("examples/bo_m3/structural_credit/demo_output")
-_M3_DEMO_CASES = {
-    "hca_simulated": ("HCA (simulated M3 fixture)",
-                      "Deterministic recorded Module 3 fixture — NOT a live HCA run."),
-    "fictional_positive": ("Fictional — positive structure", "Deterministic M3 fixture."),
-    "fictional_negative": ("Fictional — negative structure", "Deterministic M3 fixture."),
-    "fictional_mixed": ("Fictional — mixed structure", "Deterministic M3 fixture."),
-    "fictional_unsupported_guarantee":
-        ("Fictional — unsupported guarantee", "Deterministic M3 fixture."),
-}
-
-
 def discover_cases(
     output_dir: str | Path,
     *,
     repo_root: str | Path = ".",
-    include_demo: bool = True,
 ) -> list[CaseSource]:
-    """List the cases the Explorer can render (live output + demo fixtures)."""
+    """List the cases the Explorer can render (recorded pipeline output)."""
     output_root = Path(output_dir)
     repo = Path(repo_root)
     found: dict[str, CaseSource] = {}
@@ -78,17 +59,6 @@ def discover_cases(
                         output_root=output_root, repo_root=repo,
                         note="Recorded output of a pipeline run.",
                     )
-
-    if include_demo:
-        for sub, (label, note) in _M3_DEMO_CASES.items():
-            demo_dir = repo / _M3_DEMO_ROOT / sub
-            if demo_dir.is_dir():
-                cid = f"demo:{sub}"
-                found[cid] = CaseSource(
-                    case_id=cid, label=label, kind="demo_fixture",
-                    output_root=repo / _M3_DEMO_ROOT, repo_root=repo,
-                    m3_dirs=(demo_dir,), note=note,
-                )
 
     return list(found.values())
 
@@ -108,9 +78,8 @@ def manifest_for_case(
     source = _source_for(case_id, output_dir, repo_root)
     if source is None:
         return None
-    lookup_id = source.m3_dirs[0].name if source.kind == "demo_fixture" else case_id
     return build_manifest(
-        source.output_root, lookup_id,
+        source.output_root, case_id,
         m3_dirs=list(source.m3_dirs), repo_root=source.repo_root,
     )
 

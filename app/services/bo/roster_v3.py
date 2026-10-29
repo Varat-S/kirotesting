@@ -3,8 +3,9 @@
 Pure data (no I/O, no LLM). Specification: ``BO_ARCHITECTURE_V3_SPEC.md``.
 
 * Module 1 has five primary specialists (M1S1-M1S5) and Agent 6 (M1A6).
-* Modules 2-4 are executable primary modules with the same sealed-evidence,
-  validation and audit boundary used by the Module 1 specialists.
+* Modules 2 and 4 are executable primary modules with the same sealed-evidence,
+  validation and audit boundary used by the Module 1 specialists. Module 3 is
+  not a roster agent: it runs as its own workflow (``bo/m3_rebuild``).
 * Parameter ids are those of v2. Every ownership move is listed in
   ``BO_V2_TO_V3_PARAMETER_OWNER``; v1/v2 remain buildable, so records written
   under earlier rosters keep their meaning.
@@ -165,48 +166,6 @@ M2_INDUSTRY = BoAgentSpec(
     indicator_groups=("growth", "payer", "geography", "segment"),
 )
 
-M3_CORPORATE_MANAGEMENT = BoAgentSpec(
-    "M3", "m3_corporate_management", "Corporate Structure & Senior Management",
-    ("management_quality_assessment", "key_person_dependency_assessment",
-     "governance_concern_assessment", "litigation_risk_assessment",
-     "material_event_assessment"),
-    (
-        _reuse("m3", "bo4.management"),
-        _reuse("m3", "bo5.litigation"),
-        _q("m3.structure", "support", r"subsidiar", r"corporate structure",
-           r"operating entities", r"joint venture", r"ownership", r"parent company"),
-        _q("m3.named_legal_entities", "support", r"significant subsidiaries?",
-           r"name of (?:the )?subsidiar", r"Exhibit 21", r"jurisdiction",
-           r"incorporat(?:ed|ion)",
-           r"\b(?:Inc\.?|LLC|L\.L\.C\.|L\.P\.|Ltd\.?|Corporation)\b"),
-        _q("m3.cash_location", "support", r"cash (?:flow|generated|held)",
-           r"operating cash", r"distributions?", r"dividends?", r"cash pool"),
-        _q("m3.cash_transfer_limits", "contradict", r"restricted payments?",
-           r"distribution restrictions?", r"noncontrolling interests?",
-           r"intercompany", r"joint venture agreements?", r"prior-ranking"),
-        _q("m3.management_outcomes", "support", r"executive officers?",
-           r"appointed", r"resigned", r"succession", r"operating performance",
-           r"remediation", r"restatement"),
-        _q("m3.executive_biographies", "support", r"information about our executive officers",
-           r"was appointed", r"has served as", r"previously served", r"joined (?:the company|[A-Z])", k=4),
-        _q("m3.executive_transitions", "contradict", r"resign(?:ed|ation)", r"abrupt departure",
-           r"externally recruit", r"recruited externally", r"succession", r"leadership changes?", k=3),
-        _q("m3.executive_experience", "mitigant", r"prior to joining", r"before joining",
-           r"joined .{0,40} in (?:19|20)\d{2}", r"previously served as", r"internal promotion", k=3),
-        _q("m3.management_limits", "contradict", r"succession", r"key person",
-           r"material weakness", r"internal control", r"misconduct",
-           r"enforcement", r"conflicts? of interest"),
-        _q("m3.related_parties", "contradict", r"related part(?:y|ies)",
-           r"controlling shareholder", r"affiliate transactions?", r"conflict"),
-        _reuse("m3", "bo5.forecast_vs_existing"),
-    ), module="M3", dimension="corporate_structure_management",
-    validator_id="validator_7", indicator_groups=("segment",),
-    task_sections=("corporate_and_cash_flow_structure",
-                   "senior_management_stability_continuity_experience",
-                   "governance_and_related_party_screening",
-                   "litigation_and_material_events"),
-)
-
 M4_STRATEGY_CAPITAL = BoAgentSpec(
     "M4", "m4_strategy_capital", "Strategy & Capital Allocation / Financial Stewardship",
     ("acquisition_strategy_assessment", "integration_risk_assessment",
@@ -230,7 +189,7 @@ M4_STRATEGY_CAPITAL = BoAgentSpec(
 V3_SPECS: tuple[BoAgentSpec, ...] = (
     M1_REVENUE_QUALITY, M1_CUSTOMER_STICKINESS, M1_PRICING_POWER,
     M1_OPERATING_MODEL, M1_COMPETITIVE_DURABILITY, M1_AGENT_6,
-    M2_INDUSTRY, M3_CORPORATE_MANAGEMENT, M4_STRATEGY_CAPITAL,
+    M2_INDUSTRY, M4_STRATEGY_CAPITAL,
 )
 V3_SPEC_BY_AGENT = {s.agent_id: s for s in V3_SPECS}
 V3_SPEC_BY_CODE = {s.code: s for s in V3_SPECS}
@@ -238,17 +197,10 @@ V3_M1_PRIMARY_IDS = tuple(s.agent_id for s in V3_SPECS[:5])
 V3_AGENT_6_ID = M1_AGENT_6.agent_id
 V3_EXECUTABLE_IDS = tuple(s.agent_id for s in V3_SPECS if s.executable)
 V3_NOT_EXECUTED_IDS = tuple(s.agent_id for s in V3_SPECS if not s.executable)
-# The eight primary analytical agents, each with its own validator.
-V3_MODULE_AGENT_IDS = tuple(s.agent_id for s in V3_SPECS if s.module in {"M2", "M3", "M4"})
+# The primary analytical agents, each with its own validator.
+V3_MODULE_AGENT_IDS = tuple(s.agent_id for s in V3_SPECS if s.module in {"M2", "M4"})
 V3_PRIMARY_AGENT_IDS = (*V3_M1_PRIMARY_IDS, *V3_MODULE_AGENT_IDS)
 
-
-def v3_specs(m3_version: str = "v1") -> tuple[BoAgentSpec, ...]:
-    """The v3 specialists a run schedules. M3-v2 replaces the M3 specialist with
-    the rebuild workflow, so it is left out of the roster."""
-    if m3_version == "v2":
-        return tuple(s for s in V3_SPECS if s.code != "M3")
-    return V3_SPECS
 
 # parameter_id -> (v2 owner, v3 owner). Every v2 Business parameter appears once.
 BO_V2_TO_V3_PARAMETER_OWNER: dict[str, tuple[str, str]] = {
@@ -259,11 +211,6 @@ BO_V2_TO_V3_PARAMETER_OWNER: dict[str, tuple[str, str]] = {
 
 # Review notes that travel with the ownership decision (17 Oct 2026).
 OWNERSHIP_NOTES: dict[str, str] = {
-    "litigation_risk_assessment":
-        "Owned by M3 subject to a future review of legal-risk ownership.",
-    "material_event_assessment":
-        "M3 assesses company-specific events; cross-module synthesis assesses "
-        "their wider interactions.",
     "external_event_exposure_assessment":
         "Owned by M2. Geographic context may inform the M1 specialists but "
         "does not by itself establish demand defensiveness or customer stickiness.",
@@ -279,6 +226,7 @@ V3_CHECK_ASSIGNMENT: dict[str, tuple[str, ...]] = {
     "hc.contract_rates_vs_volumes": ("M1S1", "M1S2"),
     "hc.unit_revenue_vs_pricing": ("M1S1",),
     "hc.revenue_realisation": ("M1S1",),
+    # Module 3 runs as its own workflow, not as a roster agent: no specialist answers this.
     "hc.operating_entities": ("M3",),
     "hc.workforce": ("M1S4",),
     "hc.geography": ("M2",),

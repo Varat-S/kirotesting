@@ -1,25 +1,15 @@
-# Module 3, version 2 (M3-v2)
+# Module 3
 
-The Business Overview has two Module 3 implementations, picked per run:
+Module 3 is the rebuild in `app/services/bo/m3_rebuild`. It is the only Module 3 of
+the Business Overview: the earlier `m3_corporate_management` specialist and its
+original Validator 7 were removed, and there is no per-run choice. Standalone
+command: `run-m3`.
 
-* **M3-v1** (default): the `m3_corporate_management` specialist run through
-  `m3_standalone.run_m3` and governed by the original Validator 7
-  (`m3_validation`). Standalone command: `run-m3`.
-* **M3-v2** (this document): the rebuild in `app/services/bo/m3_rebuild`.
-  Standalone command: `run-m3-v2`.
-
-Pick one with `--m3-version v1|v2` on `run-bo-case`, `run-bo-specialists` and
-`run-bo-fo`, the "Business Overview Module 3" field on the `/run` page, or
-`BusinessOverviewRunner(..., m3_version="v2")`. The switch lives in
-`app/services/bo/m3_version.py`. M3-v1 may be dropped later.
-
-M3-v2 has two independent components: deterministic corporate-structure
-conversion and filing-only senior-management assessment. Under M3-v2 the M3-v1
-specialist is not scheduled. Its `m3_validator_7` uses the compact claim-level
-contract and is separate from M3-v1's Validator 7. The
-[retirement report](m3-retirement-report.md) and
-[deletion/dependency inventory](m3-retirement-inventory.json) describe the
-rebuild branch, where M3-v1 was removed; in this codebase M3-v1 is kept.
+Module 3 has two independent components: deterministic corporate-structure
+conversion and filing-only senior-management assessment. It is not a roster agent;
+the roster has no Module 3 specialist. Its `m3_validator_7` uses the compact
+claim-level contract. The [retirement report](m3-retirement-report.md) and
+[deletion/dependency inventory](m3-retirement-inventory.json) record the removal.
 
 ## Run either component
 
@@ -29,7 +19,7 @@ worktree uses the existing environment without changing the original checkout:
 ```sh
 cd /Users/Daniel/.codex/worktrees/m3-rebuild/kirotesting-evaluation
 M3_PYTHON='/Users/Daniel/Desktop/SMU/AI in Fin/Credit Memo Testing/kirotesting-evaluation/.venv/bin/python'
-"$M3_PYTHON" -m app.cli run-m3-v2 HCA_2024 \
+"$M3_PYTHON" -m app.cli run-m3 HCA_2024 \
   --structure examples/m3_rebuild/hca_input.json --output output
 ```
 
@@ -38,7 +28,7 @@ source IDs. The old hca_2024_extraction.json is a historical facts-only fixture
 and cannot be passed as a current specialist assessment:
 
 ```sh
-"$M3_PYTHON" -m app.cli run-m3-v2 HCA_2024 \
+"$M3_PYTHON" -m app.cli run-m3 HCA_2024 \
   --filing '/Users/Daniel/Desktop/SMU/EYE Investment/ISP 1/HCA 10K/10K 2024.pdf' \
   --company 'HCA Healthcare' --filing-period 2024-12-31 \
   --extraction /path/to/saved-v2-response.json --output output
@@ -48,12 +38,11 @@ Supply both sets of arguments to run both components. Each run has its own folde
 and deterministic manifest in `output/m3_rebuild/<case>/<run>`. Existing folders
 are not overwritten. A valid sibling artifact is saved even if the other fails.
 `python -m app.services.bo.m3_rebuild` remains the independent Python entry point.
-`run-m3-v2` passes its arguments to this two-component workflow; `run-m3` is
-M3-v1's standalone command.
+`run-m3` passes its arguments to this two-component workflow.
 
 ## Normal orchestration
 
-Every `BusinessOverviewRunner` run with `m3_version="v2"` executes this workflow. Inputs can be
+Every v3-roster `BusinessOverviewRunner` run executes this workflow. Inputs can be
 supplied in the normal source package's optional `module3` object:
 
 ```json
@@ -85,7 +74,7 @@ Both pass through the same AgentRuntime/LLMClient schema and audit boundary.
 The `m3_extractor` adapter is for existing offline fixture tests; the old direct
 Vertex extractor rejects execution. A selected filing alone never silently
 triggers paid execution. Missing or rejected sources produce precise independent
-component statuses; they never invoke the M3-v1 specialist. `run-m3-v2` remains the
+component statuses; there is no Module 3 specialist to fall back to. `run-m3` remains the
 standalone interface for running either component. Previously generated rebuild
 manifests remain readable through the compact `synthesis_block`/registry artifact
 adapters, but are historical artifacts and cannot bypass admission in a new normal
@@ -150,8 +139,7 @@ revision. FO and M4 numerical rules remain unchanged.
 ## Registry and offline checks
 
 The existing registry/viewer discovers independent runs and records their status,
-source identity and payload hashes. M3-v1 output directories are still indexed
-as M3-v1 artifacts and are never reinterpreted as M3-v2. Current artifacts
+source identity and payload hashes. Current artifacts
 remain consumable through their existing versioned manifest and file contracts.
 
 ```sh

@@ -124,7 +124,7 @@ class ArtifactEntry(BaseModel):
 
     # Producer identity: module/agent/validator that owns this artifact.
     producer_module: Optional[str] = None       # e.g. "BO", "M3", "M4", "FO"
-    producer_agent: Optional[str] = None         # e.g. "m3_corporate_management"
+    producer_agent: Optional[str] = None         # e.g. "m3_management_assessment"
     producer_validator: Optional[str] = None     # e.g. "validator_7"
 
     # Schema governance.

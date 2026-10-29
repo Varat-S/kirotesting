@@ -277,6 +277,20 @@ def test_invalid_orchestrator_answer_produces_no_conclusion(
     assert escalations and all(e.mandatory for e in escalations)
 
 
+def test_claim_may_quote_any_run_indicator(db_session, tmp_path):
+    # Live HCA runs: a claim states a deterministic ratio the orchestrator was
+    # given, though its own hypotheses do not carry that value.
+    script = good_script()
+    answer = orchestrator_answer()
+    answer["key_drivers"].append(claim(
+        "bo_d9", "driver", "BO2", "Capital expenditure was 5% of revenue.",
+        ["BO2-H002"]))
+    script["orchestrate"] = answer
+    result, backend = run(db_session, tmp_path, script)
+    assert result.conclusion_status == "accepted"
+    assert backend.calls("orchestrate") == 1
+
+
 def test_overstated_claim_type_is_lowered_not_rejected(db_session, tmp_path):
     script = good_script()
     answer = orchestrator_answer()

@@ -240,6 +240,36 @@ def fill_missing_qualifications(
     return changes
 
 
+def governed_module_figures(
+    module_conclusions: dict[str, dict[str, Any]],
+) -> tuple[list[float], list[str]]:
+    """Numbers and text of validated module outputs the orchestrator is shown.
+
+    Only the M4 debt assessment that passed Validator 8 qualifies; its figures
+    are deterministic-checked, so quoting them is not calculating.
+    """
+    m4 = module_conclusions.get("M4") or {}
+    if m4.get("m4_debt_status") != "validated":
+        return [], []
+    values: list[float] = []
+    texts: list[str] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for child in node.values():
+                walk(child)
+        elif isinstance(node, list):
+            for child in node:
+                walk(child)
+        elif isinstance(node, str):
+            texts.append(node)
+        elif isinstance(node, (int, float)) and not isinstance(node, bool):
+            values.append(float(node))
+
+    walk((m4.get("m4_debt_assessment") or {}).get("assessment"))
+    return values, texts
+
+
 def validate_orchestrator_output(
     parsed: dict[str, Any],
     *,
@@ -247,9 +277,19 @@ def validate_orchestrator_output(
     reconciliation: Reconciliation,
     indicators: IndicatorSet,
     accepted_parameter_ids: set[str],
+    inserted_claim_ids: set[str] = frozenset(),
+    governed_values: list[float] = (),
+    governed_quotes: list[str] = (),
 ) -> list[str]:
-    """Return the issues that prevent the answer becoming a TopicConclusion."""
+    """Return the issues that prevent the answer becoming a TopicConclusion.
+
+    ``inserted_claim_ids`` are claims ``include_all_validated_findings`` added;
+    they repeat a finding in its own section by design, so they are not the
+    model double counting. ``governed_values`` and ``governed_quotes`` are
+    run-wide deterministic figures the orchestrator was given and may quote.
+    """
     known = indicators.known_values()
+    run_values = [*known.values(), *governed_values]
     admitted = {e for h in hypotheses.values() for e in h.evidence_ids()}
     outcome = DeterministicValidator(
         admitted_evidence_ids=admitted, known_parameters=known,
@@ -297,7 +337,9 @@ def validate_orchestrator_output(
                     f"unaccepted_parameter: claim {cid!r} references {prid!r}.")
         quoted = [float(q["value"]) for q in claim.get("quoted_values") or []
                   if isinstance(q, dict) and isinstance(q.get("value"), (int, float))]
+        quoted += run_values
         quotes = [q["quote"] for h in used for q in h.evidence_quotes]
+        quotes += governed_quotes
         quoted += [float(q["value"]) for h in used for q in h.quoted_values
                    if isinstance(q.get("value"), (int, float))]
         for token in sorted(set(unbound_numbers(claim.get("text") or "", quoted, quotes))):
@@ -323,6 +365,8 @@ def validate_orchestrator_output(
     adverse = [c for key, c in claims if key in ("weaknesses", "material_risks")]
     for i, a in enumerate(adverse):
         for b in adverse[i + 1:]:
+            if {a.get("claim_id"), b.get("claim_id")} & inserted_claim_ids:
+                continue
             ha, hb = set(a.get("hypothesis_ids") or []), set(b.get("hypothesis_ids") or [])
             ga = {reconciliation.group_of(h) for h in ha} - {None}
             gb = {reconciliation.group_of(h) for h in hb} - {None}
@@ -333,6 +377,8 @@ def validate_orchestrator_output(
     texts = [(c.get("claim_id"), c.get("text") or "") for _, c in claims]
     for i, (ida, ta) in enumerate(texts):
         for idb, tb in texts[i + 1:]:
+            if {ida, idb} & inserted_claim_ids:
+                continue
             if similarity(ta, tb) >= 0.8:
                 issues.append(
                     f"duplicate_claim_text: claims {ida!r} and {idb!r} repeat "

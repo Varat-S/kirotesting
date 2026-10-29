@@ -346,10 +346,12 @@ def _claims(parsed: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _matches(number: float, quoted: list[float]) -> bool:
-    """A displayed number may be a quoted value rounded, or its percentage form."""
+    """A displayed number may be a quoted value as is, rounded, or its percentage form."""
     for value in quoted:
         for candidate in (value, value * 100.0):
-            for digits in range(0, 5):
+            if abs(candidate - number) <= 1e-9:
+                return True
+            for digits in range(0, 7):
                 if abs(round(candidate, digits) - number) <= 1e-9:
                     return True
     return False

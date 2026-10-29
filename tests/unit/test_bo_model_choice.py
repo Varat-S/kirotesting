@@ -41,8 +41,9 @@ def test_web_run_passes_the_picked_model_to_both_sections(monkeypatch):
     monkeypatch.setattr(bo_fo, "sqlite_path", lambda url: "db")
     monkeypatch.setattr(bo_fo, "plan", lambda folder, case_id, cutoff: {"case_id": "C", "cutoff": None})
     monkeypatch.setattr(bo_fo, "bo_live_backend", lambda model=None: seen.setdefault("bo", model))
+    monkeypatch.setattr(bo_fo, "m3_live_backend", lambda model=None: None)
     monkeypatch.setattr(precheck, "live_backend", lambda model=None: seen.setdefault("fo", model))
     monkeypatch.setattr(bo_fo.jobs, "start", lambda **kwargs: "job1")
     api.start_run(folder="f", case_id="", model="gemini-3.6-flash",
-                  cutoff="", requested_amount_m="", tenor_years="", m3_version="v1", sections="both", bo_validators="on")
+                  cutoff="", requested_amount_m="", tenor_years="", sections="both", bo_validators="on")
     assert seen == {"bo": "gemini-3.6-flash", "fo": "gemini-3.6-flash"}

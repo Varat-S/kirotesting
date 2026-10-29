@@ -33,7 +33,7 @@ def test_employer_attribution_defect_and_historical_external_promotion(role,hist
         assert {o['direction'] for o in r['observations']}=={'positive','negative'}
         assert not any(o['rule']=='B' for o in r['observations'])
     else:
-        assert r['completion_status']=='partial' and r['profiles']
+        assert r['completion_status']=='complete' and r['profiles']
         assert r['coverage']['missing']==[]
         assert r['profiles'][0]['prior_internal_roles']==[]
         rejected=[c for c in r['validation']['claim_results'] if c['kind']=='prior_internal_role' and c['outcome']=='unsupported']
@@ -64,12 +64,10 @@ def test_wrapped_roster_position_is_reconciled():
     assert s2.coverage_verifiable and s2.expected_roster[0]['position']=='Chief Executive Officer'
 
 
-def test_m3_v2_registry_cannot_invoke_old_specialist():
-    # M3-v1 remains selectable (m3_version="v1"); under M3-v2 its specialist is never scheduled.
+def test_registry_cannot_invoke_old_specialist():
     from app.services.agents.registry import default_registry
     for roster in ['v1','v2','v3']:
-        assert 'm3_corporate_management' not in {a.agent_id for a in default_registry(roster, m3_version='v2').all()}
-    assert 'm3_corporate_management' in {a.agent_id for a in default_registry('v3').all()}
+        assert 'm3_corporate_management' not in {a.agent_id for a in default_registry(roster).all()}
 
 
 def test_default_orchestration_has_two_missing_statuses_without_old_call(db_session,tmp_path):
@@ -78,7 +76,7 @@ def test_default_orchestration_has_two_missing_statuses_without_old_call(db_sess
     from tests.integration.test_bo_v3_complete import _script
     from tests import bo_helpers as h
     backend=ScriptedBoBackend(_script())
-    result=BusinessOverviewRunner(db_session,backend=backend,bo_roster='v3', m3_version='v2',data_root=tmp_path/'data',output_root=tmp_path/'out').run_prepared(h.CASE,h.evidence_snapshot(),h.metrics(),write_outputs=False)
+    result=BusinessOverviewRunner(db_session,backend=backend,bo_roster='v3',data_root=tmp_path/'data',output_root=tmp_path/'out').run_prepared(h.CASE,h.evidence_snapshot(),h.metrics(),write_outputs=False)
     block=result.handoff['module_conclusions']['M3']
     assert {c['status'] for c in block['m3_rebuild'].values()}=={'not_attempted'}
     assert block['status']=='incomplete' and backend.calls('m3_corporate_management')==0
@@ -108,7 +106,7 @@ def partial_memo_with_new_observations():
     from .responses import with_credit_response
     p=with_credit_response(p,recent_names=['Alex Sample','Jamie Example'])
     r=assess_management(p,s)
-    b=_handoff('v2');b.update(borrower_name=s.company,as_of_date=s.filing_period)
+    b=_handoff(True);b.update(borrower_name=s.company,as_of_date=s.filing_period)
     corp=fixture();corp['company_name']=s.company
     block=unavailable_block(b['case_id'])
     block['m3_rebuild']={'structure':dict(status='complete',validation_status='passed',artifact=convert_structure(corp),error=None),
@@ -182,14 +180,3 @@ def test_failed_management_request_consumes_budget_and_prevents_retry(tmp_path):
     with pytest.raises(RuntimeError,match='exhausted'):guard.generate(request)
     assert len(calls)==1
     assert json.loads((tmp_path/'ledger.json').read_text(encoding="utf-8"))['state']=='failed'
-
-
-def test_m3_v1_output_directories_are_still_indexed_as_m3_v1(tmp_path):
-    # M3-v1 is still supported, so its standalone outputs keep their own artifact entries.
-    from app.services.registry.indexer import build_manifest
-    directory=tmp_path/'m3_v1';directory.mkdir()
-    (directory/'m3_analysis.json').write_text('{"schema_version":"bo-m3-analysis-1.0"}',encoding='utf-8')
-    manifest=build_manifest(tmp_path,'case',m3_dirs=[directory],repo_root=tmp_path)
-    analysis=next(a for a in manifest.artifacts if a.artifact_id=='m3.analysis')
-    assert analysis.producer_agent=='m3_corporate_management'
-    assert analysis.validation_status!='unsupported_legacy'

@@ -20,6 +20,7 @@ from sqlalchemy import create_engine, inspect, text
 
 from app.main import create_app
 from app.models.base import init_db
+from tests.registry_fixture import CASE as M3_CASE, MANAGEMENT_ID, write_fixture
 from app.services.registry.explorer import (
     ArtifactAccessError,
     discover_cases,
@@ -27,7 +28,8 @@ from app.services.registry.explorer import (
     load_artifact,
 )
 
-DEMO_CASE = "demo:hca_simulated"
+DEMO_CASE = M3_CASE
+M3_ARTIFACT = MANAGEMENT_ID
 
 
 def _q(s: str) -> str:
@@ -35,7 +37,15 @@ def _q(s: str) -> str:
 
 
 @pytest.fixture()
-def client() -> TestClient:
+def output_root(tmp_path, monkeypatch):
+    """A recorded Module 3 run in a temporary output root, served by the Explorer."""
+    write_fixture(tmp_path)
+    monkeypatch.setattr("app.api.pipeline_explorer._output_dir", lambda: str(tmp_path))
+    return tmp_path
+
+
+@pytest.fixture()
+def client(output_root) -> TestClient:
     return TestClient(create_app())
 
 
@@ -56,11 +66,11 @@ def test_graph_and_manifest_for_demo_case(client):
     assert m.status_code == 200
     body = m.json()
     assert body["manifest_version"] == "artifact-manifest-1.0"
-    assert any(a["artifact_id"] == "m3.analysis" for a in body["artifacts"])
+    assert any(a["artifact_id"] == M3_ARTIFACT for a in body["artifacts"])
 
 
 def test_node_inspector_download_and_pdf(client):
-    base = f"/pipeline/{_q(DEMO_CASE)}/node/{_q('m3.analysis')}"
+    base = f"/pipeline/{_q(DEMO_CASE)}/node/{_q(M3_ARTIFACT)}"
     node = client.get(base)
     assert node.status_code == 200
     assert node.json()["status"] in {"validated", "qualified"}
@@ -76,17 +86,17 @@ def test_node_inspector_download_and_pdf(client):
     assert pdf.status_code == 200 and pdf.content[:4] == b"%PDF"
 
 
-def test_download_json_matches_recorded_artifact(client):
-    payload, _ = load_artifact(DEMO_CASE, "m3.analysis", "output", repo_root=".")
+def test_download_json_matches_recorded_artifact(client, output_root):
+    payload, _ = load_artifact(DEMO_CASE, M3_ARTIFACT, str(output_root), repo_root=str(output_root))
     dl = client.get(
-        f"/pipeline/{_q(DEMO_CASE)}/node/{_q('m3.analysis')}/download.json")
+        f"/pipeline/{_q(DEMO_CASE)}/node/{_q(M3_ARTIFACT)}/download.json")
     assert json.loads(dl.content) == payload  # export == actual recorded artifact
 
 
 def test_unknown_case_and_node_are_404(client):
     assert client.get(f"/pipeline/{_q('nope')}/manifest.json").status_code == 404
     assert client.get(
-        f"/pipeline/{_q(DEMO_CASE)}/node/{_q('m3.bogus')}").status_code == 404
+        f"/pipeline/{_q(DEMO_CASE)}/node/{_q('m3.rebuild.bogus')}").status_code == 404
 
 
 def test_illustration_graph_when_no_run(client):
@@ -98,19 +108,17 @@ def test_illustration_graph_when_no_run(client):
 
 # -- Artifact-access safety ---------------------------------------------------
 
-def test_access_is_bounded_to_known_artifacts():
+def test_access_is_bounded_to_known_artifacts(output_root):
     # A valid-looking id that is not in the manifest is rejected.
     with pytest.raises(ArtifactAccessError):
-        load_artifact(DEMO_CASE, "../../../../etc/passwd", "output", repo_root=".")
+        load_artifact(DEMO_CASE, "../../../../etc/passwd", str(output_root), repo_root=str(output_root))
 
 
-def test_absent_node_reports_reason_not_mock():
-    # Craft an id that maps to an absent entry via a synthetic empty case.
-    info = inspect_node(DEMO_CASE, "m3.run_manifest", "output", repo_root=".")
-    assert info["payload_available"] is True  # this one exists
-    # A missing-file artifact in a fresh case returns a reason, no payload.
-    cases = discover_cases("output", repo_root=".")
-    assert any(c.kind == "demo_fixture" for c in cases)
+def test_recorded_node_reports_its_payload_and_cases_are_discovered(output_root):
+    info = inspect_node(DEMO_CASE, M3_ARTIFACT, str(output_root), repo_root=str(output_root))
+    assert info["payload_available"] is True
+    cases = discover_cases(output_root, repo_root=output_root)
+    assert [c.case_id for c in cases] == [DEMO_CASE] and cases[0].kind == "live"
 
 
 # -- Shared CLI commands coexist after integration ----------------------------

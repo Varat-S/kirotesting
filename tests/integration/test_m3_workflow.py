@@ -1,4 +1,4 @@
-"""The per-run choice between M3-v1 (default) and M3-v2 (the rebuild)."""
+"""Module 3: the rebuild workflow is the only Module 3 of a Business Overview run."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import pytest
 
 from app.services import bo_fo
 from app.services.agents.registry import default_registry
-from app.services.bo.m3_version import check_m3_version, is_m3_v2_block
+from app.services.bo.m3_rebuild import is_m3_block
 from app.services.bo.offline import ScriptedBoBackend
 from app.services.bo.runner import BusinessOverviewRunner
 from tests import bo_helpers as h
@@ -22,41 +22,25 @@ from tests.integration.test_bo_v3_complete import _script
 from tests.integration.test_fo_runner_api import FOLDER, NVDA, agent
 
 
-def test_version_defaults_to_v1_and_rejects_unknown_values():
-    assert check_m3_version(None) == "v1"
-    assert check_m3_version("v2") == "v2"
-    with pytest.raises(ValueError, match="m3_version"):
-        check_m3_version("v3")
-    with pytest.raises(ValueError, match="m3_version"):
-        BusinessOverviewRunner(None, m3_version="v3")
+def test_the_roster_has_no_corporate_management_specialist_and_no_version_choice():
+    assert "m3_corporate_management" not in {a.agent_id for a in default_registry("v3").all()}
+    with pytest.raises(TypeError):
+        BusinessOverviewRunner(None, m3_version="v2")
 
 
-def test_only_m3_v1_schedules_the_corporate_management_specialist():
-    v1 = default_registry("v3")
-    v2 = default_registry("v3", m3_version="v2")
-    assert "m3_corporate_management" in {a.agent_id for a in v1.all()}
-    assert "m3_corporate_management" not in {a.agent_id for a in v2.all()}
-    assert v1.version != v2.version
-
-
-@pytest.mark.parametrize("m3_version", ["v1", "v2"])
-def test_each_version_produces_its_own_m3_module_and_records_the_choice(
-        db_session, tmp_path, m3_version):
+def test_a_run_produces_the_m3_workflow_block_without_a_specialist_call(db_session, tmp_path):
     backend = ScriptedBoBackend(_script())
     result = BusinessOverviewRunner(
-        db_session, backend=backend, bo_roster="v3", m3_version=m3_version,
+        db_session, backend=backend, bo_roster="v3",
         data_root=tmp_path / "data", output_root=tmp_path / "out",
     ).run_prepared(h.CASE, h.evidence_snapshot(), h.metrics(), write_outputs=False)
     m3 = result.handoff["module_conclusions"]["M3"]
-    assert is_m3_v2_block(m3) is (m3_version == "v2")
-    if m3_version == "v1":
-        assert "m3_assessment_status" in m3
-    else:
-        assert backend.calls("m3_corporate_management") == 0
-        assert {c["status"] for c in m3["m3_rebuild"].values()} == {"not_attempted"}
+    assert is_m3_block(m3)
+    assert backend.calls("m3_corporate_management") == 0
+    assert {c["status"] for c in m3["m3_rebuild"].values()} == {"not_attempted"}
 
 
-def test_so_assessment_from_m3_v1_keeps_its_1_1_shape():
+def test_so_assessment_without_an_m3_block_keeps_its_1_1_shape():
     from app.services.structural_overview.adapter import adapt_business_overview
     from tests.integration.test_structural_overview_thin_slice import _handoff
 
@@ -70,33 +54,31 @@ def test_so_assessment_from_m3_v1_keeps_its_1_1_shape():
              "category": "continuity", "text": "t", "citation_ids": []}]})
 
 
-def test_combined_run_passes_m3_v2_to_the_bo(root, tmp_path):
+def test_combined_run_runs_the_m3_workflow(root, tmp_path):
     shutil.copytree(NVDA, root / FOLDER)
     db = _database(tmp_path)
     out = bo_fo.run_bo_fo(database=db, folder=FOLDER, bo_backend=None, fo_backend=agent(),
-                          fo_mode="scripted", output_root=tmp_path / "out", m3_version="v2")
+                          fo_mode="scripted", output_root=tmp_path / "out")
     assert out["bo"]["status"] == "completed", out
-    assert out["bo"]["summary"]["m3_version"] == "v2"
-    # No M3-v1 standalone run: only the BO's own analysis run is recorded.
+    # Only the BO's own analysis run is recorded; Module 3 is not a separate specialist run.
     assert _count(db, "agentic_analysis_runs") == 1
 
 
-def test_run_page_offers_both_versions_and_starts_m3_v2(client, root, monkeypatch):
+def test_run_page_offers_no_m3_choice_and_starts_the_m3_workflow(client, root, monkeypatch):
     shutil.copytree(NVDA, root / FOLDER)
     picked = []
-    monkeypatch.setattr(bo_fo, "m3_v2_live_backend", lambda model=None: picked.append(model) or object())
+    monkeypatch.setattr(bo_fo, "m3_live_backend", lambda model=None: picked.append(model) or object())
     started_with = {}
     monkeypatch.setattr(bo_fo.jobs, "start", lambda **kw: started_with.update(kw) or "job1")
     page = client.get("/run").text
-    assert 'name="m3_version"' in page and 'value="v1" selected' in page and 'value="v2"' in page
-    response = client.post("/run/start", data={"folder": FOLDER, "m3_version": "v2"},
-                           follow_redirects=False)
+    assert 'name="m3_version"' not in page
+    response = client.post("/run/start", data={"folder": FOLDER}, follow_redirects=False)
     assert response.status_code == 303
-    assert started_with["m3_version"] == "v2" and started_with["m3_backend"] is not None
+    assert "m3_version" not in started_with and started_with["m3_backend"] is not None
     assert picked
 
 
-# --- M3-v2 from a filing folder: the SEC HTML 10-K and m3_corporate_structure.json ---------------------
+# --- Module 3 from a filing folder: the SEC HTML 10-K and m3_corporate_structure.json ---------------------
 
 def _html_packet(passages, *, form="10-K", report_date="2025-12-31"):
     from app.core.hashing import content_hash
@@ -137,6 +119,38 @@ def test_html_10k_executive_roster_is_discovered_without_pages_or_cover():
     assert all("Item 1A" not in found.pages[s] for s in found.section_ids)
 
 
+def test_html_10k_identity_cites_the_stacked_roster_row_not_the_heading():
+    from app.services.bo.m3_rebuild.claims import assess_claims
+    from app.services.bo.m3_rebuild.sources import sources_from_evidence_packet
+    from tests.m3_rebuild.review_fixtures import FixtureReviewer
+    from tests.m3_rebuild.test_proxy_source import executive
+
+    found = sources_from_evidence_packet(_html_packet(HTML_ROSTER))
+    roster_sid, bio_sid = found.section_ids[:2]
+    heading = "As of February 1, 2026, our executive officers were as follows:"
+    payload = {
+        "roster_date": "2026-02-01", "roster_source_id": roster_sid, "roster_quote": heading,
+        "executives": [
+            executive("Alex Sample", "Chief Executive Officer", "2019",
+                      [(bio_sid, "Alex Sample has served as Chief Executive Officer since 2019.")]),
+            executive("Jamie Example", "Chief Financial Officer", "2021",
+                      [(bio_sid, "Jamie Example has served as Chief Financial Officer since 2021.")]),
+        ],
+        "facts": [],
+        "judgments": [{"judgment_id": "j1", "executive": "Jamie Example", "signal": "neutral",
+                       "category": "transition", "supporting_fact_ids": ["executive:2:appointment"],
+                       "explanation": "A 2021 appointment.", "uncertainties": []}],
+        "overall_assessment": {"signal": "neutral", "explanation": "Neutral.", "supporting_judgment_ids": ["j1"],
+                               "uncertainties": [], "missing_information": []},
+    }
+    result = assess_claims(payload, found, reviewer=FixtureReviewer())
+    identities = {c["executive"]: c for c in result["validation"]["claim_results"] if c["kind"] == "identity"
+                  and c["claim_id"].endswith(":identity")}
+    assert {n: c["outcome"] for n, c in identities.items()} == {"Alex Sample": "accepted", "Jamie Example": "accepted"}
+    assert identities["Alex Sample"]["citations"][0]["original_source_text"] == "Alex Sample\n58\nChief Executive Officer"
+    assert result["coverage"]["missing"] == []
+
+
 @pytest.mark.parametrize("form,report_date", [("10-Q", "2025-12-31"), ("10-K", "2024-12-31")])
 def test_html_10k_metadata_must_match_the_case(form, report_date):
     from app.services.bo.m3_rebuild.sources import sources_from_evidence_packet
@@ -151,13 +165,13 @@ def test_package_accepts_the_sec_10k_as_the_management_source(root):
 
     shutil.copytree(NVDA, root / FOLDER)
     bundle = shared_filing.load_bundle(FOLDER)
-    package = bo_fo.m3_v2_package(
+    package = bo_fo.m3_package(
         sec_source_package(bundle, cutoff=max(f.available_at for f in bundle.files)), FOLDER, bundle)
     assert package.module3.management_source == bundle.primary_document
     assert package.module3.corporate_source is None  # no JSON in the folder
 
 
-def test_combined_m3_v2_run_takes_the_corporate_structure_from_the_folder(root, tmp_path):
+def test_combined_m3_run_takes_the_corporate_structure_from_the_folder(root, tmp_path):
     import json
     from pathlib import Path
 
@@ -171,16 +185,16 @@ def test_combined_m3_v2_run_takes_the_corporate_structure_from_the_folder(root, 
     structure["company_name"] = "NVIDIA Corporation"
     (folder / shared_filing.M3_STRUCTURE).write_text(json.dumps(structure), encoding="utf-8")
     out = bo_fo.run_bo_fo(database=_database(tmp_path), folder=FOLDER, bo_backend=None, fo_backend=agent(),
-                          fo_mode="scripted", output_root=tmp_path / "out", m3_version="v2")
+                          fo_mode="scripted", output_root=tmp_path / "out")
     assert out["bo"]["status"] == "completed", out
     manifest = next((tmp_path / "out" / "m3_rebuild").glob("*/*/m3_rebuild_manifest.json"))
     recorded = json.loads(manifest.read_text(encoding="utf-8"))
     assert recorded["components"]["structure"]["status"] == "complete"
     assert recorded["evidence_context"]["corporate_document_id"]
     assert recorded["evidence_context"]["management_document_id"]  # the folder's 10-K was selected
-    # The BO page shows the M3-v2 section with the submitted structure's simulation notice.
+    # The BO page shows the M3 section with the submitted structure's simulation notice.
     page = next((tmp_path / "out" / "bo").glob("*/*/business_overview.html")).read_text(encoding="utf-8")
-    assert "Corporate Structure &amp; Senior Management (M3-v2)" in page
+    assert "Corporate Structure &amp; Senior Management" in page
     assert "SIMULATED EDUCATIONAL EXAMPLE" in page
     # The structure is drawn as the corporate-structure diagram, not the plain-text tree.
     assert 'class="structure-diagram"><img src="data:image/svg+xml;base64,' in page
@@ -227,19 +241,21 @@ def test_corporate_structure_json_is_found_by_its_declared_type(root):
     assert shared_filing.m3_structure_path(FOLDER).name == shared_filing.M3_STRUCTURE  # the fixed name wins
 
 
-def test_workbench_lists_m3_v2_components_with_their_validation_outcome():
+def test_workbench_lists_m3_components_with_their_validation_outcome():
     from app.services.bo.m3_rebuild.adapters import unavailable_block
-    from app.services.bo.workbench import _m3_v2_agents
+    from app.services.bo.workbench import _m3_agents
 
     block = unavailable_block("C")
     block["m3_rebuild"]["structure"].update(status="complete", validation_status="passed", error=None)
     block["m3_rebuild"]["management"].update(
         status="partial", validation_status="partial", error=None,
         artifact={"validation": {"validator_7": {"decisions": [
-            {"outcome": "accepted"}, {"outcome": "accepted"}, {"outcome": "unsupported"}]}},
+            {"outcome": "accepted"}, {"outcome": "accepted"}, {"outcome": "unsupported"}]},
+            "claim_results": [{"outcome": "accepted"}, {"outcome": "unsupported"}]},
             "limitations": ["1 individual evidence claims are unsupported."]})
-    rows = {r["agent_id"]: r for r in _m3_v2_agents(block)}
+    rows = {r["agent_id"]: r for r in _m3_agents(block)}
     assert rows["m3_structure_conversion"]["status"] == "validated"
     assert rows["m3_management_assessment"]["status"] == "partially_validated"
-    assert rows["m3_management_assessment"]["detail"] == "Validator 7: 2 accepted, 1 unsupported"
-    assert _m3_v2_agents({"module": "M3", "m3_assessment_status": "validated"}) == []  # M3-v1 is unchanged
+    assert rows["m3_management_assessment"]["detail"] == (
+        "Validator 7: 2 accepted, 1 unsupported; 1 evidence claims excluded")
+    assert _m3_agents({"module": "M3", "m3_assessment_status": "validated"}) == []  # not a Module 3 workflow block

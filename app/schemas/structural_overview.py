@@ -19,12 +19,12 @@ from app.schemas.bo_m3 import (
 
 
 ASSESSMENT_SCHEMA_VERSION = "structural-overview-assessment-1.1"
-# 1.2 is produced from an M3-v2 (m3-rebuild) handoff: it adds the two typed M3
+# 1.2 is produced from a handoff carrying the Module 3 (m3-rebuild) block: it adds the two typed M3
 # components and the management claims derived from them. 1.1 output is unchanged.
-ASSESSMENT_SCHEMA_VERSION_M3_V2 = "structural-overview-assessment-1.2"
+ASSESSMENT_SCHEMA_VERSION_M3 = "structural-overview-assessment-1.2"
 ASSESSMENT_SCHEMA_VERSIONS = Literal[
     "structural-overview-assessment-1.1", "structural-overview-assessment-1.2"]
-M3_V2_FIELDS = ("m3_rebuild", "management_claims")
+M3_FIELDS = ("m3_rebuild", "management_claims")
 TRANSFORMATION_VERSION = "bo-to-so-1.1"
 
 
@@ -181,7 +181,7 @@ class AssessmentAuditMetadata(StrictModel):
 
 
 class ManagementMemoClaim(StrictModel):
-    """One M3-v2 management observation, carried to the memo with its citations."""
+    """One Module 3 management observation, carried to the memo with its citations."""
 
     observation_id: str
     executive: str | None
@@ -200,7 +200,7 @@ class StructuralOverviewAssessment(StrictModel):
     borrower: BorrowerContext
     business_assessment: BusinessAssessment
     corporate_structure: CorporateStructureAssessment
-    # M3-v2 only (schema 1.2); never serialized on a 1.1 assessment.
+    # Module 3 workflow only (schema 1.2); never serialized on a 1.1 assessment.
     m3_rebuild: dict[str, Any] | None = None
     management_claims: list[ManagementMemoClaim] = Field(default_factory=list)
     evidence_references: list[EvidenceReference] = Field(default_factory=list)
@@ -212,19 +212,19 @@ class StructuralOverviewAssessment(StrictModel):
     content_hash: str
 
     @model_validator(mode="after")
-    def validate_m3_version(self):
+    def validate_m3_fields(self):
         if self.schema_version == ASSESSMENT_SCHEMA_VERSION:
             if self.m3_rebuild is not None or self.management_claims:
-                raise ValueError("M3-v2 fields require structural-overview-assessment-1.2.")
+                raise ValueError("Module 3 fields require structural-overview-assessment-1.2.")
             return self
         from app.services.bo.m3_rebuild.narrative import validate_claims
         validate_claims([c.model_dump(mode="json") for c in self.management_claims], self.m3_rebuild)
         return self
 
     @model_serializer(mode="wrap")
-    def _omit_m3_v2_fields(self, handler):
+    def _omit_m3_fields(self, handler):
         data = handler(self)
         if self.schema_version == ASSESSMENT_SCHEMA_VERSION:
-            for key in M3_V2_FIELDS:
+            for key in M3_FIELDS:
                 data.pop(key, None)
         return data

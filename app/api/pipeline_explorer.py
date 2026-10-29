@@ -4,7 +4,7 @@ recorded BO / FO / M3 artifacts, with a per-node inspector and JSON/PDF export.
 Every route is a read-only GET. Nothing here runs a model, mutates an artifact or
 generates a credit conclusion; it only indexes and re-presents recorded outputs.
 Artifact access is bounded by :mod:`app.services.registry.explorer` so only files
-under the configured output root or the registered demo fixtures are reachable.
+under the configured output root are reachable.
 """
 
 from __future__ import annotations

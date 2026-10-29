@@ -45,7 +45,6 @@ from app.services.rms import runner as rms_runner
 from app.services.acquisition import shared_filing
 from app.services.fo import loader as fo_loader
 from app.services.fo.runner import FinancialOverviewRunner, default_case_id, validate_case_id
-from app.services.bo.m3_version import DEFAULT_M3_VERSION, check_m3_version
 from app.services.llm import usage
 from app.services.pipeline.sec import sec_source_package
 
@@ -68,8 +67,8 @@ def bo_live_backend(model: str | None = None):
     return _live_backend_for(_live_settings(model))
 
 
-def m3_v2_live_backend(model: str | None = None):
-    """The live backend for M3-v2's management specialist and its Validator 7 reviewer: the same provider and
+def m3_live_backend(model: str | None = None):
+    """The live backend for Module 3's management specialist and its Validator 7 reviewer: the same provider and
     model as the BO, with the rebuild's response-schema adaptation on Vertex."""
     from app.services.bo.m3_rebuild.contracts import provider_schema
 
@@ -104,8 +103,8 @@ def _live_backend_for(settings, *, schema_transform=None):
     return backend
 
 
-def m3_v2_package(package, folder: str, bundle):
-    """The filing folder's inputs for M3-v2: its 10-K (the bundle's primary Inline XBRL document) for the
+def m3_package(package, folder: str, bundle):
+    """The filing folder's inputs for Module 3: its 10-K (the bundle's primary Inline XBRL document) for the
     management assessment and, when present, its corporate-structure JSON (``shared_filing.m3_structure_path``).
 
     The JSON is dated to the filing's own availability, so the evidence cut-off admits both together."""
@@ -149,7 +148,7 @@ def plan(folder: str, case_id: str | None = None, cutoff: datetime | None = None
 
 def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: str,
               output_root, data_root=None, case_id: str | None = None, cutoff: datetime | None = None,
-              produce_pdf: bool = False, m3_version: str | None = None, m3_backend=None,
+              produce_pdf: bool = False, m3_backend=None,
               rms_request: rms.RmsRequest | None = None, on_progress=None,
               lock_wait: float = LOCK_WAIT_SECONDS, bo_only: bool = False,
               stop: threading.Event | None = None, bo_validators: bool = True) -> dict:
@@ -157,8 +156,7 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
     "rms": {...}}``.
 
     Each section's entry has ``status`` ``completed`` or ``failed`` and either its ``summary`` or its
-    ``error``. ``m3_version`` picks the BO's Module 3 (``v1`` default, ``v2`` the rebuild, whose management
-    specialist and reviewer use ``m3_backend``). ``rms`` is ``completed`` (a verdict, or a debt capacity report without ``rms_request``), ``failed`` or ``skipped`` (a section didn't complete),
+    ``error``. The BO's Module 3 management specialist and reviewer use ``m3_backend``. ``rms`` is ``completed`` (a verdict, or a debt capacity report without ``rms_request``), ``failed`` or ``skipped`` (a section didn't complete),
     with its ``summary``, ``error`` or ``reason``. ``on_progress(section, message)`` is called from the worker
     threads as they advance, and for ``rms`` once both have finished. ``bo_only`` runs the BO by itself: the FO
     (and so RMS) is ``skipped`` and ``fo_backend`` is not used. Setting ``stop`` ends each unfinished section
@@ -185,8 +183,7 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
         package = sec_source_package(
             settled["bundle"], cutoff=settled["cutoff"],
             entity_id=identity.get("ticker") or None, legal_name=identity.get("name") or None)
-        if check_m3_version(m3_version) == "v2":
-            package = m3_v2_package(package, folder, settled["bundle"])
+        package = m3_package(package, folder, settled["bundle"])
         engine, factory = create_engine_and_session(
             f"sqlite:///{database.as_posix()}", sqlite_timeout=lock_wait)
         try:
@@ -194,14 +191,14 @@ def run_bo_fo(*, database: Path, folder: str, bo_backend, fo_backend, fo_mode: s
                 result = BusinessOverviewRunner(
                     session, backend=bo_backend, data_root=data_root, output_root=output_root,
                     bo_roster=BO_ROSTER, enable_m4_debt_specialist=True,
-                    m3_version=m3_version, m3_backend=m3_backend, m3_reviewer_backend=m3_backend,
+                    m3_backend=m3_backend, m3_reviewer_backend=m3_backend,
                     check_stop=checker("bo"), enforce_validators=bo_validators,
                 ).run_case(case_id, package=package, produce_pdf=produce_pdf)
                 say("bo", "recording the Business Overview")
                 session.commit()
         finally:
             engine.dispose()
-        return bo_summary(result, m3_version=check_m3_version(m3_version), validators=bo_validators)
+        return bo_summary(result, validators=bo_validators)
 
     def fo():
         staging = data_root / "staging" / f"fo-{uuid.uuid4().hex[:16]}.db"
@@ -308,14 +305,13 @@ class StagingKept(RuntimeError):
         self.staging = staging
 
 
-def bo_summary(result, *, m3_version: str = DEFAULT_M3_VERSION, validators: bool = True) -> dict:
+def bo_summary(result, *, validators: bool = True) -> dict:
     return {
         "case_id": result.case_id,
         "analysis_run_id": result.analysis_run_id,
         "scope": "business_overview_only",
         "execution_mode": result.execution_mode,
         "bo_roster": BO_ROSTER,
-        "m3_version": m3_version,
         "validators_enforced": validators,
         "conclusion_status": result.conclusion_status,
         "human_review_status": "pending",

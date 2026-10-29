@@ -152,7 +152,7 @@ def run_test(directory, filing, corporate, *, authorized=False, settings=None, s
                 directory/'request_ledger.json',settings.llm_prices,
                 agent_id='m3_validator_7',authorization='Milestone 4 verification: exactly one live HCA Validator 7 request; specialist and other agents offline')
         runner=BusinessOverviewRunner(
-            session,bo_roster='v3',m3_version='v2',data_root=directory/'data',output_root=directory/'output',
+            session,bo_roster='v3',data_root=directory/'data',output_root=directory/'output',
             m3_backend=backend,m3_reviewer_backend=reviewer_backend,max_rerun_rounds=0,
             m3_review_corrections=review_corrections,
         )

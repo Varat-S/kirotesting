@@ -18,6 +18,7 @@ No database mutation happens here. Persistence is the executor's serial phase.
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from dataclasses import dataclass
@@ -44,6 +45,16 @@ class AgentRuntimeOutput:
     execution: AgentExecutionResult
     agent_run: AgentRun
     generate_result: GenerateOnlyResult | None
+
+
+# A ProviderCallError is a failed provider round trip, not a bad answer, so the
+# task is simply re-run. Total attempts = 1 + PROVIDER_CALL_RETRIES.
+PROVIDER_CALL_RETRIES = 2
+PROVIDER_CALL_RETRY_DELAY_SECONDS = 2.0
+
+
+def _is_provider_call_error(result: GenerateOnlyResult) -> bool:
+    return result.raw.model_config.get("error_type") == "ProviderCallError"
 
 
 _OUTCOME_TO_EXECUTION = {
@@ -78,6 +89,11 @@ class AgentRuntime:
         request = self._build_request(task, inputs, evidence_ids)
         started = time.monotonic()
         result = self._client.generate_only(request)
+        for attempt in range(1, PROVIDER_CALL_RETRIES + 1):
+            if not _is_provider_call_error(result):
+                break
+            time.sleep(PROVIDER_CALL_RETRY_DELAY_SECONDS * attempt)
+            result = self._client.generate_only(request)
         latency_ms = int((time.monotonic() - started) * 1000)
         return self._assemble(
             task,
@@ -110,6 +126,11 @@ class AgentRuntime:
         request = self._build_request(task, inputs, evidence_ids)
         started = time.monotonic()
         result = await self._client.generate_only_async(request)
+        for attempt in range(1, PROVIDER_CALL_RETRIES + 1):
+            if not _is_provider_call_error(result):
+                break
+            await asyncio.sleep(PROVIDER_CALL_RETRY_DELAY_SECONDS * attempt)
+            result = await self._client.generate_only_async(request)
         latency_ms = int((time.monotonic() - started) * 1000)
         return self._assemble(
             task,

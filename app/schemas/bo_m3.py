@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.bo import Admissibility, Confidence, Direction, Disposition
 from app.schemas.agentic import Materiality
-from app.schemas.bo_m3_management import ManagementStability
 
 
 M3_ASSESSMENT_VERSION = "bo-m3-corporate-assessment-1.2"
@@ -223,34 +222,3 @@ class M3ValidationIssue(_Strict):
     item_id: str | None = None
     action: Literal["rejected", "downgraded", "recorded_gap"]
     reason: str
-
-
-class M3CorporateAssessment(_Strict):
-    schema_version: Literal[
-        "bo-m3-corporate-assessment-1.0", "bo-m3-corporate-assessment-1.1",
-        "bo-m3-corporate-assessment-1.2",
-    ] = "bo-m3-corporate-assessment-1.1"  # unstamped historic proposals retain their old meaning
-    validator_id: Literal["validator_7"] = "validator_7"
-    validator_version: Literal[
-        "validator-7-1.0.0", "validator-7-1.1.0",
-    ] = M3_VALIDATOR_VERSION
-    borrower_identification: BorrowerIdentification
-    legal_entities: list[LegalEntity] = Field(default_factory=list)
-    ownership_relationships: list[OwnershipRelationship] = Field(default_factory=list)
-    cash_flow_locations: list[CashFlowLocation] = Field(default_factory=list)
-    cash_transfer_relationships: list[CashTransferRelationship] = Field(default_factory=list)
-    structural_credit_findings: list[StructuralCreditFinding] = Field(default_factory=list)
-    management_assessments: list[ManagementObservation] = Field(default_factory=list)
-    management_stability: ManagementStability | None = None
-    governance_screening: list[StructuralCreditFinding] = Field(default_factory=list)
-    information_gaps: list[str] = Field(default_factory=list)
-    downstream_dependencies: list[dict[str, str]] = Field(default_factory=list)
-    validation_issues: list[M3ValidationIssue] = Field(default_factory=list)
-    rejected_items: list[dict] = Field(default_factory=list)
-    model_proposal: dict = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def stability_version_contract(self):
-        if self.schema_version == "bo-m3-corporate-assessment-1.2" and self.management_stability is None:
-            raise ValueError("M3 1.2 requires management_stability; earlier records retain legacy interpretation")
-        return self

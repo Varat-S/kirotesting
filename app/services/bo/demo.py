@@ -43,7 +43,6 @@ def run_demo(
     prepared=None,
     bo_roster="v2",
     transaction_borrower_entity_id: str | None = None,
-    m3_version: str | None = None,
     m3_backend=None,
 ) -> dict[str, Any]:
     output_root = Path(output_root)
@@ -70,7 +69,6 @@ def run_demo(
             session, backend=replay, data_root=data_root, output_root=output_root,
             coverage_checks=coverage_checks, sector=sector, bo_roster=bo_roster,
             transaction_borrower_entity_id=transaction_borrower_entity_id,
-            m3_version=m3_version,
         ).run_specialists(case_id, package=package, prepared=prepared)
         replayed = build_payload(replay_run, calls=replay.calls,
                                  execution_mode="offline_simulation")
@@ -99,7 +97,7 @@ def run_demo(
         session, backend=recorder, data_root=data_root, output_root=output_root,
         coverage_checks=coverage_checks, sector=sector, bo_roster=bo_roster,
         transaction_borrower_entity_id=transaction_borrower_entity_id,
-        m3_version=m3_version, m3_backend=m3_backend, m3_reviewer_backend=m3_backend,
+        m3_backend=m3_backend, m3_reviewer_backend=m3_backend,
     ).run_specialists(case_id, package=package, prepared=prepared)
     mode = execution_mode(backend)
     payload = build_payload(run, calls=recorder.calls, execution_mode=mode, prices=prices)

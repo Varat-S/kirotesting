@@ -43,8 +43,8 @@ def _finding(module: str, index: int, *, qualified: bool = False) -> dict:
     }
 
 
-def _handoff(m3_version: str = "v1") -> dict:
-    """A test handoff. M3-v2's module block has no scored findings (the rebuild's
+def _handoff(with_m3_workflow: bool = False) -> dict:
+    """A test handoff. The Module 3 workflow block has no scored findings (its
     two typed components start ``not_attempted``)."""
     findings = {
         "M1": _finding("M1", 1, qualified=True),
@@ -52,7 +52,7 @@ def _handoff(m3_version: str = "v1") -> dict:
         "M3": _finding("M3", 1),
         "M4": _finding("M4", 1),
     }
-    if m3_version == "v2":
+    if with_m3_workflow:
         del findings["M3"]
     payload = {
         "handoff_id": "bo_test001",
@@ -108,7 +108,7 @@ def _handoff(m3_version: str = "v1") -> dict:
         "config_versions": {},
         "content_hash": None,
     }
-    if m3_version == "v2":
+    if with_m3_workflow:
         from app.services.bo.m3_rebuild.adapters import unavailable_block
         payload["module_conclusions"]["M3"] = unavailable_block(payload["case_id"])
     payload["content_hash"] = handoff_content_hash(payload)
@@ -118,74 +118,6 @@ def _handoff(m3_version: str = "v1") -> dict:
 def _rehash(payload: dict) -> dict:
     payload["content_hash"] = handoff_content_hash(payload)
     return payload
-
-
-def _governed_m3(*, borrower_status: str = "identified") -> dict:
-    limitation = None if borrower_status == "identified" else (
-        "Proposed borrower is unavailable; SO must confirm the facility obligor."
-    )
-    return {
-        "schema_version": "bo-m3-corporate-assessment-1.0",
-        "validator_id": "validator_7",
-        "validator_version": "validator-7-1.0.0",
-        "borrower_identification": {
-            "status": borrower_status,
-            "entity_id": "borrower" if borrower_status == "identified" else None,
-            "evidence_ids": ["EV-M3-STRUCT"] if borrower_status == "identified" else [],
-            "limitation": limitation,
-        },
-        "legal_entities": [{
-            "entity_id": "parent", "legal_name": "Test Parent, Inc.",
-            "jurisdiction": "US-DE", "classification": "ultimate_parent",
-            "verification_status": "verified", "identity_type": "legal_entity",
-            "evidence_ids": ["EV-M3-STRUCT"], "materiality_reason": "Parent of borrower.",
-        }, {
-            "entity_id": "borrower", "legal_name": "Test Finance LLC",
-            "jurisdiction": "US-DE", "classification": "proposed_borrower",
-            "verification_status": "verified", "identity_type": "legal_entity",
-            "evidence_ids": ["EV-M3-STRUCT"], "materiality_reason": "Proposed facility obligor.",
-        }],
-        "ownership_relationships": [{
-            "relationship_id": "OR-1", "parent_entity_id": "parent",
-            "subsidiary_entity_id": "borrower", "ownership_percentage": 100,
-            "control_basis": "direct ownership", "effective_from": None,
-            "effective_to": None, "evidence_ids": ["EV-M3-STRUCT"],
-            "confirmation_status": "qualified", "uncertainty": "SO legal verification required.",
-        }],
-        "cash_flow_locations": [],
-        "cash_transfer_relationships": [],
-        "structural_credit_findings": [{
-            "finding_id": "SF-1", "hypothesis_id": "M3-H001",
-            "credit_hypothesis": "Parent access depends on borrower distributions.",
-            "causal_mechanism": "Restrictions could limit debt-service cash access.",
-            "supporting_evidence_ids": ["EV-M3-STRUCT"],
-            "contradicting_evidence_ids": [],
-            "supporting_evidence_investigated": True,
-            "contradictory_evidence_investigated": True,
-            "disposition": "qualified", "admissibility": "qualified_narrative",
-            "confidence": "medium", "materiality": "high",
-            "downstream_verification_requirements": [
-                "Verify obligor identity, restriction enforceability and creditor ranking."
-            ],
-            "borrower_specific": borrower_status == "identified",
-            "validation_reasons": [],
-        }],
-        "management_assessments": [], "governance_screening": [],
-        "information_gaps": ["Legal ranking is not established."],
-        "downstream_dependencies": [{"module": "SO", "question": "Verify legal ranking."}],
-        "validation_issues": [{
-            "rule_id": "m3.legal_entity_identity", "item_id": "affiliates",
-            "action": "rejected", "reason": "Collective grouping is not a legal person.",
-        }],
-        "rejected_items": [{
-            "kind": "legal_entity",
-            "item": {"entity_id": "affiliates", "identity_type": "collective_grouping"},
-            "reason": "collective_grouping_is_not_a_legal_person",
-        }],
-        "model_proposal": {
-            "legal_entities": [{"entity_id": "affiliates", "identity_type": "collective_grouping"}]
-        },
-    }
 
 
 def test_qualified_handoff_stays_partial_and_does_not_manufacture_credit_outputs(tmp_path):
@@ -217,85 +149,19 @@ def test_qualified_handoff_stays_partial_and_does_not_manufacture_credit_outputs
     assert "final_credit_synthesis" in html
 
 
-def test_governed_m3_crosses_boundary_without_promoting_rejected_graph_items():
+def test_a_legacy_m3_specialist_assessment_is_rejected():
     payload = _handoff()
     payload["module_conclusions"]["M3"].update(
-        m3_assessment_status="validated", m3_assessment=_governed_m3())
-    assessment = adapt_business_overview(_rehash(payload))
-
-    assert assessment.schema_version == "structural-overview-assessment-1.1"
-    assert assessment.borrower.legal_name == "Test Finance LLC"
-    assert assessment.borrower.entity_id == "borrower"
-    assert assessment.borrower.identification_evidence_ids == ["EV-M3-STRUCT"]
-    structure = assessment.corporate_structure
-    assert structure.source_status == "validated"
-    assert {entity.entity_id for entity in structure.legal_entities} == {"parent", "borrower"}
-    assert structure.ownership_relationships[0].confirmation_status == "qualified"
-    assert structure.structural_credit_findings[0].disposition.value == "qualified"
-    assert structure.structural_credit_findings[0].admissibility.value == "qualified_narrative"
-    assert "Verify obligor identity" in structure.structural_credit_findings[0].downstream_verification_requirements[0]
-    assert all(entity.entity_id != "affiliates" for entity in structure.legal_entities)
-    assert structure.audit.rejected_items[0]["item"]["entity_id"] == "affiliates"
-    assert structure.audit.model_proposal["legal_entities"][0]["entity_id"] == "affiliates"
-    evidence = next(
-        item for item in assessment.evidence_references
-        if item.evidence_id == "EV-M3-STRUCT"
-    )
-    assert "M3.corporate_structure" in evidence.source_sections
-    assert assessment.downstream_dependencies.sections["structural_overview"].status == "partial"
+        m3_assessment_status="validated", m3_assessment={"schema_version": "bo-m3-corporate-assessment-1.2"})
+    with pytest.raises(StructuralOverviewInputError, match="no longer accepted"):
+        adapt_business_overview(_rehash(payload))
 
 
-def test_validated_m3_with_unknown_borrower_fails_closed_but_keeps_governed_graph():
-    payload = _handoff()
-    payload["module_conclusions"]["M3"].update(
-        m3_assessment_status="validated",
-        m3_assessment=_governed_m3(borrower_status="unavailable"),
-    )
-    assessment = adapt_business_overview(_rehash(payload))
+def test_a_handoff_without_the_m3_workflow_block_supplies_no_corporate_structure():
+    assessment = adapt_business_overview(_handoff())
+    assert assessment.corporate_structure.source_status == "unavailable"
     assert assessment.borrower.identification_status == "unavailable"
-    assert assessment.borrower.legal_name is None
     assert assessment.borrower.entity_id is None
-    assert assessment.corporate_structure.legal_entities
-    assert "SO must confirm" in assessment.borrower.identification_limitation
-
-
-def test_validated_m3_requires_governed_contract_and_resolved_borrower():
-    payload = _handoff()
-    payload["module_conclusions"]["M3"].update(
-        m3_assessment_status="validated", m3_assessment={"schema_version": "bad"})
-    with pytest.raises(StructuralOverviewInputError, match="Invalid governed M3 assessment"):
-        adapt_business_overview(_rehash(payload))
-
-    payload = _handoff()
-    m3 = _governed_m3()
-    m3["legal_entities"] = [m3["legal_entities"][0]]
-    m3["ownership_relationships"] = []
-    payload["module_conclusions"]["M3"].update(
-        m3_assessment_status="validated", m3_assessment=m3)
-    with pytest.raises(StructuralOverviewInputError, match="does not resolve"):
-        adapt_business_overview(_rehash(payload))
-
-    payload = _handoff()
-    m3 = _governed_m3()
-    m3["ownership_relationships"][0]["subsidiary_entity_id"] = "rejected-node"
-    payload["module_conclusions"]["M3"].update(
-        m3_assessment_status="validated", m3_assessment=m3)
-    with pytest.raises(StructuralOverviewInputError, match="references an unadmitted entity"):
-        adapt_business_overview(_rehash(payload))
-
-
-def test_disputed_m3_borrower_never_populates_transaction_identity():
-    payload = _handoff()
-    m3 = _governed_m3(borrower_status="disputed")
-    m3["borrower_identification"]["entity_id"] = "borrower"
-    m3["borrower_identification"]["evidence_ids"] = ["EV-M3-STRUCT"]
-    payload["module_conclusions"]["M3"].update(
-        m3_assessment_status="validated", m3_assessment=m3)
-    assessment = adapt_business_overview(_rehash(payload))
-    assert assessment.borrower.identification_status == "disputed"
-    assert assessment.borrower.entity_id is None
-    assert assessment.borrower.legal_name is None
-    assert assessment.borrower.identification_evidence_ids == []
 
 
 def test_compound_risk_preserves_component_and_evidence_links():

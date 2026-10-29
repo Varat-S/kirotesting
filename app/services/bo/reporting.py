@@ -27,9 +27,9 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.services.bo.m3_rebuild import is_m3_block
 from app.services.bo.m3_rebuild.narrative import management_claims
 from app.services.bo.m3_rebuild.structure import render_svg
-from app.services.bo.m3_version import is_m3_v2_block
 
 from app.core.hashing import canonical_json, content_hash
 from app.models.orm import (
@@ -151,8 +151,8 @@ def _m1_sections_with_further_findings(memo: dict[str, Any]) -> dict[str, Any]:
     return {**memo, "sections": out}
 
 
-def _m3_v2_view(module: dict[str, Any]) -> dict[str, Any]:
-    """M3-v2's two components as the memo shows them: the corporate structure's status and
+def _m3_view(module: dict[str, Any]) -> dict[str, Any]:
+    """Module 3's two components as the memo shows them: the corporate structure's status and
     simulation notice, and the management assessment's reviewed observations with their quotes."""
     components = module.get("m3_rebuild") or {}
     structure = components.get("structure") or {}
@@ -190,65 +190,6 @@ def _m3_v2_view(module: dict[str, Any]) -> dict[str, Any]:
                 for o in assessment.get("observations") or []],
             "limitations": list(dict.fromkeys(assessment.get("limitations") or [])),
         },
-    }
-
-
-def _m3_view(assessment: dict[str, Any] | None, cite) -> dict[str, Any] | None:
-    """The memo's reading of the validated M3 assessment (Validator 7 output).
-
-    Only what Validator 7 kept: rejected graph items stay in the audit report.
-    """
-    if assessment is None:
-        return None
-    names = {e["entity_id"]: e["legal_name"] for e in assessment.get("legal_entities") or []}
-    borrower = assessment.get("borrower_identification") or {}
-
-    def finding(f: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "finding_id": f["finding_id"],
-            "text": f["credit_hypothesis"],
-            "mechanism": f.get("causal_mechanism"),
-            "direction": f.get("credit_direction", "neutral"),
-            "materiality": f.get("materiality", "medium"),
-            "disposition": f["disposition"],
-            "qualifications": f.get("qualifications") or [],
-            "citations": cite(f.get("supporting_evidence_ids") or []),
-        }
-
-    return {
-        "borrower": {
-            "status": borrower.get("status"),
-            "legal_name": names.get(borrower.get("entity_id")),
-            "limitation": borrower.get("limitation"),
-        },
-        "legal_entities": [
-            {"legal_name": e["legal_name"], "jurisdiction": e.get("jurisdiction"),
-             "classification": e.get("classification"),
-             "verification_status": e.get("verification_status"),
-             "citations": cite(e.get("evidence_ids") or [])}
-            for e in assessment.get("legal_entities") or []],
-        "ownership": [
-            {"parent": names.get(r["parent_entity_id"], r["parent_entity_id"]),
-             "subsidiary": names.get(r["subsidiary_entity_id"], r["subsidiary_entity_id"]),
-             "ownership_percentage": r.get("ownership_percentage"),
-             "confirmation_status": r.get("confirmation_status")}
-            for r in assessment.get("ownership_relationships") or []],
-        "structural_findings": [finding(f) for f in
-                                assessment.get("structural_credit_findings") or []
-                                if _shown(f)],
-        "governance_findings": [finding(f) for f in
-                                assessment.get("governance_screening") or []
-                                if _shown(f)],
-        "management": [
-            {"legal_name": o["legal_name"], "role": o["role"],
-             "dimension": o["dimension"], "text": o["hypothesis"],
-             "mechanism": o.get("credit_mechanism"),
-             "direction": o.get("credit_direction", "neutral"),
-             "materiality": o.get("materiality", "medium"),
-             "attributed": o.get("admissibility") == "attributed",
-             "citations": cite(o.get("supporting_evidence_ids") or [])}
-            for o in assessment.get("management_assessments") or [] if _shown(o)],
-        "information_gaps": list(assessment.get("information_gaps") or []),
     }
 
 
@@ -302,7 +243,7 @@ _DIAGRAM_WIDTH_PT = 500  # printable A4 width; xhtml2pdf needs absolute image si
 
 
 def _m3_structure_image(memo: dict[str, Any]) -> dict[str, Any] | None:
-    """The M3-v2 corporate-structure diagram as an embeddable SVG image, drawn at render
+    """The Module 3 corporate-structure diagram as an embeddable SVG image, drawn at render
     time from the artifact the memo already holds (so the memo JSON is unchanged). ``None``
     when there is no complete structure or it cannot be drawn; the memo then shows the text tree."""
     m3 = (memo.get("module_conclusions") or {}).get("M3") or {}
@@ -554,8 +495,7 @@ class BoReportBuilder:
                     "missing_information": module["missing_information"],
                     "further_findings": _further_findings(
                         module["findings"], used_in_claims, cite, sources.__contains__),
-                    "m3": (_m3_view(module.get("m3_assessment"), cite)
-                           if section["code"] == "M3" else None),
+                    "m3": None,
                     "m4": _m4_view(module, cite) if section["code"] == "M4" else None,
                 }
             # M1 spans six specialist sections; each lists its own findings the narrative skipped.
@@ -569,20 +509,19 @@ class BoReportBuilder:
                 if section["further_findings"]:
                     section["notice"] = None
 
-        # M3-v2 has no M3 specialist in the roster, so its section is added from the rebuild's block.
-        m3_v2 = run.module_conclusions.get("M3")
-        if run.roster_version == "v3" and is_m3_v2_block(m3_v2):
+        # Module 3 is not a roster agent, so its section is added from the workflow's block.
+        m3_block = run.module_conclusions.get("M3")
+        if run.roster_version == "v3" and is_m3_block(m3_block):
             after = next((i + 1 for i, sec in enumerate(sections) if sec["code"] == "M2"), len(sections))
             sections.insert(after, {
-                "code": "M3", "title": "Corporate Structure & Senior Management (M3-v2)",
-                "agent_id": None, "agent_status": m3_v2["status"], "claims": [],
+                "code": "M3", "title": "Corporate Structure & Senior Management",
+                "agent_id": None, "agent_status": m3_block["status"], "claims": [],
                 "headline_refs": [], "parameters": [], "notice": None,
                 "module": {
-                    "code": "M3", "status": m3_v2["status"], "failed_or_missing_agents": [],
+                    "code": "M3", "status": m3_block["status"], "failed_or_missing_agents": [],
                     "unresolved_coverage_checks": [],
-                    "missing_information": m3_v2.get("missing_information") or [],
-                    "further_findings": [], "m3": None, "m4": None,
-                    "m3_v2": _m3_v2_view(m3_v2),
+                    "missing_information": m3_block.get("missing_information") or [],
+                    "further_findings": [], "m3": _m3_view(m3_block), "m4": None,
                 },
             })
 

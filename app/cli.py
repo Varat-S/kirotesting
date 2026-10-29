@@ -19,7 +19,6 @@ from app.core.config import get_settings
 from app.services.acquisition.sec_edgar import SecEdgarClient, EdgarError, write_bundle
 from app.services.extraction.sec.bundle import SecFilingBundle
 from app.services.pipeline.sec import sec_source_package
-from app.services.bo.m3_version import DEFAULT_M3_VERSION, M3_VERSIONS
 from app.services.llm import usage
 
 
@@ -136,21 +135,6 @@ def main(argv=None):
         help="Use the configured live provider (LLM_PROVIDER); incurs model cost",
     )
     bo_run.add_argument("--pdf", action="store_true")
-    bo_run.add_argument(
-        "--m3-responses", type=Path,
-        help=("Scripted run-m3 response map (same format as run-m3 "
-              "--responses) for the standalone Module 3 step. Without it, Module 3 "
-              "uses the run's own backend."),
-    )
-    bo_run.add_argument(
-        "--corporate-structure", type=Path,
-        help=("Simplified v1.0 corporate-structure onboarding JSON passed "
-              "to the standalone Module 3 step (as run-m3 --corporate-structure)."),
-    )
-    bo_run.add_argument("--m3-version", choices=M3_VERSIONS, default=DEFAULT_M3_VERSION,
-                        help="Business Overview Module 3: v1 (default) the corporate-management "
-             "specialist + Validator 7; v2 the rebuild (structure conversion + management "
-             "continuity from the package's module3 sources)")
     bo_run.add_argument("--no-validators", action="store_true",
                         help="Run the BO validators in advisory mode: findings are recorded, not "
                              "applied (an ungoverned draft, always left for human review)")
@@ -185,49 +169,12 @@ def main(argv=None):
         "--transaction-borrower-entity-id",
         help="Validated case-spec entity id for the proposed facility obligor; "
              "omit when transaction identity is unavailable")
-    bo_spec.add_argument("--m3-version", choices=M3_VERSIONS, default=DEFAULT_M3_VERSION,
-                         help="Business Overview Module 3: v1 (default) the corporate-management "
-             "specialist + Validator 7; v2 the rebuild (structure conversion + management "
-             "continuity from the package's module3 sources)")
     m3_run = commands.add_parser(
         "run-m3",
-        help=("M3-v1: run ONLY Business Overview Module 3 (Corporate Structure & Senior "
-              "Management) + Validator 7 offline; write the inspectable demo files"),
+        help=("Run Module 3's corporate conversion and/or filing-only management "
+              "assessment (arguments as `python -m app.services.bo.m3_rebuild`)"),
     )
-    m3_run.add_argument("case_id")
-    m3_source = m3_run.add_mutually_exclusive_group(required=True)
-    m3_source.add_argument("--package", type=Path)
-    m3_source.add_argument("--bundle", type=Path,
-                           help="A local SEC bundle manifest (bundle.json)")
-    m3_run.add_argument(
-        "--cutoff", type=lambda s: datetime.fromisoformat(s.replace("Z", "+00:00")),
-        help="Evidence cut-off (required with --bundle)")
-    m3_run.add_argument("--entity-id")
-    m3_run.add_argument("--entity-name")
-    m3_run.add_argument(
-        "--corporate-structure", type=Path,
-        help=("Path to the simplified v1.0 corporate-structure onboarding JSON for "
-              "THIS case (optional). Absent -> Deliverable A fails closed."))
-    m3_backend = m3_run.add_mutually_exclusive_group(required=True)
-    m3_backend.add_argument(
-        "--responses", type=Path,
-        help="Scripted offline M3 responses (JSON with a 'single_pass' key)")
-    m3_backend.add_argument(
-        "--live", action="store_true",
-        help=("Opt-in real-model path: run ONLY m3_corporate_management against the "
-              "configured provider (LLM_PROVIDER/LLM_MODEL/credentials). Disabled by "
-              "default; incurs model cost; fails safely with a clear blocker when no "
-              "provider is configured. No downstream agent/renderer runs."))
-    m3_run.add_argument(
-        "--transaction-borrower-entity-id",
-        help="Validated case-spec entity id for the proposed facility obligor; "
-             "omit when transaction identity is unavailable")
-    m3_v2_run = commands.add_parser(
-        "run-m3-v2",
-        help=("M3-v2: run the rebuild's corporate conversion and/or filing-only "
-              "management assessment (arguments as `python -m app.services.bo.m3_rebuild`)"),
-    )
-    m3_v2_run.add_argument("rebuild_args", nargs=argparse.REMAINDER)
+    m3_run.add_argument("rebuild_args", nargs=argparse.REMAINDER)
     bo_review = commands.add_parser(
         "bo-review",
         help="Record your explicit decision on a pending Business Overview handoff",
@@ -376,10 +323,6 @@ def main(argv=None):
     both.add_argument("--amount", type=float,
                       help="Requested loan, US$ millions: Risk Mitigation & Structuring runs once both sections "
                            "complete (without it, a debt capacity report)")
-    both.add_argument("--m3-version", choices=M3_VERSIONS, default=DEFAULT_M3_VERSION,
-                      help="Business Overview Module 3: v1 (default) the corporate-management "
-             "specialist + Validator 7; v2 the rebuild (structure conversion + management "
-             "continuity from the package's module3 sources)")
     both.add_argument("--no-validators", action="store_true",
                       help="Run the BO validators in advisory mode: findings are recorded, not "
                            "applied (an ungoverned draft, always left for human review)")
@@ -402,7 +345,7 @@ def main(argv=None):
     finalize.add_argument("--reviewer", required=True)
     finalize.add_argument("--pdf", action="store_true")
     args = parser.parse_args(argv)
-    if args.command == "run-m3-v2":
+    if args.command == "run-m3":
         from app.services.bo.m3_rebuild.__main__ import main as rebuild_main
         raise SystemExit(rebuild_main(args.rebuild_args))
     if (
@@ -487,15 +430,6 @@ def main(argv=None):
             if args.command == "run-bo-specialists":
                 print(json.dumps(_with_cost(_run_bo_specialists(session, database, args)), indent=2))
                 session.commit()
-                return
-            if args.command == "run-m3":
-                m3_summary = _run_m3(session, database, args)
-                print(json.dumps(_with_cost(m3_summary), indent=2))
-                session.commit()
-                # Persist database/artifacts first. An execution/validation
-                # failure must not be reported as a successful shell command.
-                if str(m3_summary.get("validation_stages", {}).get("module_completion", "")).startswith("failed_"):
-                    raise SystemExit(1)
                 return
             if args.command == "bo-review":
                 from app.services.bo.handoff import review_handoff
@@ -712,11 +646,11 @@ def _intake(session, args):
             "next": f'python -m app.cli run-bo-fo --filing "{filing.name}" --live'}
 
 
-def _m3_v2_backend(args):
-    """M3-v2's live management specialist / reviewer backend (the configured provider)."""
-    from app.services.bo_fo import m3_v2_live_backend
+def _m3_backend(args):
+    """Module 3's live management specialist / reviewer backend (the configured provider)."""
+    from app.services.bo_fo import m3_live_backend
 
-    return m3_v2_live_backend(getattr(args, "model", None))
+    return m3_live_backend(getattr(args, "model", None))
 
 
 def _run_bo_fo(session, database, args):
@@ -760,12 +694,12 @@ def _run_bo_fo(session, database, args):
     def show(section, message):  # progress on stderr, so stdout stays the JSON summary
         print(f"[{section}] {message}", file=sys.stderr, flush=True)
 
-    m3_backend = (bo_fo.m3_v2_live_backend(args.model)
-                  if args.m3_version == "v2" and args.live and not args.bo_responses else None)
+    m3_backend = (bo_fo.m3_live_backend(args.model)
+                  if args.live and not args.bo_responses else None)
     outcome = bo_fo.run_bo_fo(
         database=database, folder=folder, case_id=args.case_id, cutoff=args.cutoff,
         bo_backend=bo_backend, fo_backend=fo_backend, fo_mode=fo_mode,
-        m3_version=args.m3_version, m3_backend=m3_backend,
+        m3_backend=m3_backend,
         output_root=args.output, produce_pdf=args.pdf, rms_request=rms_request, on_progress=show,
         bo_validators=not getattr(args, "no_validators", False))
     for section in ("bo", "fo", "rms"):
@@ -806,15 +740,13 @@ def _run_bo_specialists(session, database, args):
         coverage_checks=load_case_checks(args.coverage) if args.coverage else None,
         baseline_calls=args.baseline, prices=prices, bo_roster=BO_ROSTER,
         transaction_borrower_entity_id=args.transaction_borrower_entity_id,
-        m3_version=args.m3_version,
-        m3_backend=_m3_v2_backend(args) if args.m3_version == "v2" and args.live else None)
+        m3_backend=_m3_backend(args) if args.live else None)
     payload = result["payload"]
     metrics = payload["metrics"]
     return {
         "case_id": args.case_id,
         "analysis_run_id": payload["meta"]["analysis_run_id"],
         "scope": payload["meta"]["scope"],
-        "m3_version": args.m3_version,
         "execution_mode": payload["meta"]["execution_mode"],
         "models": payload["meta"]["models"],
         "specialists": {a["code"]: a["status"] for a in payload["agents"]},
@@ -831,134 +763,6 @@ def _run_bo_specialists(session, database, args):
                        "held_back": metrics["parameters_held_back"]},
         "tokens": metrics["tokens"],
         "outputs": {k: str(v) for k, v in result["paths"].items()},
-    }
-
-
-def _run_m3(session, database, args):
-    """Standalone Module 3: one specialist + Validator 7 + the demo files.
-
-    Offline only. Invokes ONLY ``m3_corporate_management`` and its applicable
-    validation; no other BO specialist, no Agent 6, orchestrator, challenger,
-    synthesis, scoring, memo, handoff or downstream agent runs.
-    """
-    from app.services.bo.m3_demo import write_m3_demo
-    from app.services.bo.m3_diagnostics import ensure_local_store
-    from app.services.bo.m3_standalone import run_m3
-    from app.services.pipeline.runner import CreditMemoPipeline
-
-    ensure_local_store(session)
-    # OPT-IN, default-off real-model pathway. Offline (scripted --responses) is
-    # the default and is clearly separated from the live path. --live constructs
-    # the configured provider backend through the existing provider abstraction
-    # and reads model id / timeout / token limits / credentials from Settings
-    # (SecretStr, never logged). If no provider/credentials are configured this
-    # raises a clear, credential-free error REPORTING the blocker; it NEVER
-    # invents or simulates a successful live run, and there is NO silent fallback
-    # to the scripted path.
-    live_backend = None
-    live_config = None
-    if args.live:
-        live_backend = _live_backend()  # raises ProviderNotConfiguredError if unset
-        settings = get_settings()
-        live_config = {
-            "provider": settings.llm_provider,
-            "model_id": settings.llm_model,
-            "timeout_seconds": settings.llm_timeout_seconds,
-            "max_output_tokens": settings.llm_max_output_tokens,
-            "max_input_bytes": settings.llm_max_input_bytes,
-            "max_retries": 0,
-        }
-
-    if args.bundle:
-        if args.cutoff is None:
-            raise ValueError("--bundle requires --cutoff.")
-        package = sec_source_package(
-            SecFilingBundle.load(args.bundle), cutoff=args.cutoff,
-            entity_id=args.entity_id, legal_name=args.entity_name)
-    else:
-        package = SourcePackage.load(args.package)
-
-    prepared = CreditMemoPipeline(
-        session, data_root=database.parent, output_root=args.output,
-    ).prepare_case(args.case_id, package=package)
-
-    corporate_structure_document = None
-    simplified_document = None
-    corporate_structure_path = None
-    if args.corporate_structure:
-        corporate_structure_document = json.loads(
-            args.corporate_structure.read_text(encoding="utf-8"))
-        simplified_document = corporate_structure_document
-        corporate_structure_path = str(args.corporate_structure)
-
-    m3_responses = (json.loads(args.responses.read_text(encoding="utf-8"))
-                    if args.responses else None)
-
-    result = run_m3(
-        session, case_id=args.case_id, evidence=prepared.evidence_snapshot,
-        metrics=prepared.metrics, m3_responses=m3_responses,
-        corporate_structure_document=corporate_structure_document,
-        transaction_borrower_entity_id=args.transaction_borrower_entity_id,
-        live_backend=live_backend, live_config=live_config,
-        required_assessment_version=("bo-m3-corporate-assessment-1.2" if args.live else None))
-
-    reference_output = None
-    reference_path = Path("examples/bo_m3/Sample HCA Corp Structure Final Output.json")
-    if simplified_document is not None and reference_path.is_file():
-        reference_output = json.loads(reference_path.read_text(encoding="utf-8"))
-
-    reproduce_argv = [sys.executable, "-m", "app.cli", "--database", str(database),
-                      "--output", str(args.output), "run-m3", args.case_id]
-    for flag, value in (("--package", args.package), ("--bundle", args.bundle),
-                        ("--cutoff", args.cutoff.isoformat() if args.cutoff else None),
-                        ("--entity-id", args.entity_id), ("--entity-name", args.entity_name),
-                        ("--corporate-structure", args.corporate_structure),
-                        ("--transaction-borrower-entity-id", args.transaction_borrower_entity_id),
-                        ("--responses", args.responses)):
-        if value is not None:
-            reproduce_argv += [flag, str(value)]
-    reproduce_env = {"DEBUG": "false"}
-    if args.live:
-        reproduce_argv.append("--live")
-        reproduce_env.update({
-            "LLM_PROVIDER": settings.llm_provider,
-            "LLM_TIMEOUT_SECONDS": str(settings.llm_timeout_seconds),
-            "LLM_MAX_OUTPUT_TOKENS": str(settings.llm_max_output_tokens),
-            "LLM_MAX_INPUT_BYTES": str(settings.llm_max_input_bytes),
-        })
-        if settings.llm_provider == "vertex":
-            reproduce_env.update({k: str(v) for k, v in {
-                "VERTEX_MODEL_NARROW": settings.vertex_model_narrow,
-                "GOOGLE_CLOUD_PROJECT": settings.google_cloud_project,
-                "GOOGLE_CLOUD_LOCATION": settings.google_cloud_location,
-            }.items() if v is not None})
-        elif settings.llm_model:
-            reproduce_env["LLM_MODEL"] = settings.llm_model
-    paths = write_m3_demo(
-        result, args.output, simplified_document=simplified_document,
-        reference_output=reference_output,
-        corporate_structure_path=corporate_structure_path,
-        responses_path=(str(args.responses) if args.responses else None),
-        reproduce_argv=reproduce_argv, reproduce_env=reproduce_env)
-
-    return {
-        "case_id": result.case_id,
-        "analysis_run_id": result.analysis_run_id,
-        "scope": "business_overview_module_3_only",
-        "specialist": "m3_corporate_management",
-        "validator_id": "validator_7",
-        "execution_mode": result.run_manifest.get("execution", {}).get(
-            "execution_mode", "offline_simulation"),
-        "real_model_invoked": result.run_manifest.get("execution", {}).get(
-            "real_model_invoked", False),
-        "model_called": result.model_called,
-        "specialist_validated": result.specialist_validated,
-        "corporate_structure_status": result.corporate_structure_status,
-        "completion_status": result.completion_status,
-        "validation_issue_count": len(result.validation_issues),
-        "rejected_item_count": len(result.rejected_items),
-        "validation_stages": result.validation_stages,
-        "outputs": {k: str(v) for k, v in paths.items()},
     }
 
 
@@ -1018,22 +822,11 @@ def _run_bo_case(session, database, args):
         from app.services.bo.evaluation import load_manifest
 
         manifest = load_manifest(args.manifest)
-    m3_responses_path = getattr(args, "m3_responses", None)
-    corporate_structure_path = getattr(args, "corporate_structure", None)
-    m3_version = getattr(args, "m3_version", DEFAULT_M3_VERSION)
-    if m3_version == "v2" and (m3_responses_path or corporate_structure_path):
-        raise ValueError("--m3-responses and --corporate-structure are M3-v1 inputs; M3-v2 takes "
-                         "its sources from the package's module3 object.")
-    m3_backend = _m3_v2_backend(args) if m3_version == "v2" and args.live else None
+    m3_backend = _m3_backend(args) if args.live else None
     result = BusinessOverviewRunner(
         session, backend=backend, data_root=database.parent, output_root=args.output,
         bo_roster=BO_ROSTER, enable_m4_debt_specialist=True,
-        m3_version=m3_version, m3_backend=m3_backend, m3_reviewer_backend=m3_backend,
-        m3_responses=(json.loads(m3_responses_path.read_text(encoding="utf-8"))
-                      if m3_responses_path else None),
-        m3_corporate_structure=(
-            json.loads(corporate_structure_path.read_text(encoding="utf-8"))
-            if corporate_structure_path else None),
+        m3_backend=m3_backend, m3_reviewer_backend=m3_backend,
         enforce_validators=not getattr(args, "no_validators", False),
     ).run_case(
         args.case_id, package=package, produce_pdf=args.pdf, manifest=manifest,
@@ -1054,7 +847,6 @@ def _run_bo_case(session, database, args):
         # registry version, so a run can never be silently misattributed to a
         # different architecture than the one that produced it.
         "bo_roster": BO_ROSTER,
-        "m3_version": m3_version,
         "validators_enforced": bool(result.record.get("validators_enforced", True)),
         "agent_registry_version": (result.audit or {}).get("registry", {}).get("version"),
         # Whether the Module 4 debt specialist took effect, from the recorded run metadata.

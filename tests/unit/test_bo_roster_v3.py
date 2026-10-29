@@ -79,17 +79,27 @@ def test_earlier_rosters_are_unchanged():
 def test_v3_registry_builds_with_unique_ownership():
     registry = default_registry("v3")  # AgentRegistry validates uniqueness
     assert registry.version == AGENT_REGISTRY_VERSION_BO_V3
-    assert len(registry) == 30
+    assert len(registry) == 29
     for spec in V3_SPECS:
         for parameter in spec.owned_parameters:
             assert registry.owner_of(parameter) == spec.agent_id
 
 
-def test_every_v2_parameter_keeps_its_id_and_has_one_v3_owner():
+# Module 3 is a workflow, not a roster agent: the parameters its old specialist
+# owned have no owner in the v3 roster.
+M3_UNOWNED = {
+    "management_quality_assessment", "key_person_dependency_assessment",
+    "governance_concern_assessment", "litigation_risk_assessment",
+    "material_event_assessment",
+}
+
+
+def test_every_v2_parameter_keeps_its_id_and_has_at_most_one_v3_owner():
     v2 = sorted(p for s in BO_AGENT_SPECS for p in s.owned_parameters)
     v3 = sorted(p for s in V3_SPECS for p in s.owned_parameters)
-    assert v2 == v3
-    assert sorted(BO_V2_TO_V3_PARAMETER_OWNER) == v2
+    assert sorted(set(v2) - set(v3)) == sorted(M3_UNOWNED)
+    assert set(v3) <= set(v2) and len(v3) == len(set(v3))
+    assert sorted(BO_V2_TO_V3_PARAMETER_OWNER) == v3
 
 
 def test_review_decisions_of_17_october_are_implemented():
@@ -97,11 +107,7 @@ def test_review_decisions_of_17_october_are_implemented():
     assert owner["supplier_dependence_assessment"] == "m1_operating_model"
     assert owner["regulatory_dependency_assessment"] == "m2_industry"
     assert owner["external_event_exposure_assessment"] == "m2_industry"
-    assert owner["litigation_risk_assessment"] == "m3_corporate_management"
-    assert owner["material_event_assessment"] == "m3_corporate_management"
-    for p in ("management_quality_assessment", "key_person_dependency_assessment",
-              "governance_concern_assessment"):
-        assert owner[p] == "m3_corporate_management"
+    assert not M3_UNOWNED & set(owner)  # Module 3 is not a roster agent
     for p in ("acquisition_strategy_assessment", "integration_risk_assessment",
               "capex_strategy_assessment"):
         assert owner[p] == "m4_strategy_capital"
@@ -117,9 +123,10 @@ def test_module_1_has_five_primaries_and_agent_6_after_them():
     assert set(agent_6.dependencies) == set(V3_M1_PRIMARY_IDS)
 
 
-def test_eight_primary_agents_have_eight_separate_validators():
+def test_primary_agents_have_separate_validators():
     validators = [validator_identity(V3_SPEC_BY_AGENT[a]) for a in V3_PRIMARY_AGENT_IDS]
-    assert validators == [f"validator_{n}" for n in range(1, 9)]
+    # Validator 7 belongs to the Module 3 workflow, which is not a roster agent.
+    assert validators == [f"validator_{n}" for n in (1, 2, 3, 4, 5, 6, 8)]
     assert validator_identity(V3_SPEC_BY_AGENT[V3_AGENT_6_ID]) == "agent6_governance"
     assert V3_AGENT_6_ID not in V3_PRIMARY_AGENT_IDS
 
@@ -156,11 +163,11 @@ def test_case_coverage_checks_follow_the_code_map():
 # -- modules 2-4: executable with exclusive ownership --------------------------
 
 
-def test_modules_2_to_4_are_executable_and_prompted():
+def test_modules_2_and_4_are_executable_and_prompted():
     registry = default_registry("v3")
     names = {e["name"] for e in bo_v3_prompt_catalogue()}
     assert V3_NOT_EXECUTED_IDS == ()
-    for agent_id in ("m2_industry", "m3_corporate_management", "m4_strategy_capital"):
+    for agent_id in ("m2_industry", "m4_strategy_capital"):
         definition = registry.get(agent_id)
         assert definition.task_type == agent_id
         assert definition.prompt_name == agent_id and definition.routing is not None
@@ -176,7 +183,7 @@ def test_a_not_assessed_result_cannot_carry_a_value_or_a_run():
     base = dict(parameter_result_id="x", analysis_run_id="ar",
                 parameter_id="management_quality_assessment", topic=Topic.BUSINESS,
                 value_type="category", method=Method.LLM,
-                status=ParameterStatus.NOT_ASSESSED, agent_id="m3_corporate_management")
+                status=ParameterStatus.NOT_ASSESSED, agent_id="m2_industry")
     ParameterResult(**base)
     with pytest.raises(ValueError):
         ParameterResult(**base, value="strong")

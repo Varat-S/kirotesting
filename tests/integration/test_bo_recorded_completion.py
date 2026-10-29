@@ -111,7 +111,7 @@ def test_material_challenge_only_plans_direct_bounded_specialists():
     findings = [{
         "challenge_id": "a", "severity": "material", "requires_reanalysis": True,
         "affected_agent_ids": ["m1_pricing_power", "m2_industry"],
-        "requested_rerun_scope": ["m3_corporate_management", "business_orchestrator"],
+        "requested_rerun_scope": ["m4_strategy_capital", "business_orchestrator"],
     }]
     plan = remediation_plan(findings)
     assert plan["selected_specialists"] == ["m1_pricing_power", "m2_industry"]

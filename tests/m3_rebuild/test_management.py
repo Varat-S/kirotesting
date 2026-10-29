@@ -153,7 +153,8 @@ def test_citation_match_is_separate_from_supported_claim(mutation):
         s.pages['pdf:p2']+=' '+q
         profile['prior_internal_roles']=[dict(position='Vice President',start_date='2020-01',end_date='2024-04',source_id='pdf:p2',quote=q)]
     r=assess_management(p,s)
-    assert r['completion_status']=='partial'
+    # A rejected claim is excluded on its own; only a lost executive is partial.
+    assert r['completion_status']==('partial' if mutation=='another_executive' else 'complete')
     rejected=[c for c in r['validation']['claim_results'] if c['outcome']=='unsupported']
     assert rejected
     assert r['rejected_profiles']==[]  # Failures are scoped to evidence claims.
@@ -167,7 +168,7 @@ def test_citation_match_is_separate_from_supported_claim(mutation):
 def test_complete_roster_enforced_and_partial_rejections_preserved():
     p,s=hca();p['executives'][1]['appointment_date']='2024-01-01'
     r=assess_management(p,s)
-    assert len(r['profiles'])==7 and r['completion_status']=='partial'
+    assert len(r['profiles'])==7 and r['completion_status']=='complete'
     assert r['coverage']['missing']==[]
     assert r['profiles'][1]['appointment_date']==''
     assert any(c['claim_id']=='executive:2:appointment' and c['outcome']=='unsupported' for c in r['validation']['claim_results'])
@@ -210,7 +211,7 @@ def test_date_from_different_prior_role_is_not_admitted():
     # Marks' 2023 finance promotion is not the start of his National Group CFO role.
     p['executives'][4]['prior_internal_roles'][2]['start_date']='2023-01'
     r=assess_management(p,s)
-    assert r['completion_status']=='partial'
+    assert r['completion_status']=='complete'
     assert any(x['executive']=='Michael A. Marks' and 'bound' in x['reason'] for x in r['validation']['claim_results'])
     assert len(r['profiles'])==7
 

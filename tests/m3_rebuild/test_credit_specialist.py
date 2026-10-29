@@ -48,7 +48,7 @@ def test_normal_bo_shared_vertex_task_and_exact_audit_are_offline(db_session, tm
     from app.services.bo.m3_rebuild import workflow
     monkeypatch.setattr(workflow, 'locate_sources', lambda *args: pytest.fail('PDF reopened during M3 execution'))
     result = BusinessOverviewRunner(
-        db_session, backend=ScriptedBoBackend(_script()), bo_roster='v3', m3_version='v2',
+        db_session, backend=ScriptedBoBackend(_script()), bo_roster='v3',
         data_root=tmp_path/'data', output_root=tmp_path/'out', m3_backend=backend,
         m3_reviewer_backend=FixtureReviewerBackend(),
     ).run_case('CREDIT_M3', package=_package(), write_outputs=False)

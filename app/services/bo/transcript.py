@@ -38,10 +38,6 @@ class RecordingBackend(LLMBackend):
     def cache_identity(self, model_tier: str | None = None):
         return self._inner.cache_identity(model_tier)
 
-    def prepare_diagnostics(self, request):
-        prepare = getattr(self._inner, "prepare_diagnostics", None)
-        return prepare(request) if prepare else {}
-
     def generate(self, request: LLMRequest) -> LLMRawResult:
         entry: dict[str, Any] = {
             "task_type": request.method, "prompt_id": request.prompt.prompt_id,

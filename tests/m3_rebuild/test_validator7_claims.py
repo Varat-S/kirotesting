@@ -52,7 +52,7 @@ class MixedReview(LLMBackend):
 
 def run(db_session,tmp_path,backend,reviewer=None,package=None):
     result=BusinessOverviewRunner(db_session,backend=ScriptedBoBackend(_script()),
-        bo_roster='v3', m3_version='v2',data_root=tmp_path/'data',output_root=tmp_path/'out',
+        bo_roster='v3',data_root=tmp_path/'data',output_root=tmp_path/'out',
         m3_backend=backend,m3_reviewer_backend=reviewer or FixtureReviewerBackend()).run_case(
         'M4_CLAIMS',package=package or _package(),write_outputs=False)
     block=result.handoff['module_conclusions']['M3']
