@@ -54,8 +54,45 @@ class InferenceRule:
 
 _NEG = r"\b(?:not|no|never|neither|without|cannot|can't|n't|rather than)\b"
 
+
+class _ContractCommitmentRule(InferenceRule):
+    """Scope negation to each commitment assertion, not the whole hypothesis.
+
+    A noun such as "commitments" can follow "lack", and an unrelated denial
+    elsewhere must not exempt an affirmative guarantee. This is still a
+    lexical guard; evidence sufficiency remains the hypothesis validator's job.
+    """
+
+    def hit(self, text: str) -> bool:
+        subject = r"\b(?:contracts?|agreements?|arrangements?|contractually)\b"
+        action = r"\b(?:guarantee\w*|secure\w*|assure\w*|ensure\w*|commit\w*|lock(?:s|ed|ing)?[- ]in)\b"
+        target = r"\b(?:volumes?|revenues?|patients?|admissions?|demand|minimum purchases?)\b"
+        denial = (r"\b(?:not(?!\s+only\b)|no(?!\s+(?:fewer|less)\s+than\b)|never|"
+                  r"without|cannot|lack(?:s|ed|ing)?|absence\s+of|rather\s+than)\b|n't\b")
+        uncertainty = (r"\b(?:unclear|unknown|uncertain|not\s+(?:established|evidenced|verified|disclosed))"
+                       r"[^.;]{0,80}\b(?:whether|that|if)\b|\b(?:may|might|could)\s*$")
+        for clause in re.split(r"[.!?;]|\b(?:but|however|yet|whereas|although)\b", text, flags=re.I):
+            for verb in re.finditer(action, clause, _FLAGS):
+                before, after = clause[:verb.start()], clause[verb.end():]
+                if not re.search(subject + r"[^.;]{0,120}$", before, _FLAGS):
+                    continue
+                value = re.search(target, after[:60], _FLAGS)
+                passive = re.search(r"\b(?:revenues?|volumes?)\s+(?:is|are)\s+contractually\s*$", before, _FLAGS)
+                if value is None and passive is None:
+                    continue
+                # A new coordinated assertion gets its own negation scope.
+                prefix = re.split(r",|\b(?:and|or)\b", before, flags=re.I)[-1]
+                if re.search(denial, prefix, _FLAGS) or re.search(uncertainty, prefix, _FLAGS):
+                    continue
+                if value is not None and re.search(denial, after[:value.start()], _FLAGS):
+                    continue
+                if re.search(r"\b(?:is|are|remains?)\s+(?:not\s+(?:established|evidenced|verified|disclosed)|unverified|unclear|unknown)\b", after, _FLAGS):
+                    continue
+                return True
+        return False
+
 RULES: tuple[InferenceRule, ...] = (
-    InferenceRule(
+    _ContractCommitmentRule(
         "rate_agreement_to_volume_guarantee",
         "A reimbursement or price agreement does not guarantee volumes or revenue.",
         "audit_only",

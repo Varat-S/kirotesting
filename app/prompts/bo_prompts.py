@@ -11,6 +11,7 @@ makes every declared property required.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from app.prompts.m1_specialist_briefs import M1_SPECIALIST_BRIEFS
@@ -22,6 +23,10 @@ from app.services.bo.plans import (
     BO_ORCHESTRATOR_PROMPT,
     PURPOSES,
 )
+
+M1_AGENT6_SPECIALIST_PROMPT = Path(__file__).with_name(
+    "m1_agent6_specialist.txt"
+).read_text(encoding="utf-8")
 
 CLAIM_TYPES = ["fact", "calculated_fact", "management_claim", "inference", "assumption"]
 DIRECTIONS = ["positive", "negative", "mixed", "neutral"]
@@ -571,15 +576,7 @@ _AGENT_BRIEFS.update({
         "Boundaries: pricing power belongs to Pricing Power; switching costs to "
         "Customer Stickiness."
     ),
-    "M1A6": (
-        "You are Agent 6, the Business Resilience, Risk Interactions & Synthesis "
-        "agent of Module 1. You receive the VALIDATED, completeness-gated "
-        "hypotheses of the five Module 1 specialists in 'primary_hypotheses'.\n"
-        "Questions in 'open_questions' were left unanswered by the specialists. "
-        "Do not answer them yourself; where one bears on an interaction, name it "
-        "in that interaction's missing_information.\n"
-        + _AGENT_BRIEFS["BO6"].split("\n", 1)[1]
-    ),
+    "M1A6": M1_AGENT6_SPECIALIST_PROMPT,
     "M2": (
         "You are the Industry Information specialist (Business Overview Module 2).\n"
         "Assess industry structure and concentration, cyclicality, regulatory "
@@ -600,8 +597,8 @@ _AGENT_BRIEFS.update({
     ),
 })
 
-# The five primary M1 briefs are reviewed as a set.  Agent 6 retains its
-# existing interaction prompt and the original shared rules verbatim.
+# The five primary M1 briefs are reviewed as a set. Agent 6 uses its
+# separately supplied complete prompt in the v3 specialist catalogue.
 _AGENT_BRIEFS.update(M1_SPECIALIST_BRIEFS)
 
 _M1_EPISTEMIC_RULES = (
@@ -838,8 +835,11 @@ def bo_v3_prompt_catalogue() -> list[dict]:
             continue
         entries.append({
             "name": spec.agent_id, "role": spec.agent_id,
-            "template": specialist_block(spec) + "\n" + (
-                M1_SHARED_RULES if spec.code in M1_SPECIALIST_BRIEFS else SHARED_RULES),
+            # Agent 6's replacement is a complete, verbatim specialist prompt.
+            "template": (M1_AGENT6_SPECIALIST_PROMPT if spec.code == "M1A6" else
+                         specialist_block(spec) + "\n" + (
+                             M1_SHARED_RULES if spec.code in M1_SPECIALIST_BRIEFS
+                             else SHARED_RULES)),
             "response_schema": BO_NARROW_JSON_SCHEMA,
             "label": f"Business Overview v3 specialist {spec.code}: {spec.title}",
         })

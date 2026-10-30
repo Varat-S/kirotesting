@@ -826,6 +826,7 @@ class BoReportBuilder:
                 "orchestrator_merged_duplicates":
                     (run.orchestrator_output or {}).get("merged_duplicates") or [],
             },
+            "resilience_retrieval_feedback": run.resilience_feedback,
             "resilience_analysis": (
                 [h for h in current if h["agent_id"] == run.resilience_agent_id]
                 if run.agents[run.resilience_agent_id].status == "validated"

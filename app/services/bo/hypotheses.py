@@ -188,7 +188,7 @@ def unbound_numbers(text: str, quoted_values: list[float], quotes: list[str]) ->
 
 # Identifies the validation logic on every record it produces. Bump when a
 # check changes what is accepted, held back or rejected.
-HYPOTHESIS_VALIDATOR_VERSION = "bo-hypothesis-validator-2.2.0"
+HYPOTHESIS_VALIDATOR_VERSION = "bo-hypothesis-validator-2.2.1"
 _V2_VALIDATOR_IDS = {"BO1": "validator_1", "BO2": "validator_2", "BO3": "validator_3",
                      "BO4": "validator_4", "BO5": "validator_5", "BO6": "agent6_governance"}
 
