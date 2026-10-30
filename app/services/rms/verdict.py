@@ -1,6 +1,6 @@
 """The RMS verdict: grade, gates, the verdict matrix, terms, and a feasibility check of the structure.
 
-Order: the adjusted grade (FO composite notched by the M4 verdict and the business band) sets the level used
+Order: the adjusted grade (FO composite notched by the M4 verdict) sets the level used
 everywhere after it: the sizing multiples, the tenor, the terms; the capacity is sized at that level and tenor;
 the gates run; the matrix (adjusted level x utilisation) gives the verdict; the approved
 structure is then run through the existing structuring engine (``app.services.structuring``) as an
@@ -22,32 +22,31 @@ from .capacity import debt_capacity, existing_debt_service, level
 from .inputs import RmsRequest, load_bo, load_fo
 from .mitigants import mitigants
 from .policy import (
-    AGGRESSIVE_DISTRIBUTIONS_TO_DEBT, AMORTISATION, BUSINESS_BAND_NOTCH, DEBT_MISMATCH_TOLERANCE,
-    DEFAULT_INTEREST_RATE, DEFAULT_TENOR_YEARS, DOWNSIDE_DSCR_MIN, DOWNSIDE_SHOCK, DSCR_COVENANT,
+    AGGRESSIVE_DISTRIBUTIONS_TO_DEBT, AMORTISATION, BASE_RATE, BO_ACCEPTANCE_WAIVES, BUSINESS_PREMIUM_BPS,
+    BUSINESS_PREMIUM_DEFAULT, CREDIT_SPREAD_BPS, DEBT_MISMATCH_TOLERANCE, DEFAULT_TENOR_YEARS, DOWNSIDE_DSCR_MIN,
+    DOWNSIDE_SHOCK, DSCR_COVENANT,
     FINANCIAL_POLICY_COVENANT_HEADROOM, LEVERAGE_COVENANT_HEADROOM, LEVERAGE_MULTIPLE, LIQUIDITY_MISMATCH_TOLERANCE,
     M4_VERDICT_NOTCH, MAX_LTV, RMS_POLICY_VERSION, SECURED_LEVELS, SEVERITY_FLOOR, SEVERITY_MEASURES,
     SEVERITY_TRIGGER, SUBORDINATION_DRAG_SECURED, TENOR_CAP_YEARS, UTILISATION_EDGES, VERDICT_MATRIX,
 )
 
-RMS_SCHEMA_VERSION = "rms-1.2"  # 1.2: cross_checks, terms financial_policy; 1.1: fo_decisions, adjusted level
+RMS_SCHEMA_VERSION = "rms-1.3"  # 1.3: pricing, warnings; 1.2: cross_checks, terms financial_policy; 1.1: fo_decisions,
+# adjusted level
 LEGAL_SUFFIXES = ("inc", "llc", "corp", "corporation", "co", "ltd", "plc", "lp", "company")
 APPROVALS = ("approve", "approve_with_conditions", "approve_with_conditions_secured")
 CAPACITY_ONLY = "capacity_only"  # the verdict of a debt capacity report: no amount was requested
 
 
 def adjusted_grade(fo, bo):
-    """The FO composite score notched by the BO's credit-quality judgements (the M4 verdict, the business band),
-    then FO's severity floor. None without an FO composite. M3 structural findings are a capacity haircut, not a
-    notch: each BO signal is counted once."""
+    """The FO composite score notched by the BO's credit-quality judgement (the M4 verdict), then FO's severity
+    floor. None without an FO composite. M3 structural findings are a capacity haircut, not a notch: each BO
+    signal is counted once."""
     if fo.composite_score is None:
         return None
     notches = []
     if bo.m4_verdict in M4_VERDICT_NOTCH:
         notches.append({"source": "m4_verdict", "reason": f"M4 credit verdict {bo.m4_verdict}",
                         "notch": M4_VERDICT_NOTCH[bo.m4_verdict]})
-    if bo.business_band in BUSINESS_BAND_NOTCH:
-        notches.append({"source": "business_band", "reason": f"BO business risk band {bo.business_band}",
-                        "notch": BUSINESS_BAND_NOTCH[bo.business_band]})
     score = min(10.0, max(1.0, fo.composite_score + sum(n["notch"] for n in notches)))
     severe = [k for k in SEVERITY_MEASURES if (fo.scores.get(k) or 0) >= SEVERITY_TRIGGER]
     floored = bool(severe) and score < SEVERITY_FLOOR
@@ -69,6 +68,25 @@ def _entity(name):
 
 def _gap(a, b):
     return abs(a - b) / max(a, b) if max(a, b) > 0 else 0.0
+
+
+def pricing(fo, bo, requested_rate=None):
+    """The loan's interest rate and how it was built: the requested rate when one is given, otherwise the base
+    rate + a credit spread for FO's composite credit rating + a Business Overview premium for the M4 verdict.
+    None without a requested rate or an FO composite."""
+    if requested_rate is not None:
+        return {"basis": "requested", "rate": requested_rate}
+    if fo.composite_score is None:
+        return None
+    rating = credit_rating(fo.composite_score)
+    grade = rating.rstrip("+-")
+    verdict = bo.m4_verdict if bo.m4_verdict in BUSINESS_PREMIUM_BPS else None
+    spread, premium = CREDIT_SPREAD_BPS[grade], BUSINESS_PREMIUM_BPS[verdict or BUSINESS_PREMIUM_DEFAULT]
+    return {"basis": "policy", "base_rate": dict(BASE_RATE),
+            "credit_spread": {"fo_credit_rating": rating, "grade": grade, "bps": spread},
+            "business_premium": {"m4_verdict": verdict, "priced_as": verdict or BUSINESS_PREMIUM_DEFAULT,
+                                 "bps": premium},
+            "rate": round(BASE_RATE["rate"] + (spread + premium) / 10_000, 6)}
 
 
 def cross_checks(fo, bo):
@@ -157,6 +175,18 @@ def gates(fo, bo, capacity, checks=()):
     return out
 
 
+def waive_on_bo_acceptance(held, bo):
+    """(gates still holding, warnings): once a reviewer has accepted the BO handoff, the gates in
+    ``BO_ACCEPTANCE_WAIVES`` become warnings that record the outcome they would have had."""
+    if bo.handoff_review_status != "accepted":
+        return held, []
+    waived = [g for g in held
+              if g["gate_id"] in BO_ACCEPTANCE_WAIVES and (g["gate_id"] != "RMS-G05" or bo.m4_present)]
+    return ([g for g in held if g not in waived],
+            [{**g, "outcome": "warning", "would_have_been": g["outcome"], "waived_by": "bo_acceptance"}
+             for g in waived])
+
+
 def utilisation_band(utilisation):
     return next((i for i, edge in enumerate(UTILISATION_EDGES) if utilisation <= edge), len(UTILISATION_EDGES))
 
@@ -243,8 +273,6 @@ def _limitations(bo, checks=()):
     if not bo.validators_enforced:
         out.append("The Business Overview ran with its validators off: its findings are an ungoverned draft, "
                    "not validated against the filing.")
-    if bo.handoff_present and bo.business_band is None:
-        out.append("BO business risk band unavailable (the handoff carries none): no business-band notch applied.")
     if bo.m3_source is None:
         out.append("M3 unavailable: no structural haircut, ring-fencing or guarantor terms from M3.")
     elif bo.m3_source == "rebuild":
@@ -288,7 +316,9 @@ class RmsResult:
     utilisation: float | None
     grade: dict | None
     capacity: dict | None
+    pricing: dict | None = None
     gates: list = field(default_factory=list)
+    warnings: list = field(default_factory=list)  # gates waived by the BO reviewer's acceptance
     cross_checks: list = field(default_factory=list)
     terms: dict | None = None
     mitigants: list = field(default_factory=list)
@@ -332,17 +362,19 @@ def assess(request: RmsRequest | None, fo_payload: dict, *, handoff: dict | None
     request = request or RmsRequest()
     fo, bo = load_fo(fo_payload, fo_review, fo_overrides), load_bo(handoff, m4_analysis)
     grade = adjusted_grade(fo, bo)
-    rate = request.interest_rate if request.interest_rate is not None else DEFAULT_INTEREST_RATE
+    price = pricing(fo, bo, request.interest_rate)
+    rate = price["rate"] if price else None
     tenor = request.tenor_years or DEFAULT_TENOR_YEARS
     if grade is not None:
         tenor = min(tenor, TENOR_CAP_YEARS[grade["level"]])
     capacity = (debt_capacity(fo, bo, grade_level=grade["level"], tenor_years=tenor, interest_rate=rate)
                 if grade is not None else None)
     checks = cross_checks(fo, bo)
-    held = gates(fo, bo, capacity, checks)
+    held, warnings = waive_on_bo_acceptance(gates(fo, bo, capacity, checks), bo)
     result = RmsResult(entity_name=fo.entity_name, period_end=fo.period_end, request=asdict(request),
                        verdict="refer", approved_amount_m=None, utilisation=None, grade=grade, capacity=capacity,
-                       gates=held, cross_checks=checks, fo_decisions=list(fo.analyst_decisions),
+                       pricing=price, gates=held, warnings=warnings, cross_checks=checks,
+                       fo_decisions=list(fo.analyst_decisions),
                        limitations=_limitations(bo, checks))
     if request.requested_amount_m is None:
         return capacity_report(result, fo, bo, grade, tenor=tenor, rate=rate,

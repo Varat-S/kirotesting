@@ -9,13 +9,15 @@ from __future__ import annotations
 
 from app.services.fo.scoring import COMPOSITE_CORE, COMPOSITE_FLOOR, COMPOSITE_FLOOR_TRIGGER
 
-RMS_POLICY_VERSION = "rms-policy-1.2"  # 1.2: M3 rebuild, structured distributions, financial policy, M4 rollover
-# evidence, liquidity and borrower cross-checks; 1.1: each BO signal counted once; sizing at the adjusted grade
+RMS_POLICY_VERSION = "rms-policy-1.4"  # 1.4: risk-based pricing (SOFR + credit spread + business premium); an
+# accepted BO turns its gates into warnings; 1.3: no business-band notch (the BO no longer gives a band); 1.2: M3
+# rebuild, structured distributions, financial policy, M4 rollover evidence, liquidity and borrower cross-checks;
+# 1.1: each BO signal counted once; sizing at the adjusted grade
 
 # Risk levels on the FO 1-10 scale (highest score in each level). FO's "Very low" folds into "low".
 LEVELS = (("low", 3.5), ("moderate", 5.0), ("elevated", 7.5), ("high", 10.0))
 
-# Each BO signal is counted once. Credit-quality judgements (the M4 verdict, the business band) notch the grade,
+# Each BO signal is counted once. The BO's credit-quality judgement (the M4 verdict) notches the grade,
 # and the one adjusted grade then sets everything below: the sizing multiples, the tenor, the terms and the
 # verdict. Structural facts that cut what a lender can reach (M3 findings, unproven mitigants) are a capacity
 # haircut only. Refinancing distress acts only through the rollover rule.
@@ -43,16 +45,26 @@ ROLLOVER_CONFIRMED_MAX_REFINANCING_SCORE = 4
 # over its tenor (first-year principal + interest), whatever its final amortisation: the conservative case,
 # and the same debt service the structuring engine's feasibility check uses.
 DEFAULT_TENOR_YEARS = 5
-DEFAULT_INTEREST_RATE = 0.065
+
+# --- Pricing (when the request doesn't give a rate) ---------------------------------------------------------
+# A floating rate: the base rate + a credit spread for FO's financial risk + a premium for the Business
+# Overview's credit judgement (the M4 verdict). The all-in rate is today's coupon, and the loan is sized at it.
+# The base is the latest published overnight SOFR (New York Fed): update the rate and its date together.
+BASE_RATE = {"name": "SOFR (overnight)", "rate": 0.0394, "as_of": "2026-10-28"}
+# Credit spread over the base, in bps, by the letter grade of FO's composite credit rating (its +/- ignored).
+CREDIT_SPREAD_BPS = {"AAA": 60, "AA": 80, "A": 110, "BBB": 160, "BB": 275, "B": 425, "CCC": 700, "CC": 1000,
+                     "C": 1300, "D": 1300}
+# Business Overview premium, in bps, by the M4 credit verdict; without one, priced as "adequate".
+BUSINESS_PREMIUM_BPS = {"strong": -25, "satisfactory": 0, "adequate": 50, "weak": 150}
+BUSINESS_PREMIUM_DEFAULT = "adequate"
 
 # --- BO haircut on capacity: structural facts only ----------------------------------------------------------
 HAIRCUT_CAP = 0.40
 M3_FINDING_HAIRCUT, M3_FINDINGS_COUNTED = 0.05, 2
 UNPROVEN_MITIGANT_HAIRCUT = 0.05
 
-# --- Adjusted grade (FO composite, notched by BO credit-quality judgements) --------------------------------
+# --- Adjusted grade (FO composite, notched by the M4 credit verdict) ---------------------------------------
 M4_VERDICT_NOTCH = {"strong": -0.5, "satisfactory": 0.0, "adequate": 0.5, "weak": 1.5}
-BUSINESS_BAND_NOTCH = {1: -0.5, 2: 0.0, 3: 0.5, 4: 1.5}
 # FO's own severity floor carries over: leverage, liquidity or DSCR at 9 or more keeps the grade at 7 or worse.
 SEVERITY_MEASURES, SEVERITY_TRIGGER, SEVERITY_FLOOR = COMPOSITE_CORE, COMPOSITE_FLOOR_TRIGGER, COMPOSITE_FLOOR
 # M3 structural findings that count: negative, high materiality, usable, on one of these dimensions.
@@ -67,6 +79,12 @@ BLOCKING_BO_SEVERITIES = ("high", "material")
 # FO's undrawn revolver and M4's revolver availability (limit less drawn, read either gross or net of the
 # commercial paper it backstops) further apart than this refer the case.
 LIQUIDITY_MISMATCH_TOLERANCE = 0.10
+# A reviewer's acceptance of the BO handoff stands in for these gates: the BO's own state (an incomplete or
+# unvalidated M4, unresolved challenges) and its disagreements with FO. They stay on the result as warnings and the
+# verdict follows the matrix. FO's own gates still hold: its going concern, escalations (cleared by an FO
+# decision), covenant breach, missing composite or capacity, and the structuring engine. G05 without any M4
+# output still holds: there is nothing on the debt structure to accept.
+BO_ACCEPTANCE_WAIVES = ("RMS-G05", "RMS-G06", "RMS-G07", "RMS-G11", "RMS-G12")
 
 # --- Financial policy -----------------------------------------------------------------------------------------
 # Debt-funded shareholder distributions (M4 Deliverable 3) of at least this share of M4 total indebtedness over

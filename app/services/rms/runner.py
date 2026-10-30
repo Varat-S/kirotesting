@@ -184,6 +184,8 @@ def rms_summary(record: dict, path: Path) -> dict:
         "rating": grade.get("rating"),
         "level": grade.get("level"),
         "gates": [f"{g['gate_id']}: {g['reason']}" for g in record["gates"]],
+        "warnings": [f"{g['gate_id']}: {g['reason']} (would have been {g['would_have_been']})"
+                     for g in record.get("warnings") or []],
         "mitigants": [m["rule_id"] for m in record["mitigants"]],
         "fo_decisions": record.get("fo_decisions") or [],
         "requires_human_review": record["requires_human_review"],

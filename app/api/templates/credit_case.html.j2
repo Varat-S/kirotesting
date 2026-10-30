@@ -43,9 +43,10 @@
 {% if rms.stale %}<div class="notice" id="stale"><strong>Out of date:</strong> {{ rms.stale|join('; ') }}. <form method="post" action="/cases/{{ view.case_id }}/credit/assess" style="display:inline">
 <input type="hidden" name="fo_run" value="{{ fo_run }}"><input type="hidden" name="bo_run" value="{{ bo_run }}">
 <input type="hidden" name="requested_amount_m" value="{{ rms.request.requested_amount_m if rms.request.requested_amount_m is not none else '' }}"><input type="hidden" name="tenor_years" value="{{ rms.request.tenor_years }}">
-<input type="hidden" name="interest_rate" value="{{ rms.request.interest_rate }}"><input type="hidden" name="collateral_value_m" value="{{ rms.request.collateral_value_m if rms.request.collateral_value_m is not none else '' }}">
+<input type="hidden" name="interest_rate" value="{{ rms.request.interest_rate if rms.request.interest_rate is not none else '' }}"><input type="hidden" name="collateral_value_m" value="{{ rms.request.collateral_value_m if rms.request.collateral_value_m is not none else '' }}">
 <button type="submit">Re-assess now</button></form></div>{% endif %}
 {% if r.gates %}<p><strong>Gates holding:</strong></p><ul>{% for g in r.gates %}<li>{{ g }}</li>{% endfor %}</ul>{% endif %}
+{% if r.warnings %}<p class="warn"><strong>Warnings</strong> (gates waived because the BO reviewer accepted the handoff):</p><ul>{% for g in r.warnings %}<li>{{ g }}</li>{% endfor %}</ul>{% endif %}
 <p class="subtle">Assessment <code>{{ r.run_id }}</code>{% if r.supersedes %} (supersedes <code>{{ r.supersedes }}</code>){% endif %} · <code>{{ r.output }}</code></p>
 </div>
 {% else %}<p>No assessment of these runs yet. Enter the requested loan below, or leave it blank for a debt capacity report.</p>{% endif %}
@@ -54,7 +55,7 @@
 <input type="hidden" name="fo_run" value="{{ fo_run }}"><input type="hidden" name="bo_run" value="{{ bo_run }}">
 <div><label for="requested_amount_m">Requested loan, US$ millions <small>(blank: debt capacity only)</small></label><input id="requested_amount_m" name="requested_amount_m" type="number" min="0.1" step="0.1" value="{{ rms.request.requested_amount_m if rms.request.requested_amount_m is not none else '' }}"></div>
 <div><label for="tenor_years">Tenor, years</label><input id="tenor_years" name="tenor_years" type="number" min="1" step="1" value="{{ rms.request.tenor_years }}"></div>
-<div><label for="interest_rate">Interest rate</label><input id="interest_rate" name="interest_rate" type="number" min="0" step="0.0005" value="{{ rms.request.interest_rate }}"></div>
+<div><label for="interest_rate">Interest rate, as a decimal <small>(blank: SOFR + credit spread + business premium)</small></label><input id="interest_rate" name="interest_rate" type="number" min="0" max="1" step="0.0005" placeholder="e.g. 0.065" value="{{ rms.request.interest_rate if rms.request.interest_rate is not none else '' }}"></div>
 <div><label for="collateral_value_m">Collateral value, US$ millions <small>(secured only)</small></label><input id="collateral_value_m" name="collateral_value_m" type="number" min="0" step="0.1" value="{{ rms.request.collateral_value_m if rms.request.collateral_value_m is not none else '' }}"></div>
 <div class="buttons"><button class="primary-button" type="submit">{{ 'Re-assess' if r else 'Assess' }}</button></div>
 </form>{% else %}<p class="notice">This case has no Financial Overview run: RMS needs one.</p>{% endif %}
@@ -66,7 +67,6 @@
 <dl class="facts">
 <dt>Handoff</dt><dd>{{ st(bo.human_review_status) }}{% if bo.reviewer %} by {{ bo.reviewer }}{% endif %}{% if bo.reviewed_at %} ({{ bo.reviewed_at[:10] }}){% endif %}</dd>
 <dt>Conclusion</dt><dd>{{ st(bo.conclusion_status) }}</dd>
-<dt>Business risk band</dt><dd>{{ bo.business_band if bo.business_band is not none else 'unavailable' }}</dd>
 <dt>M4 credit verdict</dt><dd>{% if bo.m4.present %}{{ st(bo.m4.verdict) }} · placement {{ (bo.m4.placement or '—')|replace('_', ' ') }}{% else %}<span class="warn">no Module 4 output</span>{% endif %}</dd>
 {% if bo.m4.present %}<dt>M4 status</dt><dd>{{ st(bo.m4.status) }} · debt specialist {{ 'validated' if bo.m4.validated else 'not validated' }}</dd>
 <dt>M4 total debt</dt><dd>{{ usd(bo.m4.total_debt_m) }} · refinancing distress events {{ bo.m4.distress_events if bo.m4.distress_events is not none else '—' }}</dd>{% endif %}
@@ -148,6 +148,7 @@
 <dt>Amount</dt><dd>{{ usd(t.amount_m) }}</dd>
 <dt>Rank</dt><dd>{{ t.rank|replace('_', ' ') }}</dd>
 <dt>Tenor</dt><dd>{{ t.tenor_years }} years at {{ '{:.2%}'.format(t.interest_rate) }}</dd>
+{% if rec.pricing %}{% set p = rec.pricing %}<dt>Pricing</dt><dd>{% if p.basis == 'requested' %}requested rate{% else %}{{ p.base_rate.name }} {{ '{:.2%}'.format(p.base_rate.rate) }} (as of {{ p.base_rate.as_of }}) + {{ p.credit_spread.bps }}bp credit spread (FO {{ p.credit_spread.fo_credit_rating }}) {{ '+' if p.business_premium.bps >= 0 else '-' }} {{ p.business_premium.bps|abs }}bp business premium (M4 {{ p.business_premium.m4_verdict or 'verdict unavailable: priced as ' ~ p.business_premium.priced_as }}){% endif %}</dd>{% endif %}
 <dt>Amortisation</dt><dd>{{ t.amortisation.type|replace('_', ' ') }}{% if t.amortisation.amortised_share %}, {{ '{:.0%}'.format(t.amortisation.amortised_share) }} amortised{% endif %}{% if t.amortisation.excess_cash_sweep %}, {{ '{:.0%}'.format(t.amortisation.excess_cash_sweep) }} excess cash sweep{% endif %}</dd>
 <dt>Pro forma leverage</dt><dd>{{ t.pro_forma_leverage }}x</dd>
 <dt>Covenants</dt><dd>{% for k in t.financial_covenants %}{{ k.covenant|replace('_', ' ') }} {% if k.max is defined %}≤ {{ k.max }}x{% else %}≥ {{ k.min }}x{% endif %} ({{ k.test }}){% if not loop.last %}<br>{% endif %}{% endfor %}</dd>

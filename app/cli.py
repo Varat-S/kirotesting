@@ -267,7 +267,7 @@ def main(argv=None):
     run_rms.add_argument("--capacity-only", action="store_true",
                          help="A debt capacity report: no requested amount, no verdict")
     run_rms.add_argument("--tenor", type=int, help="Requested tenor in years (default 5)")
-    run_rms.add_argument("--rate", type=float, help="Interest rate, e.g. 0.065 (default 6.5%%)")
+    run_rms.add_argument("--rate", type=float, help="Interest rate, e.g. 0.065 (default: SOFR + credit spread + business premium)")
     run_rms.add_argument("--collateral-value", type=float, help="Collateral value, US$ millions")
     run_rms.add_argument("--fo-run", help="FO run id (default: the case's latest)")
     run_rms.add_argument("--bo-run", help="BO analysis run id (default: the case's latest handoff)")
@@ -327,7 +327,7 @@ def main(argv=None):
                       help="Run the BO validators in advisory mode: findings are recorded, not "
                            "applied (an ungoverned draft, always left for human review)")
     both.add_argument("--tenor", type=int, help="Requested tenor in years (default 5)")
-    both.add_argument("--rate", type=float, help="Interest rate, e.g. 0.065 (default 6.5%%)")
+    both.add_argument("--rate", type=float, help="Interest rate, e.g. 0.065 (default: SOFR + credit spread + business premium)")
     both.add_argument("--collateral-value", type=float,
                       help="Collateral value, US$ millions (a secured loan's LTV test)")
     approve = commands.add_parser(

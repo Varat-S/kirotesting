@@ -45,9 +45,8 @@ def m4_with(**box):
     return m4
 
 
-def handoff(m4=M4, *, band=None, m3=(), vulnerabilities=(), escalations=(), unproven=()):
+def handoff(m4=M4, *, m3=(), vulnerabilities=(), escalations=(), unproven=()):
     return {
-        "business_risk_band": band,
         "module_conclusions": {"M3": {"m3_assessment": {"structural_credit_findings": list(m3)}},
                                "M4": {"m4_analysis": m4}},
         "operational_vulnerabilities": list(vulnerabilities),
@@ -90,8 +89,8 @@ def test_hca_capacity_matches_the_hand_calculation():
     assert c["tests_m"] == {
         "base_leverage": pytest.approx(23838.5),  # 4.5 x 16,119 - 48,697
         "downside_leverage": pytest.approx(HCA_CAPACITY),
-        "base_dscr": pytest.approx(17376.6),  # (8,566 / 1.25 - 2,248) / (1/5 + 6.5%)
-        "downside_dscr": pytest.approx(17376.6),  # (8,566 x 0.8 / 1.0 - 2,248) / (1/5 + 6.5%)
+        "base_dscr": pytest.approx(18389.8),  # (8,566 / 1.25 - 2,248) / (1/5 + 5.04%)
+        "downside_dscr": pytest.approx(18389.8),  # (8,566 x 0.8 / 1.0 - 2,248) / (1/5 + 5.04%)
     }
     assert c["binding_test"] == "downside_leverage" and c["haircut"] == 0
     assert c["derived_capacity_m"] == pytest.approx(HCA_CAPACITY)
@@ -107,8 +106,33 @@ def test_the_capacity_breakdown_labels_each_test_and_marks_the_binding_one():
     assert [(t["test"], t["binding"]) for t in c["tests"]] == [
         ("base_leverage", False), ("downside_leverage", True), ("base_dscr", False), ("downside_dscr", False)]
     assert c["tests"][0]["label"] == "Leverage, base: 4.5x EBITDAR - lease-adjusted debt"
-    assert c["tests"][2]["label"] == "DSCR, base: (CFADS / 1.25x - existing debt service) / (1/5 + 6.50%)"
+    assert c["tests"][2]["label"] == "DSCR, base: (CFADS / 1.25x - existing debt service) / (1/5 + 5.04%)"
     assert c["base_capacity_m"] == c["derived_capacity_m"] == pytest.approx(HCA_CAPACITY) and c["haircuts"] == []
+
+
+def test_the_rate_is_sofr_plus_the_fo_credit_spread_plus_the_bo_premium():
+    p = assess(RmsRequest(2000), FO, m4_analysis=M4).pricing
+    assert p["basis"] == "policy" and p["base_rate"]["rate"] == 0.0394
+    assert p["credit_spread"] == {"fo_credit_rating": "A+", "grade": "A", "bps": 110}
+    assert p["business_premium"] == {"m4_verdict": "satisfactory", "priced_as": "satisfactory", "bps": 0}
+    assert p["rate"] == pytest.approx(0.0504)
+
+
+@pytest.mark.parametrize("m4, premium, rate", [
+    (m4_with(overall_credit_rating_verdict="strong"), -25, 0.0479),
+    (m4_with(overall_credit_rating_verdict="weak"), 150, 0.0654),
+    (None, 50, 0.0554),  # no Business Overview: priced as "adequate"
+])
+def test_the_business_overview_moves_the_rate(m4, premium, rate):
+    r = assess(RmsRequest(2000), FO, m4_analysis=m4)
+    assert r.pricing["business_premium"]["bps"] == premium and r.pricing["rate"] == pytest.approx(rate)
+    assert r.capacity["assumptions"]["interest_rate"] == pytest.approx(rate)
+
+
+def test_a_requested_rate_overrides_the_pricing():
+    r = assess(RmsRequest(2000, interest_rate=0.08), FO, m4_analysis=M4)
+    assert r.pricing == {"basis": "requested", "rate": 0.08}
+    assert r.terms["interest_rate"] == 0.08 and r.capacity["assumptions"]["interest_rate"] == 0.08
 
 
 def test_without_rollover_the_bond_maturities_leave_no_dscr_capacity():
@@ -163,12 +187,12 @@ def test_a_weak_m4_verdict_reaches_capacity_through_the_grade_only():
     assert lev["max"] == pytest.approx((48697 + 3923.8) / 16119 * 1.25, abs=0.01)
 
 
-def test_the_business_band_notches_and_an_m3_finding_only_cuts_capacity():
-    h = handoff(band=4, m3=[m3_finding("M3-F1", "guarantor_coverage")],
+def test_an_m3_finding_only_cuts_capacity():
+    h = handoff(m4_with(overall_credit_rating_verdict="weak"), m3=[m3_finding("M3-F1", "guarantor_coverage")],
                 vulnerabilities=[{"claim_id": "CLM-RSK-01", "title": "Regulatory and Reimbursement Dependency",
                                   "text": "Medicare and Medicaid make up a large share of revenue."}])
     r = assess(RmsRequest(2000), FO, handoff=h)
-    assert r.grade["score"] == 4.8 and [n["source"] for n in r.grade["notches"]] == ["m4_verdict", "business_band"]
+    assert r.grade["score"] == 4.8 and [n["source"] for n in r.grade["notches"]] == ["m4_verdict"]
     assert [h["source"] for h in r.capacity["haircuts"]] == ["m3_structural"] and r.capacity["haircut"] == 0.05
     assert r.capacity["derived_capacity_m"] == pytest.approx(3727.6)  # 3,923.8 x 0.95
     assert r.verdict == "approve" and r.approved_amount_m == 2000
@@ -178,8 +202,8 @@ def test_the_business_band_notches_and_an_m3_finding_only_cuts_capacity():
 
 
 def test_one_grade_sizes_everything_so_an_elevated_hca_has_no_capacity():
-    # 3.3 + 0.5 (adequate) + 1.5 (band 4) = 5.3: at 3.6x, stressed EBITDAR already carries more than the net debt.
-    r = assess(RmsRequest(2000), FO, handoff=handoff(m4_with(overall_credit_rating_verdict="adequate"), band=4))
+    # Leverage at 9.2 floors the grade at 7.0: at 3.6x, stressed EBITDAR already carries more than the net debt.
+    r = assess(RmsRequest(2000), fo_with({"leverage": 9.2}), m4_analysis=M4)
     assert r.grade["level"] == "elevated" and r.capacity["tests_m"]["downside_leverage"] == 0
     assert r.capacity["derived_capacity_m"] == 0 and r.verdict == "decline"
 
@@ -239,6 +263,35 @@ def test_hard_gates_decline_or_refer(fo, bo, gate, verdict):
     r = assess(RmsRequest(2000), fo, **bo)
     assert gate in [g["gate_id"] for g in r.gates]
     assert r.verdict == verdict and r.approved_amount_m is None and r.feasibility is None
+
+
+def _reviewed(review, m4=M4, **kw):
+    return {**handoff(m4, **kw), "human_review_status": review}
+
+
+@pytest.mark.parametrize("bo, gate", [
+    (_reviewed("accepted", _incomplete_m4()), "RMS-G05"),
+    (_reviewed("accepted", escalations=[{"challenge_id": "c1", "severity": "high"}]), "RMS-G06"),
+    (_reviewed("accepted", _mismatched_m4()), "RMS-G07"),
+])
+def test_an_accepted_bo_turns_its_gates_into_warnings(bo, gate):
+    r = assess(RmsRequest(2000), FO, handoff=bo)
+    assert r.gates == [] and r.verdict == "approve" and r.approved_amount_m == 2000
+    assert [(w["gate_id"], w["outcome"], w["would_have_been"]) for w in r.warnings] == [(gate, "warning", "refer")]
+
+
+def test_a_pending_bo_still_holds_its_gates():
+    r = assess(RmsRequest(2000), FO, handoff=_reviewed("pending", _mismatched_m4()))
+    assert [g["gate_id"] for g in r.gates] == ["RMS-G07"] and r.verdict == "refer" and r.warnings == []
+
+
+def test_an_accepted_bo_does_not_waive_fo_gates_or_a_missing_m4():
+    r = assess(RmsRequest(2000), fo_with(going_concern="fail"), handoff=_reviewed("accepted", _mismatched_m4()))
+    assert [g["gate_id"] for g in r.gates] == ["RMS-G01"] and r.verdict == "decline"
+    assert [w["gate_id"] for w in r.warnings] == ["RMS-G07"]
+    no_m4 = {"module_conclusions": {}, "human_review_status": "accepted"}
+    r = assess(RmsRequest(2000), FO, handoff=no_m4)
+    assert "RMS-G05" in [g["gate_id"] for g in r.gates] and r.verdict == "refer"
 
 
 def test_a_referral_still_drafts_provisional_terms():
@@ -331,14 +384,14 @@ def test_without_a_requested_amount_rms_reports_the_debt_capacity(request_):
 def test_a_capacity_report_records_the_gates_but_decides_nothing():
     r = assess(RmsRequest(), fo_with(going_concern="fail"), m4_analysis=M4)
     assert r.verdict == "capacity_only" and "RMS-G01" in _gate_ids(r)
-    no_capacity = assess(RmsRequest(), FO, handoff=handoff(m4_with(overall_credit_rating_verdict="adequate"), band=4))
+    no_capacity = assess(RmsRequest(), fo_with({"leverage": 9.2}), m4_analysis=M4)
     assert no_capacity.verdict == "capacity_only" and no_capacity.capacity["derived_capacity_m"] == 0
     assert no_capacity.terms is None and no_capacity.feasibility is None
 
 
 def test_the_result_serialises_with_its_versions():
     out = json.loads(json.dumps(assess(RmsRequest(2000), FO, m4_analysis=M4).to_dict()))
-    assert out["schema_version"] == "rms-1.2" and out["policy_version"] == "rms-policy-1.2"
+    assert out["schema_version"] == "rms-1.3" and out["policy_version"] == "rms-policy-1.4"
     assert out["verdict"] == "approve" and out["request"]["requested_amount_m"] == 2000
 
 
@@ -509,4 +562,4 @@ def test_the_bo_questions_and_an_aggregated_ladder_become_conditions_and_limitat
     assert any("one aggregate line" in x for x in r.limitations)
     assert "BO open question: What are the supplier concentrations?" in r.limitations
     assert "BO evidence gaps: Supplier breakdown" in r.limitations
-    assert any("business risk band unavailable" in x for x in r.limitations)
+    assert not any("business risk band" in x for x in r.limitations)

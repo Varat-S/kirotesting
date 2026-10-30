@@ -7,8 +7,8 @@ Base capacity is the smallest of four tests, on the FO headline figures (US$ mil
 * base DSCR:          (CFADS / DSCR_min - existing debt service) / (1 / tenor + rate)
 * downside DSCR:      (CFADS x (1 + shock) / 1.0 - existing debt service) / (1 / tenor + rate)
 
-``L_max`` and ``DSCR_min`` follow the adjusted grade's level (the FO composite notched by the M4 verdict and
-the business band), so those BO judgements reach capacity through the grade alone. The new loan's debt service is its first year as a
+``L_max`` and ``DSCR_min`` follow the adjusted grade's level (the FO composite notched by the M4 verdict), so
+that BO judgement reaches capacity through the grade alone. The new loan's debt service is its first year as a
 straight-line amortiser (1 / tenor of principal + interest): conservative, and the same as the structuring
 engine's, so a loan sized here also passes its leverage and DSCR checks. Existing debt service is FO's DSCR
 debt service, or interest only when the maturities count as refinanced (FO's refinancing test scores 3 or

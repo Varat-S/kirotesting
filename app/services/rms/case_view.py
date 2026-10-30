@@ -12,7 +12,7 @@ from app.services.fo.review import overrides_for, review_for, review_view
 from app.services.fo.scoring import COMPOSITE_WEIGHTS
 
 from .inputs import undecided_escalations, load_bo, load_fo
-from .policy import DEFAULT_INTEREST_RATE, DEFAULT_TENOR_YEARS
+from .policy import DEFAULT_TENOR_YEARS
 from .runner import current_inputs, records, rms_summary, stale_reasons
 
 
@@ -47,7 +47,6 @@ def _bo_panel(row):
         "can_accept": row.human_review_status == "pending" and payload.get("business_topic_conclusion_id") is not None,
         "can_reject": row.human_review_status == "pending",
         "unresolved_challenges": payload.get("unresolved_challenges") or [],
-        "business_band": bo.business_band,
         "m4": {"present": bo.m4_present, "status": bo.m4_status, "validated": bo.m4_debt_validated,
                "verdict": bo.m4_verdict, "placement": bo.m4_placement, "total_debt_m": bo.m4_total_debt_m,
                "distress_events": bo.distress_events},
@@ -91,7 +90,7 @@ def credit_view(session, case_id: str, *, output_root, fo_run_id: str | None = N
                         for r in reversed(history)],
             "request": {"requested_amount_m": request.get("requested_amount_m"),
                         "tenor_years": request.get("tenor_years") or DEFAULT_TENOR_YEARS,
-                        "interest_rate": request.get("interest_rate") or DEFAULT_INTEREST_RATE,
+                        "interest_rate": request.get("interest_rate"),
                         "collateral_value_m": request.get("collateral_value_m")},
         },
     }

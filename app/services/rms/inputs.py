@@ -192,7 +192,6 @@ class BoInputs:
     distributions_debt_funded: bool = False  # M4 D3: buybacks or dividends funded partly from debt
     distributions_3y_m: float | None = None  # M4 D3: buybacks + dividends over three years
     adverse_strategy_findings: tuple = ()  # Agent A acquisition / integration findings marked negative or adverse
-    business_band: int | None = None  # 1 (lowest risk) - 4
     unproven_mitigants: tuple = ()
     vulnerabilities: tuple = ()  # (claim id, title, text) of the handoff's material risks and weaknesses
     risk_categories: tuple = ()  # (claim id, category) where the BO declares a vulnerability's category
@@ -357,7 +356,6 @@ def load_bo(handoff: dict | None = None, m4_analysis: dict | None = None) -> BoI
         distributions_debt_funded=debt_funded,
         distributions_3y_m=distributions_3y,
         adverse_strategy_findings=adverse,
-        business_band=handoff.get("business_risk_band"),
         unproven_mitigants=tuple(u.get("hypothesis_id") for u in handoff.get("unproven_mitigants") or []),
         vulnerabilities=vulnerabilities,
         risk_categories=tuple((v.get("claim_id"), v["risk_category"]) for v in raw_vulnerabilities
