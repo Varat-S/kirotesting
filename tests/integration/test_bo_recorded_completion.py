@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from app.schemas.bo import AcceptedBusinessOverview
+from app.schemas.bo import AcceptedBusinessOverview, MitigantAssessment
 from app.services.bo.completion import (
     ConservativeCompletionBackend,
     RecordedCompletionError,
@@ -175,6 +175,38 @@ def test_unsupported_high_confidence_claim_cannot_become_established(source):
     )
     assert any(issue.startswith("inadmissible_hypothesis:") for issue in issues)
     assert any(issue.startswith("no_validated_basis:") for issue in issues)
+
+
+@pytest.mark.parametrize("with_mitigant", [True, False])
+def test_claim_may_cite_its_mitigants_outcome_evidence(source, with_mitigant):
+    # Live HCA run: a claim cited a mitigant's outcome evidence, which the
+    # hypothesis relies on although it is neither support nor contradiction.
+    usable = [h for h in source.hypotheses.values() if h.usable]
+    base = usable[0]
+    outcome = next(e for h in usable for e in h.evidence_ids()
+                   if e not in base.evidence_ids())
+    mitigant = MitigantAssessment(capability="Annual rate increases", existence="verified",
+                                  outcome_evidence_ids=[outcome])
+    hypotheses = dict(source.hypotheses)
+    hypotheses[base.hypothesis_id] = base.model_copy(
+        update={"mitigant": mitigant if with_mitigant else None})
+    parsed = {
+        "overall_assessment": {
+            "claim_id": "mitigated", "category": "assessment",
+            "text": "Rate renewals offset cost inflation.",
+            "section": "executive", "claim_type": "inference",
+            "hypothesis_ids": [base.hypothesis_id],
+            "parameter_result_ids": [], "evidence_ids": [*base.evidence_ids(), outcome],
+            "materiality": "high", "uncertainty": "Inferred.", "quoted_values": [],
+        }
+    }
+    issues = validate_orchestrator_output(
+        parsed, hypotheses=hypotheses, reconciliation=source.reconciliation,
+        indicators=source.indicators,
+        accepted_parameter_ids={p.parameter_result_id for p in source.parameters},
+    )
+    mismatched = any(i.startswith("claim_evidence_mismatch:") for i in issues)
+    assert mismatched is not with_mitigant
 
 
 def test_cross_specialist_contradiction_remains_visible(tmp_path, source):

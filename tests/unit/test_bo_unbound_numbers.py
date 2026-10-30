@@ -17,3 +17,10 @@ def test_rounded_and_percentage_forms_stay_bound():
 
 def test_unsupplied_number_is_still_unbound():
     assert unbound_numbers("Margin was 0.488996.", [0.488995], []) == ["0.488996"]
+
+
+def test_thousands_separator_is_read_as_one_number():
+    # Live HCA run: "$7,692.0 million" was read as "692.0" and rejected.
+    assert unbound_numbers("Cash flow was $7,692.0 million.", [7692.0], []) == []
+    assert unbound_numbers("Cash flow was $7,692.0 million.", [692.0], []) == ["7,692.0"]
+    assert unbound_numbers("Occupancy took 1,250 days.", [1250.0], []) == []

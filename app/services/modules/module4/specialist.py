@@ -10,7 +10,9 @@ Ties the three pieces together:
    which validates the raw output against the fixed
    :data:`app.schemas.module4.MODULE4_JSON_SCHEMA` BEFORE use.
 3. Run the deterministic :class:`DebtStructureValidator` over the parsed output
-   and attach the report. When its reconciliation leaves a gap, ask the model
+   and attach the report. Reconciling items are dropped first when the
+   instruments alone already match the reported total (they would double-count).
+   When its reconciliation leaves a gap, ask the model
    ONCE to explain the gap from the filing passages it was given; each item it
    returns counts only if its quote is verbatim in those passages (check 6).
    When the validator still fails, a MANDATORY escalation is raised (explicit
@@ -93,6 +95,8 @@ class Module4Result:
     escalation_id: str | None = None
     # The reconciliation follow-up, when one was made (see Module4Specialist._reconcile).
     reconciliation_followup: dict[str, Any] | None = None
+    # Reconciling items dropped because the instruments already matched the total.
+    dropped_reconciling_items: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def validated(self) -> bool:
@@ -149,6 +153,7 @@ class Module4Specialist:
             )
 
         output = _in_maturity_order(Module4Output.model_validate(run.parsed))
+        output, dropped = self._without_unneeded_items(output)
         passages = inputs.filing_passages()
         report = self._validator.validate(output, filing_passages=passages)
         followup = None
@@ -162,7 +167,27 @@ class Module4Specialist:
             run=run,
             escalation_id=escalation_id,
             reconciliation_followup=followup,
+            dropped_reconciling_items=dropped,
         )
+
+    def _without_unneeded_items(
+        self, output: Module4Output,
+    ) -> tuple[Module4Output, list[dict[str, Any]]]:
+        """Drop reconciling items when the instruments alone already reconcile.
+
+        Reconciling items only bridge principal to a carrying-value total. When
+        the instruments' principal already matches the reported total (it is the
+        face amount), any item listed would double-count, so all are dropped and
+        returned for the audit trail.
+        """
+        d1 = output.deliverable_1
+        if not d1.reconciling_items:
+            return output, []
+        bare = output.model_copy(update={
+            "deliverable_1": d1.model_copy(update={"reconciling_items": []})})
+        if not self._validator.validate(bare).check(CHECK_RECONCILIATION).passed:
+            return output, []
+        return bare, [i.model_dump(mode="json") for i in d1.reconciling_items]
 
     def _reconcile(self, inputs: Module4Inputs, output: Module4Output,
                    report: DebtStructureValidatorReport, *, case_version, key):

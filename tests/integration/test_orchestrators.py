@@ -106,6 +106,26 @@ def test_invented_number_is_rejected(db_session):
                for i in outcome.issues)
 
 
+@pytest.mark.parametrize("quoted, valid", [
+    (0.070776, True),   # live HCA run: six-decimal rounding of the validated value
+    (0.0708, True),     # four decimals is the coarsest rounding accepted
+    (0.071, False),     # three decimals is not enough
+    (0.070777, False),  # mis-rounded
+    (0.0001, False),    # four decimals, but too far from a small value
+])
+def test_quoted_number_may_round_the_validated_value(quoted, valid):
+    validated = 0.07077602934719487 if quoted != 0.0001 else 0.00012
+    parsed = {"overall_assessment": {
+        "claim_id": "a1", "category": "assessment", "text": "Revenue grew.",
+        "evidence_ids": ["E1"],
+        "quoted_values": [{"parameter_result_id": "pr_growth", "value": quoted}],
+    }}
+    validator = DeterministicValidator(
+        admitted_evidence_ids={"E1"}, known_parameters={"pr_growth": validated},
+    )
+    assert validator.validate(parsed).valid is valid
+
+
 def test_financial_orchestrator_input_contains_only_contracted_inputs():
     from app.schemas.agentic import (
         AcceptanceState,

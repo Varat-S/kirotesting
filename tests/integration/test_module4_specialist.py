@@ -204,6 +204,36 @@ def test_no_follow_up_when_the_schedule_reconciles(db_session) -> None:
     assert result.validated is True and result.reconciliation_followup is None
 
 
+def test_items_are_dropped_when_the_instruments_already_reconcile(db_session) -> None:
+    """EHC FY2025: the total is the face amount, so a listed discount would double-count."""
+    specialist, backend, _ = _specialist(db_session)
+    data = copy.deepcopy(hca_module4_output())
+    data["deliverable_1"]["reconciling_items"] = [
+        _item(label="Unamortized debt discount and fees", amount_m=-27.4,
+              quote="Unamortized debt discount and fees")]
+    backend.register("analyze", data)
+
+    result = specialist.run(_filing_inputs())
+
+    assert result.validated is True, [c.detail for c in result.validator8.failures]
+    assert result.output.deliverable_1.reconciling_items == []
+    assert [i["amount_m"] for i in result.dropped_reconciling_items] == [-27.4]
+    assert result.reconciliation_followup is None
+
+
+def test_items_that_close_the_gap_are_kept(db_session) -> None:
+    specialist, backend, _ = _specialist(db_session)
+    data = _unreconciled()
+    data["deliverable_1"]["reconciling_items"] = [_item()]
+    backend.register("analyze", data)
+
+    result = specialist.run(_filing_inputs())
+
+    assert result.validated is True, [c.detail for c in result.validator8.failures]
+    assert [i.amount_m for i in result.output.deliverable_1.reconciling_items] == [-436.0]
+    assert result.dropped_reconciling_items == []
+
+
 def test_senior_notes_are_listed_in_maturity_order(db_session) -> None:
     specialist, backend, _ = _specialist(db_session)
     shuffled = copy.deepcopy(hca_module4_output())

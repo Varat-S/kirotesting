@@ -54,6 +54,7 @@ from app.services.orchestration.benchmark_context import (
     _METRIC_NUMBER,
     _SCORE_KEYS,
     _matches,
+    metric_value,
 )
 
 MIN_QUOTE_CHARS = 12
@@ -178,7 +179,7 @@ def unbound_numbers(text: str, quoted_values: list[float], quotes: list[str]) ->
     loose = []
     for match in _METRIC_NUMBER.finditer(text or ""):
         token = match.group(0)
-        if _matches(abs(float(token)), [abs(v) for v in quoted_values]):
+        if _matches(abs(metric_value(token)), [abs(v) for v in quoted_values]):
             continue
         if re.search(rf"(?<![\d.]){re.escape(token.lstrip('-'))}(?!\d)", haystack):
             continue

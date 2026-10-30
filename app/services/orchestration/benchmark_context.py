@@ -70,9 +70,17 @@ _SCORE_KEYS = frozenset({
     "score", "scores", "band", "risk_band", "risk_score", "rating", "credit_rating",
     "risk_rating", "grade", "official_score",
 })
+# Thousands separators are part of the number ("7,692.0" is one token, not
+# "692.0"); read a match with ``metric_value``.
 _METRIC_NUMBER = re.compile(
-    r"(?<![A-Za-z0-9_.])-?(?:\d+\.\d+|\d+(?=\s?(?:x\b|%|bps\b|days?\b|percent\b)))"
+    r"(?<![A-Za-z0-9_.])-?(?:\d{1,3}(?:,\d{3})+|\d+)"
+    r"(?:\.\d+|(?=\s?(?:x\b|%|bps\b|days?\b|percent\b)))"
 )
+
+
+def metric_value(token: str) -> float:
+    """The number a ``_METRIC_NUMBER`` match states."""
+    return float(token.replace(",", ""))
 
 
 class BenchmarkContextError(ValueError):
@@ -390,7 +398,7 @@ def validate_benchmark_narrative(parsed: dict[str, Any]) -> list[str]:
             if isinstance(q, dict) and isinstance(q.get("value"), (int, float))
         ] if isinstance(claim.get("quoted_values"), list) else []
         for match in _METRIC_NUMBER.finditer(claim.get("text") or ""):
-            number = float(match.group(0))
+            number = metric_value(match.group(0))
             if not _matches(abs(number), [abs(v) for v in quoted]):
                 issues.append(
                     f"unquoted_number: claim {claim.get('claim_id', '?')!r} states "

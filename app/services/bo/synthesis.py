@@ -325,7 +325,10 @@ def validate_orchestrator_output(
         if claim.get("category") != "limitation" and not used:
             issues.append(
                 f"no_validated_basis: claim {cid!r} rests on no validated hypothesis.")
+        # A mitigant's outcome evidence is evidence its hypothesis relies on.
         allowed_evidence = {e for h in used for e in h.evidence_ids()}
+        allowed_evidence |= {e for h in used if h.mitigant
+                             for e in h.mitigant.outcome_evidence_ids}
         for eid in claim.get("evidence_ids") or []:
             if eid in admitted and eid not in allowed_evidence:
                 issues.append(

@@ -28,7 +28,9 @@ This module is deterministic and never calls an LLM.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
+from decimal import Decimal
 from enum import Enum
 from typing import Any
 
@@ -384,8 +386,25 @@ def _iter_emitted_parameters(parsed: dict[str, Any]) -> list[str]:
     return out
 
 
+# A quote may round the validated value, but only to this many decimal places
+# or more, and never by more than this relative error (so 0.0001 cannot stand
+# for 0.00012).
+_MIN_QUOTE_DECIMALS = 4
+_MAX_ROUNDING_ERROR = 5e-4
+
+
 def _numbers_match(a: Any, b: Any, tol: float) -> bool:
     try:
-        return abs(float(a) - float(b)) <= tol
+        quoted, validated = float(a), float(b)
     except (TypeError, ValueError):
         return a == b
+    if abs(quoted - validated) <= tol:
+        return True
+    if not (math.isfinite(quoted) and math.isfinite(validated)):
+        return False
+    places = -Decimal(repr(quoted)).as_tuple().exponent
+    return (
+        places >= _MIN_QUOTE_DECIMALS
+        and abs(round(validated, places) - quoted) <= tol
+        and abs(quoted - validated) <= _MAX_ROUNDING_ERROR * abs(validated)
+    )

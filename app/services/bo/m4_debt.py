@@ -77,12 +77,16 @@ class M4DebtResult:
     validator_issues: list[str] = None                # type: ignore[assignment]
     # The one reconciliation follow-up call, when Validator 8 found a gap.
     reconciliation_followup: Optional[dict[str, Any]] = None
+    # Reconciling items dropped because the instruments already matched the total.
+    dropped_reconciling_items: list[dict[str, Any]] = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.evidence_ids is None:
             self.evidence_ids = []
         if self.validator_issues is None:
             self.validator_issues = []
+        if self.dropped_reconciling_items is None:
+            self.dropped_reconciling_items = []
 
     def to_module_conclusion(self) -> dict[str, Any]:
         """The block attached to ``module_conclusions['M4']['m4_debt_assessment']``."""
@@ -100,6 +104,7 @@ class M4DebtResult:
             "reason": self.reason,
             "model_invoked": self.model_invoked,
             "reconciliation_followup": self.reconciliation_followup,
+            "dropped_reconciling_items": self.dropped_reconciling_items,
         }
 
 
@@ -252,4 +257,5 @@ def run_debt_specialist(
         model_invoked=True,
         validator_issues=issues,
         reconciliation_followup=result.reconciliation_followup,
+        dropped_reconciling_items=result.dropped_reconciling_items,
     )
