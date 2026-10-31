@@ -194,7 +194,7 @@ def test_a_not_assessed_result_cannot_carry_a_value_or_a_run():
 # -- prompts -----------------------------------------------------------------
 
 
-def test_v3_prompts_classify_primary_claims_without_changing_agent_6():
+def test_v3_prompts_classify_primary_claims_and_preserve_verbatim_agent_6():
     from app.prompts.bo_prompts import M1_SHARED_RULES
 
     v2_names = {e["name"] for e in bo_prompt_catalogue()}
@@ -206,6 +206,12 @@ def test_v3_prompts_classify_primary_claims_without_changing_agent_6():
                 assert entry["template"].endswith(M1_SHARED_RULES)
                 assert all(label in entry["template"] for label in (
                     "GREEN FACT", "YELLOW INFERENCE", "RED ASSUMPTION"))
+            elif code == "M1A6":
+                from pathlib import Path
+                import app.prompts.bo_prompts as prompts
+
+                source = Path(prompts.__file__).with_name("m1_agent6_specialist.txt")
+                assert entry["template"].encode("utf-8") == source.read_bytes()
             else:
                 assert entry["template"].endswith(SHARED_RULES)
     for code in ("M1S1", "M1S2", "M1S3", "M1S4", "M1S5", "M1A6"):

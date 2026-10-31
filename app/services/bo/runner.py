@@ -74,6 +74,7 @@ from app.services.agents.validation import DeterministicValidator
 from app.services.audit.log import AuditLog
 from app.services.bo import handoff as _handoff  # noqa: F401  (registers the immutability guard)
 from app.services.bo.hypotheses import (
+    HYPOTHESIS_VALIDATOR_VERSION,
     HypothesisStore,
     HypothesisValidator,
     gate_parameters,
@@ -523,6 +524,11 @@ class _BoRun:
         self.hypotheses: dict[str, list[HypothesisRecord]] = {}
         self.retrieval_requests: dict[str, list[dict]] = {}
         self.followups: dict[str, str] = {}
+        self.resilience_feedback: list[dict] = []
+        self.resilience_reconsideration: dict | None = None
+        self._resilience_collecting = False
+        self._resilience_pending = False
+        self._resilience_candidate = None
         self.reconciliation = Reconciliation()
         self.conclusion = None
         self.conclusion_row_id: str | None = None
@@ -553,7 +559,7 @@ class _BoRun:
         self._stage("primary_specialists", set(self.primary_agent_ids))
         self._follow_up_retrieval()
         self._coverage_follow_up()
-        self._stage("resilience", {self.resilience_agent_id})
+        self._resilience_stage("resilience")
         if self.enable_m4_debt:
             self._module4_debt_phase()
         if self.roster_version == "v3":
@@ -607,7 +613,7 @@ class _BoRun:
         self._stage("primary_specialists", set(self.primary_agent_ids))
         self._follow_up_retrieval()
         self._coverage_follow_up()
-        self._stage("resilience", {self.resilience_agent_id})
+        self._resilience_stage("resilience")
         self._build_module_conclusions()
         self._close_run()
 
@@ -944,7 +950,9 @@ class _BoRun:
 
     def _usable(self, agent_ids=None) -> list[HypothesisRecord]:
         selected = self.narrow_agent_ids if agent_ids is None else agent_ids
-        return [h for a in selected for h in self.hypotheses.get(a, []) if h.usable]
+        return [h for a in selected
+                if not (a == self.resilience_agent_id and self._resilience_pending)
+                for h in self.hypotheses.get(a, []) if h.usable]
 
     def _audit_only(self) -> list[HypothesisRecord]:
         return [h for a in self.narrow_agent_ids
@@ -1018,6 +1026,10 @@ class _BoRun:
             self._seal_packet(agent.agent_id, extra_ids=cited)
             parents = [self.agents[a].run_ids[-1] for a in self.m1_primary_ids
                        if self.agents[a].run_ids]
+            if self.resilience_reconsideration and self.agents[agent.agent_id].run_ids:
+                parents.append(self.agents[agent.agent_id].run_ids[-1])
+        if agent.agent_id == self.resilience_agent_id and self.resilience_reconsideration:
+            inputs["retrieval_reconsideration"] = self.resilience_reconsideration
         if self.feedback.get(agent.agent_id):
             inputs["challenge_feedback"] = self.feedback[agent.agent_id]
         if agent.agent_id in self.followups:
@@ -1041,7 +1053,9 @@ class _BoRun:
         return self._task(agent, inputs, evidence_ids, BO_NARROW_JSON_SCHEMA, parents)
 
     def _business_parameters(self) -> list[ParameterResult]:
-        return [p for a in self.narrow_agent_ids for p in self.promoted.get(a, [])]
+        return [p for a in self.narrow_agent_ids
+                if not (a == self.resilience_agent_id and self._resilience_pending)
+                for p in self.promoted.get(a, [])]
 
     def _module4_debt_phase(self) -> None:
         """Run Ernest's debt-structure specialist inside the orchestrated path.
@@ -1175,6 +1189,23 @@ class _BoRun:
             {"field": f"retrieval:{g.query_id}", "state": "no_results",
              "detail": f"No admitted passage matched ({g.purpose})."}
             for a in self.narrow_agent_ids for g in self.retrieval[a].gaps]
+        for feedback in self.resilience_feedback[-1:]:
+            outstanding = (feedback.get("outstanding_requests")
+                           or feedback.get("unresolved_requests") or [])
+            if outstanding or feedback["status"] in {"retrieval_failed", "reconsideration_failed"}:
+                limitations.append({
+                    "field": "agent6_retrieval_feedback", "state": feedback["status"],
+                    "detail": f"Agent 6 evidence cycle: {feedback['status']}; "
+                              f"{len(outstanding)} outstanding search requests. "
+                              "Unfulfilled requests are information gaps, not evidence."})
+            for gap in feedback.get("information_gaps", []):
+                if gap["unresolved"] and isinstance(gap["original_gap"], str) and gap["original_gap"].strip():
+                    limitations.append({
+                        "field": "agent6_information_gap:" + gap["gap_id"],
+                        "state": gap["outcome"],
+                        "detail": "Unresolved Agent 6 information need (not evidence): "
+                                  + gap["original_gap"],
+                    })
         extras = {
             "data_notice": DATA_NOTICE,
             "sections": [{"code": code, "title": title} for _, code, title in self.sections],
@@ -1299,7 +1330,8 @@ class _BoRun:
                 {h.hypothesis_id: h for h in self._usable(self.m1_primary_ids)}
                 if agent.agent_id == self.resilience_agent_id else None),
             corpus=self.corpus,
-            enforce=self.enforce_validators,
+            enforce=(True if agent.agent_id == self.resilience_agent_id
+                     and self.roster_version == "v3" else self.enforce_validators),
         ).validate(parsed, analysis_run_id=self.analysis_run_id, agent_run_id=run_id)
         validation.adjustments[:0] = citation_notes
         issues += validation.issues
@@ -1332,6 +1364,17 @@ class _BoRun:
             self._reject(agent.agent_id, run_id, [str(exc)])
             return
 
+        if agent.agent_id == self.resilience_agent_id and self._resilience_collecting:
+            # Keep the validated candidate outside the canonical hypothesis and
+            # parameter stores until its evidence requests have been resolved.
+            self._resilience_candidate = (agent, parsed, run_id, validated, validation)
+            self.retrieval_requests[agent.agent_id] = parsed.get("retrieval_requests") or []
+            self.agents[agent.agent_id].status = "validated"
+            return
+        self._persist_narrow_output(agent, parsed, run_id, validated, validation)
+
+    def _persist_narrow_output(self, agent, parsed, run_id, validated, validation):
+        spec = self.spec_by_agent[agent.agent_id]
         # A newer valid output of the same agent supersedes the earlier one
         # (append-only: prior rows stay queryable).
         prior_params = {
@@ -1507,6 +1550,142 @@ class _BoRun:
             self.rerun_reason = "retrieval_follow_up"
             self._stage("follow_up_retrieval", again)
             self.rerun_reason = None
+
+    def _resilience_stage(self, name: str, *, force: bool = False) -> None:
+        """Hold v3 Agent 6 provisional until one bounded evidence cycle finishes.
+
+        Each challenger-triggered execution gets its own cycle. The second
+        pass is deliberately a plain stage, so it cannot recursively retrieve.
+        """
+        if self.roster_version != "v3":
+            self._stage(name, {self.resilience_agent_id}, force=force)
+            return
+        from app.services.bo.resilience_retrieval import annotate_gap_searches, bridge_requests
+
+        agent_id = self.resilience_agent_id
+        budget = self.runner.retriever.budget
+        trace = {"agent_id": agent_id, "round": self.round_index,
+                 "validator_version": HYPOTHESIS_VALIDATOR_VERSION,
+                 "enforce_validators": True, "status": "pending"}
+        self.resilience_feedback.append(trace)
+        self._resilience_pending = self._resilience_collecting = True
+        self._resilience_candidate = None
+        self.resilience_reconsideration = None
+        previous_reason = self.rerun_reason
+        try:
+            self._stage(name, {agent_id}, force=force)
+            candidate = self._resilience_candidate
+            if candidate is None:
+                trace["status"] = "initial_pass_failed"
+                return
+            agent, parsed, run_id, validated, validation = candidate
+            trace.update({
+                "initial_run_id": run_id,
+                "provisional_response": copy.deepcopy(parsed),
+                "provisional_hypotheses": [h.model_dump(mode="json") for h in validation.records],
+                "initial_validator_adjustments": copy.deepcopy(validation.adjustments),
+                "initial_parameter_adjustments": copy.deepcopy(self.parameter_adjustments.get(agent_id, [])),
+            })
+            requests, outcomes, gaps = bridge_requests(
+                parsed, validation.records,
+                [p for p in self.corpus if p["evidence_id"] in set(self.packets[agent_id].evidence_ids)],
+                budget)
+            trace["requests"] = outcomes
+            trace["information_gaps"] = gaps
+            trace["retrieval_bridge_version"] = "a6-gap-bridge-1"
+            # Persist the provisional audit BEFORE searching or calling a model.
+            self._audit_resilience_feedback({**trace, "status": "provisional"})
+            new_ids = set()
+            if requests and budget.max_followup_rounds > 0:
+                before = set(self.packets[agent_id].evidence_ids)
+                try:
+                    updated = self.runner.retriever.follow_up(
+                        self.spec_by_agent[agent_id], requests,
+                        copy.deepcopy(self.corpus), copy.deepcopy(self.retrieval[agent_id]),
+                        analysis_run_id=self.analysis_run_id,
+                        round_index=self.round_index + 1)
+                except Exception as exc:
+                    # Fail closed: an unfulfilled search is not reconsideration.
+                    trace.update(status="retrieval_failed", error=f"{type(exc).__name__}: {exc}")
+                    self.agents[agent_id].status = "failed"
+                    self.agents[agent_id].detail = "Agent 6 evidence retrieval failed; provisional findings withheld."
+                    return
+                self._record_attempts(updated.attempts)
+                origins = {a["query_index"]: a["request_origin"] for a in outcomes
+                           if a["outcome"] == "eligible"}
+                trace["searches"] = [{**a.model_dump(mode="json"),
+                    "request_origin": origins[index]} for index, a in enumerate(updated.attempts)]
+                new_ids = set(updated.evidence_ids) - before
+                updated.attempts = [*self.retrieval[agent_id].attempts, *updated.attempts]
+                self.retrieval[agent_id] = updated
+                self._seal_packet(agent_id, extra_ids=before)
+            trace["new_evidence_ids"] = sorted(new_ids)
+            annotate_gap_searches(gaps, trace.get("searches", []), new_ids,
+                                 reconsideration_occurred=False)
+            self._resilience_collecting = False
+            if new_ids:
+                self.resilience_reconsideration = {
+                    "instruction": (
+                        "Reconsider your COMPLETE response using the original inputs and expanded "
+                        "admitted evidence. The initial response below is provisional analysis, "
+                        "not independently verified fact. Evaluate supporting AND contradictory "
+                        "evidence; retrieval hits do not establish truth. You may retain, revise, "
+                        "weaken, reject or replace any hypothesis and identify supported new "
+                        "interactions. Preserve Fact / Inference / Assumption discipline and "
+                        "component links. Record unresolved gaps. This is the only retrieval "
+                        "cycle; further requests will be recorded but not executed."),
+                    "provisional_response": copy.deepcopy(parsed),
+                    "new_evidence_ids": sorted(new_ids),
+                    "request_outcomes": outcomes,
+                    "information_gaps": copy.deepcopy(gaps),
+                    "searches": trace["searches"],
+                }
+                trace["status"] = "reconsidering"
+                self._audit_resilience_feedback(trace)
+                self.rerun_reason = "resilience_retrieval_follow_up"
+                # Clear the first-pass status so failed/skipped reruns cannot
+                # inherit validation success from their provisional predecessor.
+                self.agents[agent_id].status = "not_executed"
+                self._stage("resilience_reconsideration", {agent_id}, force=True)
+                trace["final_run_id"] = self.agents[agent_id].run_ids[-1]
+                trace["status"] = ("reconsidered" if self.agents[agent_id].status == "validated"
+                                   else "reconsideration_failed")
+                final_row = self.session.get(AgentRunRow, trace["final_run_id"])
+                trace["outstanding_requests"] = copy.deepcopy(
+                    (final_row.parsed_response or {}).get("retrieval_requests") or [])
+                trace["final_validator_adjustments"] = copy.deepcopy(self.agents[agent_id].adjustments)
+                trace["final_issues"] = list(self.agents[agent_id].issues)
+                trace["final_parameter_adjustments"] = copy.deepcopy(self.parameter_adjustments.get(agent_id, []))
+            else:
+                trace["status"] = ("retrieval_disabled" if requests and budget.max_followup_rounds < 1
+                                   else "no_new_evidence" if requests else "no_actionable_requests")
+                trace["unresolved_requests"] = copy.deepcopy(parsed.get("retrieval_requests") or [])
+                self._persist_narrow_output(*candidate)
+                trace["final_run_id"] = run_id
+        finally:
+            annotate_gap_searches(trace.get("information_gaps", []), trace.get("searches", []),
+                                 trace.get("new_evidence_ids", []),
+                                 reconsideration_occurred=trace["status"] in {"reconsidered", "reconsideration_failed"})
+            trace["outstanding_information_gaps"] = [g["gap_id"] for g in trace.get("information_gaps", []) if g["unresolved"]]
+            if self.agents[agent_id].status == "validated":
+                trace["final_reported_information_gaps"] = {
+                    "response_level": copy.deepcopy(self.last_parsed.get(agent_id, {}).get("missing_information") or []),
+                    "hypothesis_level": [{"hypothesis_id": h.hypothesis_id,
+                                          "missing_information": list(h.missing_information)}
+                                         for h in self.hypotheses.get(agent_id, [])],
+                }
+            self._audit_resilience_feedback(trace)
+            self._resilience_collecting = self._resilience_pending = False
+            self._resilience_candidate = None
+            self.resilience_reconsideration = None
+            self.rerun_reason = previous_reason
+
+    def _audit_resilience_feedback(self, trace) -> None:
+        AuditLog(self.session).record(
+            "agent6_retrieval_feedback", case_id=self.case_id,
+            after={"analysis_run_id": self.analysis_run_id, **copy.deepcopy(trace)},
+            linked_objects=[self.analysis_run_id],
+            reason="Agent 6 provisional/retrieval/final eligibility checkpoint")
 
     def _reconcile(self) -> None:
         """Group duplicate and contradictory validated findings for synthesis."""
@@ -1756,7 +1935,7 @@ class _BoRun:
         if primary:
             self._stage("rerun_primary_specialists", primary, force=True)
         if self.resilience_agent_id in narrow:
-            self._stage("rerun_resilience", {self.resilience_agent_id}, force=True)
+            self._resilience_stage("rerun_resilience", force=True)
         self._reconcile()
         self.conclusion, self.orchestrator_output = None, None
         self._stage("rerun_orchestrator", {BO_ORCHESTRATOR_ID}, force=True)
